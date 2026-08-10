@@ -1,0 +1,21 @@
+{
+  "name": "restaurant-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w apps/server",
+    "dev:client": "npm run dev -w apps/client",
+    "build:shared": "npm run build -w packages/shared",
+    "build:server": "npm run build -w apps/server",
+    "build:client": "npm run build -w apps/client",
+    "build": "npm run build:shared && npm run build:server && npm run build:client",
+    "lint": "npm run lint -w apps/server && npm run lint -w apps/client"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
