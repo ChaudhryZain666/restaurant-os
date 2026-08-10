@@ -24,6 +24,69 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    container_name: restaurant-api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/restaurant_platform?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 30d
+      CLIENT_ORIGIN: http://localhost:5173
+      ADMIN_ORIGIN: http://localhost:5174
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./apps/api/src:/repo/apps/api/src
+      - ./packages:/repo/packages
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+    container_name: restaurant-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      VITE_RESTAURANT_SLUG: demo-restaurant
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./packages:/repo/packages
+
+  admin:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/admin.Dockerfile
+    container_name: restaurant-admin
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./apps/admin/src:/repo/apps/admin/src
+      - ./packages:/repo/packages
 
 volumes:
   mongo_data:

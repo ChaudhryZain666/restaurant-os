@@ -6,5 +6,7 @@ build/
 *.log
 .DS_Store
 coverage/
+playwright-report/
+test-results/
 .vscode/*
 !.vscode/extensions.json

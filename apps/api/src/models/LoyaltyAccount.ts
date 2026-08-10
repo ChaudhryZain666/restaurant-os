@@ -1,0 +1,29 @@
+import { Schema, model, type InferSchemaType } from "mongoose";
+import { idTransform } from "../utils/schemaOptions.js";
+
+const loyaltyAccountSchema = new Schema(
+  {
+    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    customerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    pointsBalance: { type: Number, default: 0, min: 0 },
+    tier: { type: String, enum: ["bronze", "silver", "gold"], default: "bronze" },
+  },
+  { timestamps: true, toJSON: idTransform }
+);
+loyaltyAccountSchema.index({ restaurantId: 1, customerId: 1 }, { unique: true });
+
+const loyaltyTransactionSchema = new Schema(
+  {
+    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    customerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    orderId: { type: Schema.Types.ObjectId, ref: "Order" },
+    type: { type: String, enum: ["earn", "redeem", "adjustment"], required: true },
+    points: { type: Number, required: true },
+    reason: { type: String, required: true },
+  },
+  { timestamps: true, toJSON: idTransform }
+);
+
+export type LoyaltyAccountDoc = InferSchemaType<typeof loyaltyAccountSchema>;
+export const LoyaltyAccount = model<LoyaltyAccountDoc>("LoyaltyAccount", loyaltyAccountSchema);
+export const LoyaltyTransaction = model("LoyaltyTransaction", loyaltyTransactionSchema);

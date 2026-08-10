@@ -1,72 +1,57 @@
-# Restaurant Online Ordering Platform
+# Restaurant Platform
 
-A restaurant ordering platform with an integrated customer CRM (loyalty program first, then support/segmentation/campaigns).
+A multi-tenant restaurant online ordering SaaS platform with an integrated customer CRM. Built
+for many restaurants on one platform, not one app per restaurant — see `docs/architecture.md`
+for what that means in practice.
 
 ## Stack
 
-- **Backend:** Node.js, Express, TypeScript, MongoDB (Mongoose), Redis (ioredis)
-- **Frontend:** React, TypeScript, Vite, React Router
-- **Shared:** `@restaurant/shared` — types shared between client and server
-- **Auth:** Custom JWT access tokens (15m) + Redis-backed refresh tokens (30d, httpOnly cookie, rotated on use, revocable)
+- **Backend:** Node.js, Express, TypeScript, MongoDB (Mongoose), Redis (ioredis), BullMQ, Socket.IO
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS, TanStack Query, React Hook Form, Zod, React Router
+- **Auth:** JWT access tokens (15m) + Redis-backed rotating refresh tokens (30d, httpOnly cookie, revocable), 6-role RBAC
+- **Docs:** Swagger UI at `/api/docs`, generated from `docs/openapi.yaml`
 
 ## Repo layout
 
 ```
 apps/
-  server/   Express API
-  client/   React app (Vite)
+  api/      Express API — all business logic, all tenants
+  web/      Customer storefront (React + Vite)
+  admin/    Restaurant dashboard + platform admin (React + Vite, role-gated routes)
 packages/
-  shared/   Shared TypeScript types (User, MenuItem, Order, Loyalty)
-docker-compose.yml   MongoDB + Redis for local dev
+  types/        Shared TypeScript types + RBAC role→permission table
+  validation/   Shared zod schemas (API validation + future frontend forms)
+  utils/        Shared browser API client
+  config/       Shared tsconfig/ESLint/Prettier config
+  ui/           Shared UI components
+infrastructure/
+  docker/       Dockerfiles for api/web/admin
+docs/           Architecture, database, auth, API, dev setup, roadmap
+e2e/            Playwright end-to-end tests
 ```
 
-## Getting started
+Full setup instructions: **[docs/development-setup.md](docs/development-setup.md)**.
+Why things are built this way: **[docs/architecture.md](docs/architecture.md)**.
 
-1. Start MongoDB and Redis:
-   ```
-   docker compose up -d
-   ```
-   MongoDB runs as a single-node replica set (`rs0`, auto-initiated by the healthcheck) because order
-   creation uses a multi-document transaction (order + loyalty ledger together) — transactions require
-   a replica set even for local dev. If you run MongoDB outside Docker, start `mongod --replSet rs0` and
-   initiate it yourself (`mongosh --eval "rs.initiate()"`), or order creation will fail with
-   `Transaction numbers are only allowed on a replica set member or mongos`.
-2. Install dependencies (from repo root):
-   ```
-   npm install
-   ```
-3. Copy `apps/server/.env.example` to `apps/server/.env` and fill in real secrets (a `.env` with generated dev secrets is already included locally and gitignored).
-4. Build the shared package once (server/client both depend on its compiled output):
-   ```
-   npm run build:shared
-   ```
-5. Seed an admin user and sample menu:
-   ```
-   npm run seed -w apps/server
-   ```
-6. Run both apps in separate terminals:
-   ```
-   npm run dev:server
-   npm run dev:client
-   ```
-   Server: http://localhost:4000 · Client: http://localhost:5173 (proxies `/api` to the server)
+## Quick start (Docker)
 
-Seeded admin login: `admin@restaurant.local` / `Admin123!`
+```
+cp .env.example .env
+docker compose up -d --build
+docker compose exec api npm run seed -w apps/api
+```
+- Storefront: http://localhost:5173
+- Admin: http://localhost:5174
+- API: http://localhost:4000 · Docs: http://localhost:4000/api/docs
 
-## MVP scope (phase 1)
+Seeded accounts: `platform-admin@restaurant.local` / `Admin123!` and
+`owner@demo-restaurant.local` / `Owner123!` (owns the seeded `demo-restaurant`).
 
-- Menu browsing (Redis-cached, 60s TTL, invalidated on writes)
-- Cart → checkout → order creation (Mongo transaction covers order + loyalty ledger together)
-- Customer accounts (JWT auth, roles: customer/staff/admin)
-- Loyalty: points earned per order, redeemable, tier calculated from balance
-- Order status tracking, staff/admin can update status
+## Status
 
-## Planned next phases (CRM layer)
-
-- Customer 360 view for staff/admin (order history, lifetime value, loyalty tier)
-- Segmentation (e.g. "customers who haven't ordered in 30 days")
-- Campaigns / promotions targeting segments
-- Support ticket thread per customer
-- Analytics dashboard (revenue, repeat-order rate, popular items)
-
-Build phase 1 end-to-end and validate it against real usage before starting the CRM layer — that sequencing is deliberate, not a placeholder.
+- **Ordering + loyalty core** (menu, cart, checkout, orders, loyalty points/tiers) — built and
+  smoke-tested end-to-end via the API before this platform foundation work; **not yet re-tested
+  in the browser** against the new tenant-scoped routes since the restructure.
+- **Platform foundation** (multi-tenancy, RBAC, versioned API, Swagger, structured logging,
+  BullMQ/Socket.IO/storage scaffolding, Docker, tests, docs) — this phase's work; see
+  `docs/roadmap.md` for exactly what is and isn't built yet.

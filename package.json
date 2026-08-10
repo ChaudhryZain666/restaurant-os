@@ -7,15 +7,25 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:server": "npm run dev -w apps/server",
-    "dev:client": "npm run dev -w apps/client",
-    "build:shared": "npm run build -w packages/shared",
-    "build:server": "npm run build -w apps/server",
-    "build:client": "npm run build -w apps/client",
-    "build": "npm run build:shared && npm run build:server && npm run build:client",
-    "lint": "npm run lint -w apps/server && npm run lint -w apps/client"
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:admin": "npm run dev -w apps/admin",
+    "build:packages": "npm run build -w packages/types && npm run build -w packages/validation && npm run build -w packages/utils",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "build:admin": "npm run build -w apps/admin",
+    "build": "npm run build:packages && npm run build:api && npm run build:web && npm run build:admin",
+    "test:api": "npm run test -w apps/api",
+    "test:e2e": "playwright test",
+    "lint": "npm run lint -w apps/api && npm run lint -w apps/web && npm run lint -w apps/admin",
+    "seed": "npm run seed -w apps/api",
+    "format": "prettier --write ."
   },
+  "prettier": "@restaurant/config/prettier.base.js",
   "devDependencies": {
+    "@playwright/test": "^1.48.1",
+    "eslint": "^9.13.0",
+    "prettier": "^3.3.3",
     "typescript": "^5.6.3"
   }
 }

@@ -1,0 +1,385 @@
+openapi: 3.0.3
+info:
+  title: Restaurant Platform API
+  version: "1"
+  description: >
+    Multi-tenant restaurant ordering + CRM platform API. All routes are
+    versioned under /api/v1. Every response uses the envelope described in
+    ApiSuccess / ApiErrorBody below.
+servers:
+  - url: /api/v1
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiSuccess:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        requestId:
+          type: string
+    ApiErrorBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+            details: {}
+        requestId:
+          type: string
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role:
+          type: string
+          enum: [platform_admin, restaurant_owner, restaurant_manager, restaurant_staff, kitchen_staff, customer]
+        restaurantId: { type: string, nullable: true }
+    Restaurant:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        ownerId: { type: string }
+        status: { type: string, enum: [pending, active, suspended] }
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string }
+        restaurantId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number }
+        category: { type: string }
+        isAvailable: { type: boolean }
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        restaurantId: { type: string }
+        customerId: { type: string }
+        status:
+          type: string
+          enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled]
+        subtotal: { type: number }
+        total: { type: number }
+        loyaltyPointsEarned: { type: number }
+        loyaltyPointsRedeemed: { type: number }
+  responses:
+    Unauthorized:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiErrorBody" }
+    Forbidden:
+      description: Authenticated but not permitted (wrong role, or wrong tenant)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiErrorBody" }
+security:
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      security: []
+      summary: Register a new customer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string, minLength: 8 }
+                phone: { type: string }
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiSuccess" }
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Log in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiSuccess" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/refresh:
+    post:
+      tags: [auth]
+      security: []
+      summary: Exchange the httpOnly refresh cookie for a new access token
+      responses:
+        "200":
+          description: New access token issued
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current refresh token
+      responses:
+        "204":
+          description: Logged out
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Get the authenticated user's profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiSuccess" }
+  /restaurants:
+    post:
+      tags: [restaurants]
+      summary: Create a restaurant and assign an owner (platform_admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug, ownerId]
+              properties:
+                name: { type: string }
+                slug: { type: string }
+                ownerId: { type: string }
+      responses:
+        "201":
+          description: Restaurant created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/me:
+    get:
+      tags: [restaurants]
+      summary: Get the authenticated user's own restaurant
+      responses:
+        "200":
+          description: Restaurant
+  /restaurants/by-slug/{slug}:
+    get:
+      tags: [restaurants]
+      security: []
+      summary: Look up an active restaurant by its public slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Restaurant
+        "404":
+          description: Not found
+  /restaurants/{restaurantId}/menu:
+    get:
+      tags: [menu]
+      security: []
+      summary: List a restaurant's available menu items (Redis-cached, 60s TTL)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Menu items
+    post:
+      tags: [menu]
+      summary: Create a menu item (requires restaurant.menu.write on this tenant)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MenuItem" }
+      responses:
+        "201":
+          description: Menu item created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/menu/{id}:
+    patch:
+      tags: [menu]
+      summary: Update a menu item
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [menu]
+      summary: Delete a menu item
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+  /restaurants/{restaurantId}/orders:
+    post:
+      tags: [orders]
+      summary: Place an order at this restaurant (any authenticated customer)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      menuItemId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                redeemPoints: { type: integer, minimum: 0 }
+      responses:
+        "201":
+          description: Order created (order + loyalty ledger written in one Mongo transaction)
+    get:
+      tags: [orders]
+      summary: List all orders for this restaurant (staff, requires restaurant.orders.read)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Orders
+  /restaurants/{restaurantId}/orders/{id}/status:
+    patch:
+      tags: [orders]
+      summary: Update an order's status (staff, requires restaurant.orders.manage)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled]
+      responses:
+        "200":
+          description: Updated
+  /orders/mine:
+    get:
+      tags: [orders]
+      summary: List the authenticated customer's own orders, across all restaurants
+      responses:
+        "200":
+          description: Orders
+  /orders/{id}:
+    get:
+      tags: [orders]
+      summary: Get a single order (owner, or staff of that order's restaurant)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Order
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/loyalty/me:
+    get:
+      tags: [loyalty]
+      summary: Get the authenticated customer's loyalty account at this restaurant
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Loyalty account
+  /restaurants/{restaurantId}/loyalty/me/history:
+    get:
+      tags: [loyalty]
+      summary: Get the authenticated customer's loyalty transaction history at this restaurant
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Loyalty transactions
