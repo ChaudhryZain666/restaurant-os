@@ -60,29 +60,91 @@ components:
         slug: { type: string }
         ownerId: { type: string }
         status: { type: string, enum: [pending, active, suspended] }
-    MenuItem:
+    Category:
       type: object
       properties:
         id: { type: string }
         restaurantId: { type: string }
         name: { type: string }
         description: { type: string }
+        sortOrder: { type: integer }
+        isActive: { type: boolean }
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string }
+        restaurantId: { type: string }
+        categoryId: { type: string }
+        name: { type: string }
+        description: { type: string }
         price: { type: number }
-        category: { type: string }
         isAvailable: { type: boolean }
+        sortOrder: { type: integer }
+    ModifierOption:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        priceAdjustment: { type: number }
+        isActive: { type: boolean }
+        sortOrder: { type: integer }
+    ModifierGroup:
+      type: object
+      properties:
+        id: { type: string }
+        restaurantId: { type: string }
+        menuItemId: { type: string }
+        name: { type: string }
+        minSelect: { type: integer }
+        maxSelect: { type: integer }
+        isActive: { type: boolean }
+        sortOrder: { type: integer }
+        options:
+          type: array
+          items: { $ref: "#/components/schemas/ModifierOption" }
     Order:
       type: object
       properties:
         id: { type: string }
         restaurantId: { type: string }
         customerId: { type: string }
+        orderNumber: { type: string, example: "ORD-1001" }
+        orderType:
+          type: string
+          enum: [pickup, delivery]
         status:
           type: string
-          enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled]
+          enum: [pending, confirmed, preparing, ready, out_for_delivery, completed, cancelled]
+        paymentStatus:
+          type: string
+          enum: [unpaid, paid]
         subtotal: { type: number }
+        taxAmount: { type: number }
+        deliveryFee: { type: number }
+        discount: { type: number }
         total: { type: number }
         loyaltyPointsEarned: { type: number }
         loyaltyPointsRedeemed: { type: number }
+        deliveryAddress: { type: string }
+        customerNotes: { type: string }
+        customerName:
+          type: string
+          description: Present only on staff-facing responses (restaurant order list/detail).
+        customerPhone:
+          type: string
+          description: Present only on staff-facing responses (restaurant order list/detail).
+    RestaurantAvailability:
+      type: object
+      description: >
+        Computed from settings.orderingEnabled / settings.temporarilyPaused. Does not factor in
+        businessHours — that stays informational/display-only in Phase 2.
+      properties:
+        status:
+          type: string
+          enum: [open, closed, paused]
+        reason:
+          type: string
+          description: Present when status is "paused" and the restaurant supplied a reason.
   responses:
     Unauthorized:
       description: Missing or invalid access token
@@ -192,6 +254,7 @@ paths:
     get:
       tags: [restaurants]
       summary: Get the authenticated user's own restaurant
+      description: Response data includes both `restaurant` and a computed `availability` (RestaurantAvailability).
       responses:
         "200":
           description: Restaurant
@@ -200,6 +263,7 @@ paths:
       tags: [restaurants]
       security: []
       summary: Look up an active restaurant by its public slug
+      description: Response data includes both `restaurant` and a computed `availability` (RestaurantAvailability).
       parameters:
         - name: slug
           in: path
@@ -223,6 +287,24 @@ paths:
       responses:
         "200":
           description: Menu items
+  /restaurants/{restaurantId}/menu/items:
+    get:
+      tags: [menu]
+      summary: List ALL menu items including unavailable ones (staff, requires restaurant.menu.read)
+      description: >
+        Uncached and staff-only, unlike GET /menu — that endpoint is public and Redis-cached, so
+        it must never include hidden items. Staff need to see hidden items to be able to
+        un-hide them, hence this separate endpoint.
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Menu items, including unavailable ones (isAvailable: false)"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [menu]
       summary: Create a menu item (requires restaurant.menu.write on this tenant)
@@ -334,10 +416,40 @@ paths:
               properties:
                 status:
                   type: string
-                  enum: [pending, confirmed, preparing, out_for_delivery, delivered, cancelled]
+                  enum: [pending, confirmed, preparing, ready, out_for_delivery, completed, cancelled]
       responses:
         "200":
           description: Updated
+  /restaurants/{restaurantId}/orders/{id}/payment-status:
+    patch:
+      tags: [orders]
+      summary: Mark an order paid/unpaid (staff, requires restaurant.orders.manage)
+      description: >
+        Manual payment tracking only — no payment processing is implemented. Useful for cash/
+        in-person orders where the restaurant wants a record of settlement.
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentStatus]
+              properties:
+                paymentStatus: { type: string, enum: [unpaid, paid] }
+      responses:
+        "200":
+          description: Updated
+        "404":
+          description: Not found
   /orders/mine:
     get:
       tags: [orders]
@@ -357,6 +469,23 @@ paths:
       responses:
         "200":
           description: Order
+  /orders/{id}/cancel:
+    patch:
+      tags: [orders]
+      summary: Cancel the authenticated customer's own order
+      description: >
+        Only allowed while the order is still "pending" — once a restaurant has accepted it,
+        only restaurant staff can cancel it (via the restaurant-scoped status endpoint).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Order cancelled
+        "400":
+          description: Order is no longer cancellable (already accepted, completed, or cancelled)
         "403":
           $ref: "#/components/responses/Forbidden"
   /restaurants/{restaurantId}/loyalty/me:
@@ -383,3 +512,143 @@ paths:
       responses:
         "200":
           description: Loyalty transactions
+  /restaurants/{restaurantId}:
+    patch:
+      tags: [restaurants]
+      summary: Update restaurant profile and settings (requires restaurant.settings.manage — owner only)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated restaurant
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/categories:
+    get:
+      tags: [categories]
+      summary: List all categories for this restaurant (staff, requires restaurant.menu.read via tenant auth)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Categories
+    post:
+      tags: [categories]
+      summary: Create a category (requires restaurant.categories.write)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Category created
+  /restaurants/{restaurantId}/categories/{id}:
+    patch:
+      tags: [categories]
+      summary: Update a category (requires restaurant.categories.write)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [categories]
+      summary: Delete a category (requires restaurant.categories.write; blocked while it still has menu items)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Category still has menu items
+  /restaurants/{restaurantId}/menu/{menuItemId}/modifiers:
+    get:
+      tags: [modifiers]
+      summary: List modifier groups for a menu item
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Modifier groups
+    post:
+      tags: [modifiers]
+      summary: Create a modifier group on this menu item (requires restaurant.modifiers.write)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Modifier group created
+  /restaurants/{restaurantId}/menu/{menuItemId}/modifiers/{id}:
+    patch:
+      tags: [modifiers]
+      summary: Update a modifier group (requires restaurant.modifiers.write)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [modifiers]
+      summary: Delete a modifier group (requires restaurant.modifiers.write)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted

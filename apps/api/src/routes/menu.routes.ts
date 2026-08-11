@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { menuItemSchema } from "@restaurant/validation";
+import { menuItemSchema, updateMenuItemSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
@@ -8,6 +8,7 @@ import { validateBody } from "../middleware/validate.js";
 import {
   createMenuItem,
   deleteMenuItem,
+  listAllMenuItems,
   listMenu,
   updateMenuItem,
 } from "../controllers/menu.controller.js";
@@ -16,6 +17,13 @@ import {
 export const menuRouter = Router({ mergeParams: true });
 
 menuRouter.get("/", asyncHandler(listMenu));
+menuRouter.get(
+  "/items",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.read"),
+  asyncHandler(listAllMenuItems)
+);
 menuRouter.post(
   "/",
   requireAuth,
@@ -29,6 +37,7 @@ menuRouter.patch(
   requireAuth,
   requireTenantMatch(),
   requirePermission("restaurant.menu.write"),
+  validateBody(updateMenuItemSchema),
   asyncHandler(updateMenuItem)
 );
 menuRouter.delete(

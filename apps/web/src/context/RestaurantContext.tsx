@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Restaurant } from "@restaurant/types";
+import type { Restaurant, RestaurantAvailability } from "@restaurant/types";
 import { apiClient } from "../lib/api";
 
 /**
@@ -11,6 +11,7 @@ const RESTAURANT_SLUG = import.meta.env.VITE_RESTAURANT_SLUG ?? "demo-restaurant
 
 interface RestaurantContextValue {
   restaurant: Restaurant | null;
+  availability: RestaurantAvailability | null;
   loading: boolean;
   error: string | null;
 }
@@ -19,19 +20,28 @@ const RestaurantContext = createContext<RestaurantContextValue | undefined>(unde
 
 export function RestaurantProvider({ children }: { children: ReactNode }) {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiClient
-      .request<{ restaurant: Restaurant }>(`/restaurants/by-slug/${RESTAURANT_SLUG}`, { skipRefresh: true })
-      .then((data) => setRestaurant(data.restaurant))
+      .request<{ restaurant: Restaurant; availability: RestaurantAvailability }>(
+        `/restaurants/by-slug/${RESTAURANT_SLUG}`,
+        { skipRefresh: true }
+      )
+      .then((data) => {
+        setRestaurant(data.restaurant);
+        setAvailability(data.availability);
+      })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <RestaurantContext.Provider value={{ restaurant, loading, error }}>{children}</RestaurantContext.Provider>
+    <RestaurantContext.Provider value={{ restaurant, availability, loading, error }}>
+      {children}
+    </RestaurantContext.Provider>
   );
 }
 

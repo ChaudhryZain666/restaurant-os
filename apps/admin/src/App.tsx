@@ -3,6 +3,9 @@ import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { MenuManagementPage } from "./pages/MenuManagementPage";
+import { OrdersManagementPage } from "./pages/OrdersManagementPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 const RESTAURANT_ROLES = [
   "restaurant_owner",
@@ -28,7 +31,7 @@ export function App() {
           path="/orders"
           element={
             <RequireAuth roles={[...RESTAURANT_ROLES]}>
-              <PlaceholderPage title="Orders" description="Live order queue — coming in a later phase." />
+              <OrdersManagementPage />
             </RequireAuth>
           }
         />
@@ -36,7 +39,7 @@ export function App() {
           path="/menu"
           element={
             <RequireAuth roles={[...RESTAURANT_ROLES]}>
-              <PlaceholderPage title="Menu" description="Menu, categories, and modifiers management — coming in a later phase." />
+              <MenuManagementPage />
             </RequireAuth>
           }
         />
@@ -83,8 +86,8 @@ export function App() {
         <Route
           path="/settings"
           element={
-            <RequireAuth roles={["restaurant_owner", "restaurant_manager"]}>
-              <PlaceholderPage title="Settings" description="Restaurant settings — coming in a later phase." />
+            <RequireAuth roles={["restaurant_owner"]}>
+              <SettingsPage />
             </RequireAuth>
           }
         />

@@ -1,6 +1,7 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { AvailabilityBanner } from "./AvailabilityBanner";
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -27,6 +28,7 @@ export function Layout() {
           )}
         </div>
       </nav>
+      <AvailabilityBanner />
       <main style={{ padding: "1rem" }}>
         <Outlet />
       </main>

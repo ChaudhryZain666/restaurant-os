@@ -22,23 +22,35 @@ export const RESTAURANT_SCOPED_ROLES: readonly UserRole[] = [
 
 export type Permission =
   | "restaurant.manage"
+  | "restaurant.settings.manage"
   | "restaurant.staff.manage"
   | "restaurant.menu.read"
   | "restaurant.menu.write"
+  | "restaurant.categories.write"
+  | "restaurant.modifiers.write"
   | "restaurant.orders.read"
   | "restaurant.orders.manage"
   | "restaurant.analytics.read"
   | "platform.restaurants.manage"
   | "platform.users.manage";
 
-/** Static role → permission grants. The source of truth for both API enforcement and UI gating. */
+/**
+ * Static role → permission grants. The source of truth for both API enforcement and UI gating.
+ *
+ * There is no separate "ADMIN" role — Phase 1 maps that tier onto restaurant_manager, which
+ * already has broad operational access short of restaurant.settings.manage (owner-only, the
+ * "OWNER has full restaurant access" boundary).
+ */
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   platform_admin: ["platform.restaurants.manage", "platform.users.manage"],
   restaurant_owner: [
     "restaurant.manage",
+    "restaurant.settings.manage",
     "restaurant.staff.manage",
     "restaurant.menu.read",
     "restaurant.menu.write",
+    "restaurant.categories.write",
+    "restaurant.modifiers.write",
     "restaurant.orders.read",
     "restaurant.orders.manage",
     "restaurant.analytics.read",
@@ -46,6 +58,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   restaurant_manager: [
     "restaurant.menu.read",
     "restaurant.menu.write",
+    "restaurant.categories.write",
+    "restaurant.modifiers.write",
     "restaurant.orders.read",
     "restaurant.orders.manage",
     "restaurant.analytics.read",

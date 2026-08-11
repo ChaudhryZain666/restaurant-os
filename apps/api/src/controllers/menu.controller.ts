@@ -1,14 +1,19 @@
 import type { Request, Response } from "express";
-import type { MenuItemInput } from "@restaurant/validation";
+import type { MenuItemInput, UpdateMenuItemInput } from "@restaurant/validation";
 import { MenuItem } from "../models/MenuItem.js";
+import { Category } from "../models/Category.js";
+import { ModifierGroup } from "../models/ModifierGroup.js";
 import { redis } from "../config/redis.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
+import { menuCacheKey, invalidateMenuCache, MENU_CACHE_TTL_SECONDS } from "../services/menuCache.service.js";
 
-const MENU_CACHE_TTL_SECONDS = 60;
-
-function menuCacheKey(restaurantId: string) {
-  return `menu:${restaurantId}:available`;
+/** Throws if categoryId doesn't reference an existing category owned by this restaurant. */
+async function assertCategoryInRestaurant(restaurantId: string, categoryId: string) {
+  const exists = await Category.exists({ _id: categoryId, restaurantId });
+  if (!exists) {
+    throw ApiError.badRequest("categoryId does not reference a category on this restaurant");
+  }
 }
 
 export async function listMenu(req: Request, res: Response) {
@@ -17,28 +22,65 @@ export async function listMenu(req: Request, res: Response) {
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    return sendSuccess(res, { items: JSON.parse(cached), cached: true });
+    return sendSuccess(res, { ...JSON.parse(cached), cached: true });
   }
 
-  const docs = await MenuItem.find({ restaurantId, isAvailable: true }).sort({ category: 1, name: 1 });
-  const items = docs.map((doc) => doc.toJSON());
-  await redis.set(cacheKey, JSON.stringify(items), "EX", MENU_CACHE_TTL_SECONDS);
-  return sendSuccess(res, { items, cached: false });
+  const [itemDocs, categoryDocs, modifierGroupDocs] = await Promise.all([
+    MenuItem.find({ restaurantId, isAvailable: true }).sort({ categoryId: 1, sortOrder: 1, name: 1 }),
+    Category.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
+    ModifierGroup.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
+  ]);
+  const payload = {
+    items: itemDocs.map((doc) => doc.toJSON()),
+    categories: categoryDocs.map((doc) => doc.toJSON()),
+    modifierGroups: modifierGroupDocs.map((doc) => doc.toJSON()),
+  };
+  await redis.set(cacheKey, JSON.stringify(payload), "EX", MENU_CACHE_TTL_SECONDS);
+  return sendSuccess(res, { ...payload, cached: false });
+}
+
+/**
+ * Staff-only, uncached, and deliberately separate from listMenu: listMenu is public and its
+ * response is cached in Redis, so it must never include unavailable items — a request that
+ * populated the shared cache with hidden items included would leak them to every subsequent
+ * public customer request reading that same cache entry. Restaurant staff need to see hidden
+ * items too (to be able to un-hide them), hence this endpoint.
+ */
+export async function listAllMenuItems(req: Request, res: Response) {
+  const { restaurantId } = req.params;
+  const items = await MenuItem.find({ restaurantId }).sort({ categoryId: 1, sortOrder: 1, name: 1 });
+  sendSuccess(res, { items: items.map((doc) => doc.toJSON()) });
 }
 
 export async function createMenuItem(req: Request, res: Response) {
   const { restaurantId } = req.params;
   const body = req.body as MenuItemInput;
+  await assertCategoryInRestaurant(restaurantId, body.categoryId);
+
   const item = await MenuItem.create({ ...body, restaurantId });
-  await redis.del(menuCacheKey(restaurantId));
+  await invalidateMenuCache(restaurantId);
   sendSuccess(res, { item: item.toJSON() }, 201);
 }
 
 export async function updateMenuItem(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
-  const item = await MenuItem.findOneAndUpdate({ _id: id, restaurantId }, req.body, { new: true });
+  // updateMenuItemSchema has no restaurantId field, so req.body (already parsed by
+  // validateBody) cannot carry one through — the filter below is what scopes this update
+  // to the caller's own tenant; restaurantId itself is never part of the $set. categoryId IS
+  // allowed here, but is re-verified against the caller's own restaurant first — an item can
+  // move between categories, but never to another restaurant's category (Phase 1 audit item).
+  const updates = req.body as UpdateMenuItemInput;
+  if (updates.categoryId) {
+    await assertCategoryInRestaurant(restaurantId, updates.categoryId);
+  }
+
+  const item = await MenuItem.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { $set: updates },
+    { new: true, runValidators: true }
+  );
   if (!item) throw ApiError.notFound("Menu item not found");
-  await redis.del(menuCacheKey(restaurantId));
+  await invalidateMenuCache(restaurantId);
   sendSuccess(res, { item: item.toJSON() });
 }
 
@@ -46,6 +88,6 @@ export async function deleteMenuItem(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
   const item = await MenuItem.findOneAndDelete({ _id: id, restaurantId });
   if (!item) throw ApiError.notFound("Menu item not found");
-  await redis.del(menuCacheKey(restaurantId));
+  await invalidateMenuCache(restaurantId);
   res.status(204).send();
 }

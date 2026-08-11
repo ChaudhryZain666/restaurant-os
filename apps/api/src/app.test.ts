@@ -1,12 +1,12 @@
 import { afterAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "./app.js";
-import { redis } from "./config/redis.js";
+import { closeTestConnections } from "./test-utils/fixtures.js";
 
 const app = createApp();
 
 afterAll(async () => {
-  await redis.quit();
+  await closeTestConnections();
 });
 
 describe("app", () => {

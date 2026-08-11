@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createOrderSchema, updateOrderStatusSchema } from "@restaurant/validation";
+import { createOrderSchema, updateOrderPaymentStatusSchema, updateOrderStatusSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
@@ -8,6 +8,7 @@ import { validateBody } from "../middleware/validate.js";
 import {
   createOrder,
   listRestaurantOrders,
+  updateOrderPaymentStatus,
   updateOrderStatus,
 } from "../controllers/order.controller.js";
 
@@ -29,4 +30,12 @@ restaurantOrderRouter.patch(
   requirePermission("restaurant.orders.manage"),
   validateBody(updateOrderStatusSchema),
   asyncHandler(updateOrderStatus)
+);
+restaurantOrderRouter.patch(
+  "/:id/payment-status",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.orders.manage"),
+  validateBody(updateOrderPaymentStatusSchema),
+  asyncHandler(updateOrderPaymentStatus)
 );
