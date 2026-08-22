@@ -4,6 +4,7 @@ import { Badge, Button, Card } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { ModifierGroupsEditor } from "../components/ModifierGroupsEditor";
 import { uploadRestaurantImage } from "../lib/uploads";
@@ -186,7 +187,7 @@ function ItemForm({ mode, draft, setDraft, categories, saving, saveDraft, closeP
 
 export function MenuManagementPage() {
   const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   // Every role that can reach this page at all (owner/manager/restaurant_staff — see App.tsx's
   // RequireAuth permission="restaurant.menu.read") either has all three menu-editing permissions

@@ -6,6 +6,7 @@ import { ErrorBoundary, ToastProvider } from "@restaurant/ui";
 import "./index.css";
 import { App } from "./App";
 import { AuthProvider } from "./context/AuthContext";
+import { LocationProvider } from "./context/LocationContext";
 
 const queryClient = new QueryClient();
 
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <ToastProvider>
             <AuthProvider>
-              <App />
+              <LocationProvider>
+                <App />
+              </LocationProvider>
             </AuthProvider>
           </ToastProvider>
         </BrowserRouter>

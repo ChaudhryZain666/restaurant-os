@@ -3,7 +3,7 @@ import type { Order, OrderDeliveryAddress, OrderStatus, OrderType, PaymentStatus
 import { Badge, Button, Card } from "@restaurant/ui";
 import { formatCurrency, formatRestaurantDateTime, formatRestaurantTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { OrderPaymentAdmin } from "../components/OrderPaymentAdmin";
 import { OrderNotesAndActivity } from "../components/OrderNotesAndActivity";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
@@ -165,8 +165,7 @@ const PAYMENT_FILTER_OPTIONS: Array<{ value: "all" | PaymentStatus; label: strin
 ];
 
 export function OrdersManagementPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const timezone = useRestaurantTimezone();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);

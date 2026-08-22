@@ -3,7 +3,7 @@ import type { Promotion, PromotionType } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { IconTag } from "../components/icons";
 
@@ -31,8 +31,7 @@ function statusOf(promo: Promotion): { label: string; tone: "success" | "neutral
 }
 
 export function PromotionsPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);

@@ -3,13 +3,12 @@ import { Link } from "react-router-dom";
 import type { Restaurant } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
 export function DeliveryPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,7 +17,7 @@ export function DeliveryPage() {
 
   useEffect(() => {
     apiClient
-      .request<{ restaurant: Restaurant }>("/restaurants/me")
+      .request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`)
       .then((data) => setRestaurant(data.restaurant))
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));

@@ -6,6 +6,7 @@ import { Alert, Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { IconChart, IconClipboard } from "../components/icons";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -42,7 +43,7 @@ function MetricCard({ label, value, icon }: { label: string; value: string; icon
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   // restaurant_staff/kitchen_staff never hold restaurant.analytics.read — this unconditional
   // fetch used to run for every role, and its failure took the whole page down to an error-only
   // screen on their very first login (Phase 13 audit's P0-5). Fetched once, gates both the
@@ -56,7 +57,7 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const restaurantReq = apiClient.request<{ restaurant: Restaurant }>("/restaurants/me");
+    const restaurantReq = apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`);
     const analyticsReq = canViewAnalytics
       ? apiClient.request<{ analytics: RestaurantAnalytics }>(`/restaurants/${restaurantId}/analytics`)
       : Promise.resolve(null);

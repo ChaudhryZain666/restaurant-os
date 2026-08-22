@@ -18,6 +18,11 @@ test("platform admin can open a restaurant's detail page from the Restaurants li
   await page.getByRole("link", { name: "Restaurants" }).click();
   await expect(page.getByRole("heading", { name: "Restaurants" })).toBeVisible();
 
+  // Searched rather than relied on being on the default (unfiltered, newest-first) first page —
+  // this dev database accumulates real restaurants from every other E2E spec's own real UI-driven
+  // provisioning across the whole suite's history, so an old seeded restaurant like this one can
+  // legitimately no longer be on page 1 by the time this runs.
+  await page.getByPlaceholder("Search by name, slug, or city...").fill("Spice Route");
   await page.getByRole("link", { name: "Spice Route" }).click();
   await expect(page.getByRole("heading", { name: "Spice Route" })).toBeVisible({ timeout: 10_000 });
 

@@ -3,7 +3,7 @@ import type { Order, Paginated, RestaurantCustomerSummary } from "@restaurant/ty
 import { Alert, Badge, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { STATUS_LABELS, STATUS_TONE } from "../lib/orderStatusFlow";
 
@@ -70,8 +70,7 @@ function CustomerOrdersRow({ restaurantId, customerId }: { restaurantId: string;
 }
 
 export function CustomersPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");

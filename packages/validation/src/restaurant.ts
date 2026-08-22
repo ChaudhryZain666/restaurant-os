@@ -33,6 +33,23 @@ export const createRestaurantSchema = z
   });
 export type CreateRestaurantInput = z.infer<typeof createRestaurantSchema>;
 
+// Phase 19 — the owner-facing counterpart to createRestaurantSchema's businessId branch: always
+// attaches to the caller's OWN business (taken from the URL's :businessId, verified server-side by
+// requireBusinessMatch — never from this body), so there's no owner/businessId choice to make here
+// the way the platform-admin route has. cloneFromLocationId is optional: a one-time copy of
+// another of the business's own locations' menu (Category/MenuItem/ModifierGroup) into the new
+// location, fully independent afterward — see business.controller.ts's createLocationForBusiness.
+// The controller independently re-verifies cloneFromLocationId actually belongs to the same
+// business before touching it — never trusted from this body alone.
+export const createLocationSchema = z.object({
+  name: z.string().min(2).max(120),
+  slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
+  timezone: z.string().min(1).optional(),
+  currency: z.string().length(3).optional(),
+  cloneFromLocationId: z.string().min(1).optional(),
+});
+export type CreateLocationInput = z.infer<typeof createLocationSchema>;
+
 export const businessHoursDaySchema = z
   .object({
     day: z.enum(WEEKDAYS),

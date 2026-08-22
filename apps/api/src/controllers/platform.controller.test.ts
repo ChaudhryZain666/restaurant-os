@@ -79,6 +79,32 @@ describe("GET /platform/restaurants/:id — single-restaurant overview (Phase 16
     expect(res.body.data.analytics).toHaveProperty("ordersToday");
     expect(typeof res.body.data.orderCountLifetime).toBe("number");
     expect(Array.isArray(res.body.data.recentAuditLog)).toBe(true);
+    // Phase 19 — restaurantA has no businessId (default fixture), the still-overwhelmingly-common
+    // single-location case.
+    expect(res.body.data.businessLocationCount).toBe(1);
+  });
+
+  it("(Phase 19) reports the correct location count for a real multi-location business", async () => {
+    const { Business } = await import("../models/Business.js");
+    const business = await Business.create({
+      name: "Platform Detail Multi-Location Co",
+      slug: `platform-detail-multi-${Date.now()}`,
+      ownerId: ownerAId,
+      status: "active",
+    });
+    const locationB = await createTestRestaurant({ businessId: business._id, ownerId: ownerAId });
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { businessId: business._id });
+    try {
+      const res = await request(app)
+        .get(`/api/v1/platform/restaurants/${restaurantA.id}`)
+        .set("Authorization", `Bearer ${platformAdminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.businessLocationCount).toBe(2);
+    } finally {
+      await Restaurant.findByIdAndUpdate(restaurantA._id, { $unset: { businessId: "" } });
+      await Restaurant.deleteOne({ _id: locationB._id });
+      await Business.deleteOne({ _id: business._id });
+    }
   });
 
   it("returns 404 for a restaurant that doesn't exist", async () => {

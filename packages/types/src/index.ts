@@ -3,6 +3,7 @@ export * from "./types/rbac.js";
 export * from "./types/user.js";
 export * from "./types/address.js";
 export * from "./types/restaurant.js";
+export * from "./types/business.js";
 export * from "./types/category.js";
 export * from "./types/modifier.js";
 export * from "./types/menu.js";

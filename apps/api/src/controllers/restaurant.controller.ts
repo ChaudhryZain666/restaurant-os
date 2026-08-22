@@ -37,8 +37,10 @@ const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff
  * Business + owner (the default, unchanged behavior below), it attaches a new Restaurant (location)
  * to an EXISTING Business. No owner is created/invited in that mode — the existing Business's owner
  * already has implicit access to every location under their businessId (see
- * middleware/businessLocation.ts's requireLocationAccess), so there's nothing to invite. This is
- * the concrete proof that a business can have multiple locations; no UI calls it yet this phase.
+ * middleware/tenant.ts's requireTenantMatch), so there's nothing to invite. This branch stays
+ * platform_admin-only (this whole route is) — Phase 19 added a separate, owner-facing route for the
+ * same underlying action (business.controller.ts's createLocationForBusiness, mounted at
+ * POST /businesses/:businessId/locations) rather than widening this route's trust model.
  */
 export async function createRestaurant(req: Request, res: Response) {
   const { name, slug, timezone, currency, owner, businessId } = req.body as CreateRestaurantInput;
@@ -302,6 +304,25 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
 export async function getMyRestaurant(req: Request, res: Response) {
   if (!req.user?.restaurantId) throw ApiError.notFound("You are not associated with a restaurant");
   const restaurant = await Restaurant.findById(req.user.restaurantId);
+  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  sendSuccess(res, {
+    restaurant: restaurant.toJSON(),
+    availability: computeAvailability(restaurant.settings),
+    supportIdentity: getSupportIdentity(restaurant),
+  });
+}
+
+/**
+ * Phase 19 — GET /restaurants/me resolves purely from the JWT's own baked-in restaurantId, which
+ * is exactly wrong for a multi-location user: it would keep returning their ORIGINAL location's
+ * currency/timezone/settings even after switching the admin's active location to a different one
+ * (see apps/admin's useRestaurantCurrency/useRestaurantTimezone hooks and DashboardPage/
+ * SettingsPage, all of which used to call /me for this). This is the same shape as /me, but keyed
+ * by the URL's :restaurantId (guarded by requireTenantMatch — every role that can see /me can see
+ * this for whichever location they're actually authorized on, single- or multi-location).
+ */
+export async function getRestaurantById(req: Request, res: Response) {
+  const restaurant = await Restaurant.findById(req.params.restaurantId);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
   sendSuccess(res, {
     restaurant: restaurant.toJSON(),

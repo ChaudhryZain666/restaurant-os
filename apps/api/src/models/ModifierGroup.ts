@@ -23,6 +23,8 @@ export interface ModifierGroupDoc {
   isActive: boolean;
   sortOrder: number;
   options: ModifierOptionSubdoc[];
+  /** Phase 19 — see Category.ts's clonedFromCategoryId for the full rationale. */
+  clonedFromModifierGroupId?: Types.ObjectId;
 }
 
 const modifierOptionSchema = new Schema<ModifierOptionSubdoc>({
@@ -44,6 +46,7 @@ const modifierGroupSchema = new Schema<ModifierGroupDoc>(
     isActive: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
     options: { type: [modifierOptionSchema], required: true, validate: (v: unknown[]) => v.length > 0 },
+    clonedFromModifierGroupId: { type: Schema.Types.ObjectId, ref: "ModifierGroup", select: false },
   },
   {
     timestamps: true,

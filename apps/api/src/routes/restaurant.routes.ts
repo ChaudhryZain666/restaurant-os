@@ -8,6 +8,7 @@ import { validateBody } from "../middleware/validate.js";
 import {
   createRestaurant,
   getMyRestaurant,
+  getRestaurantById,
   getRestaurantBySlug,
   getRestaurantReadiness,
   previewRestaurantBySlug,
@@ -31,6 +32,13 @@ restaurantRouter.get("/by-slug/:slug", asyncHandler(getRestaurantBySlug));
 // in declaration order and "by-slug/:slug/preview" must not be shadowed by "by-slug/:slug" — it
 // isn't (different full path), but kept adjacent to getRestaurantBySlug for readability.
 restaurantRouter.get("/by-slug/:slug/preview", requireAuth, asyncHandler(previewRestaurantBySlug));
+// Phase 19 — the multi-location-safe sibling of /me (see getRestaurantById's doc comment). No
+// extra permission beyond requireTenantMatch, mirroring /me's own openness (every restaurant-
+// scoped role, including staff/kitchen_staff, can read their own location's basic info). Declared
+// AFTER the /by-slug/... routes above (both literal two-segment paths, so there's no real
+// collision either way, but keeping the single-segment :restaurantId wildcard last matches this
+// file's existing convention of literal-prefix routes before generic ones).
+restaurantRouter.get("/:restaurantId", requireAuth, requireTenantMatch(), asyncHandler(getRestaurantById));
 restaurantRouter.patch(
   "/:restaurantId",
   requireAuth,

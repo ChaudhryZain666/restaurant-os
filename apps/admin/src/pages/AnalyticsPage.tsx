@@ -3,7 +3,7 @@ import type { DailyAnalyticsPoint, RestaurantAnalytics } from "@restaurant/types
 import { Card, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 
 function MetricCard({ label, value }: { label: string; value: string }) {
@@ -56,8 +56,7 @@ function TrendChart({ series, metric, currency }: { series: DailyAnalyticsPoint[
 }
 
 export function AnalyticsPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   const [analytics, setAnalytics] = useState<RestaurantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);

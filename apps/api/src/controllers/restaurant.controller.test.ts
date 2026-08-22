@@ -498,6 +498,31 @@ describe("restaurant retrieval", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.restaurant.ownerId).toBeDefined();
   });
+
+  describe("GET /restaurants/:restaurantId (Phase 19) — the multi-location-safe sibling of /me", () => {
+    it("the owner can fetch their own restaurant by id, same shape as /me", async () => {
+      const res = await request(app)
+        .get(`/api/v1/restaurants/${restaurantA.id}`)
+        .set("Authorization", `Bearer ${ownerAToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.restaurant.id).toBe(restaurantA.id);
+      expect(res.body.data.restaurant.ownerId).toBeDefined();
+    });
+
+    it("staff cannot fetch a different restaurant by id (tenant isolation preserved)", async () => {
+      const res = await request(app)
+        .get(`/api/v1/restaurants/${restaurantB.id}`)
+        .set("Authorization", `Bearer ${ownerAToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it("platform_admin can fetch any restaurant by id", async () => {
+      const res = await request(app)
+        .get(`/api/v1/restaurants/${restaurantA.id}`)
+        .set("Authorization", `Bearer ${platformAdminToken}`);
+      expect(res.status).toBe(200);
+    });
+  });
 });
 
 describe("restaurant settings update (OWNER-only operation)", () => {

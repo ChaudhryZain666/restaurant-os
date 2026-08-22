@@ -7,6 +7,14 @@ export interface PublicUser {
   role: UserRole;
   /** Present only for restaurant-scoped roles (owner/manager/staff/kitchen_staff). */
   restaurantId?: string;
+  /** Phase 19 — present once a Business/Location foundation exists for this account (Phase 18
+   *  migration or a Phase-18-or-later invite/creation). Lets the admin frontend know whether to
+   *  offer any multi-location UI at all. */
+  businessId?: string;
+  /** Owner/manager: not populated here — they get implicit access to every location under
+   *  businessId (see apps/api's requireTenantMatch), so this stays empty for them by design, not
+   *  by omission. Staff/kitchen_staff: the specific locations they're scoped to. */
+  locationIds?: string[];
   phone?: string;
   createdAt: string;
 }
@@ -26,5 +34,10 @@ export interface StaffMember {
   isActive: boolean;
   /** True until they've followed their invite email and set their own password. */
   invitePending: boolean;
+  /** Phase 19 — which locations (Restaurant ids) this staff member can act on. Only meaningful
+   *  for restaurant_staff/kitchen_staff — a manager gets implicit access to every location under
+   *  the business regardless of what's here (see requireTenantMatch), so this is always empty for
+   *  managers by design. */
+  locationIds?: string[];
   createdAt: string;
 }

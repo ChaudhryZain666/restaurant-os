@@ -90,6 +90,9 @@ export interface Restaurant {
   /** Absent on the public storefront resolution response (GET /restaurants/by-slug/:slug) —
    *  present only on authenticated staff-facing responses (GET /restaurants/me). */
   ownerId?: string;
+  /** Phase 18/19 — the Business (brand) this location belongs to. Absent on a not-yet-migrated
+   *  restaurant or the public storefront response. */
+  businessId?: string;
   status: RestaurantStatus;
   settings: RestaurantSettings;
   createdAt: string;

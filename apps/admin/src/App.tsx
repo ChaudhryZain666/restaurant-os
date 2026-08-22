@@ -30,6 +30,7 @@ import { PlatformRestaurantDetailPage } from "./pages/PlatformRestaurantDetailPa
 import { CreateRestaurantPage } from "./pages/CreateRestaurantPage";
 import { PlatformUsersPage } from "./pages/PlatformUsersPage";
 import { SetupPage } from "./pages/SetupPage";
+import { LocationsPage } from "./pages/LocationsPage";
 import { PrintOrderPage } from "./pages/PrintOrderPage";
 
 const RESTAURANT_ROLES = [
@@ -221,6 +222,14 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.settings.manage">
               <SetupPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/locations"
+          element={
+            <RequireAuth permission="restaurant.settings.manage">
+              <LocationsPage />
             </RequireAuth>
           }
         />

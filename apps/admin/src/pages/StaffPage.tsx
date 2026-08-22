@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { StaffMember, UserRole } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId, useLocation as useActiveLocation } from "../context/LocationContext";
 import { IconIdBadge } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -33,8 +33,8 @@ function emptyDraft(): InviteDraft {
 }
 
 export function StaffPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
+  const { locations } = useActiveLocation();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +100,28 @@ export function StaffPage() {
     setBusyId(member.id);
     try {
       await apiClient.request(`/restaurants/${restaurantId}/staff/${member.id}`, { method: "PATCH", body: { role } });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Phase 19 — only meaningful for restaurant_staff/kitchen_staff (managers get implicit
+   *  business-wide access regardless of locationIds — see requireTenantMatch). Only rendered at
+   *  all when the business has more than one location, so a single-location owner never sees
+   *  this UI (nothing to assign). */
+  async function toggleLocation(member: StaffMember, locationId: string) {
+    setError(null);
+    setBusyId(member.id);
+    try {
+      const current = member.locationIds ?? [];
+      const next = current.includes(locationId) ? current.filter((id) => id !== locationId) : [...current, locationId];
+      await apiClient.request(`/restaurants/${restaurantId}/staff/${member.id}`, {
+        method: "PATCH",
+        body: { locationIds: next },
+      });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -221,7 +243,8 @@ export function StaffPage() {
         <Card>
           <ul className="flex flex-col divide-y divide-border">
             {staff.map((member) => (
-              <li key={member.id} className="flex flex-wrap items-center gap-3 py-3">
+              <li key={member.id} className="flex flex-col gap-2 py-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary font-heading text-xs font-semibold text-secondary-foreground">
                   {member.name[0]?.toUpperCase() ?? "?"}
                 </span>
@@ -264,6 +287,27 @@ export function StaffPage() {
                 >
                   {member.isActive ? "Deactivate" : "Reactivate"}
                 </button>
+              </div>
+              {/* Phase 19 — only shown once there's an actual choice to make (>1 location) and
+                  only for roles that don't already get implicit business-wide access. A manager
+                  covers every location under the business regardless of locationIds, so this
+                  would be a meaningless, misleading control for that role. */}
+              {locations.length > 1 && (member.role === "restaurant_staff" || member.role === "kitchen_staff") && (
+                <div className="ml-12 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted">Locations:</span>
+                  {locations.map((loc) => (
+                    <label key={loc.id} className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={(member.locationIds ?? []).includes(loc.id)}
+                        disabled={busyId === member.id}
+                        onChange={() => toggleLocation(member, loc.id)}
+                      />
+                      {loc.name}
+                    </label>
+                  ))}
+                </div>
+              )}
               </li>
             ))}
           </ul>

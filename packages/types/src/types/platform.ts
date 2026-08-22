@@ -50,6 +50,9 @@ export interface PlatformRestaurantDetail {
   analytics: RestaurantAnalytics;
   orderCountLifetime: number;
   recentAuditLog: AuditLogEntry[];
+  /** Phase 19 — how many Restaurant (location) documents share this one's businessId, including
+   *  itself. 1 for the still-overwhelmingly-common single-location case. */
+  businessLocationCount: number;
 }
 
 export interface PlatformOverview {

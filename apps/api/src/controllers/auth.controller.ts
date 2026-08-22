@@ -60,6 +60,8 @@ function toPublicUser(user: HydratedDocument<UserDoc>) {
     email: user.email,
     role: user.role,
     restaurantId: user.restaurantId?.toString(),
+    businessId: user.businessId?.toString(),
+    locationIds: user.locationIds?.map((id) => id.toString()),
     phone: user.phone,
   };
 }

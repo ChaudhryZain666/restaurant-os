@@ -3,6 +3,13 @@ import type { PublicUser } from "@restaurant/types";
 import { apiClient } from "../lib/api";
 import { socket } from "../lib/socket";
 
+/** Phase 19 — the socket's connect()/disconnect() trigger moved to LocationContext, which needs
+ *  to resolve the active location BEFORE the first connection attempt (see its doc comment for
+ *  why connecting here, the instant `user` is set, would race ahead of that and cause a
+ *  guaranteed extra reconnect for every multi-location user). AuthContext still owns logout's
+ *  disconnect — a logged-out session should never keep a socket open regardless of what
+ *  LocationContext is doing. */
+
 interface AuthResponse {
   user: PublicUser;
   accessToken: string;
@@ -51,8 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (user) socket.connect();
-    else socket.disconnect();
+    if (!user) socket.disconnect();
   }, [user]);
 
   async function login(email: string, password: string) {

@@ -568,3 +568,175 @@ total.
   Business backfill, then User sync), with a pre-flight check that fails loudly rather than
   silently if it finds one `ownerId` reused across multiple `Restaurant` documents (which the naive
   one-Business-per-Restaurant migration would otherwise incorrectly split into two Businesses).
+
+## Phase 19 — Multi-Location Admin Product Experience
+
+Phase 18 built the Business/Location data model but deliberately stopped at the backend. Phase 19
+turns it into a real, usable admin product: an owner can create a second location through the real
+UI, switch between locations, and have every location-scoped page (Orders, Menu, Kitchen, Staff,
+Delivery, Settings, ...) correctly follow the switch — while a single-location business (still the
+overwhelming majority) never sees any of this complexity at all.
+
+### The central correction to Phase 18
+
+Reconnaissance before implementation (required by this phase's own brief, and good practice
+regardless) found that Phase 18's design, while safe, left the product **unable to actually use**
+its own new capability: every real restaurant-scoped route was, and had to remain, guarded by
+`requireTenantMatch` — a strict equality check against the single `restaurantId` baked into a
+user's JWT at login. Phase 18's `requireLocationAccess` (which *did* correctly grant business-wide/
+location-scoped access) was deliberately wired into zero real routes, specifically to avoid
+touching existing routes' live behavior. The consequence: an owner with implicit access to a second
+location could never actually reach it through Orders, Menu, Kitchen, Staff, or any other real
+page, no matter what frontend was built on top.
+
+**Fix**: `requireTenantMatch` (`apps/api/src/middleware/tenant.ts`) is unified rather than left as
+two parallel authorization systems. Its core logic is extracted into a plain, non-Express function,
+`canAccessRestaurant(user, targetRestaurantId)`, reused by both the Express middleware and the
+Socket.IO handshake (see below) — a single implementation, not two copies that could drift out of
+sync. The original single-`restaurantId` fast path is checked first and is completely unchanged
+(synchronous, zero DB cost) — the single-location case, still nearly every account, pays nothing
+for this. The new fallback (owner/manager: `businessId` match against the target restaurant, one
+indexed lookup; staff/kitchen_staff: explicit `locationIds` membership, no DB call) only runs once
+that fast path has already failed. `requireLocationAccess` is retired (redundant once
+`requireTenantMatch` covers its logic); the one route that used it
+(`GET /businesses/:businessId/locations/:locationId`) now calls
+`requireTenantMatch('locationId')` instead. `requireBusinessMatch` stays — a genuinely different,
+business-level (not location-level) check with no equivalent in `tenant.ts`.
+
+This correction is validated by both new unit tests (`middleware/tenant.test.ts`, covering the
+async fallback branches in isolation) and, per the explicit recommendation that a middleware-only
+test can't prove a real route actually grants access, a real-route integration suite
+(`controllers/business.controller.test.ts`'s "requireTenantMatch's businessId fallback reaches REAL
+restaurant-scoped routes" block) — a manager operating a second location through the real
+`GET .../orders` and `PATCH /restaurants/:id` routes, not just the `/businesses` proof endpoints.
+
+### A second real gap found during reconnaissance
+
+`GET /businesses/:businessId/locations` (`listBusinessLocations`) returned every location under a
+business to any caller whose `businessId` matched, regardless of role — meaning a staff member
+explicitly restricted to one location via `locationIds` could still see every sibling location's
+name/slug/address in that response, even though they had no ability to actually operate them. Fixed
+by filtering the query to the caller's own `locationIds` when the role is
+`restaurant_staff`/`kitchen_staff`; owner/manager/`platform_admin` keep seeing everything, matching
+their access everywhere else.
+
+### Admin frontend architecture
+
+**`LocationContext`** (`apps/admin/src/context/LocationContext.tsx`) — the admin-app analog of
+`apps/web`'s `RestaurantContext`, except "which restaurant" is never a URL param here (every admin
+route is bare — `/orders`, not `/orders/:restaurantId`). Once `user.businessId` is known, it fetches
+`GET /businesses/:businessId/locations`, resolves the active location (a valid, still-accessible
+localStorage preference for this business > the user's own original `restaurantId` > the first
+accessible location), and exposes `activeLocationId`/`locations`/`switchLocation()`/
+`refetchLocations()`. **localStorage is a UI preference only, never an authorization input** — every
+request is still independently authorized server-side by `requireTenantMatch`, so a tampered/stale
+localStorage value can at worst show the wrong (but still authorized) location, never an
+unauthorized one. Proven directly by `e2e/multi-location-staff-isolation.spec.ts`, which tampers
+with localStorage to claim an unauthorized location and confirms the client falls back to the
+real, authorized one rather than trusting it.
+
+**15 admin pages** (Dashboard, Orders, Kitchen, Menu, Customers, Delivery, Tables, Promotions,
+Loyalty, Analytics, Staff, Support, Settings, Audit log, Setup) changed their one `const
+restaurantId = user!.restaurantId!;` line to `useActiveLocationId()` instead — mechanical,
+one-line-plus-import per file. `useRestaurantCurrency`/`useRestaurantTimezone`
+(`apps/admin/src/hooks/`) and four pages (Dashboard, Settings, Delivery, Setup) had a second,
+easy-to-miss bug in the same family: they called `GET /restaurants/me`, which resolves purely from
+the JWT's own baked-in `restaurantId` — meaning a multi-location user switching locations would
+still see their *original* location's currency/timezone/settings forever. Fixed by adding
+`GET /restaurants/:restaurantId` (guarded by the same `requireTenantMatch`, same response shape as
+`/me`) and pointing all of these at the active location instead.
+
+**Remount-on-switch**: the routed page area (`Layout.tsx`'s `<Outlet key={activeLocationId}>`)
+forces a full remount of whatever page is showing on every switch. This is not just a safety
+margin — `StaffPage`/`MenuManagementPage`/`AuditLogPage` all fetch with a mount-only
+`useEffect(() => {...}, [])`, no `restaurantId` in the dependency array at all, so without the
+forced remount they would silently keep showing the previous location's data indefinitely after a
+switch. Only the currently-displayed page's local state is lost (open modals, in-progress form
+fields) — `Layout` itself (nav, header, socket status) lives outside the keyed subtree.
+
+**Socket.IO**: room membership used to be derived once, at connection handshake, purely from the
+JWT's baked-in `restaurantId` — with no live "leave room X, join room Y" mechanism. Since switching
+the active location client-side doesn't issue a new JWT, Kitchen realtime for a switched-to
+location would silently keep listening to the *previous* location's room unless something changed.
+Fixed by extending the Socket.IO handshake's `auth` payload with a client-supplied `locationId`
+(`packages/utils/src/socketClient.ts`'s `auth` was already a callback re-invoked on every
+connection attempt, so this was cheap), verified server-side via the same `canAccessRestaurant`
+function before the server honors it — never trusted from the client alone, exactly like a URL
+param. `LocationContext.switchLocation()` does a real `disconnect()`+`connect()`, not a live
+in-place room swap — deliberately simpler, and structurally can't leave a stale room membership
+lingering alongside the new one. The very first connection's trigger was also moved from
+`AuthContext` (which used to connect the instant `user` was set) to `LocationContext` (which
+connects once `activeLocationId` has actually resolved) — connecting before that resolution would
+guarantee an extra, immediate reconnect for every multi-location user on every page load.
+
+**Known, accepted limitation**: authorization for an already-connected socket is checked once, at
+handshake — not per-event. If an owner revokes a staff member's location access mid-session, that
+socket keeps receiving events for the old room until their access token expires and forces a
+reconnect. This is not a new gap Phase 19 introduced — it's the same pre-existing property of the
+`restaurantId`-in-JWT design, just now also true of the `locationId` claim.
+
+### New surfaces
+
+- **`LocationsPage`** (`apps/admin/src/pages/LocationsPage.tsx`, route `/locations`) — the owner-facing
+  home for location management. Deliberately minimal at 1 location ("You have 1 location: X · [+ Add
+  another]") rather than presenting management complexity nobody needs yet. Gated by
+  `restaurant.settings.manage` (owner-only — `restaurant_manager` does not hold this permission,
+  matching Settings/Delivery's existing gating; not widened as an incidental side effect of this
+  phase).
+- **`POST /businesses/:businessId/locations`** (new route) — the owner-facing counterpart to Phase
+  18's `createRestaurant` `businessId` branch. `POST /restaurants` stays `platform_admin`-only (a
+  different trust model — onboarding an entirely new business); this new route is
+  `requireBusinessMatch` + `requirePermission("restaurant.settings.manage")`, never trusting a
+  client-supplied `businessId` for authorization.
+- **Staff page location assignment** — when a business has more than one location, the existing
+  staff list gains a small per-row location checkbox set (PATCHing `locationIds`, backend capability
+  already built in Phase 18) for `restaurant_staff`/`kitchen_staff` rows only — a manager gets
+  implicit business-wide access regardless of `locationIds`, so showing the control for that role
+  would be actively misleading. Hidden entirely at 1 location.
+- **Platform admin** — `PlatformRestaurantDetailPage` gained one fact ("Business: N locations",
+  shown only when >1) via a new `businessLocationCount` field on
+  `GET /platform/restaurants/:id`. Deliberately not a new business/location hierarchy view.
+
+### Menu — clone-on-creation, not the full shared architecture
+
+The full "business-scoped canonical item + location override" architecture Phase 18 documented as
+the eventual target was evaluated and explicitly deferred again this phase: it requires redesigning
+`orderPricing.service.ts`'s tenant-isolation guard (which today proves a menu item belongs to a
+restaurant via strict `{_id, restaurantId}` equality — a shared-item model breaks that core
+invariant and needs a real replacement, not a rename), and is independently as large and risky as
+everything else in this phase combined.
+
+Instead: each location keeps a fully independent menu (`Category`/`MenuItem`/`ModifierGroup`
+unchanged, still `restaurantId`-scoped), with an optional **one-time clone** convenience when
+creating a new location (`cloneFromLocationId` on `POST /businesses/:businessId/locations`,
+implemented in `services/menuClone.service.ts`, run inside the same transaction as the location's
+own creation so a failure partway through rolls back cleanly rather than leaving a half-set-up
+location behind). The clone produces entirely new, independent documents — editing the copy never
+affects the source, and there is no ongoing sync. `cloneFromLocationId` is independently
+re-verified server-side to belong to the same business — never trusted from the request body alone.
+Each cloned document records a `clonedFrom*Id` provenance field (`select: false` — internal-only,
+never exposed via `@restaurant/types` or any API response) as a near-zero-cost hook for a future
+shared-menu migration to detect "never touched since cloning" vs. "diverged" — nothing in the
+product reads it today. `imageUrl` is copied as a literal shared URL, not duplicated storage —
+intentional.
+
+### What stayed deliberately untouched this phase
+
+The full shared-menu/override architecture and `orderPricing.service.ts`'s redesign (above).
+`Order.orderNumber`/`LoyaltyAccount`/`Promotion` uniqueness scope (still location-scoped, per Phase
+18's original decision — unaffected by anything in this phase). Business-level analytics
+aggregation. White-label/custom domains, agency/multi-business users, a public API, POS
+integrations, CRM, billing — all explicitly out of scope per the brief.
+
+### A pre-existing, unrelated test fragility found and fixed along the way
+
+Two pre-existing Playwright specs (`platform-admin-tenant-management.spec.ts`,
+`platform-restaurant-detail.spec.ts`) located the seeded "Spice Route" restaurant by assuming it
+would always be on the admin Restaurants list's default (unfiltered, newest-first) first page. As
+this shared local dev database has accumulated real restaurants from every E2E spec's own
+real-UI-driven provisioning across many phases' test runs, the seeded restaurant eventually aged
+off page 1 — unrelated to any Phase 19 code change, but discovered by Phase 19's own regression
+run. Fixed durably (not just for this session) by having both specs search for "Spice Route"
+explicitly, using the same search box `platform-pagination-filters.spec.ts` already exercises
+against the real backend, rather than relying on default-page visibility that will only keep
+degrading as the dev database keeps growing over future phases.

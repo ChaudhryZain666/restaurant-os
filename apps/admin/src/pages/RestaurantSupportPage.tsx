@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { SupportTicket } from "@restaurant/types";
 import { Badge, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { TICKET_STATUS_LABELS, TICKET_STATUS_TONE } from "../lib/ticketStatus";
 
 /**
@@ -14,8 +14,7 @@ import { TICKET_STATUS_LABELS, TICKET_STATUS_TONE } from "../lib/ticketStatus";
  * response this role can reach regardless: support.tickets.internal_notes is platform_admin-only.
  */
 export function RestaurantSupportPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

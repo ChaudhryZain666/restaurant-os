@@ -1,14 +1,23 @@
 import type { NextFunction, Request, Response } from "express";
-import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
 
 /**
  * Phase 18 — additive alongside tenant.ts's requireTenantMatch, not a replacement for it. No
- * pre-Phase-18 route uses these; they guard the new /businesses routes only (routes/business.routes.ts).
+ * pre-Phase-18 route uses this; it guards the new /businesses routes only (routes/business.routes.ts).
  *
  * Confirms the business in the URL matches the authenticated user's own business.
  * platform_admin is exempt (manages all tenants). req.user.businessId being unset (a not-yet-
  * migrated account, or a token issued before Phase 18) is always a DENY, never a throw.
+ *
+ * Phase 19 note: this file used to also export requireLocationAccess, a location-level analog of
+ * this business-level check. It's been retired — its exact logic (owner/manager: businessId
+ * match via a DB lookup; staff/kitchen_staff: explicit locationIds membership) is now folded
+ * directly into middleware/tenant.ts's requireTenantMatch, since that's the function every real
+ * restaurant-scoped route actually depends on. Keeping requireLocationAccess around as a second,
+ * parallel implementation of the same logic — used by nothing except the one /businesses route
+ * that's since switched to requireTenantMatch('locationId') — would just be a second place for
+ * this authorization logic to drift out of sync. requireBusinessMatch stays here: it's a genuinely
+ * different check (business-level, not location-level) with no equivalent in tenant.ts.
  */
 export function requireBusinessMatch(paramName = "businessId") {
   return (req: Request, _res: Response, next: NextFunction) => {
@@ -18,44 +27,6 @@ export function requireBusinessMatch(paramName = "businessId") {
     const targetBusinessId = req.params[paramName];
     if (!req.user.businessId || req.user.businessId !== targetBusinessId) {
       return next(ApiError.forbidden("You do not have access to this business"));
-    }
-    next();
-  };
-}
-
-/**
- * Confirms the authenticated user has access to the specific location (Restaurant) in the URL.
- * platform_admin is exempt. Owner/manager get access to ANY location under their own businessId
- * (one indexed lookup — the JWT only carries businessId for them, not every location id, so this
- * is a genuine cross-check, not a JWT-only claim). Staff/kitchen_staff need explicit membership in
- * their own locationIds — no business-wide bypass for those roles.
- */
-export function requireLocationAccess(paramName = "locationId") {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(ApiError.unauthorized());
-    if (req.user.role === "platform_admin") return next();
-
-    const targetLocationId = req.params[paramName];
-    const isOwnerOrManager = req.user.role === "restaurant_owner" || req.user.role === "restaurant_manager";
-
-    if (isOwnerOrManager) {
-      if (!req.user.businessId) return next(ApiError.forbidden("You do not have access to this location"));
-      try {
-        const location = await Restaurant.findById(targetLocationId).select("businessId");
-        if (!location?.businessId || location.businessId.toString() !== req.user.businessId) {
-          return next(ApiError.forbidden("You do not have access to this location"));
-        }
-      } catch {
-        // A malformed ObjectId in the URL is a bad request, not a server error — findById throws
-        // a CastError for it, which reads the same as "not found" from the caller's perspective.
-        return next(ApiError.forbidden("You do not have access to this location"));
-      }
-      return next();
-    }
-
-    const locationIds = req.user.locationIds ?? [];
-    if (!locationIds.includes(targetLocationId)) {
-      return next(ApiError.forbidden("You do not have access to this location"));
     }
     next();
   };

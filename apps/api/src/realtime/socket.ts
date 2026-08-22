@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
 import { verifyAccessToken } from "../services/token.service.js";
+import { canAccessRestaurant } from "../middleware/tenant.js";
 import { env } from "../config/env.js";
 import { logger } from "../common/logger.js";
 
@@ -30,6 +31,29 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
       socket.data.userId = payload.sub;
       socket.data.role = payload.role;
       socket.data.restaurantId = payload.restaurantId;
+      socket.data.businessId = payload.businessId;
+      socket.data.locationIds = payload.locationIds;
+      // Phase 19 — a client-supplied locationId (the admin's currently active location; see
+      // apps/admin/src/lib/socket.ts) is NEVER trusted on its own, same as any URL param: it only
+      // ever takes effect if canAccessRestaurant confirms this specific token's user actually has
+      // access to it, using the exact same check every real restaurant-scoped route already
+      // enforces (middleware/tenant.ts). If it's absent, or the check fails, this falls back to
+      // the token's own baked-in restaurantId exactly as before Phase 19 — never a hard failure
+      // just because a stale/unset locationId was sent.
+      const requestedLocationId = socket.handshake.auth?.locationId as string | undefined;
+      socket.data.roomRestaurantId = payload.restaurantId;
+      if (requestedLocationId && requestedLocationId !== payload.restaurantId) {
+        canAccessRestaurant(
+          { role: payload.role, restaurantId: payload.restaurantId, businessId: payload.businessId, locationIds: payload.locationIds },
+          requestedLocationId
+        )
+          .then((allowed) => {
+            if (allowed) socket.data.roomRestaurantId = requestedLocationId;
+            next();
+          })
+          .catch(() => next());
+        return;
+      }
       next();
     } catch {
       next(new Error("Invalid or expired access token"));
@@ -37,15 +61,15 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
   });
 
   io.on("connection", (socket) => {
-    const { userId, restaurantId, role } = socket.data;
+    const { userId, roomRestaurantId, role } = socket.data;
     socket.join(`user:${userId}`);
-    if (restaurantId) socket.join(`restaurant:${restaurantId}`);
+    if (roomRestaurantId) socket.join(`restaurant:${roomRestaurantId}`);
     // Platform admins aren't restaurant-scoped, so they'd otherwise join no shared room at all —
     // this is how the platform-wide support dashboard receives live ticket updates regardless of
     // which platform_admin happens to be connected. See events/ticketEventListeners.ts.
     if (role === "platform_admin") socket.join("support:platform");
 
-    logger.info("socket connected", { userId, restaurantId, socketId: socket.id });
+    logger.info("socket connected", { userId, restaurantId: roomRestaurantId, socketId: socket.id });
 
     socket.on("disconnect", (reason) => {
       logger.info("socket disconnected", { userId, socketId: socket.id, reason });

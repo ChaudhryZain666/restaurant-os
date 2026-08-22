@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { TableWithStatus } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { IconQrCode, IconTable } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -18,8 +18,7 @@ function emptyDraft(): Draft {
 }
 
 export function TablesPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [tables, setTables] = useState<TableWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

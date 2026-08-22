@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { roleHasPermission, type Permission, type UserRole } from "@restaurant/types";
 import { useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
+import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import {
   IconBook,
@@ -51,6 +52,11 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     items: [
       { to: "/", label: "Dashboard", icon: IconGrid, end: true },
       { to: "/setup", label: "Setup", icon: IconSliders, permission: "restaurant.settings.manage" },
+      // Phase 19 — same gating as Settings/Delivery (restaurant.settings.manage is owner-only,
+      // not manager). Always shown to an owner even with just one location today, so there's a
+      // discoverable way to ever reach a second one — the page itself stays minimal at 1 location
+      // rather than presenting management complexity by default (see LocationsPage.tsx).
+      { to: "/locations", label: "Locations", icon: IconStore, permission: "restaurant.settings.manage" },
     ],
   },
   {
@@ -204,6 +210,7 @@ function IconClose({ className }: { className?: string }) {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const { activeLocationId, locations, switchLocation } = useActiveLocation();
   const isPlatformAdmin = user?.role === "platform_admin";
   const isKitchenStaff = user?.role === "kitchen_staff";
   const isRestaurantScoped = user && !isPlatformAdmin;
@@ -286,6 +293,29 @@ export function Layout() {
           <span className="lg:hidden" />
           {user && (
             <div className="ml-auto flex items-center gap-3">
+              {/* Phase 19 — only ever rendered when there's an actual choice to make
+                  (locations.length > 1): a single-location business must never see this, matching
+                  Section 5's "don't complicate the single-location product" requirement. A native
+                  <select>, matching the only existing picker precedent in this app (SettingsPage's
+                  timezone field) — no dropdown component exists in packages/ui and this phase
+                  doesn't justify building one. */}
+              {isRestaurantScoped && locations.length > 1 && (
+                <label className="hidden items-center gap-1.5 text-sm sm:flex">
+                  <span className="text-muted">Location:</span>
+                  <select
+                    value={activeLocationId ?? ""}
+                    onChange={(e) => switchLocation(e.target.value)}
+                    aria-label="Active location"
+                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                  >
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="flex items-center gap-2.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary font-heading text-xs font-semibold text-secondary-foreground">
                   {user.name?.[0]?.toUpperCase() ?? "?"}
@@ -306,7 +336,17 @@ export function Layout() {
           )}
         </header>
         <main className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          {/* Phase 19 — forces a full remount of whatever page is showing on every location
+              switch, so its (mostly mount-only, useEffect(() => {...}, [])) fetch always re-runs
+              against the new id. Confirmed necessary, not just a safety margin: several pages
+              (Staff, Menu Management, Audit log) fetch with no restaurantId in their effect's
+              dependency array at all — without this key, switching locations would leave them
+              silently showing the PREVIOUS location's data indefinitely. Only the currently
+              displayed page's local state is lost (open modals, in-progress form fields); Layout
+              itself (nav, header, socket status) lives outside this keyed subtree and is
+              untouched. platform_admin/no-business accounts have a constant (null) key here, so
+              they're never affected. */}
+          <Outlet key={activeLocationId} />
         </main>
       </div>
     </div>

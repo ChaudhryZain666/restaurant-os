@@ -14,6 +14,9 @@ const menuItemSchema = new Schema(
     imageUrl: { type: String },
     isAvailable: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
+    // Phase 19 — see Category.ts's clonedFromCategoryId for the full rationale. imageUrl is
+    // copied as a literal shared URL on clone (not duplicated storage) — intentional.
+    clonedFromMenuItemId: { type: Schema.Types.ObjectId, ref: "MenuItem", select: false },
   },
   { timestamps: true, toJSON: idTransform }
 );

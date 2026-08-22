@@ -16,6 +16,12 @@ test("platform admin can suspend and reactivate a restaurant from the Restaurant
   await page.getByRole("link", { name: "Restaurants" }).click();
   await expect(page.getByRole("heading", { name: "Restaurants" })).toBeVisible();
 
+  // Searched rather than relied on being on the default (unfiltered, newest-first) first page —
+  // this dev database accumulates real restaurants from every other E2E spec's own real UI-driven
+  // provisioning across the whole suite's history, so an old seeded restaurant like this one can
+  // legitimately no longer be on page 1 by the time this runs. The search box is the same one
+  // platform-pagination-filters.spec.ts already exercises against the real backend.
+  await page.getByPlaceholder("Search by name, slug, or city...").fill("Spice Route");
   const row = page.locator("tr", { hasText: "Spice Route" });
   await expect(row).toBeVisible();
 

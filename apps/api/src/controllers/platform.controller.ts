@@ -154,16 +154,21 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
   const restaurant = await Restaurant.findById(id);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
-  const [owner, readiness, analytics, orderCount, recentAuditLog] = await Promise.all([
+  const [owner, readiness, analytics, orderCount, recentAuditLog, businessLocationCount] = await Promise.all([
     User.findById(restaurant.ownerId).select("name email phone inviteTokenHash inviteExpiresAt isActive"),
     computeReadiness(restaurant),
     getRestaurantAnalytics(id),
     Order.countDocuments({ restaurantId: restaurant._id }),
     AuditLog.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 }).limit(10),
+    // Phase 19 — a light-touch fact only (not a new business/location hierarchy view): lets a
+    // platform admin see at a glance that this restaurant is one of several locations under the
+    // same business, without building out a dedicated cross-restaurant navigation surface.
+    restaurant.businessId ? Restaurant.countDocuments({ businessId: restaurant.businessId }) : Promise.resolve(1),
   ]);
 
   sendSuccess(res, {
     restaurant: restaurant.toJSON(),
+    businessLocationCount,
     owner: owner
       ? {
           id: owner.id as string,

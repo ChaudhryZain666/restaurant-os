@@ -14,10 +14,16 @@ export type { Socket } from "socket.io-client";
  * This is a notification channel, not a source of truth: callers should treat every event as
  * "something changed, go re-fetch," never as the state itself — see each app's useOrderEvents/
  * useRestaurantOrderEvents hook.
+ *
+ * Phase 19 — `getLocationId` is optional (apps/web has no multi-location concept and never passes
+ * it): when present, its current value is sent alongside the token on every (re)connection
+ * attempt, the same "always read fresh, never capture stale" reasoning as the token itself. The
+ * server verifies it against the token's own claims before honoring it (see
+ * apps/api/src/realtime/socket.ts) — this is never trusted on its own, exactly like a URL param.
  */
-export function createSocketClient(url: string, getToken: () => string | null): Socket {
+export function createSocketClient(url: string, getToken: () => string | null, getLocationId?: () => string | null): Socket {
   return io(url, {
     autoConnect: false,
-    auth: (cb) => cb({ token: getToken() }),
+    auth: (cb) => cb({ token: getToken(), locationId: getLocationId?.() ?? undefined }),
   });
 }

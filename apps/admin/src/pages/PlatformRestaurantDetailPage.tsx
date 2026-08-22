@@ -83,7 +83,7 @@ export function PlatformRestaurantDetailPage() {
     );
   if (!detail) return null;
 
-  const { restaurant, owner, readiness, analytics, orderCountLifetime, recentAuditLog } = detail;
+  const { restaurant, owner, readiness, analytics, orderCountLifetime, recentAuditLog, businessLocationCount } = detail;
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
@@ -151,6 +151,12 @@ export function PlatformRestaurantDetailPage() {
               <dt className="text-muted">Created</dt>
               <dd className="text-foreground">{new Date(restaurant.createdAt).toLocaleDateString()}</dd>
             </div>
+            {businessLocationCount > 1 && (
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Business</dt>
+                <dd className="text-foreground">{businessLocationCount} locations</dd>
+              </div>
+            )}
           </dl>
         </Card>
 

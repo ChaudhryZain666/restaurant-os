@@ -4,7 +4,7 @@ import type { BusinessHoursDay, GeocodeResult, Restaurant, Weekday } from "@rest
 import { WEEKDAYS } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
 import { uploadRestaurantImage } from "../lib/uploads";
 
@@ -51,8 +51,7 @@ function ComingSoon({ children }: { children: ReactNode }) {
 }
 
 export function SettingsPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,7 +77,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     apiClient
-      .request<{ restaurant: Restaurant }>("/restaurants/me")
+      .request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`)
       .then((data) => setRestaurant(data.restaurant))
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { LoyaltySummary } from "@restaurant/types";
 import { Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { IconStar } from "../components/icons";
 
 const TIER_TONE: Record<string, "neutral" | "info" | "warning"> = {
@@ -36,8 +36,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
  * LoyaltyAccount/LoyaltyTransaction — every number here reflects an actual order, never estimated.
  */
 export function LoyaltyPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [summary, setSummary] = useState<LoyaltySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -3,7 +3,7 @@ import type { AuditAction, AuditLogEntry, AuditTargetType, Paginated } from "@re
 import { AUDIT_ACTIONS } from "@restaurant/types";
 import { Alert, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { AUDIT_ACTION_LABELS } from "../lib/auditLog";
 
 const PAGE_SIZE = 30;
@@ -34,8 +34,7 @@ function MetadataSummary({ metadata }: { metadata?: Record<string, unknown> }) {
 }
 
 export function AuditLogPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [page, setPage] = useState(1);
   const [targetType, setTargetType] = useState<AuditTargetType | "all">("all");
   const [action, setAction] = useState<AuditAction | "all">("all");

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Restaurant, RestaurantReadiness } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { previewUrl, storefrontUrl } from "../lib/links";
 
 const CHECK_LINKS: Record<string, { label: string; to: string }> = {
@@ -33,8 +33,7 @@ function CheckIcon({ complete }: { complete: boolean }) {
  * only reflects that, it never decides readiness on its own.
  */
 export function SetupPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const navigate = useNavigate();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [readiness, setReadiness] = useState<RestaurantReadiness | null>(null);
@@ -44,7 +43,7 @@ export function SetupPage() {
 
   function reload() {
     return Promise.all([
-      apiClient.request<{ restaurant: Restaurant }>("/restaurants/me"),
+      apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`),
       apiClient.request<RestaurantReadiness>(`/restaurants/${restaurantId}/readiness`),
     ]).then(([restaurantData, readinessData]) => {
       setRestaurant(restaurantData.restaurant);

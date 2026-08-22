@@ -3,7 +3,7 @@ import type { Order, OrderStatus } from "@restaurant/types";
 import { Badge, Button, Card } from "@restaurant/ui";
 import { getStatusTimestamp, formatElapsed } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import { useSocketStatus } from "../hooks/useSocketStatus";
 import {
@@ -91,8 +91,7 @@ function KitchenOrderCard({ order, now, onSetStatus }: { order: Order; now: Date
  * needs to be scanned fast, not admired.
  */
 export function KitchenPage() {
-  const { user } = useAuth();
-  const restaurantId = user!.restaurantId!;
+  const restaurantId = useActiveLocationId();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
