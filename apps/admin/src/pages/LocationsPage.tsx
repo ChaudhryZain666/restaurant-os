@@ -190,13 +190,13 @@ export function LocationsPage() {
             </div>
             {locations.length > 0 && (
               <label className="flex flex-col gap-1 text-sm">
-                Clone menu from (optional)
+                Match another location's menu differences (optional)
                 <select
                   value={draft.cloneFromLocationId}
                   onChange={(e) => setDraft({ ...draft, cloneFromLocationId: e.target.value })}
                   className={inputClass}
                 >
-                  <option value="">Start with an empty menu</option>
+                  <option value="">Just use the business's shared menu</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -204,7 +204,9 @@ export function LocationsPage() {
                   ))}
                 </select>
                 <span className="text-xs text-muted">
-                  A one-time copy — the new location's menu is fully independent afterward, with no ongoing sync.
+                  Every location already shares the business's menu automatically — this only copies a
+                  starting point of price/availability differences from that location, if it has any.
+                  Future changes to the shared menu still apply here automatically either way.
                 </span>
               </label>
             )}

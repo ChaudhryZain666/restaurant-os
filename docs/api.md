@@ -27,10 +27,22 @@
 /api/v1/restaurants/me                            GET     Requires auth (restaurant-scoped)
 /api/v1/restaurants/by-slug/:slug                 GET     Public
 
-/api/v1/restaurants/:restaurantId/menu            GET     Public, Redis-cached
-/api/v1/restaurants/:restaurantId/menu            POST    requires restaurant.menu.write + tenant match
-/api/v1/restaurants/:restaurantId/menu/:id        PATCH   requires restaurant.menu.write + tenant match
-/api/v1/restaurants/:restaurantId/menu/:id        DELETE  requires restaurant.menu.write + tenant match
+/api/v1/restaurants/:restaurantId/menu            GET     Public, Redis-cached — dual-path: canonical (shared) menu once the business is migrated, legacy per-location menu otherwise
+/api/v1/restaurants/:restaurantId/menu            POST    requires restaurant.menu.write + tenant match — 410 MENU_MIGRATED once the business is migrated (Phase 21); use the canonical/override routes below instead
+/api/v1/restaurants/:restaurantId/menu/:id        PATCH   requires restaurant.menu.write + tenant match — same 410 retirement
+/api/v1/restaurants/:restaurantId/menu/:id        DELETE  requires restaurant.menu.write + tenant match — same 410 retirement
+
+# Phase 21 — shared canonical menu + per-location overrides (categories/menu/modifiers all follow this same split)
+/api/v1/businesses/:businessId/categories                                  GET/POST      requires requireBusinessMatch + restaurant.categories.write (POST only)
+/api/v1/businesses/:businessId/categories/:id                              PATCH/DELETE  requires requireBusinessMatch + restaurant.categories.write
+/api/v1/businesses/:businessId/menu                                        GET/POST      requires requireBusinessMatch + restaurant.menu.write (POST only)
+/api/v1/businesses/:businessId/menu/:id                                    PATCH/DELETE  requires requireBusinessMatch + restaurant.menu.write
+/api/v1/businesses/:businessId/menu/:menuItemId/modifiers                  GET/POST      requires requireBusinessMatch + restaurant.modifiers.write (POST only)
+/api/v1/businesses/:businessId/menu/:menuItemId/modifiers/:id              PATCH/DELETE  requires requireBusinessMatch + restaurant.modifiers.write
+/api/v1/restaurants/:restaurantId/categories/:categoryId/override          PUT/DELETE    requires tenant match + restaurant.categories.write — atomic upsert; PUT merges ($set), DELETE restores pure inheritance
+/api/v1/restaurants/:restaurantId/menu/:menuItemId/override                PUT/DELETE    requires tenant match + restaurant.menu.write
+/api/v1/restaurants/:restaurantId/menu/:menuItemId/modifiers/:id/override  PUT/DELETE    requires tenant match + restaurant.modifiers.write
+/api/v1/restaurants/:restaurantId/menu/overrides                          GET            requires tenant match + restaurant.menu.read — every override row for this location in one call: {categoryOverrides, menuItemOverrides, modifierGroupOverrides}
 
 /api/v1/restaurants/:restaurantId/orders          POST    Any authenticated customer (ordering FROM this restaurant)
 /api/v1/restaurants/:restaurantId/orders          GET     requires restaurant.orders.read + tenant match

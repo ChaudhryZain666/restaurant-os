@@ -17,15 +17,18 @@ test.describe("admin panel — tenant isolation", () => {
     request,
   }) => {
     const bellaVista = await request.get("http://localhost:4000/api/v1/restaurants/by-slug/bella-vista");
-    const bellaVistaId = (await bellaVista.json()).data.restaurant.id as string;
+    const bellaVistaBusinessId = (await bellaVista.json()).data.restaurant.businessId as string;
 
     await page.goto("http://localhost:5174/login");
     await page.locator('input[type="email"]').fill("amara@spice-route.local");
     await page.locator('input[type="password"]').fill("Owner123!");
 
+    // Phase 21 — the admin Menu page now reads the canonical (business-scoped) menu, not the old
+    // location-scoped /menu/items endpoint, so that's what a real session's auth header is
+    // captured from here.
     let capturedAuthHeader: string | null = null;
     page.on("request", (req) => {
-      if (!capturedAuthHeader && req.url().includes("/menu/items")) {
+      if (!capturedAuthHeader && /\/businesses\/[^/]+\/menu$/.test(req.url())) {
         capturedAuthHeader = req.headers()["authorization"] ?? null;
       }
     });
@@ -41,9 +44,9 @@ test.describe("admin panel — tenant isolation", () => {
 
     await expect.poll(() => capturedAuthHeader).not.toBeNull();
 
-    // The exact same, genuinely valid access token — reused against a different restaurantId in
-    // the URL — must be rejected by requireTenantMatch(), not silently served.
-    const crossTenantRes = await request.get(`http://localhost:4000/api/v1/restaurants/${bellaVistaId}/menu/items`, {
+    // The exact same, genuinely valid access token — reused against a different BUSINESS's
+    // canonical menu — must be rejected by requireBusinessMatch(), not silently served.
+    const crossTenantRes = await request.get(`http://localhost:4000/api/v1/businesses/${bellaVistaBusinessId}/menu`, {
       headers: { Authorization: capturedAuthHeader! },
     });
     expect(crossTenantRes.status()).toBe(403);

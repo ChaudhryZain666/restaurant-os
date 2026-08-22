@@ -21,8 +21,13 @@ test("platform admin can suspend and reactivate a restaurant from the Restaurant
   // provisioning across the whole suite's history, so an old seeded restaurant like this one can
   // legitimately no longer be on page 1 by the time this runs. The search box is the same one
   // platform-pagination-filters.spec.ts already exercises against the real backend.
+  //
+  // Phase 21 — excludes "Downtown" because e2e/shared-menu-canonical-override.spec.ts creates a
+  // real "Spice Route Downtown {timestamp}" second location under this same real business on every
+  // run, which also matches a "Spice Route" substring search; this locator must keep targeting the
+  // one, original, exact "Spice Route" row regardless of how many such locations have accumulated.
   await page.getByPlaceholder("Search by name, slug, or city...").fill("Spice Route");
-  const row = page.locator("tr", { hasText: "Spice Route" });
+  const row = page.locator("tr").filter({ hasText: "Spice Route" }).filter({ hasNotText: "Downtown" });
   await expect(row).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());

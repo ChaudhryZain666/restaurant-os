@@ -27,17 +27,19 @@ test.describe("menu page — role-based write controls", () => {
     await expect(page.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
 
     // Capture staff's own genuine access token, then prove the backend rejects a write attempt
-    // independently of the UI — not merely "the button is hidden."
+    // independently of the UI — not merely "the button is hidden." Phase 21 — the admin Menu page
+    // now reads the canonical (business-scoped) menu, not the old location-scoped /menu/items
+    // endpoint, so that's what the auth header is captured from here.
     let staffAuthHeader: string | null = null;
     page.on("request", (req) => {
-      if (!staffAuthHeader && req.url().includes("/menu/items")) staffAuthHeader = req.headers()["authorization"] ?? null;
+      if (!staffAuthHeader && /\/businesses\/[^/]+\/menu$/.test(req.url())) staffAuthHeader = req.headers()["authorization"] ?? null;
     });
     await page.reload();
     await expect.poll(() => staffAuthHeader).not.toBeNull();
 
     const restaurantRes = await request.get("http://localhost:4000/api/v1/restaurants/by-slug/demo-restaurant");
-    const restaurantId = (await restaurantRes.json()).data.restaurant.id;
-    const createRes = await request.post(`http://localhost:4000/api/v1/restaurants/${restaurantId}/menu`, {
+    const restaurantData = (await restaurantRes.json()).data.restaurant;
+    const createRes = await request.post(`http://localhost:4000/api/v1/businesses/${restaurantData.businessId}/menu`, {
       headers: { Authorization: staffAuthHeader! },
       data: { name: "Should never be created", price: 1, categoryId: "000000000000000000000000" },
     });

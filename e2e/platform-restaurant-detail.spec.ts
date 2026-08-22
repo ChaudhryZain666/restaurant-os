@@ -22,8 +22,12 @@ test("platform admin can open a restaurant's detail page from the Restaurants li
   // this dev database accumulates real restaurants from every other E2E spec's own real UI-driven
   // provisioning across the whole suite's history, so an old seeded restaurant like this one can
   // legitimately no longer be on page 1 by the time this runs.
+  //
+  // Phase 21 — exact: true because e2e/shared-menu-canonical-override.spec.ts creates a real
+  // "Spice Route Downtown {timestamp}" second location under this same real business on every run,
+  // which also matches a substring "Spice Route" search and link-name lookup.
   await page.getByPlaceholder("Search by name, slug, or city...").fill("Spice Route");
-  await page.getByRole("link", { name: "Spice Route" }).click();
+  await page.getByRole("link", { name: "Spice Route", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Spice Route" })).toBeVisible({ timeout: 10_000 });
 
   await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();

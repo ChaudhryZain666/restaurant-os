@@ -966,3 +966,181 @@ phase and none were added; not required for correctness (the storefront simply r
    queries in `orderPricing.service.ts`/`menu.controller.ts`, the whole-document clone path in
    `menuClone.service.ts`) — dual-path was a deliberate, temporary safety net for this phase, not
    the permanent shape of the code.
+
+## Phase 21 — Shared Menu Productization, Migration & Owner Experience
+
+Phase 20 built the shared-canonical-menu architecture as a dormant, dual-path backend checkpoint —
+correct, fixture-tested, but never run against real data, with the old per-location write endpoints
+still live and the admin UI unaware the new model existed. Phase 21 finishes the transition: the
+real migration ran, the old write endpoints were retired (per-business, runtime-checked), and the
+admin UI was rebuilt around canonical items + per-location overrides — without a single existing
+restaurant losing functionality.
+
+### Domain model change
+
+One schema change, the only one this phase made: `restaurantId` on `Category`/`MenuItem`/
+`ModifierGroup` went from `required: true` to conditionally required
+(`required: function(this){ return !this.businessId; }`). A canonical-only document (created via
+the new business-scoped write API, below) has no single owning location to populate it with; a
+legacy, not-yet-migrated document keeps requiring it exactly as before. `ModifierGroupDoc`'s
+TypeScript interface changed to match (`restaurantId?: Types.ObjectId`).
+
+### New write API
+
+Two parallel write surfaces now exist per entity type (`Category`/`MenuItem`/`ModifierGroup`),
+added as new functions on the *existing* controllers — not new files, so each entity's logic stays
+in one place:
+
+- **Canonical** — `POST/PATCH/DELETE /businesses/:businessId/categories|menu|menu/:menuItemId/modifiers[/:id]`,
+  guarded by `requireBusinessMatch()` + the *existing* `restaurant.{categories|menu|modifiers}.write`
+  permission (no new RBAC entries — owner/manager already hold it business-wide; staff/kitchen_staff
+  hold neither, regardless of scope). Writes set/scope by `businessId`, call
+  `invalidateMenuCacheForBusiness(businessId)` (built dormant in Phase 20; these are its first real
+  callers).
+- **Location override** — `PUT/DELETE /restaurants/:restaurantId/categories/:categoryId/override`,
+  `.../menu/:menuItemId/override`, `.../menu/:menuItemId/modifiers/:modifierGroupId/override`,
+  guarded by the existing `requireTenantMatch()` + same write permissions. `PUT` is an atomic
+  `findOneAndUpdate({locationId, entityId}, {$set: body}, {upsert:true, new:true, runValidators:true})`
+  — never find-then-write, since the unique `{locationId, entityId}` index makes a two-step
+  read-then-decide racy under concurrent requests. `$set` semantics make `PUT` a **merge**, not a
+  destructive replace: only the keys present in the request body are touched, so the frontend always
+  sends the full set of override-editable fields it wants preserved. `DELETE` removes the whole
+  override row idempotently (204 either way — "no override" is a valid steady state), restoring pure
+  inheritance from canonical.
+- A combined `GET /restaurants/:restaurantId/menu/overrides` returns every override row
+  (`{categoryOverrides, menuItemOverrides, modifierGroupOverrides}`) for a location in one round
+  trip — sparse by design, so this stays cheap even for a location with many divergences.
+- New DTOs (`packages/types/src/types/override.ts`) and zod schemas (`packages/validation/src/override.ts`,
+  all `.refine()`-rejecting an empty body) back both surfaces.
+
+### Retirement of the old write endpoints — per-business, runtime-checked
+
+The old per-location write endpoints (`POST/PATCH/DELETE /restaurants/:restaurantId/menu|
+categories|.../modifiers`) are not deleted — deleting them outright would break any business not
+yet migrated (every newly-onboarded business, by construction, until a future phase changes that).
+Instead, `assertMenuNotMigrated(restaurantId)` (`menuResolution.service.ts`) is the first line of
+all nine legacy write functions: it calls the newly-exported `resolveCanonicalBusinessId`, and if
+the business has already been migrated, throws a new `ApiError.gone()` (410, `ErrorCode.MENU_MIGRATED`)
+pointing the caller at the new canonical/override endpoints instead. This check is **per-business
+and evaluated on every request**, not a static route removal — a business rolled back via `$unset
+businessId` automatically regains its old endpoints with no redeploy. This was a deliberate
+correction of Phase 20's original "dual-path forever" framing: once a sibling location's document is
+promoted into canonical (keeping its original `restaurantId`, only gaining `businessId`), the old
+endpoint's `{_id, restaurantId}` filter would still match it — a write through the old endpoint
+would silently mutate what is now a business-wide canonical document. A passive dual-path, unlike
+the read side, was unsafe on the write side; the active per-business cutover above closes that gap.
+
+### The real migration
+
+**Backup.** `mongodump`/`mongorestore` are not installed on this machine (confirmed: no
+`mongodump.exe` under `C:\Program Files\MongoDB`, no `docker` CLI available either), so a
+purpose-built logical backup was used instead: the `mongodb` Node driver + `bson`'s `EJSON`
+(canonical extended JSON, full `ObjectId`/`Date` fidelity) dumped every collection to one `.ejson`
+file each. Run against `mongodb://localhost:27017/restaurant_platform?replicaSet=rs0`:
+
+- **Taken at**: 2026-08-22T20:21:47.251Z
+- **Location**: session scratchpad (`.../scratchpad/phase21-migration/backup-20260823T012146/`) —
+  outside the repo and **not a permanent retention location**; if this migration is ever re-run
+  against a different environment, take a fresh backup with the same script rather than relying on
+  this one persisting.
+- **Contents**: full 22-collection snapshot (all business data — restaurants, businesses, categories,
+  menu items, modifier groups, overrides, orders, users, etc.), one `.ejson` file per collection plus
+  a `_summary.json` recording per-collection document counts at backup time.
+- **Verified restorable**: restored into a scratch database (`restaurant_platform_backup_verify`)
+  and every collection's document count compared against the source — all matched exactly, before
+  the real migration was trusted to run.
+
+**Rehearsal.** The existing Phase 20 migration service (`menuBusinessMigration.service.ts` +
+`scripts/migrateMenuToCanonical.ts --dry-run`) was run in dry-run mode against the real dev database
+first (executes the real matching/promotion logic inside a manually-managed transaction, then always
+aborts — nothing persisted) and inspected against STOP criteria (any throw; implausible
+exclusive-promotion counts; failed backup-restore verification) before proceeding. No architectural
+change was made to the migration logic itself — Phase 20's design held up under real data.
+
+**Real run.** Executed via the unchanged `npm run migrate:menu-canonical` script. Result:
+**78 businesses migrated**, **30 already-canonical** (investigated and confirmed to be Jest test
+fixtures — `"Test Business"`/`test-business-<timestamp>-<n>` slugs — with zero overlap with real
+seeded/demo data), **84 businesses skipped** (no locations to migrate — not yet provisioned past
+account creation).
+
+**Verification.** Not a hand-picked sample: every migrated business's effective menu (via
+`resolveMenuForLocation`) was diffed content-by-content (`{name, price, isAvailable, categoryName}`,
+not raw document ids, since ids legitimately change for matched/promoted documents) between a
+pre-migration snapshot (restored from the EJSON backup into the scratch database) and the real
+post-migration database. The diff tooling itself had a bug on its first run (a raw, un-stringified
+`ObjectId` used as a map key against string keys, causing 21 false-positive differences on the
+legacy-resolution path) — found and fixed before drawing any conclusion, then the diff was
+regenerated from the corrected snapshot and re-run: **4 genuine, fully explained differences**
+remained (all sort-order-only reorderings from the migration's deterministic anchor-election, no
+price/availability/name changes), **0 unexplained differences** across the full migrated set.
+
+### Owner UX — `MenuManagementPage.tsx` rebuild
+
+Rebuilt around a canonical editor (business-scoped, `user!.businessId`) with an inline "this
+location's differences" panel per item/category/modifier group — not a second page, so scope stays
+visible in context rather than requiring the owner to navigate between "the menu" and "my
+overrides." A single-location owner (still the overwhelming majority) sees no new concepts: their
+one location's overrides panel exists but sits empty until they deliberately create a divergence,
+and every canonical edit takes effect immediately with no separate "publish to location" step.
+
+For a multi-location owner, each item/category row gains a "This location:" mini-row showing
+whether it's overridden here, with inline price-override / hide-here-only inputs and a
+"Reset to canonical" button that calls the override `DELETE`. `ModifierGroupsEditor.tsx` got the
+same treatment at the group and per-option level — group-level `isActive` override, per-option
+price-override, merged against existing `optionOverrides` (since the override `PUT` is a `$set`
+merge, not a replace). `LocationsPage.tsx`'s "clone menu from" copy was corrected: every location
+already shares the canonical menu automatically now, so cloning only seeds a *starting* divergence
+snapshot from another location, not a copy of the menu itself.
+
+### Location UX
+
+No new location-management system — everything reuses the existing `LocationContext`
+(`activeLocationId`/`switchLocation`) from Phase 19 unchanged. A newly created location inherits the
+full canonical menu with zero setup (proven live end-to-end by `e2e/shared-menu-canonical-override.spec.ts`,
+including publishing the new location — which also re-proves the Piece 1 `computeReadiness` fix: a
+non-anchor location with no `restaurantId`-scoped documents of its own must still resolve as ready).
+
+### `restaurantReadiness.service.ts` fix
+
+`computeReadiness`'s menu-count check (used both for the readiness UI and as a real server-side gate
+on `PATCH /restaurants/:id/publish`) went dual-path: canonical businesses route through
+`resolveMenuForLocation` (a naive `businessId`-scoped count would answer the wrong question — it
+needs each location's own *effective* menu, not the business's raw canonical count); legacy
+businesses keep the original `restaurantId`-scoped query unchanged. Without this fix, migrating a
+business would have silently zeroed out every non-anchor location's readiness count, permanently
+blocking it from ever publishing — caught and fixed in Piece 1, before the real migration ran.
+
+### Pricing, storefront, cache, security, concurrency
+
+Unchanged from Phase 20's design (`orderPricing.service.ts`'s two-step business-then-location
+resolution, `resolveMenuForLocation`'s merge, `invalidateMenuCacheForBusiness`'s per-business cache
+busting) — Phase 21 gave these paths their first real callers and real data, but made no design
+changes to any of them. Extended test coverage this phase: override-write-as-mutation-source
+immutability (an order's stored price is unaffected by a later override edit), `reorderOrder`'s
+canonical-path re-pricing and unavailable-item reporting, and a full authorization + concurrency
+matrix (owner/manager write, staff/kitchen_staff/cross-business/cross-location rejected, atomic
+upsert under concurrent override writes) against real fixture-migrated businesses.
+
+### A real architectural consequence, found and documented explicitly (not a bug)
+
+Under shared-canonical-menu architecture, an item created at (or promoted to canonical from) one
+location is visible at every sibling location by default unless an explicit override hides it — this
+is the *intended* behavior, not data leakage. It surfaced three times during this phase's own
+testing, each resolved the same way: (1) the migration-diff investigation above; (2)
+`e2e/multi-location-owner-journey.spec.ts`'s Phase 19-era assertion that a menu item created at
+Location A must never appear at Location B — corrected (docstring, title, and assertions rewritten)
+to prove the new, correct shared-inheritance behavior instead, with the correction documented
+directly in the test file; (3) two other pre-existing specs (`admin-tenant-isolation.spec.ts`,
+`menu-rbac.spec.ts`) that captured a real auth token by intercepting the old `/menu/items` network
+request — updated to intercept the new `/businesses/:businessId/menu` request instead, since the
+rebuilt admin UI no longer calls the old URL.
+
+### What Phase 21 still owes (deliberately deferred)
+
+Removing the legacy dual-path branches entirely (`restaurantId`-scoped queries in
+`orderPricing.service.ts`/`menu.controller.ts`, the whole-document clone path in
+`menuClone.service.ts`, the retirement guard itself) — "no unmigrated business remains" is never
+provably permanent, since a new business starts unmigrated by construction until a future phase
+changes that default. White-label/custom domains, agency/multi-business accounts, a public API, POS
+integrations, business-wide analytics, and business-wide promotions/billing/branding — all
+explicitly out of this phase's scope, reserved for Phase 22.

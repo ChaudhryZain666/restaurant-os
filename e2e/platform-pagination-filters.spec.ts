@@ -38,10 +38,21 @@ test.describe("platform admin — pagination and filters", () => {
     await page.getByRole("link", { name: "Restaurants" }).click();
     await expect(page.getByRole("heading", { name: "Restaurants" })).toBeVisible();
 
+    // Phase 21 — e2e/shared-menu-canonical-override.spec.ts creates a real "Spice Route Downtown
+    // {timestamp}" second location under this same real business on every run, which also matches
+    // a "Spice Route" substring search — so an exact single-row count is no longer a safe
+    // assertion here. What this test actually needs to prove (search narrows results against the
+    // real backend) still holds: the exact "Spice Route" row is present, and every returned row
+    // genuinely matches the search term (none of the platform's other, unrelated restaurants leak
+    // through).
     await page.getByPlaceholder("Search by name, slug, or city...").fill("Spice Route");
-    const row = page.locator("tr", { hasText: "Spice Route" });
+    const row = page.locator("tr").filter({ hasText: "Spice Route" }).filter({ hasNotText: "Downtown" });
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("row")).toHaveCount(2); // header + Spice Route only
+    const resultRows = page.getByRole("row");
+    const resultCount = await resultRows.count();
+    for (let i = 1; i < resultCount; i++) {
+      await expect(resultRows.nth(i)).toContainText("Spice Route");
+    }
 
     await page.getByPlaceholder("Search by name, slug, or city...").fill("");
     await page.getByRole("combobox").selectOption("suspended");
