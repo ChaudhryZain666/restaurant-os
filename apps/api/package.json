@@ -11,6 +11,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "seed:demo": "tsx src/scripts/seed-demo-data.ts",
     "migrate:business-location": "tsx src/scripts/migrateToBusinessLocation.ts",
+    "migrate:menu-canonical": "tsx src/scripts/migrateMenuToCanonical.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

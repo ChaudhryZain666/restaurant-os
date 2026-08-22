@@ -16,6 +16,8 @@ export interface ModifierOptionSubdoc {
 // subdocument array here instead of an imported enum.
 export interface ModifierGroupDoc {
   restaurantId: Types.ObjectId;
+  /** Phase 20 — see Category.ts's businessId for the full rationale. */
+  businessId?: Types.ObjectId;
   menuItemId: Types.ObjectId;
   name: string;
   minSelect: number;
@@ -39,6 +41,7 @@ const modifierGroupSchema = new Schema<ModifierGroupDoc>(
     // No standalone index on restaurantId: the compound index below already covers
     // restaurantId-only queries via its leading-field prefix.
     restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
     menuItemId: { type: Schema.Types.ObjectId, ref: "MenuItem", required: true, index: true },
     name: { type: String, required: true, trim: true },
     minSelect: { type: Number, default: 0, min: 0 },
@@ -68,5 +71,6 @@ const modifierGroupSchema = new Schema<ModifierGroupDoc>(
 );
 
 modifierGroupSchema.index({ restaurantId: 1, menuItemId: 1 });
+modifierGroupSchema.index({ businessId: 1, menuItemId: 1 });
 
 export const ModifierGroup = model<ModifierGroupDoc>("ModifierGroup", modifierGroupSchema);

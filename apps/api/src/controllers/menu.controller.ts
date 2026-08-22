@@ -3,10 +3,25 @@ import type { MenuItemInput, UpdateMenuItemInput } from "@restaurant/validation"
 import { MenuItem } from "../models/MenuItem.js";
 import { Category } from "../models/Category.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
+import { Restaurant } from "../models/Restaurant.js";
 import { redis } from "../config/redis.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { menuCacheKey, invalidateMenuCache, MENU_CACHE_TTL_SECONDS } from "../services/menuCache.service.js";
+import { businessHasCanonicalMenu, resolveMenuForLocation } from "../services/menuResolution.service.js";
+
+/**
+ * Phase 20 — cheap per-request check deciding whether a location's menu reads should go through
+ * the canonical + override resolver or keep using the original restaurantId-scoped queries below.
+ * Pre-migration businesses (still the entire product as of this phase — see the Phase 20 report)
+ * get byte-for-byte the same behavior this file always had.
+ */
+async function resolveCanonicalBusinessId(restaurantId: string): Promise<string | undefined> {
+  const restaurant = await Restaurant.findById(restaurantId).select("businessId");
+  const businessId = restaurant?.businessId?.toString();
+  if (!businessId) return undefined;
+  return (await businessHasCanonicalMenu(businessId)) ? businessId : undefined;
+}
 
 /** Throws if categoryId doesn't reference an existing category owned by this restaurant. */
 async function assertCategoryInRestaurant(restaurantId: string, categoryId: string) {
@@ -14,6 +29,26 @@ async function assertCategoryInRestaurant(restaurantId: string, categoryId: stri
   if (!exists) {
     throw ApiError.badRequest("categoryId does not reference a category on this restaurant");
   }
+}
+
+/** Legacy (pre-Phase-20), restaurantId-scoped query — unchanged from before this phase. */
+async function loadLegacyPublicMenu(restaurantId: string) {
+  const [itemDocs, categoryDocs, modifierGroupDocs] = await Promise.all([
+    MenuItem.find({ restaurantId, isAvailable: true }).sort({ categoryId: 1, sortOrder: 1, name: 1 }),
+    Category.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
+    ModifierGroup.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
+  ]);
+  return {
+    items: itemDocs.map((doc) => doc.toJSON()),
+    categories: categoryDocs.map((doc) => doc.toJSON()),
+    // Individually-deactivated options aren't filtered at the ModifierGroup query level above
+    // (only whole groups are) — strip them here so the public menu never offers a choice that
+    // priceOrderItems would then reject at checkout.
+    modifierGroups: modifierGroupDocs.map((doc) => {
+      const json = doc.toJSON() as { options: Array<{ isActive: boolean }> };
+      return { ...json, options: json.options.filter((o) => o.isActive) };
+    }),
+  };
 }
 
 export async function listMenu(req: Request, res: Response) {
@@ -25,22 +60,11 @@ export async function listMenu(req: Request, res: Response) {
     return sendSuccess(res, { ...JSON.parse(cached), cached: true });
   }
 
-  const [itemDocs, categoryDocs, modifierGroupDocs] = await Promise.all([
-    MenuItem.find({ restaurantId, isAvailable: true }).sort({ categoryId: 1, sortOrder: 1, name: 1 }),
-    Category.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
-    ModifierGroup.find({ restaurantId, isActive: true }).sort({ sortOrder: 1, name: 1 }),
-  ]);
-  const payload = {
-    items: itemDocs.map((doc) => doc.toJSON()),
-    categories: categoryDocs.map((doc) => doc.toJSON()),
-    // Individually-deactivated options aren't filtered at the ModifierGroup query level above
-    // (only whole groups are) — strip them here so the public menu never offers a choice that
-    // priceOrderItems would then reject at checkout.
-    modifierGroups: modifierGroupDocs.map((doc) => {
-      const json = doc.toJSON() as { options: Array<{ isActive: boolean }> };
-      return { ...json, options: json.options.filter((o) => o.isActive) };
-    }),
-  };
+  const canonicalBusinessId = await resolveCanonicalBusinessId(restaurantId);
+  const payload = canonicalBusinessId
+    ? await resolveMenuForLocation(canonicalBusinessId, restaurantId, { includeHidden: false })
+    : await loadLegacyPublicMenu(restaurantId);
+
   await redis.set(cacheKey, JSON.stringify(payload), "EX", MENU_CACHE_TTL_SECONDS);
   return sendSuccess(res, { ...payload, cached: false });
 }
@@ -54,6 +78,12 @@ export async function listMenu(req: Request, res: Response) {
  */
 export async function listAllMenuItems(req: Request, res: Response) {
   const { restaurantId } = req.params;
+  const canonicalBusinessId = await resolveCanonicalBusinessId(restaurantId);
+  if (canonicalBusinessId) {
+    const resolved = await resolveMenuForLocation(canonicalBusinessId, restaurantId, { includeHidden: true });
+    sendSuccess(res, { items: resolved.items });
+    return;
+  }
   const items = await MenuItem.find({ restaurantId }).sort({ categoryId: 1, sortOrder: 1, name: 1 });
   sendSuccess(res, { items: items.map((doc) => doc.toJSON()) });
 }

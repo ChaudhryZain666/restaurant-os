@@ -75,6 +75,9 @@ export async function getBusinessLocation(req: Request, res: Response) {
  * empty menu and no retry path. cloneFromLocationId is independently re-verified to actually
  * belong to this same business — never trusted from the request body alone, since a client could
  * otherwise name an arbitrary restaurantId and clone a completely unrelated business's menu.
+ * Phase 20 — for a business already migrated to the canonical/override menu architecture,
+ * cloneMenuToRestaurant's meaning changes underneath this same call site (whole-document copy ->
+ * override-row seeding); see that service for why this call site itself didn't need to change.
  */
 export async function createLocationForBusiness(req: Request, res: Response) {
   const { businessId } = req.params;
@@ -115,7 +118,7 @@ export async function createLocationForBusiness(req: Request, res: Response) {
           { session }
         );
         if (cloneSourceId) {
-          await cloneMenuToRestaurant(cloneSourceId, createdRestaurant._id, session);
+          await cloneMenuToRestaurant(business._id, cloneSourceId, createdRestaurant._id, session);
         }
         return createdRestaurant;
       })) as HydratedDocument<RestaurantDoc>;

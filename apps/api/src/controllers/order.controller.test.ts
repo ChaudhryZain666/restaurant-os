@@ -4,6 +4,7 @@ import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
+import { MenuItemLocationOverride } from "../models/MenuItemLocationOverride.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
@@ -14,6 +15,7 @@ import { LoyaltyAccount, LoyaltyTransaction } from "../models/LoyaltyAccount.js"
 import { Counter } from "../models/Counter.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
   createTestModifierGroup,
@@ -1180,5 +1182,121 @@ describe("GET /orders/mine — pagination", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(1);
     expect(res.body.data.items[0].orderNumber).toBe("ORD-PAGE-OTHER");
+  });
+});
+
+describe("Phase 20 — canonical business menu order pricing, end to end through the real route", () => {
+  let canonicalBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  let canonicalLocationA: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let canonicalLocationB: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let canonicalCategory: Awaited<ReturnType<typeof createTestCategory>>;
+  let canonicalItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+  let canonicalCustomerToken: string;
+
+  beforeAll(async () => {
+    canonicalBusiness = await createTestBusiness();
+    canonicalLocationA = await createTestRestaurant({
+      businessId: canonicalBusiness._id,
+      settings: { orderingEnabled: true, pickupEnabled: true, cashEnabled: true, minOrderAmount: 0, taxRate: 0 },
+    });
+    canonicalLocationB = await createTestRestaurant({
+      businessId: canonicalBusiness._id,
+      settings: { orderingEnabled: true, pickupEnabled: true, cashEnabled: true, minOrderAmount: 0, taxRate: 0 },
+    });
+    canonicalCategory = await createTestCategory(canonicalLocationA._id, { businessId: canonicalBusiness._id });
+    canonicalItem = await createTestMenuItem(canonicalLocationA._id, canonicalCategory._id, {
+      businessId: canonicalBusiness._id,
+      price: 10,
+    });
+    await MenuItem.create({
+      businessId: canonicalBusiness._id,
+      restaurantId: canonicalLocationB._id,
+      categoryId: canonicalCategory._id,
+      name: "unused-anchor-doc-to-mark-canonical",
+      price: 1,
+    });
+    await MenuItemLocationOverride.create({
+      businessId: canonicalBusiness._id,
+      locationId: canonicalLocationA._id,
+      menuItemId: canonicalItem._id,
+      priceOverride: 14,
+    });
+    const canonicalCustomer = await createTestUser("customer");
+    canonicalCustomerToken = tokenFor(canonicalCustomer);
+  });
+
+  afterAll(async () => {
+    const ids = [canonicalLocationA._id, canonicalLocationB._id];
+    await Promise.all([
+      Order.deleteMany({ restaurantId: { $in: ids } }),
+      MenuItem.deleteMany({ businessId: canonicalBusiness._id }),
+      Category.deleteMany({ businessId: canonicalBusiness._id }),
+      MenuItemLocationOverride.deleteMany({ businessId: canonicalBusiness._id }),
+      Counter.deleteMany({ _id: { $in: ids } }),
+      Restaurant.deleteMany({ _id: { $in: ids } }),
+    ]);
+  });
+
+  it("charges location A's price override through the real order-creation route, and location B's canonical default through the same route", async () => {
+    const resA = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationA.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: canonicalItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(resA.status).toBe(201);
+    expect(resA.body.data.order.items[0].unitPrice).toBe(14);
+    expect(resA.body.data.order.subtotal).toBe(14);
+
+    const resB = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationB.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: canonicalItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(resB.status).toBe(201);
+    expect(resB.body.data.order.items[0].unitPrice).toBe(10);
+  });
+
+  it("cannot submit location A's override price by ordering the same canonical item through location B's route", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationB.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: canonicalItem.id, quantity: 1, price: 14, unitPrice: 14, selectedModifiers: [] }],
+      });
+    expect(res.status).toBe(201);
+    // Zod strips unknown price fields, AND location B has no override — either way, canonical
+    // default (10), never A's override (14).
+    expect(res.body.data.order.items[0].unitPrice).toBe(10);
+  });
+
+  it("order snapshot stays immutable after the canonical price changes and a new override is added later", async () => {
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationA.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: canonicalItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(createRes.status).toBe(201);
+    const orderId = createRes.body.data.order.id;
+    const originalUnitPrice = createRes.body.data.order.items[0].unitPrice;
+    const originalSubtotal = createRes.body.data.order.subtotal;
+
+    // Mutate the canonical price AND location A's own override after the order already exists.
+    await MenuItem.updateOne({ _id: canonicalItem._id }, { $set: { price: 999 } });
+    await MenuItemLocationOverride.updateOne(
+      { locationId: canonicalLocationA._id, menuItemId: canonicalItem._id },
+      { $set: { priceOverride: 500 } }
+    );
+
+    const fetchRes = await request(app)
+      .get(`/api/v1/orders/${orderId}`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`);
+    expect(fetchRes.status).toBe(200);
+    expect(fetchRes.body.data.order.items[0].unitPrice).toBe(originalUnitPrice);
+    expect(fetchRes.body.data.order.subtotal).toBe(originalSubtotal);
+
+    // Restore, so this test doesn't corrupt the other tests in this describe block.
+    await MenuItem.updateOne({ _id: canonicalItem._id }, { $set: { price: 10 } });
+    await MenuItemLocationOverride.updateOne(
+      { locationId: canonicalLocationA._id, menuItemId: canonicalItem._id },
+      { $set: { priceOverride: 14 } }
+    );
   });
 });
