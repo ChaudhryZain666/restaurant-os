@@ -4,7 +4,9 @@ import mongoose from "mongoose";
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { CreateRestaurantInput, UpdateRestaurantInput } from "@restaurant/validation";
+import { normalizeHostname } from "@restaurant/validation";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
+import { DomainMapping } from "../models/DomainMapping.js";
 import { Business, type BusinessDoc } from "../models/Business.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -293,6 +295,31 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
 
   const isOwnTenant = req.user!.role === "platform_admin" || req.user!.restaurantId === restaurant.id;
   if (!isOwnTenant) throw ApiError.forbidden("You do not have access to this restaurant");
+
+  sendSuccess(res, {
+    restaurant: toPublicRestaurant(restaurant),
+    availability: computeAvailability(restaurant.settings),
+    supportIdentity: getSupportIdentity(restaurant),
+  });
+}
+
+/**
+ * Phase 22 — the custom-domain counterpart to getRestaurantBySlug, same public/unauthenticated
+ * trust model and same response shape (so apps/web's RestaurantContext needs no new contract to
+ * consume it). Only an ACTIVE mapping resolves — pending/verified-but-inactive/removed/unknown
+ * hostnames, and a suspended location, all 404 identically, never falling through to any other
+ * restaurant. The client asserts its own window.location.hostname here (unspoofable — it's the
+ * actual address bar), exactly the same threat model as a customer typing any slug into /r/:slug:
+ * this only ever returns data that's already public for whatever restaurant genuinely owns that
+ * hostname (proven by DNS verification, not by anything checked in this handler).
+ */
+export async function getRestaurantByDomain(req: Request, res: Response) {
+  const hostname = normalizeHostname(req.params.hostname);
+  const mapping = await DomainMapping.findOne({ hostname, status: "active" });
+  if (!mapping) throw ApiError.notFound("No storefront is configured for this domain");
+
+  const restaurant = await Restaurant.findOne({ _id: mapping.locationId, status: "active" });
+  if (!restaurant) throw ApiError.notFound("No storefront is configured for this domain");
 
   sendSuccess(res, {
     restaurant: toPublicRestaurant(restaurant),

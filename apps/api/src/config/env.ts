@@ -58,6 +58,14 @@ const envSchema = z.object({
   SAFEPAY_SECRET_KEY: z.string().optional(),
   SAFEPAY_WEBHOOK_SECRET: z.string().optional(),
   SAFEPAY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+
+  // DNS verification (Phase 22 custom domains). "mock" (default outside production, mirroring
+  // PAYMENT_PROVIDER's default-mock precedent) reads from the MockDnsRecord collection, seeded
+  // directly via Mongo — the same documented exception this project already uses for e2e tests
+  // reading real invite tokens directly from Mongo instead of a real inbox. "node" performs real
+  // DNS TXT lookups (apps/api/src/dns/NodeDnsVerifier.ts) and is the only provider that should ever
+  // be selected in production.
+  DNS_VERIFIER: z.enum(["mock", "node"]).default("mock"),
 });
 
 const parsed = envSchema.safeParse(process.env);

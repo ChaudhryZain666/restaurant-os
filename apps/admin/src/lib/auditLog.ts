@@ -11,4 +11,9 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "restaurant.published": "Restaurant published",
   "restaurant.unpublished": "Restaurant unpublished",
   "restaurant.owner_invite_resent": "Owner invitation resent",
+  "domain.added": "Custom domain added",
+  "domain.verified": "Custom domain verified",
+  "domain.activated": "Custom domain activated",
+  "domain.deactivated": "Custom domain deactivated",
+  "domain.removed": "Custom domain removed",
 };

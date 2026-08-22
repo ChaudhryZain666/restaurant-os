@@ -52,8 +52,12 @@ const TableContext = createContext<TableContextValue | undefined>(undefined);
 
 export function TableProvider({ children }: { children: ReactNode }) {
   const { restaurant } = useRestaurant();
-  const match = useMatch("/r/:restaurantSlug/t/:tableToken");
-  const urlToken = match?.params.tableToken ?? null;
+  const slugMatch = useMatch("/r/:restaurantSlug/t/:tableToken");
+  // Phase 22 — a custom domain renders MenuPage directly at the bare "/t/:tableToken" route (see
+  // App.tsx's LegacyRedirect), with no "/r/:slug" segment ever in the URL, so table resolution
+  // needs the same dual-mode match RestaurantContext already uses for restaurant identity.
+  const bareMatch = useMatch("/t/:tableToken");
+  const urlToken = slugMatch?.params.tableToken ?? bareMatch?.params.tableToken ?? null;
 
   const [table, setTable] = useState<ResolvedTable | null>(null);
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);

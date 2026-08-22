@@ -1144,3 +1144,244 @@ provably permanent, since a new business starts unmigrated by construction until
 changes that default. White-label/custom domains, agency/multi-business accounts, a public API, POS
 integrations, business-wide analytics, and business-wide promotions/billing/branding — all
 explicitly out of this phase's scope, reserved for Phase 22.
+
+## Phase 22 — White-Label & Custom Domain Architecture
+
+A verified custom domain (`orders.acme-restaurants.com`) now resolves the exact same storefront a
+customer would otherwise reach at `/r/:slug` — as a second, purely additive tenant-resolution
+mechanism, never a replacement for the existing one. `/r/:slug` is completely unchanged; every
+existing bookmark, QR code, and indexed link keeps working exactly as before.
+
+### Reconnaissance that shaped the design
+
+Two facts about the existing codebase, verified before writing any new code, determined nearly
+every design decision below:
+
+1. **`apps/web`'s API client uses a relative `basePath` (`/api/v1`)**, not an absolute origin
+   (`packages/utils/src/apiClient.ts`). Whatever hostname the browser is currently on is
+   automatically also the origin for every API call and for the httpOnly refresh cookie
+   (`credentials: "include"`). This means a custom domain deployed behind the same reverse-proxy/
+   CDN that already serves the platform's own domain (proxying both static assets and `/api/v1/*`
+   to the same backend) has **no cross-origin/cross-site cookie problem at all** — no CORS change
+   was needed anywhere in this phase. This is a deployment-topology requirement (see Infrastructure
+   below), not application code.
+2. **Cart/order security already worked by construction.** `CartContext` tags cart lines with
+   `item.restaurantId`; `CartPage` POSTs to `/restaurants/${restaurant.id}/orders`; `createOrder`
+   re-derives everything (items, prices, table, delivery) scoped to that URL's `restaurantId` via
+   `priceOrderItems` — a mismatched item 400s regardless of *how* `restaurant.id` was resolved. The
+   only genuinely new security-relevant surface this phase introduces is the single new resolution
+   step (hostname → `restaurant.id`); everything downstream inherits every existing, already-tested
+   guarantee for free, with zero new order/cart/checkout code.
+
+### Domain ownership: Location, not Business
+
+A domain resolves to exactly one `Restaurant` (Location) — proven, not assumed, from the existing
+codebase: every render-affecting setting (currency, timezone, delivery config, business hours,
+`logo`/`coverImage`/`settings.brandColor`) is already Location-scoped. `Business` carries its own
+`logo`/`coverImage`/`brandColor` fields, but the model's own Phase 18 comment already states these
+are "purely presentational... not consumed by any render path" — independent confirmation that
+Location, not Business, is where a storefront's real identity lives.
+
+### Domain model
+
+New model, `apps/api/src/models/DomainMapping.ts`:
+
+```
+hostname: string            // normalized (lowercase, no protocol/path/trailing dot), globally unique
+businessId: ObjectId        // denormalized cache (source of truth stays Restaurant.businessId) — cheap
+                             // "list my business's domains" queries without a join, same pattern
+                             // MenuItemLocationOverride etc. already established for businessId
+locationId: ObjectId        // ref Restaurant — the actual, authoritative scope
+status: "pending_verification" | "verified" | "active"
+verificationToken: string   // raw randomBytes(32) hex — plaintext by design, see below
+verificationCheckedAt / verifiedAt / activatedAt: Date?
+```
+
+Two indexes carry real invariants, not just query performance:
+- `{ hostname: 1 }` unique, globally — a hostname can only ever be one mapping at a time.
+- `{ locationId: 1 }` unique **with `partialFilterExpression: { status: "active" }`** — a real
+  database constraint guaranteeing at most one active domain per location, closing the exact
+  activate/deactivate/delete race a purely application-level check couldn't. A `pending_verification`
+  or `verified` row for a *different* candidate hostname can still coexist with the currently-active
+  one — this is what makes a domain swap (add the new one, verify it, activate it, then deactivate
+  the old one) representable without ever having two active domains, even transiently.
+
+**`verificationToken` is stored in plaintext**, a deliberate departure from this codebase's
+invite/reset-token convention (`secureToken.service.ts` persists only a SHA-256 hash, since those
+are bearer credentials). A DNS TXT verification value is different in kind: the owner must be shown
+the exact value repeatedly to paste into DNS, and the platform re-compares it against live DNS
+lookups an unbounded number of times — a hash-only store would make the flow itself impossible.
+
+**Lifecycle** — three states, matching the brief's minimum exactly:
+- **Add** → `pending_verification`, generates the token. Rejects the platform's own configured
+  domain (`env.CLIENT_ORIGIN`'s hostname) as a candidate — a business can't "verify" the platform
+  itself.
+- **Check verification** (`POST .../check-verification`, synchronous — a single DNS lookup doesn't
+  need a background job) → live TXT lookup at `_tablecloth-verify.<hostname>`; on match, transitions
+  to `verified`. Idempotent, and **never** auto-activates — activation is always a separate, explicit
+  action.
+- **Activate** (only from `verified`) → `active`. A concurrent activate against a location that
+  already has a different active domain hits the partial unique index and returns a clean 409, not a
+  500 or a silent second active row.
+- **Deactivate** (only from `active`) → back to `verified` — the domain stays owned/proven, just not
+  currently serving; no re-verification needed to reactivate later.
+- **Remove** → hard delete + an `AuditLog` entry (`domain.removed`, metadata `{hostname}`). This
+  codebase never soft-deletes comparable entities (slugs are never deleted at all); the audit log is
+  the durable historical record. Removal frees the hostname immediately for anyone to re-claim —
+  safe, since re-claiming still requires passing verification again, identical to slug reuse.
+
+### Hostname normalization & validation
+
+`packages/validation/src/domain.ts`'s `normalizeHostname` forgives only superficial formatting:
+case, surrounding whitespace, a leading `http(s)://`, and a single trailing `/` or `.`. It
+deliberately does **not** strip a real path/query — `isValidHostname` (built on a `new URL(...)`
+round-trip check) then rejects anything with an actual path/query/fragment, a bare IPv4/IPv6
+address, or a single-label value with no dot. `https://example.com/path` is rejected outright, per
+the brief's explicit requirement, rather than silently reduced to `example.com` — an early version
+of this normalization got this wrong (stripped the path before validating) and was caught by its
+own test suite before merge; see Bugs Found in the final report.
+
+### DNS verification service
+
+Mirrors this codebase's existing provider-agnostic-interface pattern (`PaymentProvider`,
+`StorageService`) exactly: `apps/api/src/dns/DnsVerifier.ts` (interface: `resolveTxt(hostname):
+Promise<string[]>`), `NodeDnsVerifier.ts` (real, Node's `dns.promises.resolveTxt`, wrapped in a
+manual `Promise.race` timeout since the module has no native per-call one), `MockDnsVerifier.ts`
+(reads a small, directly-Mongo-seedable `MockDnsRecord` collection), selected via `DNS_VERIFIER=
+mock|node` (`getDnsVerifier()`, `apps/api/src/dns/index.ts`) — `mock` is the default outside
+production, mirroring `PAYMENT_PROVIDER`'s own default-mock precedent. The mock is a genuine,
+precedented exception (the same one e2e tests already rely on for reading real invite tokens
+directly from Mongo instead of a real inbox), not a shortcut that bypasses the real matching logic —
+a wrong or missing TXT value in the mock store fails verification exactly like real DNS would.
+
+### Storefront resolution — additive, no competing context
+
+`GET /restaurants/by-domain/:hostname` (public, unauthenticated) mirrors `by-slug` exactly: same
+response shape (`{restaurant, availability, supportIdentity}`), same public trust model. Only an
+active mapping resolves; pending, verified-but-inactive, removed, unknown hostnames, and a suspended
+location or business all 404 identically, never falling through to any other restaurant. The
+hostname is asserted by the **client** (`window.location.hostname` — the actual, unspoofable address
+bar), not read from a trusted `Host` header — this endpoint has the identical threat model as
+`by-slug/:slug` today: anyone can probe any hostname and get that restaurant's already-public data,
+which is not a vulnerability, it's how a public storefront works. The property that actually matters
+(nobody can make real customers land on a hostname resolving to the wrong business) is guaranteed by
+DNS ownership verification, not by anything checked in this handler.
+
+`RestaurantContext.tsx` gained a second resolution path, additive to the Phase 8 slug-based one it
+already had: on a bare storefront-shaped route (`/`, `/cart`, `/t/:tableToken`, `/loyalty` —
+detected directly against `window.location.pathname`, not "any non-slug route," to avoid a wasted
+lookup on `/login`/`/account`/`/support`) where no `/r/:slug` segment matched, it now attempts
+`GET /restaurants/by-domain/${window.location.hostname}` before falling back to the existing
+`VITE_RESTAURANT_SLUG` legacy redirect. `App.tsx`'s `LegacyRedirect` became resolution-aware: while
+loading, render nothing; if domain resolution succeeded, render the real target page (`MenuPage`/
+`CartPage`/`LoyaltyPage`) **directly, with no redirect** — the whole point of white-labeling is that
+`/r/:slug` never appears in the address bar; if it failed, fall through to exactly the pre-Phase-22
+redirect-to-`VITE_RESTAURANT_SLUG` behavior, completely unchanged. Every existing `useRestaurant()`
+consumer (`MenuPage`, `CartPage`, `LoyaltyPage`) needed zero changes — the exact Phase 8 precedent
+repeating itself.
+
+**`TableContext.tsx` needed the identical dual-mode fix.** It only matched
+`/r/:restaurantSlug/t/:tableToken` — on a domain-resolved bare `/t/:tableToken` route it would never
+have fired, silently losing dine-in/QR context for any custom-domain QR code. Fixed by adding a
+second `useMatch("/t/:tableToken")` alongside the existing one, exactly mirroring
+`RestaurantContext`'s own two-match pattern. Caught during implementation, not after — see Bugs
+Found.
+
+### SEO / canonical URL
+
+When resolved via an active custom domain, that domain **becomes canonical** — `MenuPage.tsx`'s
+canonical `<link>` and JSON-LD `url` switch from `${origin}/r/${slug}` to bare `${origin}`. The
+platform's `/r/:slug` URL is deliberately **not** forced into a redirect while a custom domain is
+active — an owner may still want existing printed QR codes/links to keep working — so it simply
+stops being the canonical one. The partial-unique-active-index (at most one active domain per
+location) keeps this unambiguous: there is never a multi-canonical case to resolve.
+
+### Cache
+
+No new cache tier. `by-domain` and `by-slug` both resolve `Restaurant` docs directly (no Redis
+layer, matching `by-slug`'s existing "cheap enough, premature to cache" reasoning). The menu cache
+key (`menu:{restaurantId}:available`) is keyed by the already-resolved `restaurantId`, so it's
+identically correct and identically isolated regardless of which resolution path produced that id —
+domain-vs-slug resolution happens strictly before any cache lookup, never inside one.
+
+### Host-header trust — narrower than it might sound
+
+`apps/web` is a pure client-side SPA (no SSR — see this doc's own earlier "Known SEO limitation"
+section). The **only** place server-side `Host`-header trust would matter at all is a
+per-domain-aware `sitemap.xml` — a raw XML response with no client JS to assert anything — and that
+was **not built this phase**: `GET /sitemap.xml` is unchanged, still emitting `/r/:slug` URLs only.
+Everywhere else (storefront bootstrap, cart, checkout, order creation), the **client** asserts its
+own hostname to a public, unauthenticated, already-public-data-only endpoint — there is no `trust
+proxy` setting, and nothing in this phase reads `req.headers.host` or `X-Forwarded-Host` anywhere.
+Building per-domain sitemap generation, if ever needed, would be the one place that trust boundary
+question has to be answered for real (see Remaining Limitations).
+
+### Backend write/read API
+
+```
+GET  /businesses/:businessId/domains                                   requireBusinessMatch + restaurant.settings.manage
+POST /restaurants/:restaurantId/domains                                requireTenantMatch + restaurant.settings.manage
+POST /restaurants/:restaurantId/domains/:id/check-verification         same
+POST /restaurants/:restaurantId/domains/:id/activate                   same
+POST /restaurants/:restaurantId/domains/:id/deactivate                 same
+DELETE /restaurants/:restaurantId/domains/:id                          same
+GET  /restaurants/by-domain/:hostname                                  public, unauthenticated
+```
+
+`restaurant.settings.manage` — the same owner-only permission that already gates
+branding/currency/hours in `SettingsPage.tsx` — is reused rather than inventing a new RBAC entry;
+managing which domain fronts a location's storefront is the same "who controls this storefront's
+identity" boundary. Since that permission is owner-only (not manager) today, domain management is
+owner-only by direct inheritance, matching the brief's own "authorized manager only if existing
+permissions justify it" language — they don't, so managers get 403, same as staff.
+
+`platform_admin` gets no write access to domains at all (consistent with never holding any
+`restaurant.*` permission) — instead, `GET /platform/restaurants/:id`
+(`getPlatformRestaurantDetail`) gained a read-only `domains` field (verification token stripped),
+mirroring the exact precedent Phase 19 set for `businessLocationCount` — light-touch investigative
+visibility for support purposes, no new management surface.
+
+### Admin UI
+
+`SettingsPage.tsx`'s previously-static "Domain" tab placeholder is now a real, self-contained
+component, `DomainSettingsPanel.tsx` — its own state and API calls, not wired into
+`SettingsPage`'s shared form/PATCH (a domain has its own lifecycle, closer to `StaffPage.tsx`'s
+list+status-badge+action-button pattern than to a form field). Shows the always-active platform URL,
+then one card per domain with a status badge (pending/verified/active), DNS TXT instructions with a
+copy-to-clipboard affordance (new to this app — `navigator.clipboard.writeText`, with a silent
+no-op fallback if permission is denied) while pending, and the relevant next action
+(check verification / activate / deactivate / remove) per status. Deliberately renders with **no
+inner `<form>` element** — it's mounted inside `SettingsPage`'s own outer `<form>`, and nested
+`<form>`s are invalid HTML; "Add a custom domain" uses a plain input plus an explicit button click
+instead of form submission.
+
+### What was NOT built this phase (explicitly deferred)
+
+- Removing/redirecting `/r/:slug` when a custom domain is active — both stay live simultaneously by
+  design (see SEO above).
+- Per-domain `sitemap.xml` generation — the one place real `Host`-header trust would need to be
+  designed for; not attempted without a concrete need driving the trust-boundary decision.
+- Any Business-level branding surface, secondary/accent colors, a theme engine, or a hero editor —
+  `SettingsPage.tsx`'s existing `ComingSoon` note for the Storefront tab is unaffected and still
+  accurate; this phase's branding work was limited to confirming the existing OG/JSON-LD block
+  already reads restaurant-level fields only (it did — no change needed).
+- Agency/multi-business accounts, a public API, POS integrations, business-wide analytics/
+  promotions/billing — all explicitly out of scope per the brief, unaffected by anything here.
+
+### Infrastructure — what production actually requires (not exercised locally)
+
+This phase's application code was verified end-to-end against the **mock** DNS provider and the
+local dev reverse-proxy setup already established for this repo (Vite's dev proxy forwarding `/api`
+to the API origin). None of the following were exercised against real infrastructure, and none
+should be assumed working until they are:
+- **Real DNS TXT propagation** — `DNS_VERIFIER=node`'s `dns.promises.resolveTxt` path is real,
+  network-capable code, but was never run against a domain this deployment doesn't control.
+- **Wildcard/per-domain routing at the reverse-proxy/CDN layer** — production needs *some* mechanism
+  routing an arbitrary verified custom domain's traffic (both static assets and `/api/v1/*`) to this
+  same backend. This phase's "no CORS/cookie problem" conclusion depends entirely on that topology
+  being real; if a custom domain is ever pointed at a *different* origin than the API, the relative-
+  fetch/same-origin-cookie assumption breaks and would need real cross-site cookie handling.
+- **TLS/certificate provisioning** for each verified custom domain — a hosting/ops concern (e.g. a
+  provider's automatic-certificate API), not application code, and entirely unbuilt here.
+- **A trusted-host / `trust proxy` decision**, only if per-domain sitemap generation (or any other
+  future server-rendered, host-aware response) is ever built.

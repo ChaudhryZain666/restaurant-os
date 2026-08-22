@@ -6,6 +6,7 @@ import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
+import { DomainSettingsPanel } from "../components/DomainSettingsPanel";
 import { uploadRestaurantImage } from "../lib/uploads";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -653,22 +654,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      {tab === "Domain" && (
-        <div className="flex flex-col gap-4">
-          <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
-            <legend className="px-1 text-sm font-medium">Storefront URL</legend>
-            <p className="text-sm text-foreground">Your ordering page is live at the platform's storefront URL.</p>
-            <p className="text-xs text-muted">
-              This platform is currently single-tenant per deployment — your storefront is the one running at your
-              platform's web address, rather than a per-restaurant subdomain.
-            </p>
-          </fieldset>
-          <ComingSoon>
-            Custom domains (e.g. order.yourrestaurant.com) require DNS verification infrastructure that isn't built
-            yet.
-          </ComingSoon>
-        </div>
-      )}
+      {tab === "Domain" && <DomainSettingsPanel />}
 
       <Button type="submit" disabled={saving} className="self-start">
         {saving ? "Saving..." : "Save settings"}

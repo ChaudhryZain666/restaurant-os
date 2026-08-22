@@ -11,6 +11,7 @@ import { User } from "../models/User.js";
 import { Order } from "../models/Order.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AuditLog } from "../models/AuditLog.js";
+import { DomainMapping } from "../models/DomainMapping.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { recordAuditEvent } from "../services/audit.service.js";
@@ -154,7 +155,7 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
   const restaurant = await Restaurant.findById(id);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
-  const [owner, readiness, analytics, orderCount, recentAuditLog, businessLocationCount] = await Promise.all([
+  const [owner, readiness, analytics, orderCount, recentAuditLog, businessLocationCount, domains] = await Promise.all([
     User.findById(restaurant.ownerId).select("name email phone inviteTokenHash inviteExpiresAt isActive"),
     computeReadiness(restaurant),
     getRestaurantAnalytics(id),
@@ -164,11 +165,20 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     // platform admin see at a glance that this restaurant is one of several locations under the
     // same business, without building out a dedicated cross-restaurant navigation surface.
     restaurant.businessId ? Restaurant.countDocuments({ businessId: restaurant.businessId }) : Promise.resolve(1),
+    // Phase 22 — read-only domain visibility for investigation (e.g. a support ticket about a
+    // custom domain not resolving). platform_admin deliberately has no write access to domains —
+    // domain management stays owner-only (restaurant.settings.manage, which platform_admin never
+    // holds) via the real /restaurants/:restaurantId/domains routes; this is visibility only.
+    DomainMapping.find({ locationId: restaurant._id }).sort({ createdAt: -1 }),
   ]);
 
   sendSuccess(res, {
     restaurant: restaurant.toJSON(),
     businessLocationCount,
+    domains: domains.map((d) => {
+      const { verificationToken: _verificationToken, ...rest } = d.toJSON();
+      return rest;
+    }),
     owner: owner
       ? {
           id: owner.id as string,

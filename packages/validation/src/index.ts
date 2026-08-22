@@ -18,3 +18,4 @@ export * from "./platform.js";
 export * from "./pagination.js";
 export * from "./customer.js";
 export * from "./auditLog.js";
+export * from "./domain.js";

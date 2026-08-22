@@ -44,7 +44,14 @@ function ItemThumb({ item }: { item: MenuItem }) {
 }
 
 export function MenuPage() {
-  const { restaurant, availability, loading: restaurantLoading, error: restaurantError, isPreview } = useRestaurant();
+  const {
+    restaurant,
+    availability,
+    loading: restaurantLoading,
+    error: restaurantError,
+    isPreview,
+    resolvedVia,
+  } = useRestaurant();
   const orderingOpen = availability?.status === "open";
   // Prefers coordinates when the owner has set them (Settings → Location); otherwise falls back
   // to the formatted street address. A plain Google Maps search URL needs no API key — this is
@@ -65,10 +72,11 @@ export function MenuPage() {
   const sectionRefs = useRef(new Map<string, HTMLElement>());
   const [cartConflict, setCartConflict] = useState<(() => void) | null>(null);
 
-  // /r/:slug/t/:tableToken URLs are QR-only entry points — they shouldn't accumulate in search
+  // /r/:slug/t/:tableToken URLs (and, on an active custom domain, the equivalent bare
+  // /t/:tableToken — Phase 22) are QR-only entry points — they shouldn't accumulate in search
   // results (robots.txt disallows crawling them entirely; this noindex tag additionally covers
   // the case where a URL got linked/indexed from somewhere outside our own crawl surface).
-  const isTableRoute = Boolean(useMatch("/r/:restaurantSlug/t/:tableToken"));
+  const isTableRoute = Boolean(useMatch("/r/:restaurantSlug/t/:tableToken")) || Boolean(useMatch("/t/:tableToken"));
   useEffect(() => {
     if (!isTableRoute) return;
     const meta = document.createElement("meta");
@@ -113,7 +121,12 @@ export function MenuPage() {
     setMeta("name", "twitter:description", description);
     if (restaurant.logo) setMeta("name", "twitter:image", restaurant.logo);
 
-    const canonicalUrl = `${window.location.origin}/r/${restaurant.slug}`;
+    // Phase 22 — when resolved via an active custom domain, that domain IS the canonical identity
+    // (the whole point of white-labeling); the platform's /r/:slug URL stays functional but is
+    // deliberately not forced into a redirect (an owner may still want existing links/QR codes to
+    // keep working), so it's simply not the canonical one anymore while a custom domain is active.
+    const canonicalUrl =
+      resolvedVia === "domain" ? window.location.origin : `${window.location.origin}/r/${restaurant.slug}`;
     const canonical = document.createElement("link");
     canonical.rel = "canonical";
     canonical.href = canonicalUrl;
@@ -196,7 +209,7 @@ export function MenuPage() {
       document.title = prevTitle;
       for (const el of created) document.head.removeChild(el);
     };
-  }, [restaurant, menu, isTableRoute]);
+  }, [restaurant, menu, isTableRoute, resolvedVia]);
 
   useEffect(() => {
     if (!restaurant) return;

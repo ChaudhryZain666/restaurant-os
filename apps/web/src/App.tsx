@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
-import { legacyDefaultSlug } from "./context/RestaurantContext";
+import { legacyDefaultSlug, useRestaurant } from "./context/RestaurantContext";
 import { MenuPage } from "./pages/MenuPage";
 import { CartPage } from "./pages/CartPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -21,20 +21,53 @@ import { TicketDetailPage } from "./pages/TicketDetailPage";
 import { PrintReceiptPage } from "./pages/PrintReceiptPage";
 
 /**
- * Forwards a pre-Phase-8 bare storefront URL (bookmarked, or a physically printed Phase 7 QR
- * code) to its canonical `/r/:restaurantSlug/...` equivalent, so nothing that was already handed
- * to a real customer becomes a dead link. `suffix` is appended as-is (e.g. "/cart"); the special
- * "t" case additionally forwards the :tableToken param. A client-side redirect (not a second
- * route rendering the same page) — see docs/multi-tenant-storefront-architecture.md's SEO section
- * for why duplicate indexable URLs are avoided.
+ * Handles every bare storefront-shaped route (`/`, `/cart`, `/t/:tableToken`, `/loyalty`) — which
+ * today means one of two things, decided by RestaurantContext:
+ *
+ * 1. **Phase 22 — an active custom domain**: `window.location.hostname` resolved to a real
+ *    Location via `GET /restaurants/by-domain/:hostname`. Renders the real target page (MenuPage/
+ *    CartPage/LoyaltyPage) directly — no redirect, no `/r/:slug` ever shown to the customer. This
+ *    is the whole point of white-labeling: the URL bar shows the restaurant's own domain, nothing
+ *    platform-shaped.
+ * 2. **Phase 8 (unchanged) — a pre-Phase-8 bare link** (bookmarked, or a physically printed Phase 7
+ *    QR code) on a deployment with no active custom domain for this hostname: forwards to the
+ *    canonical `/r/:restaurantSlug/...` equivalent via VITE_RESTAURANT_SLUG, so nothing already
+ *    handed to a real customer becomes a dead link. A client-side redirect (not a second route
+ *    rendering the same page) — see docs/multi-tenant-storefront-architecture.md's SEO section for
+ *    why duplicate indexable URLs are avoided.
+ *
+ * `suffix` is appended as-is for case 2 (e.g. "/cart"); the special "t" case additionally forwards
+ * the :tableToken param.
  */
 function LegacyRedirect({ suffix }: { suffix: string }) {
   const { tableToken } = useParams<{ tableToken?: string }>();
+  const { restaurant, loading, resolvedVia } = useRestaurant();
+
+  // Domain resolution (or its definitive failure) hasn't finished yet — render nothing rather than
+  // redirecting prematurely into a guess.
+  if (loading) return null;
+
+  if (resolvedVia === "domain" && restaurant) {
+    if (suffix === "/cart") return <CartPage />;
+    if (suffix === "/loyalty") {
+      return (
+        <RequireAuth>
+          <LoyaltyPage />
+        </RequireAuth>
+      );
+    }
+    // suffix === "" (root) or "/t" (QR table landing) — both render MenuPage, exactly like their
+    // /r/:slug and /r/:slug/t/:tableToken equivalents; TableContext resolves :tableToken from the
+    // URL independently of restaurant identity.
+    return <MenuPage />;
+  }
+
   const defaultSlug = legacyDefaultSlug();
   if (!defaultSlug) {
-    // No VITE_RESTAURANT_SLUG configured for this deployment — silently redirecting into a
-    // guessed restaurant slug that likely doesn't exist would be worse than this honest message
-    // (Phase 13 audit finding: this used to fall back to "demo-restaurant" unconditionally).
+    // No VITE_RESTAURANT_SLUG configured for this deployment, and no active custom domain matched
+    // this hostname either — silently redirecting into a guessed restaurant slug that likely
+    // doesn't exist would be worse than this honest message (Phase 13 audit finding: this used to
+    // fall back to "demo-restaurant" unconditionally).
     return (
       <div className="flex min-h-svh items-center justify-center px-4 text-center text-muted">
         <p>This link doesn't specify a restaurant. Please use the restaurant's own storefront link.</p>

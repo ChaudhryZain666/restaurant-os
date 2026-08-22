@@ -26,6 +26,15 @@
 /api/v1/restaurants                               POST    platform_admin only
 /api/v1/restaurants/me                            GET     Requires auth (restaurant-scoped)
 /api/v1/restaurants/by-slug/:slug                 GET     Public
+/api/v1/restaurants/by-domain/:hostname           GET     Public — Phase 22 custom-domain storefront resolution, same trust model/response shape as by-slug; only an ACTIVE verified domain resolves
+
+# Phase 22 — custom domains (one active domain per location; see docs/multi-tenant-storefront-architecture.md)
+/api/v1/businesses/:businessId/domains                        GET   requires requireBusinessMatch + restaurant.settings.manage — every domain across the business's locations
+/api/v1/restaurants/:restaurantId/domains                     POST  requires tenant match + restaurant.settings.manage (owner-only) — {hostname}, starts pending_verification
+/api/v1/restaurants/:restaurantId/domains/:id/check-verification POST requires tenant match + restaurant.settings.manage — synchronous DNS TXT check, idempotent, never auto-activates
+/api/v1/restaurants/:restaurantId/domains/:id/activate        POST  requires tenant match + restaurant.settings.manage — only from verified; 409 if the location already has a different active domain
+/api/v1/restaurants/:restaurantId/domains/:id/deactivate      POST  requires tenant match + restaurant.settings.manage — active -> verified
+/api/v1/restaurants/:restaurantId/domains/:id                 DELETE requires tenant match + restaurant.settings.manage — hard delete, frees the hostname
 
 /api/v1/restaurants/:restaurantId/menu            GET     Public, Redis-cached — dual-path: canonical (shared) menu once the business is migrated, legacy per-location menu otherwise
 /api/v1/restaurants/:restaurantId/menu            POST    requires restaurant.menu.write + tenant match — 410 MENU_MIGRATED once the business is migrated (Phase 21); use the canonical/override routes below instead
