@@ -6,7 +6,11 @@ import { User, type UserDoc } from "../models/User.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
+import { Order } from "../models/Order.js";
+import { Payment } from "../models/Payment.js";
+import { Table } from "../models/Table.js";
 import { signAccessToken } from "../services/token.service.js";
+import { generateTableToken } from "../services/tableToken.service.js";
 import { redis } from "../config/redis.js";
 
 /**
@@ -39,6 +43,11 @@ export async function createTestRestaurant(overrides: Partial<Record<string, unk
       orderingEnabled: true,
       pickupEnabled: true,
       deliveryEnabled: true,
+      cashEnabled: true,
+      // Permissive by default so existing online-payment tests don't need to know about this
+      // Phase 15 toggle unless they're specifically testing it — mirrors pickupEnabled/
+      // deliveryEnabled already being enabled-by-default here for the same reason.
+      onlinePaymentEnabled: true,
       minOrderAmount: 0,
       taxRate: 0.1,
       deliveryFee: 5,
@@ -89,6 +98,57 @@ export async function createTestMenuItem(
     categoryId,
     name: unique("Item"),
     price: 10,
+    ...overrides,
+  });
+}
+
+export async function createTestOrder(
+  restaurantId: mongoose.Types.ObjectId,
+  customerId: mongoose.Types.ObjectId,
+  overrides: Partial<Record<string, unknown>> = {}
+) {
+  return Order.create({
+    restaurantId,
+    customerId,
+    orderNumber: unique("ORD"),
+    items: [
+      { menuItemId: new mongoose.Types.ObjectId(), name: "Test Item", unitPrice: 10, quantity: 1, lineTotal: 10 },
+    ],
+    orderType: "pickup",
+    paymentMethod: "cash",
+    subtotal: 10,
+    total: 10,
+    statusHistory: [{ status: "pending", at: new Date() }],
+    ...overrides,
+  });
+}
+
+export async function createTestPayment(
+  restaurantId: mongoose.Types.ObjectId,
+  orderId: mongoose.Types.ObjectId,
+  customerId: mongoose.Types.ObjectId,
+  overrides: Partial<Record<string, unknown>> = {}
+) {
+  return Payment.create({
+    restaurantId,
+    orderId,
+    customerId,
+    method: "online",
+    provider: "mock",
+    providerRef: `mock_pi_${unique("ref")}`,
+    currency: "USD",
+    amount: 10,
+    status: "pending",
+    ...overrides,
+  });
+}
+
+export async function createTestTable(restaurantId: mongoose.Types.ObjectId, overrides: Partial<Record<string, unknown>> = {}) {
+  return Table.create({
+    restaurantId,
+    name: unique("Table"),
+    capacity: 2,
+    qrToken: generateTableToken(),
     ...overrides,
   });
 }

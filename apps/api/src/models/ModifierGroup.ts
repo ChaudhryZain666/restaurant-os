@@ -34,7 +34,9 @@ const modifierOptionSchema = new Schema<ModifierOptionSubdoc>({
 
 const modifierGroupSchema = new Schema<ModifierGroupDoc>(
   {
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    // No standalone index on restaurantId: the compound index below already covers
+    // restaurantId-only queries via its leading-field prefix.
+    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
     menuItemId: { type: Schema.Types.ObjectId, ref: "MenuItem", required: true, index: true },
     name: { type: String, required: true, trim: true },
     minSelect: { type: Number, default: 0, min: 0 },

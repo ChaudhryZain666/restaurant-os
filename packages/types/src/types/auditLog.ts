@@ -1,0 +1,39 @@
+/**
+ * Single source of truth for both the Mongoose schema enum (apps/api/src/models/AuditLog.ts) and
+ * every place that needs to validate/render an action or target type (Phase 12's audit log query
+ * schema, the admin audit log page). Previously the API model defined its own copy of this list
+ * and it drifted — "restaurant.status_changed"/"user.status_changed" and the "restaurant"/"user"
+ * target types existed in the model but never made it here. One list now.
+ */
+export const AUDIT_ACTIONS = [
+  "order.status_changed",
+  "order.cancelled",
+  "order.note_updated",
+  "payment.refunded",
+  "restaurant.status_changed",
+  "user.status_changed",
+  "restaurant.created",
+  "restaurant.published",
+  "restaurant.unpublished",
+  "restaurant.owner_invite_resent",
+] as const;
+
+export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user"] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
+
+export interface AuditLogEntry {
+  id: string;
+  restaurantId: string;
+  actorUserId: string;
+  actorRole: string;
+  /** The actor's current name, resolved server-side at read time (not stored on the log entry
+   *  itself) — best-effort; falls back to undefined if that user account no longer exists. */
+  actorName?: string;
+  action: AuditAction;
+  targetType: AuditTargetType;
+  targetId: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}

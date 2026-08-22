@@ -27,3 +27,11 @@ export function getStorageService(): StorageService {
   });
   return instance;
 }
+
+/** Test-only injection point — mirrors resetGeocodingServiceForTests/resetEmailServiceForTests.
+ *  Lets upload.controller.test.ts exercise a real successful-upload path against an in-memory
+ *  fake, without needing real S3-compatible credentials in the test environment. Pass undefined
+ *  to clear back to the real factory. */
+export function setStorageServiceForTests(service: StorageService | undefined): void {
+  instance = service ?? null;
+}

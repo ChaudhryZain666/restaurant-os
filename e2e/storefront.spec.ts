@@ -20,7 +20,8 @@ test("customer can register, add an item to cart, and place an order", async ({ 
   await page.getByLabel("Password").fill("E2ePassword1!");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page).toHaveURL("/");
+  // "/" legacy-redirects to the default restaurant's canonical /r/:slug URL (Phase 8).
+  await expect(page).toHaveURL(/\/r\/demo-restaurant$/);
   // Margherita Pizza (seeded) has a required "Size" modifier group, so "Add to cart" opens a
   // selection panel rather than adding immediately. Targeted by name rather than "first item"
   // since other e2e specs can add their own items/categories to the same seeded restaurant.
@@ -33,6 +34,8 @@ test("customer can register, add an item to cart, and place an order", async ({ 
   await expect(page.getByRole("heading", { name: "Cart" })).toBeVisible();
 
   await page.getByRole("button", { name: "Place order" }).click();
-  await expect(page).toHaveURL("/orders", { timeout: 10_000 });
-  await expect(page.getByText(/ORD-\d+ — pending/)).toBeVisible();
+  // Placing an order now lands on that order's own tracking page (Phase 3), not the list.
+  await expect(page).toHaveURL(/\/orders\/[a-f0-9]+$/, { timeout: 10_000 });
+  await expect(page.getByText(/Order ORD-\d+/)).toBeVisible();
+  await expect(page.getByText("Order placed successfully!")).toBeVisible();
 });

@@ -6,6 +6,8 @@ import { redis } from "./config/redis.js";
 import { queueConnection } from "./queues/connection.js";
 import { startNotificationWorker } from "./queues/notification.queue.js";
 import { createSocketServer } from "./realtime/socket.js";
+import { registerOrderEventListeners } from "./events/orderEventListeners.js";
+import { registerTicketEventListeners } from "./events/ticketEventListeners.js";
 import { logger } from "./common/logger.js";
 
 async function main() {
@@ -14,6 +16,8 @@ async function main() {
   const httpServer = createServer(app);
 
   createSocketServer(httpServer);
+  registerOrderEventListeners();
+  registerTicketEventListeners();
   const notificationWorker = startNotificationWorker();
 
   httpServer.listen(env.PORT, () => {

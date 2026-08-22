@@ -3,7 +3,9 @@ import { idTransform } from "../utils/schemaOptions.js";
 
 const categorySchema = new Schema(
   {
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    // No standalone index: the compound index below already covers restaurantId-only queries
+    // via its leading-field prefix.
+    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
     sortOrder: { type: Number, default: 0 },

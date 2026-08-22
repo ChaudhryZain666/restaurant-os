@@ -5,14 +5,21 @@ import { env } from "../config/env.js";
 import { logger } from "../common/logger.js";
 
 /**
- * Foundation only: authenticated connection + per-user room, no business events yet.
- * Real events (order.created, order.confirmed, order.preparing, order.ready,
- * order.out_for_delivery, order.delivered, order.cancelled) get emitted from the
- * relevant service once the order engine is actually built.
+ * Authenticated connection + per-user room (also per-restaurant, when the token carries one).
+ * Order lifecycle events (order.created, order.confirmed, order.preparing, ...) are emitted here
+ * via registerOrderEventListeners (see apps/api/src/events/), which pushes an "order:event"
+ * message to the relevant user:{id} and restaurant:{id} rooms.
  */
+let ioInstance: SocketIOServer | null = null;
+
+/** The live Socket.IO server instance, once createSocketServer has run — null before boot. */
+export function getIO(): SocketIOServer | null {
+  return ioInstance;
+}
+
 export function createSocketServer(httpServer: HttpServer): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
-    cors: { origin: env.CLIENT_ORIGIN, credentials: true },
+    cors: { origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN], credentials: true },
   });
 
   io.use((socket, next) => {
@@ -30,9 +37,13 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
   });
 
   io.on("connection", (socket) => {
-    const { userId, restaurantId } = socket.data;
+    const { userId, restaurantId, role } = socket.data;
     socket.join(`user:${userId}`);
     if (restaurantId) socket.join(`restaurant:${restaurantId}`);
+    // Platform admins aren't restaurant-scoped, so they'd otherwise join no shared room at all —
+    // this is how the platform-wide support dashboard receives live ticket updates regardless of
+    // which platform_admin happens to be connected. See events/ticketEventListeners.ts.
+    if (role === "platform_admin") socket.join("support:platform");
 
     logger.info("socket connected", { userId, restaurantId, socketId: socket.id });
 
@@ -41,5 +52,6 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
     });
   });
 
+  ioInstance = io;
   return io;
 }

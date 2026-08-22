@@ -19,6 +19,7 @@ export interface PricedOrderItem {
   quantity: number;
   selectedModifiers: PricedSelectedModifier[];
   lineTotal: number;
+  specialInstructions?: string;
 }
 
 /**
@@ -106,6 +107,8 @@ export async function priceOrderItems(
       quantity: item.quantity,
       selectedModifiers,
       lineTotal,
+      // Free text, never validated/priced — passed through as-is from the request.
+      specialInstructions: item.specialInstructions,
     };
   });
 

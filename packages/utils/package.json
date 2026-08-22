@@ -8,5 +8,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.0"
   }
 }

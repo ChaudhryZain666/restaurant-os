@@ -28,4 +28,10 @@ export class ApiError extends Error {
   static conflict(message: string) {
     return new ApiError(409, ErrorCode.CONFLICT, message);
   }
+  static tooManyRequests(message: string) {
+    return new ApiError(429, ErrorCode.RATE_LIMITED, message);
+  }
+  static serviceUnavailable(message: string) {
+    return new ApiError(503, ErrorCode.INTERNAL_ERROR, message);
+  }
 }

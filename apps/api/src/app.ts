@@ -11,7 +11,9 @@ import { env } from "./config/env.js";
 import { requestId } from "./common/requestId.js";
 import { requestLogger } from "./common/requestLogger.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { jsonRateLimitHandler } from "./middleware/rateLimitHandler.js";
 import { healthRouter } from "./routes/health.routes.js";
+import { sitemapRouter } from "./routes/sitemap.routes.js";
 import { apiRouter } from "./routes/index.js";
 
 const API_VERSION_PREFIX = "/api/v1";
@@ -29,7 +31,19 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors({ origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN], credentials: true }));
-  app.use(express.json());
+  // Captures the raw pre-parse body bytes onto req.rawBody — payment webhook signature
+  // verification (controllers/paymentWebhook.controller.ts) must check the exact bytes a
+  // provider signed; a re-serialized copy of the parsed JSON can differ in whitespace/key order
+  // and would make every real signature fail. Applied globally (cheap) rather than only on the
+  // webhook route, since express.json() itself is already global and this only adds a buffer
+  // reference to the request, not a second parse pass.
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    })
+  );
   app.use(cookieParser());
   app.use(requestId);
   app.use(requestLogger);
@@ -41,10 +55,12 @@ export function createApp() {
       limit: 1000,
       standardHeaders: true,
       legacyHeaders: false,
+      handler: jsonRateLimitHandler,
     })
   );
 
   app.use("/health", healthRouter);
+  app.use("/sitemap.xml", sitemapRouter);
 
   try {
     app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(loadOpenApiDocument()));

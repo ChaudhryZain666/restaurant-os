@@ -20,6 +20,44 @@ const envSchema = z.object({
   STORAGE_ACCESS_KEY: z.string().optional(),
   STORAGE_SECRET_KEY: z.string().optional(),
   STORAGE_PUBLIC_URL: z.string().optional(),
+
+  // Email (optional — unset or "console" logs the rendered email instead of sending it; see
+  // apps/api/src/email/index.ts. No real provider is wired up yet — this is the extension point).
+  EMAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
+  EMAIL_FROM: z.string().default("Tablecloth <no-reply@tablecloth.local>"),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+
+  // Geocoding (optional — GeocodingService throws only when actually used unconfigured, never at
+  // boot; see apps/api/src/services/geocoding/index.ts). "locationiq" is the real provider (see
+  // docs/delivery-architecture.md for why) and requires GEOCODING_API_KEY. "test" is a
+  // deterministic, no-network adapter safe for any environment without real credentials — used by
+  // this project's own Jest/Playwright suites and reasonable for local dev too.
+  GEOCODING_PROVIDER: z.enum(["locationiq", "test"]).optional(),
+  GEOCODING_API_KEY: z.string().optional(),
+  // Override only for testing against a different host (e.g. a self-hosted LocationIQ-compatible
+  // proxy) — defaults to LocationIQ's real API host when unset.
+  GEOCODING_BASE_URL: z.string().optional(),
+
+  // Payments. "mock" is the only provider that actually runs — deterministic, no real money ever
+  // moves, see apps/api/src/payments/MockPaymentProvider.ts. "safepay" names the real provider
+  // decision documented in docs/payment-provider-decision.md; selecting it without an
+  // implementation throws clearly (getPaymentProvider in payments/index.ts) rather than silently
+  // falling back to the mock. SAFEPAY_* are accepted but unused today — the configuration
+  // boundary a real adapter would read from, not a working credential path.
+  PAYMENT_PROVIDER: z.enum(["mock", "safepay"]).default("mock"),
+  MOCK_PAYMENT_WEBHOOK_SECRET: z.string().default("mock-payment-webhook-secret-dev-only"),
+  // Safepay: real network-capable adapter as of Phase 15 (apps/api/src/payments/SafepayProvider.ts),
+  // but never exercised against a live account — see that file's header comment and
+  // docs/payment-provider-decision.md for exactly what's verified vs. assumed. SAFEPAY_ENV picks
+  // which of Safepay's two real hosts to call; defaults to "sandbox" so an incomplete deployment
+  // config can never silently reach their production host.
+  SAFEPAY_API_KEY: z.string().optional(),
+  SAFEPAY_SECRET_KEY: z.string().optional(),
+  SAFEPAY_WEBHOOK_SECRET: z.string().optional(),
+  SAFEPAY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
 });
 
 const parsed = envSchema.safeParse(process.env);

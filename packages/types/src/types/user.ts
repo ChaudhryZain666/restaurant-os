@@ -15,3 +15,16 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
 }
+
+/** A restaurant's manager/staff/kitchen_staff account, as shown on the owner's Staff page. */
+export interface StaffMember {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  phone?: string;
+  isActive: boolean;
+  /** True until they've followed their invite email and set their own password. */
+  invitePending: boolean;
+  createdAt: string;
+}

@@ -1,21 +1,98 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
+import { legacyDefaultSlug } from "./context/RestaurantContext";
 import { MenuPage } from "./pages/MenuPage";
 import { CartPage } from "./pages/CartPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { ConfirmEmailChangePage } from "./pages/ConfirmEmailChangePage";
 import { OrdersPage } from "./pages/OrdersPage";
+import { OrderDetailPage } from "./pages/OrderDetailPage";
+import { AccountPage } from "./pages/AccountPage";
 import { LoyaltyPage } from "./pages/LoyaltyPage";
+import { SupportCenterPage } from "./pages/SupportCenterPage";
+import { ArticleDetailPage } from "./pages/ArticleDetailPage";
+import { MyTicketsPage } from "./pages/MyTicketsPage";
+import { CreateTicketPage } from "./pages/CreateTicketPage";
+import { TicketDetailPage } from "./pages/TicketDetailPage";
+import { PrintReceiptPage } from "./pages/PrintReceiptPage";
+
+/**
+ * Forwards a pre-Phase-8 bare storefront URL (bookmarked, or a physically printed Phase 7 QR
+ * code) to its canonical `/r/:restaurantSlug/...` equivalent, so nothing that was already handed
+ * to a real customer becomes a dead link. `suffix` is appended as-is (e.g. "/cart"); the special
+ * "t" case additionally forwards the :tableToken param. A client-side redirect (not a second
+ * route rendering the same page) — see docs/multi-tenant-storefront-architecture.md's SEO section
+ * for why duplicate indexable URLs are avoided.
+ */
+function LegacyRedirect({ suffix }: { suffix: string }) {
+  const { tableToken } = useParams<{ tableToken?: string }>();
+  const defaultSlug = legacyDefaultSlug();
+  if (!defaultSlug) {
+    // No VITE_RESTAURANT_SLUG configured for this deployment — silently redirecting into a
+    // guessed restaurant slug that likely doesn't exist would be worse than this honest message
+    // (Phase 13 audit finding: this used to fall back to "demo-restaurant" unconditionally).
+    return (
+      <div className="flex min-h-svh items-center justify-center px-4 text-center text-muted">
+        <p>This link doesn't specify a restaurant. Please use the restaurant's own storefront link.</p>
+      </div>
+    );
+  }
+  const target = `/r/${defaultSlug}${suffix}${tableToken ? `/${tableToken}` : ""}`;
+  return <Navigate to={target} replace />;
+}
 
 export function App() {
   return (
     <Routes>
+      {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
+          tab from the order tracking page's Print action. */}
+      <Route
+        path="/orders/:id/receipt"
+        element={
+          <RequireAuth>
+            <PrintReceiptPage />
+          </RequireAuth>
+        }
+      />
       <Route element={<Layout />}>
-        <Route path="/" element={<MenuPage />} />
-        <Route path="/cart" element={<CartPage />} />
+        {/* Restaurant-scoped storefront — canonical URLs. */}
+        <Route path="/r/:restaurantSlug" element={<MenuPage />} />
+        {/* Reuses MenuPage — the QR just adds table context (see TableContext), the menu itself
+            is identical to the regular storefront. */}
+        <Route path="/r/:restaurantSlug/t/:tableToken" element={<MenuPage />} />
+        {/* Authenticated owner/platform_admin preview (Phase 14) — reuses MenuPage too. Works even
+            while the restaurant is still "pending"; RestaurantContext detects this route and
+            fetches from the preview endpoint instead of the public one. */}
+        <Route path="/r/:restaurantSlug/preview" element={<MenuPage />} />
+        <Route path="/r/:restaurantSlug/cart" element={<CartPage />} />
+        <Route
+          path="/r/:restaurantSlug/loyalty"
+          element={
+            <RequireAuth>
+              <LoyaltyPage />
+            </RequireAuth>
+          }
+        />
+
+        {/* Legacy bare URLs — forward to the env-configured default restaurant's canonical URL. */}
+        <Route path="/" element={<LegacyRedirect suffix="" />} />
+        <Route path="/cart" element={<LegacyRedirect suffix="/cart" />} />
+        <Route path="/t/:tableToken" element={<LegacyRedirect suffix="/t" />} />
+        <Route path="/loyalty" element={<LegacyRedirect suffix="/loyalty" />} />
+
+        {/* Account/platform-level — not tied to any one restaurant. */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public, like /reset-password — the token in the link IS the credential (see
+            auth.controller.ts's confirmEmailChange). The link is sent to the NEW inbox, which
+            isn't necessarily the same device/browser the user is currently logged in on. */}
+        <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
         <Route
           path="/orders"
           element={
@@ -25,10 +102,44 @@ export function App() {
           }
         />
         <Route
-          path="/loyalty"
+          path="/orders/:id"
           element={
             <RequireAuth>
-              <LoyaltyPage />
+              <OrderDetailPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <RequireAuth>
+              <AccountPage />
+            </RequireAuth>
+          }
+        />
+        <Route path="/support" element={<SupportCenterPage />} />
+        <Route path="/support/articles/:slug" element={<ArticleDetailPage />} />
+        <Route
+          path="/support/tickets"
+          element={
+            <RequireAuth>
+              <MyTicketsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/support/tickets/new"
+          element={
+            <RequireAuth>
+              <CreateTicketPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/support/tickets/:id"
+          element={
+            <RequireAuth>
+              <TicketDetailPage />
             </RequireAuth>
           }
         />

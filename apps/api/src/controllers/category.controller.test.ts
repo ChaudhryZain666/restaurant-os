@@ -128,6 +128,20 @@ describe("categories", () => {
     expect(stillExists).not.toBeNull();
   });
 
+  it("owner can rename a category (admin UI's new Rename control uses this same PATCH)", async () => {
+    const category = await createTestCategory(restaurantA._id, { name: "Old Name" });
+
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/categories/${category.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ name: "New Name" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.category.name).toBe("New Name");
+    const stored = await Category.findById(category.id);
+    expect(stored!.name).toBe("New Name");
+  });
+
   it("sortOrder and isActive updates persist and affect listing order/visibility", async () => {
     const category = await createTestCategory(restaurantA._id, { sortOrder: 5, isActive: true });
 

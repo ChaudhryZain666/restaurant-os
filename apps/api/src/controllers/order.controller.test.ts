@@ -6,7 +6,9 @@ import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
+import { Payment } from "../models/Payment.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { Table } from "../models/Table.js";
 import { User } from "../models/User.js";
 import { LoyaltyAccount, LoyaltyTransaction } from "../models/LoyaltyAccount.js";
 import { Counter } from "../models/Counter.js";
@@ -15,7 +17,9 @@ import {
   createTestCategory,
   createTestMenuItem,
   createTestModifierGroup,
+  createTestOrder,
   createTestRestaurant,
+  createTestTable,
   createTestUser,
   tokenFor,
 } from "../test-utils/fixtures.js";
@@ -36,7 +40,17 @@ beforeAll(async () => {
   await connectDB();
 
   restaurantA = await createTestRestaurant({
-    settings: { orderingEnabled: true, pickupEnabled: true, deliveryEnabled: true, minOrderAmount: 0, taxRate: 0.1, deliveryFee: 5 },
+    settings: {
+      orderingEnabled: true,
+      pickupEnabled: true,
+      deliveryEnabled: true,
+      dineInEnabled: true,
+      cashEnabled: true,
+      onlinePaymentEnabled: true,
+      minOrderAmount: 0,
+      taxRate: 0.1,
+      deliveryFee: 5,
+    },
   });
   restaurantB = await createTestRestaurant();
   categoryA = await createTestCategory(restaurantA._id);
@@ -64,6 +78,8 @@ afterAll(async () => {
   const ids = [restaurantA._id, restaurantB._id];
   await Promise.all([
     Order.deleteMany({ restaurantId: { $in: ids } }),
+    Payment.deleteMany({ restaurantId: { $in: ids } }),
+    Table.deleteMany({ restaurantId: { $in: ids } }),
     ModifierGroup.deleteMany({ restaurantId: { $in: ids } }),
     MenuItem.deleteMany({ restaurantId: { $in: ids } }),
     Category.deleteMany({ restaurantId: { $in: ids } }),
@@ -145,6 +161,23 @@ describe("order pricing (server-authoritative)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects a menu item ID that belongs to a different restaurant entirely (Phase 8 cross-tenant order attempt)", async () => {
+    const categoryB = await createTestCategory(restaurantB._id);
+    const menuItemB = await createTestMenuItem(restaurantB._id, categoryB._id, { price: 999 });
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemB.id, quantity: 1, selectedModifiers: [] }],
+      });
+
+    expect(res.status).toBe(400);
+    const stored = await Order.find({ restaurantId: restaurantA._id, "items.menuItemId": menuItemB._id });
+    expect(stored).toHaveLength(0);
+  });
+
   it("rejects a modifier group ID that belongs to a different restaurant's item", async () => {
     const categoryB = await createTestCategory(restaurantB._id);
     const menuItemB = await createTestMenuItem(restaurantB._id, categoryB._id, { price: 5 });
@@ -212,6 +245,174 @@ describe("order pricing (server-authoritative)", () => {
 
     const [res1, res2] = [await make(), await make()];
     expect(res1.body.data.order.orderNumber).not.toBe(res2.body.data.order.orderNumber);
+  });
+});
+
+describe("dine-in orders (Phase 7)", () => {
+  function orderBody(extra: Record<string, unknown>) {
+    return {
+      orderType: "dine_in",
+      items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      ...extra,
+    };
+  }
+
+  it("creates a dine-in order for a valid table token and records tableId + tableName snapshot", async () => {
+    const table = await createTestTable(restaurantA._id, { name: "Table 9", capacity: 4 });
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.orderType).toBe("dine_in");
+    expect(res.body.data.order.tableId).toBe(table.id);
+    expect(res.body.data.order.tableName).toBe("Table 9");
+  });
+
+  it("rejects a dine-in order with no tableToken at all", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({}));
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unknown/invalid table token", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: "not-a-real-token" }));
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a token belonging to a deactivated table", async () => {
+    const table = await createTestTable(restaurantA._id, { isActive: false });
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken }));
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a table token that belongs to a different restaurant (cross-tenant)", async () => {
+    const tableB = await createTestTable(restaurantB._id);
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: tableB.qrToken }));
+
+    expect(res.status).toBe(400);
+    const stored = await Order.find({ restaurantId: restaurantA._id, tableId: tableB._id });
+    expect(stored).toHaveLength(0);
+  });
+
+  it("ignores any client-supplied tableId and re-resolves the table server-side from the token alone", async () => {
+    const table = await createTestTable(restaurantA._id);
+    const decoyTable = await createTestTable(restaurantA._id);
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ ...orderBody({ tableToken: table.qrToken }), tableId: decoyTable.id });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.tableId).toBe(table.id);
+    expect(res.body.data.order.tableId).not.toBe(decoyTable.id);
+  });
+
+  it("rejects dine-in ordering when the restaurant hasn't enabled it", async () => {
+    const noDineIn = await createTestRestaurant({
+      settings: { orderingEnabled: true, pickupEnabled: true, deliveryEnabled: true, dineInEnabled: false, minOrderAmount: 0, taxRate: 0.1, deliveryFee: 5 },
+    });
+    const cat = await createTestCategory(noDineIn._id);
+    const item = await createTestMenuItem(noDineIn._id, cat._id, { price: 10 });
+    const table = await createTestTable(noDineIn._id);
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${noDineIn.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "dine_in",
+        tableToken: table.qrToken,
+        items: [{ menuItemId: item.id, quantity: 1, selectedModifiers: [] }],
+      });
+
+    expect(res.status).toBe(400);
+
+    await Promise.all([
+      Table.deleteOne({ _id: table._id }),
+      MenuItem.deleteOne({ _id: item._id }),
+      Category.deleteOne({ _id: cat._id }),
+      Restaurant.deleteOne({ _id: noDineIn._id }),
+    ]);
+  });
+
+  it("prices a dine-in order identically to a pickup order for the same items (table context doesn't affect pricing)", async () => {
+    const table = await createTestTable(restaurantA._id);
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken }));
+
+    expect(res.status).toBe(201);
+    // Same item/modifier as the pricing describe block's pickup case, minus quantity 2 — just the
+    // base $10 item + $0 (Small) modifier, no delivery fee.
+    expect(res.body.data.order.subtotal).toBe(10);
+    expect(res.body.data.order.deliveryFee).toBe(0);
+  });
+
+  it("supports cash and online payment methods for dine-in, same as pickup/delivery", async () => {
+    const table = await createTestTable(restaurantA._id);
+    const cashRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken, paymentMethod: "cash" }));
+    expect(cashRes.status).toBe(201);
+    expect(cashRes.body.data.order.paymentMethod).toBe("cash");
+    expect(cashRes.body.data.order.paymentStatus).toBe("unpaid");
+
+    const onlineRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken, paymentMethod: "online" }));
+    expect(onlineRes.status).toBe(201);
+    expect(onlineRes.body.data.order.paymentMethod).toBe("online");
+    expect(onlineRes.body.data.order.paymentStatus).toBe("unpaid");
+  });
+
+  it("allows ready -> completed for dine-in orders, same as pickup (not out_for_delivery)", async () => {
+    const table = await createTestTable(restaurantA._id);
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send(orderBody({ tableToken: table.qrToken }));
+    const orderId = createRes.body.data.order.id;
+
+    for (const status of ["confirmed", "preparing", "ready", "completed"]) {
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/status`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ status });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("does not require a tableToken for pickup/delivery orders (regression)", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.tableId).toBeUndefined();
   });
 });
 
@@ -422,6 +623,133 @@ describe("order cancellation (customer self-service)", () => {
   });
 });
 
+describe("loyalty reversal on cancellation/refund (Phase 16) — cancelling can't be used to farm points", () => {
+  it("cancelling an order reverses the loyalty points it earned", async () => {
+    const customer = await createTestUser("customer");
+    const token = tokenFor(customer);
+
+    const create = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    expect(create.status).toBe(201);
+    const orderId = create.body.data.order.id as string;
+    const earned = create.body.data.order.loyaltyPointsEarned as number;
+    expect(earned).toBeGreaterThan(0);
+
+    const afterEarn = await LoyaltyAccount.findOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    expect(afterEarn!.pointsBalance).toBe(earned);
+
+    const cancel = await request(app).patch(`/api/v1/orders/${orderId}/cancel`).set("Authorization", `Bearer ${token}`);
+    expect(cancel.status).toBe(200);
+
+    const afterCancel = await LoyaltyAccount.findOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    expect(afterCancel!.pointsBalance).toBe(0);
+
+    const storedOrder = await Order.findById(orderId);
+    expect(storedOrder!.loyaltyReversed).toBe(true);
+
+    const reversalTxn = await LoyaltyTransaction.findOne({ orderId, type: "adjustment", points: -earned });
+    expect(reversalTxn).not.toBeNull();
+
+    await User.deleteOne({ _id: customer._id });
+    await LoyaltyAccount.deleteOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    await LoyaltyTransaction.deleteMany({ restaurantId: restaurantA._id, customerId: customer.id });
+  });
+
+  it("cancelling an order refunds the loyalty points it redeemed, and claws back only what it itself earned", async () => {
+    const customer = await createTestUser("customer");
+    const token = tokenFor(customer);
+
+    // Order 1: earns points, never cancelled — this is the baseline balance order 2 must not disturb.
+    await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    const baselineBalance = (await LoyaltyAccount.findOne({ restaurantId: restaurantA._id, customerId: customer.id }))!.pointsBalance;
+    expect(baselineBalance).toBeGreaterThan(0);
+
+    // Order 2: redeems some of order 1's points, also earns its own (smaller, post-discount) points.
+    const order2 = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+        redeemPoints: 5,
+      });
+    expect(order2.status).toBe(201);
+    expect(order2.body.data.order.loyaltyPointsRedeemed).toBe(5);
+    const order2Id = order2.body.data.order.id as string;
+
+    const cancel = await request(app).patch(`/api/v1/orders/${order2Id}/cancel`).set("Authorization", `Bearer ${token}`);
+    expect(cancel.status).toBe(200);
+
+    // Order 2's net effect on the balance (its own redemption + its own earn) is fully undone —
+    // the balance returns to exactly what order 1 alone left it at, order 1 itself untouched.
+    const finalBalance = (await LoyaltyAccount.findOne({ restaurantId: restaurantA._id, customerId: customer.id }))!.pointsBalance;
+    expect(finalBalance).toBe(baselineBalance);
+
+    await User.deleteOne({ _id: customer._id });
+    await LoyaltyAccount.deleteOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    await LoyaltyTransaction.deleteMany({ restaurantId: restaurantA._id, customerId: customer.id });
+  });
+
+  it("a full refund of an online order's payment also reverses the loyalty points it earned", async () => {
+    const customer = await createTestUser("customer");
+    const token = tokenFor(customer);
+
+    const create = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        orderType: "pickup",
+        paymentMethod: "online",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    expect(create.status).toBe(201);
+    const orderId = create.body.data.order.id as string;
+    const earned = create.body.data.order.loyaltyPointsEarned as number;
+    expect(earned).toBeGreaterThan(0);
+
+    const paymentRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payments`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ idempotencyKey: `loyalty-refund-${orderId}` });
+    const paymentId = paymentRes.body.data.payment.id as string;
+
+    await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payments/${paymentId}/mock-complete`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ outcome: "paid" });
+
+    const refundRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payments/${paymentId}/refund`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ idempotencyKey: `loyalty-refund-full-${paymentId}`, reason: "Customer complaint" });
+    expect(refundRes.status).toBe(201);
+
+    const stored = await Payment.findById(paymentId);
+    expect(stored!.status).toBe("refunded");
+
+    const afterRefund = await LoyaltyAccount.findOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    expect(afterRefund!.pointsBalance).toBe(0);
+
+    const storedOrder = await Order.findById(orderId);
+    expect(storedOrder!.loyaltyReversed).toBe(true);
+
+    await User.deleteOne({ _id: customer._id });
+    await LoyaltyAccount.deleteOne({ restaurantId: restaurantA._id, customerId: customer.id });
+    await LoyaltyTransaction.deleteMany({ restaurantId: restaurantA._id, customerId: customer.id });
+  });
+});
+
 describe("order payment status (staff)", () => {
   async function placeOrder() {
     const res = await request(app)
@@ -468,6 +796,147 @@ describe("order payment status (staff)", () => {
   });
 });
 
+describe("online payment method — order/payment consistency (Phase 5)", () => {
+  async function placeOnlineOrder() {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        paymentMethod: "online",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    return res.body.data.order.id as string;
+  }
+
+  it("creates an order with paymentMethod=online, unpaid, defaulting to cash when omitted elsewhere", async () => {
+    const orderId = await placeOnlineOrder();
+    const stored = await Order.findById(orderId);
+    expect(stored!.paymentMethod).toBe("online");
+    expect(stored!.paymentStatus).toBe("unpaid");
+  });
+
+  it("defaults paymentMethod to cash when not specified, preserving existing behavior", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    expect(res.body.data.order.paymentMethod).toBe("cash");
+  });
+
+  it("staff cannot accept (confirm) an unpaid online order", async () => {
+    const orderId = await placeOnlineOrder();
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/status`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ status: "confirmed" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("staff CAN still cancel an unpaid pending online order", async () => {
+    const orderId = await placeOnlineOrder();
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/status`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("staff can accept an online order once it's actually paid", async () => {
+    const orderId = await placeOnlineOrder();
+    await Order.findByIdAndUpdate(orderId, { $set: { paymentStatus: "paid" } });
+
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/status`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ status: "confirmed" });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("the manual payment-status endpoint (cash-only) rejects online orders", async () => {
+    const orderId = await placeOnlineOrder();
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payment-status`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ paymentStatus: "paid" });
+
+    expect(res.status).toBe(400);
+    const stored = await Order.findById(orderId);
+    expect(stored!.paymentStatus).toBe("unpaid");
+  });
+});
+
+describe("restaurant payment-method gating (Phase 15) — server never trusts the client's chosen method", () => {
+  let cashOnlyRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let onlineOnlyRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let cashOnlyCategory: Awaited<ReturnType<typeof createTestCategory>>;
+  let cashOnlyItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+  let onlineOnlyCategory: Awaited<ReturnType<typeof createTestCategory>>;
+  let onlineOnlyItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+
+  beforeAll(async () => {
+    cashOnlyRestaurant = await createTestRestaurant({
+      settings: { orderingEnabled: true, pickupEnabled: true, cashEnabled: true, onlinePaymentEnabled: false, minOrderAmount: 0, taxRate: 0 },
+    });
+    onlineOnlyRestaurant = await createTestRestaurant({
+      settings: { orderingEnabled: true, pickupEnabled: true, cashEnabled: false, onlinePaymentEnabled: true, minOrderAmount: 0, taxRate: 0 },
+    });
+    cashOnlyCategory = await createTestCategory(cashOnlyRestaurant._id);
+    cashOnlyItem = await createTestMenuItem(cashOnlyRestaurant._id, cashOnlyCategory._id, { price: 5 });
+    onlineOnlyCategory = await createTestCategory(onlineOnlyRestaurant._id);
+    onlineOnlyItem = await createTestMenuItem(onlineOnlyRestaurant._id, onlineOnlyCategory._id, { price: 5 });
+  });
+
+  afterAll(async () => {
+    const ids = [cashOnlyRestaurant._id, onlineOnlyRestaurant._id];
+    await Promise.all([
+      Order.deleteMany({ restaurantId: { $in: ids } }),
+      MenuItem.deleteMany({ restaurantId: { $in: ids } }),
+      Category.deleteMany({ restaurantId: { $in: ids } }),
+      Counter.deleteMany({ _id: { $in: ids } }),
+      Restaurant.deleteMany({ _id: { $in: ids } }),
+    ]);
+  });
+
+  it("rejects an online order for a cash-only restaurant, even though the request is otherwise well-formed", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${cashOnlyRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", paymentMethod: "online", items: [{ menuItemId: cashOnlyItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("allows a cash order for a cash-only restaurant", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${cashOnlyRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", paymentMethod: "cash", items: [{ menuItemId: cashOnlyItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a cash order for an online-only restaurant", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${onlineOnlyRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", paymentMethod: "cash", items: [{ menuItemId: onlineOnlyItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("allows an online order for an online-only restaurant", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${onlineOnlyRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", paymentMethod: "online", items: [{ menuItemId: onlineOnlyItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(201);
+  });
+});
+
 describe("staff order views include customer contact info", () => {
   it("listRestaurantOrders attaches customerName/customerPhone", async () => {
     const res = await request(app)
@@ -492,5 +961,224 @@ describe("staff order views include customer contact info", () => {
     const res = await request(app).get(`/api/v1/orders/${orderId}`).set("Authorization", `Bearer ${ownerAToken}`);
     expect(res.status).toBe(200);
     expect(res.body.data.order.customerName).toEqual(expect.any(String));
+  });
+});
+
+describe("order status history (Phase 3 tracking foundation)", () => {
+  it("records a statusHistory entry on creation and on every subsequent status change", async () => {
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    const orderId = createRes.body.data.order.id;
+    expect(createRes.body.data.order.statusHistory).toEqual([{ status: "pending", at: expect.any(String) }]);
+
+    const confirmRes = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/status`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ status: "confirmed" });
+
+    expect(confirmRes.body.data.order.statusHistory).toHaveLength(2);
+    expect(confirmRes.body.data.order.statusHistory[1].status).toBe("confirmed");
+  });
+
+  it("records a cancelled entry when the customer self-cancels", async () => {
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    const orderId = createRes.body.data.order.id;
+
+    const cancelRes = await request(app)
+      .patch(`/api/v1/orders/${orderId}/cancel`)
+      .set("Authorization", `Bearer ${customerToken}`);
+
+    expect(cancelRes.body.data.order.statusHistory).toHaveLength(2);
+    expect(cancelRes.body.data.order.statusHistory[1].status).toBe("cancelled");
+  });
+});
+
+describe("reorder (POST /orders/:id/reorder)", () => {
+  async function placeOrder() {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 2, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    return res.body.data.order.id as string;
+  }
+
+  it("returns a re-priced preview using CURRENT menu data, not the historical snapshot", async () => {
+    const orderId = await placeOrder();
+
+    await MenuItem.findByIdAndUpdate(menuItemA._id, { $set: { price: 15 } });
+
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurantAvailable).toBe(true);
+    expect(res.body.data.unavailableItems).toEqual([]);
+    expect(res.body.data.items[0].unitPrice).toBe(15); // current price, not the $10 historical one
+    expect(res.body.data.items[0].lineTotal).toBe(30);
+
+    await MenuItem.findByIdAndUpdate(menuItemA._id, { $set: { price: 10 } });
+  });
+
+  it("includes restaurantSlug so the customer routes back to the correct restaurant's /r/:slug/cart (Phase 8)", async () => {
+    const orderId = await placeOrder();
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${customerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurantSlug).toBe(restaurantA.slug);
+  });
+
+  it("a different customer cannot reorder someone else's order", async () => {
+    const orderId = await placeOrder();
+    const otherCustomer = await createTestUser("customer");
+    const otherToken = tokenFor(otherCustomer);
+
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${otherToken}`);
+    expect(res.status).toBe(403);
+
+    await User.deleteOne({ _id: otherCustomer._id });
+  });
+
+  it("reports a since-hidden menu item as unavailable instead of silently dropping it", async () => {
+    const orderId = await placeOrder();
+
+    await MenuItem.findByIdAndUpdate(menuItemA._id, { $set: { isAvailable: false } });
+
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([]);
+    expect(res.body.data.unavailableItems).toHaveLength(1);
+    expect(res.body.data.unavailableItems[0].name).toBe(menuItemA.name);
+
+    await MenuItem.findByIdAndUpdate(menuItemA._id, { $set: { isAvailable: true } });
+  });
+
+  it("reports restaurantAvailable: false when the restaurant has since paused ordering, but still prices available items", async () => {
+    const orderId = await placeOrder();
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { $set: { "settings.temporarilyPaused": true } });
+
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurantAvailable).toBe(false);
+    expect(res.body.data.items).toHaveLength(1);
+
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { $set: { "settings.temporarilyPaused": false } });
+  });
+
+  it("reports every item as unavailable when the restaurant itself no longer exists/active", async () => {
+    const orderId = await placeOrder();
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { $set: { status: "suspended" } });
+
+    const res = await request(app).post(`/api/v1/orders/${orderId}/reorder`).set("Authorization", `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurantAvailable).toBe(false);
+    expect(res.body.data.items).toEqual([]);
+    expect(res.body.data.unavailableItems.length).toBeGreaterThan(0);
+
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { $set: { status: "active" } });
+  });
+});
+
+describe("GET /orders/mine — pagination", () => {
+  let pagingRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let pagingCustomer: Awaited<ReturnType<typeof createTestUser>>;
+  let otherCustomer: Awaited<ReturnType<typeof createTestUser>>;
+  let pagingCustomerToken: string;
+  let otherCustomerToken: string;
+  const TOTAL_ORDERS = 25;
+
+  beforeAll(async () => {
+    pagingRestaurant = await createTestRestaurant();
+    pagingCustomer = await createTestUser("customer");
+    otherCustomer = await createTestUser("customer");
+    pagingCustomerToken = tokenFor(pagingCustomer);
+    otherCustomerToken = tokenFor(otherCustomer);
+
+    // Staggered createdAt (passed at creation time — timestamps:true only auto-fills a missing
+    // value, so an explicit one here is respected) so newest-first ordering is unambiguous to
+    // assert against. Created in parallel, not a 25-iteration sequential await loop — this is
+    // what was timing out the default 5s hook timeout under load, not anything pagination-related.
+    await Promise.all(
+      Array.from({ length: TOTAL_ORDERS }, (_, i) =>
+        createTestOrder(pagingRestaurant._id, pagingCustomer._id, {
+          orderNumber: `ORD-PAGE-${i}`,
+          createdAt: new Date(Date.now() - i * 1000),
+        })
+      )
+    );
+    // A single order for a different customer — proves pagination never leaks another user's orders.
+    await createTestOrder(pagingRestaurant._id, otherCustomer._id, { orderNumber: "ORD-PAGE-OTHER" });
+  }, 20_000);
+
+  afterAll(async () => {
+    await Order.deleteMany({ restaurantId: pagingRestaurant._id });
+    await Restaurant.deleteOne({ _id: pagingRestaurant._id });
+    await User.deleteMany({ _id: { $in: [pagingCustomer._id, otherCustomer._id] } });
+  });
+
+  it("defaults to page 1 with a bounded page size and correct envelope math", async () => {
+    const res = await request(app).get("/api/v1/orders/mine").set("Authorization", `Bearer ${pagingCustomerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.page).toBe(1);
+    expect(res.body.data.limit).toBe(20);
+    expect(res.body.data.total).toBe(TOTAL_ORDERS);
+    expect(res.body.data.totalPages).toBe(2);
+    expect(res.body.data.hasNextPage).toBe(true);
+    expect(res.body.data.hasPreviousPage).toBe(false);
+    expect(res.body.data.items).toHaveLength(20);
+    // Newest first — order 0 was staggered to be the most recent.
+    expect(res.body.data.items[0].orderNumber).toBe("ORD-PAGE-0");
+  });
+
+  it("returns the remainder on the next page, with hasNextPage false", async () => {
+    const res = await request(app)
+      .get("/api/v1/orders/mine?page=2&limit=20")
+      .set("Authorization", `Bearer ${pagingCustomerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toHaveLength(TOTAL_ORDERS - 20);
+    expect(res.body.data.hasNextPage).toBe(false);
+    expect(res.body.data.hasPreviousPage).toBe(true);
+  });
+
+  it("respects a custom limit", async () => {
+    const res = await request(app)
+      .get("/api/v1/orders/mine?page=1&limit=5")
+      .set("Authorization", `Bearer ${pagingCustomerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toHaveLength(5);
+    expect(res.body.data.totalPages).toBe(Math.ceil(TOTAL_ORDERS / 5));
+  });
+
+  it("rejects an out-of-range limit rather than silently clamping it", async () => {
+    const res = await request(app)
+      .get("/api/v1/orders/mine?limit=500")
+      .set("Authorization", `Bearer ${pagingCustomerToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a non-positive page", async () => {
+    const res = await request(app).get("/api/v1/orders/mine?page=0").set("Authorization", `Bearer ${pagingCustomerToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("a different customer's paginated view never includes this customer's orders", async () => {
+    const res = await request(app).get("/api/v1/orders/mine").set("Authorization", `Bearer ${otherCustomerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(1);
+    expect(res.body.data.items[0].orderNumber).toBe("ORD-PAGE-OTHER");
   });
 });

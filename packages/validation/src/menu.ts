@@ -5,7 +5,10 @@ export const menuItemSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(1000).optional(),
   price: z.number().nonnegative(),
-  imageUrl: z.string().url().optional(),
+  // Accepts an absolute URL OR a same-origin relative path (e.g. "/menu-images/foo.svg") — the
+  // storefront has no external image hosting, so self-hosted local assets are the supported
+  // path, and a bare `.url()` check would reject those even though `<img src>` renders them fine.
+  imageUrl: z.string().min(1).max(500).optional(),
   isAvailable: z.boolean().optional(),
   sortOrder: z.number().int().nonnegative().default(0),
 });

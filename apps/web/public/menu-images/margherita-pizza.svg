@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs>
+    <radialGradient id="crust" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#f3c775"/>
+      <stop offset="100%" stop-color="#dba448"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="#fbf1e2"/>
+  <circle cx="200" cy="150" r="118" fill="#e2a840"/>
+  <circle cx="200" cy="150" r="106" fill="url(#crust)"/>
+  <circle cx="200" cy="150" r="92" fill="#d94f3d"/>
+  <circle cx="200" cy="150" r="86" fill="#f2f0e6"/>
+  <g fill="#e8d9a0" opacity="0.55">
+    <circle cx="160" cy="120" r="10"/><circle cx="230" cy="105" r="7"/>
+    <circle cx="250" cy="170" r="9"/><circle cx="175" cy="195" r="8"/>
+    <circle cx="220" cy="200" r="6"/>
+  </g>
+  <g fill="#4c7a3d">
+    <ellipse cx="165" cy="140" rx="12" ry="7" transform="rotate(-20 165 140)"/>
+    <ellipse cx="225" cy="125" rx="11" ry="6" transform="rotate(30 225 125)"/>
+    <ellipse cx="245" cy="185" rx="12" ry="7" transform="rotate(-10 245 185)"/>
+    <ellipse cx="180" cy="180" rx="10" ry="6" transform="rotate(50 180 180)"/>
+    <ellipse cx="210" cy="150" rx="11" ry="6" transform="rotate(5 210 150)"/>
+  </g>
+</svg>

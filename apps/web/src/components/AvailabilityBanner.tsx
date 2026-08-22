@@ -13,11 +13,11 @@ export function AvailabilityBanner() {
         : "This restaurant has temporarily paused ordering.";
 
   return (
-    <div
-      role="status"
-      style={{ background: "#fef3c7", color: "#92400e", padding: "0.75rem 1rem", textAlign: "center" }}
-    >
-      {message}
+    <div role="status" className="animate-slide-up border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center sm:px-6">
+      <p className="flex items-center justify-center gap-2 text-sm font-medium text-amber-900">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
+        {message}
+      </p>
     </div>
   );
 }

@@ -9,6 +9,7 @@ export default {
     // compiled output is ESM-only JS that a require()-based resolution step can choke on.
     "^@restaurant/types$": "<rootDir>/../../packages/types/src/index.ts",
     "^@restaurant/validation$": "<rootDir>/../../packages/validation/src/index.ts",
+    "^@restaurant/utils$": "<rootDir>/../../packages/utils/src/index.ts",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   transform: {

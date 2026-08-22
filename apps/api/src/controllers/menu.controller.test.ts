@@ -53,6 +53,19 @@ afterAll(async () => {
   await closeTestConnections();
 });
 
+describe("public menu bundle — cross-tenant isolation (Phase 8)", () => {
+  it("restaurant A's public menu never includes restaurant B's items or categories", async () => {
+    const itemB = await createTestMenuItem(restaurantB._id, categoryB._id, { name: "Restaurant B Exclusive" });
+
+    const res = await request(app).get(`/api/v1/restaurants/${restaurantA.id}/menu`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.every((i: { id: string }) => i.id !== itemB.id)).toBe(true);
+    expect(res.body.data.categories.every((c: { id: string }) => c.id !== categoryB.id)).toBe(true);
+    // Sanity: restaurant A's own item IS there, proving this isn't just an empty response.
+    expect(res.body.data.items.some((i: { id: string }) => i.id === menuItemId)).toBe(true);
+  });
+});
+
 describe("PATCH /restaurants/:restaurantId/menu/:id tenant boundary (Phase 0 audit finding #1)", () => {
   it("cannot reassign a menu item to another restaurant via a restaurantId in the body", async () => {
     const res = await request(app)

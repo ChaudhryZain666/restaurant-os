@@ -133,6 +133,76 @@ components:
         customerPhone:
           type: string
           description: Present only on staff-facing responses (restaurant order list/detail).
+        statusHistory:
+          type: array
+          description: Every status this order has passed through, in order — powers the customer tracking timeline.
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pending, confirmed, preparing, ready, out_for_delivery, completed, cancelled]
+              at: { type: string, format: date-time }
+    ReorderPreview:
+      type: object
+      description: >
+        A re-priced, re-validated preview of a past order's contents against CURRENT menu data —
+        not an order. The frontend uses this to populate a fresh cart.
+      properties:
+        restaurantId: { type: string }
+        restaurantAvailable: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              menuItemId: { type: string }
+              name: { type: string }
+              unitPrice: { type: number }
+              quantity: { type: integer }
+              lineTotal: { type: number }
+        unavailableItems:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              reason: { type: string }
+        subtotal: { type: number }
+    Address:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        line1: { type: string }
+        line2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postalCode: { type: string }
+        country: { type: string }
+        isDefault: { type: boolean }
+    RestaurantAnalytics:
+      type: object
+      description: >
+        "Revenue" is the sum of `total` for orders that are both non-cancelled AND marked paid —
+        this platform has no real payment processor, only staff-toggled paymentStatus. "Today"
+        and "this week" are UTC calendar-day / rolling-7-day windows.
+      properties:
+        ordersToday: { type: integer }
+        ordersThisWeek: { type: integer }
+        revenueToday: { type: number }
+        revenueThisWeek: { type: number }
+        averageOrderValue: { type: number }
+        completedOrdersThisWeek: { type: integer }
+        cancelledOrdersThisWeek: { type: integer }
+        topSellingItems:
+          type: array
+          items:
+            type: object
+            properties:
+              menuItemId: { type: string }
+              name: { type: string }
+              quantitySold: { type: integer }
     RestaurantAvailability:
       type: object
       description: >
@@ -145,6 +215,118 @@ components:
         reason:
           type: string
           description: Present when status is "paused" and the restaurant supplied a reason.
+    SupportIdentity:
+      type: object
+      description: >
+        The support identity a customer-facing UI should display. Always { name: "Platform
+        Support", isWhiteLabel: false } today — no white-label/agency configuration exists
+        anywhere in this codebase yet. See docs/support-architecture.md.
+      properties:
+        name: { type: string }
+        isWhiteLabel: { type: boolean }
+    KnowledgeBaseCategory:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        sortOrder: { type: integer }
+        isActive: { type: boolean }
+    KnowledgeBaseArticle:
+      type: object
+      properties:
+        id: { type: string }
+        categoryId: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: string }
+        content:
+          type: string
+          description: Omitted from list responses (select("-content")) — only present on the single-article detail response.
+        status: { type: string, enum: [draft, published] }
+        sortOrder: { type: integer }
+        authorId: { type: string }
+        publishedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SupportTicket:
+      type: object
+      properties:
+        id: { type: string }
+        ticketNumber: { type: string, example: "TKT-1001" }
+        subject: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [open, in_progress, waiting_customer, resolved, closed]
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        category:
+          type: string
+          enum: [menu, orders, billing, account, technical, data_recovery, other]
+        source:
+          type: string
+          enum: [help_widget, support_center, admin, system]
+        createdBy: { type: string }
+        restaurantId:
+          type: string
+          nullable: true
+          description: Absent for tickets with no restaurant context (e.g. a general account question).
+        agencyId:
+          type: string
+          nullable: true
+          description: >
+            Reserved for a future Agency model — always absent today. No Agency collection
+            exists anywhere in this codebase. See docs/support-architecture.md.
+        assignedTo:
+          type: string
+          nullable: true
+          description: Must reference a platform_admin user; set only via PATCH /support/admin/tickets/{id}/assign.
+        context:
+          type: object
+          properties:
+            app: { type: string, enum: [web, admin] }
+            route: { type: string }
+            userAgent: { type: string }
+        statusHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string, enum: [open, in_progress, waiting_customer, resolved, closed] }
+              at: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        closedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdByName:
+          type: string
+          description: Present only on staff-facing responses.
+        createdByEmail:
+          type: string
+          description: Present only on staff-facing responses.
+        restaurantName:
+          type: string
+          description: Present only on staff-facing responses.
+        assignedToName:
+          type: string
+          description: Present only on staff-facing responses.
+    SupportMessage:
+      type: object
+      properties:
+        id: { type: string }
+        ticketId: { type: string }
+        authorId: { type: string }
+        authorType: { type: string, enum: [customer, support] }
+        content: { type: string }
+        isInternal:
+          type: boolean
+          description: >
+            Never present in a response returned to a caller without support.tickets.internal_notes —
+            filtered at the database query level, not just omitted from a schema.
+        createdAt: { type: string, format: date-time }
   responses:
     Unauthorized:
       description: Missing or invalid access token
@@ -230,6 +412,208 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiSuccess" }
+    patch:
+      tags: [auth]
+      summary: Update the authenticated user's own profile (name/phone)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+      responses:
+        "200":
+          description: Updated profile
+    delete:
+      tags: [auth]
+      summary: Delete (customer) or anonymize the authenticated user's own account
+      description: >
+        Customer accounts are anonymized (name/email/phone cleared, refresh tokens revoked)
+        rather than removed, so existing Order.customerId / AuditLog.actorUserId references
+        stay valid. Restaurant staff/owner accounts cannot self-delete here — they must contact
+        platform support to transfer ownership or remove staff access first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        "200":
+          description: Account anonymized
+        "400":
+          description: Restaurant staff/owner attempting self-deletion, or wrong password
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: Change the authenticated user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Password changed
+  /auth/request-password-reset:
+    post:
+      tags: [auth]
+      security: []
+      summary: Request a password-reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: >
+            Always 200 regardless of whether the email exists, to avoid leaking account
+            existence.
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      security: []
+      summary: Reset a password using the token emailed by request-password-reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Password reset
+        "400":
+          description: Invalid or expired token
+  /auth/request-email-change:
+    post:
+      tags: [auth]
+      summary: Request an email-change confirmation link, sent to the new address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newEmail, password]
+              properties:
+                newEmail: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Confirmation email sent
+  /auth/confirm-email-change:
+    post:
+      tags: [auth]
+      security: []
+      summary: Confirm an email change using the token emailed by request-email-change
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200":
+          description: Email changed
+        "400":
+          description: Invalid or expired token
+  /auth/accept-invite:
+    post:
+      tags: [auth]
+      security: []
+      summary: Accept a staff invite and set a password, activating the account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Invite accepted, logged in
+        "400":
+          description: Invalid or expired invite token
+  /users/me/addresses:
+    get:
+      tags: [account]
+      summary: List the authenticated user's saved delivery addresses
+      responses:
+        "200":
+          description: Addresses
+    post:
+      tags: [account]
+      summary: Add a saved delivery address for the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Address" }
+      responses:
+        "201":
+          description: Address added
+  /users/me/addresses/{addressId}:
+    patch:
+      tags: [account]
+      summary: Update one of the authenticated user's own saved addresses
+      description: >
+        Identity-scoped, not tenant-scoped — operates exclusively on the caller's own User
+        document; there is no code path to target another user's address.
+      parameters:
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Address" }
+      responses:
+        "200":
+          description: Updated addresses
+        "404":
+          description: Address not found
+    delete:
+      tags: [account]
+      summary: Remove one of the authenticated user's own saved addresses
+      parameters:
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Remaining addresses
+        "404":
+          description: Address not found
   /restaurants:
     post:
       tags: [restaurants]
@@ -254,7 +638,9 @@ paths:
     get:
       tags: [restaurants]
       summary: Get the authenticated user's own restaurant
-      description: Response data includes both `restaurant` and a computed `availability` (RestaurantAvailability).
+      description: >
+        Response data includes `restaurant`, a computed `availability` (RestaurantAvailability),
+        and a computed `supportIdentity` (SupportIdentity).
       responses:
         "200":
           description: Restaurant
@@ -263,7 +649,9 @@ paths:
       tags: [restaurants]
       security: []
       summary: Look up an active restaurant by its public slug
-      description: Response data includes both `restaurant` and a computed `availability` (RestaurantAvailability).
+      description: >
+        Response data includes `restaurant`, a computed `availability` (RestaurantAvailability),
+        and a computed `supportIdentity` (SupportIdentity).
       parameters:
         - name: slug
           in: path
@@ -287,24 +675,6 @@ paths:
       responses:
         "200":
           description: Menu items
-  /restaurants/{restaurantId}/menu/items:
-    get:
-      tags: [menu]
-      summary: List ALL menu items including unavailable ones (staff, requires restaurant.menu.read)
-      description: >
-        Uncached and staff-only, unlike GET /menu — that endpoint is public and Redis-cached, so
-        it must never include hidden items. Staff need to see hidden items to be able to
-        un-hide them, hence this separate endpoint.
-      parameters:
-        - name: restaurantId
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: "Menu items, including unavailable ones (isAvailable: false)"
-        "403":
-          $ref: "#/components/responses/Forbidden"
     post:
       tags: [menu]
       summary: Create a menu item (requires restaurant.menu.write on this tenant)
@@ -321,6 +691,24 @@ paths:
       responses:
         "201":
           description: Menu item created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/menu/items:
+    get:
+      tags: [menu]
+      summary: List ALL menu items including unavailable ones (staff, requires restaurant.menu.read)
+      description: >
+        Uncached and staff-only, unlike GET /menu — that endpoint is public and Redis-cached, so
+        it must never include hidden items. Staff need to see hidden items to be able to
+        un-hide them, hence this separate endpoint.
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Menu items, including unavailable ones (isAvailable: false)"
         "403":
           $ref: "#/components/responses/Forbidden"
   /restaurants/{restaurantId}/menu/{id}:
@@ -354,6 +742,70 @@ paths:
       responses:
         "204":
           description: Deleted
+  /restaurants/{restaurantId}/customers:
+    get:
+      tags: [customers]
+      summary: List this restaurant's customers with lifetime order stats (requires restaurant.orders.read)
+      description: >
+        Server-side paginated aggregation over Order, grouped by customer — never fetches a
+        restaurant's full order history to compute this.
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: search
+          in: query
+          description: Case-insensitive match against customer name or email
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [lastOrderAt, totalSpent, totalOrders, name], default: lastOrderAt }
+        - name: order
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        "200":
+          description: Paginated customer summaries
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/customers/{customerId}/orders:
+    get:
+      tags: [customers]
+      summary: A single customer's order history at this restaurant (requires restaurant.orders.read)
+      description: >
+        The drill-down behind a Customers row — separately paginated from the aggregation above,
+        bounded the same way GET /orders/mine is for a customer's own history.
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Paginated orders for this customer at this restaurant
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /restaurants/{restaurantId}/orders:
     post:
       tags: [orders]
@@ -454,9 +906,16 @@ paths:
     get:
       tags: [orders]
       summary: List the authenticated customer's own orders, across all restaurants
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Orders
+          description: Paginated orders
   /orders/{id}:
     get:
       tags: [orders]
@@ -486,6 +945,45 @@ paths:
           description: Order cancelled
         "400":
           description: Order is no longer cancellable (already accepted, completed, or cancelled)
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /orders/{id}/reorder:
+    post:
+      tags: [orders]
+      summary: Preview reordering a past order against CURRENT menu data and pricing
+      description: >
+        Does NOT create an order — returns a ReorderPreview the frontend uses to populate a
+        fresh cart. Historical prices are never trusted; every item is re-validated and
+        re-priced against the live menu, and items that no longer exist or are no longer valid
+        are reported in `unavailableItems` instead of silently dropped.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Reorder preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReorderPreview" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/analytics:
+    get:
+      tags: [analytics]
+      summary: Basic restaurant analytics (staff, requires restaurant.analytics.read)
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RestaurantAnalytics" }
         "403":
           $ref: "#/components/responses/Forbidden"
   /restaurants/{restaurantId}/loyalty/me:
@@ -652,3 +1150,406 @@ paths:
       responses:
         "204":
           description: Deleted
+  /kb/categories:
+    get:
+      tags: [knowledge-base]
+      security: []
+      summary: List active knowledge-base categories (public)
+      responses:
+        "200":
+          description: Categories
+  /kb/articles:
+    get:
+      tags: [knowledge-base]
+      security: []
+      summary: List published articles (public), optionally filtered by ?category=slug and/or full-text ?q=
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Articles (content field omitted)
+  /kb/articles/{slug}:
+    get:
+      tags: [knowledge-base]
+      security: []
+      summary: Get a single published article by slug, with up to 4 related articles (public)
+      description: >
+        Returns 404 identically whether the slug doesn't exist at all or exists but is
+        unpublished — a draft's existence is never discoverable from this endpoint.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Article + related
+        "404":
+          description: Not found
+  /kb/admin/categories:
+    get:
+      tags: [knowledge-base]
+      summary: List all knowledge-base categories, including inactive (requires support.knowledgebase.write)
+      responses:
+        "200":
+          description: Categories
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [knowledge-base]
+      summary: Create a knowledge-base category (requires support.knowledgebase.write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeBaseCategory" }
+      responses:
+        "201":
+          description: Category created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /kb/admin/categories/{id}:
+    patch:
+      tags: [knowledge-base]
+      summary: Update a knowledge-base category (requires support.knowledgebase.write)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [knowledge-base]
+      summary: Delete a category (requires support.knowledgebase.write; blocked while it still has articles)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Category still has articles
+  /kb/admin/articles:
+    get:
+      tags: [knowledge-base]
+      summary: List ALL articles including drafts (requires support.knowledgebase.write)
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, published] }
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Articles (content field omitted)
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [knowledge-base]
+      summary: Create an article (requires support.knowledgebase.write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KnowledgeBaseArticle" }
+      responses:
+        "201":
+          description: Article created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /kb/admin/articles/{id}:
+    get:
+      tags: [knowledge-base]
+      summary: Get a single article by ID, including its content, regardless of status (requires support.knowledgebase.write)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Article
+    patch:
+      tags: [knowledge-base]
+      summary: Update an article, including publish/unpublish via the status field (requires support.knowledgebase.write)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [knowledge-base]
+      summary: Delete an article (requires support.knowledgebase.write)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+  /support/tickets:
+    post:
+      tags: [support]
+      summary: Create a support ticket (any authenticated user)
+      description: >
+        restaurantId is server-derived from the caller's own tenant when they're
+        restaurant-scoped staff; a customer-submitted restaurantId is only considered when the
+        caller has none of their own, and even then is validated to reference a real restaurant
+        rather than trusted outright.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, description]
+              properties:
+                subject: { type: string }
+                description: { type: string }
+                category:
+                  type: string
+                  enum: [menu, orders, billing, account, technical, data_recovery, other]
+                priority:
+                  type: string
+                  enum: [low, normal, high, urgent]
+                restaurantId: { type: string }
+                context:
+                  type: object
+                  properties:
+                    app: { type: string, enum: [web, admin] }
+                    route: { type: string }
+      responses:
+        "201":
+          description: Ticket created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportTicket" }
+  /support/tickets/mine:
+    get:
+      tags: [support]
+      summary: List the authenticated user's own tickets
+      responses:
+        "200":
+          description: Tickets
+  /support/tickets/{id}:
+    get:
+      tags: [support]
+      summary: Get a single ticket (owner, or staff of that ticket's restaurant, or platform support)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ticket
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /support/tickets/{id}/messages:
+    get:
+      tags: [support]
+      summary: List a ticket's conversation
+      description: >
+        Internal notes (isInternal: true) are excluded by the database query itself for any
+        caller without support.tickets.internal_notes — never filtered client-side.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Messages
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [support]
+      summary: Reply to a ticket (owner, or authorized staff)
+      description: >
+        isInternal is only ever honored if the requester has support.tickets.internal_notes —
+        otherwise rejected outright, never silently downgraded to a visible reply. A customer's
+        own non-internal reply to a resolved/waiting_customer ticket automatically reopens it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                isInternal: { type: boolean }
+      responses:
+        "201":
+          description: Message created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupportMessage" }
+        "400":
+          description: Ticket is closed
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /support/tickets/{id}/confirm-resolution:
+    patch:
+      tags: [support]
+      summary: Customer confirms a resolved ticket is fixed, closing it (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ticket closed
+        "400":
+          description: Ticket is not currently "resolved"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /restaurants/{restaurantId}/support/tickets:
+    get:
+      tags: [support]
+      summary: List this restaurant's own tickets, read-only (requires support.tickets.read on this tenant)
+      description: Owner/manager only — never includes internal notes (see /support/tickets/{id}/messages).
+      parameters:
+        - name: restaurantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tickets
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /support/admin/tickets:
+    get:
+      tags: [support]
+      summary: Platform-wide ticket list (platform_admin only)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: assignedTo
+          in: query
+          schema: { type: string }
+        - name: restaurantId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tickets (up to 200, newest first)
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /support/admin/tickets/{id}/status:
+    patch:
+      tags: [support]
+      summary: Change a ticket's status through the validated transition table (platform_admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, in_progress, waiting_customer, resolved, closed] }
+      responses:
+        "200":
+          description: Updated
+        "400":
+          description: Invalid transition
+  /support/admin/tickets/{id}/priority:
+    patch:
+      tags: [support]
+      summary: Change a ticket's priority (platform_admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority: { type: string, enum: [low, normal, high, urgent] }
+      responses:
+        "200":
+          description: Updated
+  /support/admin/tickets/{id}/assign:
+    patch:
+      tags: [support]
+      summary: Assign (or unassign) a ticket to a platform_admin user (requires support.tickets.assign)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedTo]
+              properties:
+                assignedTo:
+                  type: string
+                  nullable: true
+                  description: Must reference an existing platform_admin user, or null to unassign.
+      responses:
+        "200":
+          description: Updated
+        "400":
+          description: assignedTo does not reference a platform_admin user
+  /support/admin/analytics:
+    get:
+      tags: [support]
+      summary: Basic support queue metrics — open/in_progress/waiting/resolved/highPriority counts (requires support.analytics.read)
+      responses:
+        "200":
+          description: Analytics

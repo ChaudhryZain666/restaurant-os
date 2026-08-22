@@ -28,11 +28,21 @@ export type Permission =
   | "restaurant.menu.write"
   | "restaurant.categories.write"
   | "restaurant.modifiers.write"
+  | "restaurant.promotions.manage"
   | "restaurant.orders.read"
   | "restaurant.orders.manage"
+  | "restaurant.payments.manage"
+  | "restaurant.audit.read"
   | "restaurant.analytics.read"
+  | "restaurant.tables.manage"
   | "platform.restaurants.manage"
-  | "platform.users.manage";
+  | "platform.users.manage"
+  | "support.knowledgebase.write"
+  | "support.tickets.read"
+  | "support.tickets.write"
+  | "support.tickets.assign"
+  | "support.tickets.internal_notes"
+  | "support.analytics.read";
 
 /**
  * Static role → permission grants. The source of truth for both API enforcement and UI gating.
@@ -42,7 +52,16 @@ export type Permission =
  * "OWNER has full restaurant access" boundary).
  */
 export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
-  platform_admin: ["platform.restaurants.manage", "platform.users.manage"],
+  platform_admin: [
+    "platform.restaurants.manage",
+    "platform.users.manage",
+    "support.knowledgebase.write",
+    "support.tickets.read",
+    "support.tickets.write",
+    "support.tickets.assign",
+    "support.tickets.internal_notes",
+    "support.analytics.read",
+  ],
   restaurant_owner: [
     "restaurant.manage",
     "restaurant.settings.manage",
@@ -51,18 +70,28 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.menu.write",
     "restaurant.categories.write",
     "restaurant.modifiers.write",
+    "restaurant.promotions.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
+    "restaurant.payments.manage",
+    "restaurant.audit.read",
     "restaurant.analytics.read",
+    "restaurant.tables.manage",
+    "support.tickets.read",
   ],
   restaurant_manager: [
     "restaurant.menu.read",
     "restaurant.menu.write",
     "restaurant.categories.write",
     "restaurant.modifiers.write",
+    "restaurant.promotions.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
+    "restaurant.payments.manage",
+    "restaurant.audit.read",
     "restaurant.analytics.read",
+    "restaurant.tables.manage",
+    "support.tickets.read",
   ],
   restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage"],
   kitchen_staff: ["restaurant.orders.read", "restaurant.orders.manage"],

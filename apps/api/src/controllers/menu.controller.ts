@@ -33,7 +33,13 @@ export async function listMenu(req: Request, res: Response) {
   const payload = {
     items: itemDocs.map((doc) => doc.toJSON()),
     categories: categoryDocs.map((doc) => doc.toJSON()),
-    modifierGroups: modifierGroupDocs.map((doc) => doc.toJSON()),
+    // Individually-deactivated options aren't filtered at the ModifierGroup query level above
+    // (only whole groups are) — strip them here so the public menu never offers a choice that
+    // priceOrderItems would then reject at checkout.
+    modifierGroups: modifierGroupDocs.map((doc) => {
+      const json = doc.toJSON() as { options: Array<{ isActive: boolean }> };
+      return { ...json, options: json.options.filter((o) => o.isActive) };
+    }),
   };
   await redis.set(cacheKey, JSON.stringify(payload), "EX", MENU_CACHE_TTL_SECONDS);
   return sendSuccess(res, { ...payload, cached: false });

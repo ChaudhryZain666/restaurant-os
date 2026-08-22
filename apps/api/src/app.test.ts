@@ -32,7 +32,9 @@ describe("app", () => {
   });
 
   it("rejects unauthenticated access to a protected route", async () => {
-    const res = await request(app).post("/api/v1/restaurants").send({ name: "x", slug: "x", ownerId: "x" });
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .send({ name: "x", slug: "x", owner: { name: "x", email: "x@example.com" } });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("UNAUTHORIZED");
   });

@@ -70,15 +70,58 @@ shared fixture).
 ## Future roadmap (explicitly out of scope until named otherwise)
 
 Customer mobile app, restaurant tablet app (KDS/printer integration), live GPS delivery
-tracking, digital/printable/PDF receipts, the agency/partner commission system, SEO
-(indexable pages, structured data, sitemaps), the full theme/branding system, a generic website
-builder, and payments processing. The storefront's component structure is kept reusable and
+tracking, digital/printable/PDF receipts, the agency/partner commission system, the full
+theme/branding system, a generic website builder, payments processing beyond the current mock
+provider, billing/subscriptions, commissions/payouts, multi-location, full white-label, and custom
+domain implementation. The storefront's component structure is kept reusable and
 configuration-driven specifically so the future theme system doesn't require a rewrite.
+
+**SEO is no longer fully in this list** — see `docs/multi-tenant-storefront-architecture.md`'s SEO
+section: sitemap, robots.txt, canonical URLs, Twitter Cards, and Restaurant/Menu JSON-LD
+structured data now exist (Phase 10/12). What remains genuinely out of scope: true SSR/
+prerendering (documented there as a next-phase architectural decision, not attempted — the current
+client-side-injected metadata works for JS-executing crawlers like Google but not
+non-JS-executing ones like most social-link-preview bots).
+
+## Phases 3–11 (see individual architecture docs, not fully backfilled here)
+
+This file stopped being updated per-phase after Phase 2; later phases are documented in their own
+focused docs instead (`docs/delivery-architecture.md`, `docs/qr-dine-in-architecture.md`,
+`docs/multi-tenant-storefront-architecture.md`, `docs/payment-provider-decision.md`,
+`docs/authentication.md`) rather than backfilled here retroactively.
+
+## Phase 12 — Scalability, authorization architecture & production completeness (complete)
+
+Shared server-side pagination/filter/sort convention (see
+`docs/pagination-and-rbac-architecture.md`), applied to customer order history, a new real
+backend-aggregated admin Customers endpoint (replacing the old fetch-everything-and-group
+client-side version), platform Restaurants, platform Users, and the audit log. Frontend RBAC
+(route guards + nav visibility in `apps/admin`) now derives from the same `ROLE_PERMISSIONS`
+table the backend enforces instead of hand-maintained role arrays; closed a real gap where
+`restaurant_staff` saw interactive menu-editing controls that always 403'd on click. Customer
+self-service account security: password change, two-step email change (verification link to the
+new address), and account deletion (customer role only — anonymization, not hard deletion;
+restaurant-scoped roles are explicitly refused pending a product decision on ownership/staffing —
+see below). A real restaurant-wide audit log page (backend already existed; this phase built the
+first UI for it). SEO: JSON-LD structured data, Twitter Cards, and a generalized `noindex` hook
+applied to every private page (previously only one QR route had a noindex tag; everything else
+relied on `robots.txt` alone, which stops crawling but not indexing of a linked-but-disallowed
+URL).
+
+**Still open, deliberately not decided in this phase:**
+- `platform_admin` still cannot manage an individual restaurant's menu/orders/settings (see the
+  Phase 1/2 simplification above — unchanged).
+- What happens when a `restaurant_owner`/staff account wants to delete itself (restaurant
+  ownership transfer, staff removal) — refused outright with a clear message rather than guessed
+  at; needs a product decision on data retention/ownership transfer before it's safe to implement.
+- True SSR/prerendering for non-JS-executing crawlers (see the SEO section referenced above).
 
 ## Suggested next phase
 
-With ordering, menu management, and day-to-day restaurant operations now solid, reasonable
-Phase 3 candidates are: (1) payments (the biggest remaining gap between this and a restaurant
-actually being able to use it commercially), (2) real business-hours enforcement + scheduled
-ordering, or (3) self-service restaurant onboarding. Recommend deciding explicitly rather than
-drifting into more than one at once.
+With scalability (pagination), authorization architecture (permission-derived RBAC), and account
+self-service now solid, reasonable next candidates are: (1) the SEO SSR/prerendering decision
+(framework migration vs. a bot-detecting edge function), (2) operational maturity (notification
+preferences, platform-admin UX), or (3) the product decisions flagged above and in
+`docs/commercial-decisions.md` (restaurant discovery, platform-admin support access, custom
+domains, multi-location, billing). Recommend deciding explicitly rather than drifting into more
+than one at once.

@@ -38,11 +38,15 @@ async function seed() {
     restaurant = await Restaurant.create({
       name: "Demo Restaurant",
       slug: "demo-restaurant",
-      description: "Seed data for local development",
+      description: "Wood-fired pizza, smash burgers, and made-from-scratch sides — a neighborhood spot serving Springfield since day one.",
       phone: "+1-555-0100",
       email: "hello@demo-restaurant.local",
       city: "Springfield",
       country: "USA",
+      // Real Springfield, IL coordinates — the reference point delivery-radius eligibility is
+      // calculated from (see services/delivery.service.ts).
+      latitude: 39.7817,
+      longitude: -89.6501,
       ownerId: owner._id,
       status: "active",
       settings: {
@@ -51,9 +55,13 @@ async function seed() {
         orderingEnabled: true,
         pickupEnabled: true,
         deliveryEnabled: true,
+        dineInEnabled: true,
+        cashEnabled: true,
+        onlinePaymentEnabled: true,
         minOrderAmount: 0,
         taxRate: 0.08,
         deliveryFee: 3.99,
+        deliveryRadiusKm: 8,
         businessHours: [
           { day: "monday", isClosed: false, open: "09:00", close: "22:00" },
           { day: "tuesday", isClosed: false, open: "09:00", close: "22:00" },
@@ -73,20 +81,23 @@ async function seed() {
 
   const categoryCount = await Category.countDocuments({ restaurantId: restaurant._id });
   if (categoryCount === 0) {
-    const [pizza, salad, dessert, drinks] = await Category.insertMany([
+    const [pizza, burgers, salad, sides, dessert, drinks] = await Category.insertMany([
       { restaurantId: restaurant._id, name: "Pizza", sortOrder: 0 },
-      { restaurantId: restaurant._id, name: "Salad", sortOrder: 1 },
-      { restaurantId: restaurant._id, name: "Dessert", sortOrder: 2 },
-      { restaurantId: restaurant._id, name: "Drinks", sortOrder: 3 },
+      { restaurantId: restaurant._id, name: "Burgers", sortOrder: 1 },
+      { restaurantId: restaurant._id, name: "Salad", sortOrder: 2 },
+      { restaurantId: restaurant._id, name: "Sides", sortOrder: 3 },
+      { restaurantId: restaurant._id, name: "Dessert", sortOrder: 4 },
+      { restaurantId: restaurant._id, name: "Drinks", sortOrder: 5 },
     ]);
 
-    const [margherita, pepperoni] = await MenuItem.insertMany([
+    const menuItems = await MenuItem.insertMany([
       {
         restaurantId: restaurant._id,
         categoryId: pizza._id,
         name: "Margherita Pizza",
         description: "Tomato, mozzarella, basil",
         price: 12.5,
+        imageUrl: "/menu-images/margherita-pizza.svg",
         sortOrder: 0,
       },
       {
@@ -95,6 +106,34 @@ async function seed() {
         name: "Pepperoni Pizza",
         description: "Tomato, mozzarella, pepperoni",
         price: 14,
+        imageUrl: "/menu-images/pepperoni-pizza.svg",
+        sortOrder: 1,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: pizza._id,
+        name: "BBQ Chicken Pizza",
+        description: "BBQ sauce, grilled chicken, red onion, mozzarella",
+        price: 15.5,
+        imageUrl: "/menu-images/bbq-chicken-pizza.svg",
+        sortOrder: 2,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: burgers._id,
+        name: "Classic Burger",
+        description: "Beef patty, cheddar, lettuce, tomato, house sauce",
+        price: 10.5,
+        imageUrl: "/menu-images/classic-burger.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: burgers._id,
+        name: "Crispy Chicken Burger",
+        description: "Buttermilk-fried chicken, pickles, slaw, spicy mayo",
+        price: 11,
+        imageUrl: "/menu-images/crispy-chicken-burger.svg",
         sortOrder: 1,
       },
       {
@@ -103,6 +142,16 @@ async function seed() {
         name: "Caesar Salad",
         description: "Romaine, parmesan, croutons",
         price: 8.5,
+        imageUrl: "/menu-images/caesar-salad.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: sides._id,
+        name: "Loaded Fries",
+        description: "Crispy fries, cheese sauce, bacon bits, scallions",
+        price: 7,
+        imageUrl: "/menu-images/loaded-fries.svg",
         sortOrder: 0,
       },
       {
@@ -111,7 +160,17 @@ async function seed() {
         name: "Tiramisu",
         description: "Classic Italian dessert",
         price: 6,
+        imageUrl: "/menu-images/tiramisu.svg",
         sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: dessert._id,
+        name: "Chocolate Cake",
+        description: "Rich layered chocolate cake, chocolate ganache",
+        price: 6.5,
+        imageUrl: "/menu-images/chocolate-cake.svg",
+        sortOrder: 1,
       },
       {
         restaurantId: restaurant._id,
@@ -119,9 +178,15 @@ async function seed() {
         name: "Coke",
         description: "330ml can",
         price: 2,
+        imageUrl: "/menu-images/coke.svg",
         sortOrder: 0,
       },
     ]);
+
+    const margherita = menuItems.find((i) => i.name === "Margherita Pizza")!;
+    const pepperoni = menuItems.find((i) => i.name === "Pepperoni Pizza")!;
+    const classicBurger = menuItems.find((i) => i.name === "Classic Burger")!;
+    const coke = menuItems.find((i) => i.name === "Coke")!;
 
     await ModifierGroup.insertMany([
       {
@@ -161,6 +226,31 @@ async function seed() {
           { name: "Small", priceAdjustment: 0, sortOrder: 0 },
           { name: "Medium", priceAdjustment: 2, sortOrder: 1 },
           { name: "Large", priceAdjustment: 4, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: classicBurger._id,
+        name: "Add-ons",
+        minSelect: 0,
+        maxSelect: 3,
+        sortOrder: 0,
+        options: [
+          { name: "Extra patty", priceAdjustment: 3, sortOrder: 0 },
+          { name: "Extra cheese", priceAdjustment: 1, sortOrder: 1 },
+          { name: "Bacon", priceAdjustment: 2, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: coke._id,
+        name: "Size",
+        minSelect: 1,
+        maxSelect: 1,
+        sortOrder: 0,
+        options: [
+          { name: "Regular", priceAdjustment: 0, sortOrder: 0 },
+          { name: "Large", priceAdjustment: 1, sortOrder: 1 },
         ],
       },
     ]);

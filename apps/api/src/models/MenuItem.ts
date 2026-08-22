@@ -3,7 +3,10 @@ import { idTransform } from "../utils/schemaOptions.js";
 
 const menuItemSchema = new Schema(
   {
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true, index: true },
+    // No standalone index on restaurantId: the compound index below already covers
+    // restaurantId-only queries via its leading-field prefix — a separate single-field index
+    // would be a pure duplicate (extra write/storage cost, zero query-plan benefit).
+    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true, index: true },
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
