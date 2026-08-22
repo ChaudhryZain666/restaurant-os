@@ -1,9 +1,11 @@
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
+import { Restaurant } from "../models/Restaurant.js";
 import { CategoryLocationOverride } from "../models/CategoryLocationOverride.js";
 import { MenuItemLocationOverride } from "../models/MenuItemLocationOverride.js";
 import { ModifierGroupLocationOverride } from "../models/ModifierGroupLocationOverride.js";
+import { ApiError } from "../utils/ApiError.js";
 
 export interface ResolvedCategory {
   id: string;
@@ -64,6 +66,43 @@ export interface ResolvedMenu {
  */
 export async function businessHasCanonicalMenu(businessId: string): Promise<boolean> {
   return Boolean(await MenuItem.exists({ businessId }));
+}
+
+/**
+ * Phase 20/21 — the shared per-request check every dual-path menu call site (reads AND, since
+ * Phase 21, writes) uses to decide whether a location's menu should go through the canonical +
+ * override resolver or keep using the original restaurantId-scoped queries. Promoted here from
+ * menu.controller.ts (where it started as a private helper) so category.controller.ts and
+ * modifier.controller.ts — which had zero Phase 20 awareness — can share the same implementation
+ * rather than each growing their own copy. Pre-migration businesses get `undefined`, meaning
+ * "keep doing what this code already did."
+ */
+export async function resolveCanonicalBusinessId(restaurantId: string): Promise<string | undefined> {
+  const restaurant = await Restaurant.findById(restaurantId).select("businessId");
+  const businessId = restaurant?.businessId?.toString();
+  if (!businessId) return undefined;
+  return (await businessHasCanonicalMenu(businessId)) ? businessId : undefined;
+}
+
+/**
+ * Phase 21 — the guard every legacy per-location write function (menu/category/modifier
+ * controllers) starts with. Once a business is migrated, an anchor location's own documents ARE
+ * the canonical documents (same _id, also carrying businessId), and a "promoted exclusive"
+ * sibling document keeps its original restaurantId too — so a legacy `{_id, restaurantId}` write
+ * filter would still silently match and mutate what is now a business-wide canonical document
+ * through a request the caller believes is scoped to one location. That's an active
+ * scope-violation risk, not just staleness, so this throws rather than falling through.
+ * Runtime-checked per business (not a static route removal), so a business rolled back via
+ * `$unset businessId` automatically gets its old endpoints back with no redeploy.
+ */
+export async function assertMenuNotMigrated(restaurantId: string): Promise<void> {
+  const canonicalBusinessId = await resolveCanonicalBusinessId(restaurantId);
+  if (canonicalBusinessId) {
+    throw ApiError.gone(
+      "This restaurant's menu is now managed at the business level. Use /businesses/:businessId/... instead.",
+      { businessId: canonicalBusinessId }
+    );
+  }
 }
 
 /**

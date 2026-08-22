@@ -3,25 +3,15 @@ import type { MenuItemInput, UpdateMenuItemInput } from "@restaurant/validation"
 import { MenuItem } from "../models/MenuItem.js";
 import { Category } from "../models/Category.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
-import { Restaurant } from "../models/Restaurant.js";
 import { redis } from "../config/redis.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { menuCacheKey, invalidateMenuCache, MENU_CACHE_TTL_SECONDS } from "../services/menuCache.service.js";
-import { businessHasCanonicalMenu, resolveMenuForLocation } from "../services/menuResolution.service.js";
-
-/**
- * Phase 20 — cheap per-request check deciding whether a location's menu reads should go through
- * the canonical + override resolver or keep using the original restaurantId-scoped queries below.
- * Pre-migration businesses (still the entire product as of this phase — see the Phase 20 report)
- * get byte-for-byte the same behavior this file always had.
- */
-async function resolveCanonicalBusinessId(restaurantId: string): Promise<string | undefined> {
-  const restaurant = await Restaurant.findById(restaurantId).select("businessId");
-  const businessId = restaurant?.businessId?.toString();
-  if (!businessId) return undefined;
-  return (await businessHasCanonicalMenu(businessId)) ? businessId : undefined;
-}
+import {
+  assertMenuNotMigrated,
+  resolveCanonicalBusinessId,
+  resolveMenuForLocation,
+} from "../services/menuResolution.service.js";
 
 /** Throws if categoryId doesn't reference an existing category owned by this restaurant. */
 async function assertCategoryInRestaurant(restaurantId: string, categoryId: string) {
@@ -90,6 +80,7 @@ export async function listAllMenuItems(req: Request, res: Response) {
 
 export async function createMenuItem(req: Request, res: Response) {
   const { restaurantId } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const body = req.body as MenuItemInput;
   await assertCategoryInRestaurant(restaurantId, body.categoryId);
 
@@ -100,6 +91,7 @@ export async function createMenuItem(req: Request, res: Response) {
 
 export async function updateMenuItem(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   // updateMenuItemSchema has no restaurantId field, so req.body (already parsed by
   // validateBody) cannot carry one through — the filter below is what scopes this update
   // to the caller's own tenant; restaurantId itself is never part of the $set. categoryId IS
@@ -122,6 +114,7 @@ export async function updateMenuItem(req: Request, res: Response) {
 
 export async function deleteMenuItem(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const item = await MenuItem.findOneAndDelete({ _id: id, restaurantId });
   if (!item) throw ApiError.notFound("Menu item not found");
   await invalidateMenuCache(restaurantId);

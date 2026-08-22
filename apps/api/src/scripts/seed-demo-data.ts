@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import mongoose, { Types } from "mongoose";
 import { connectDB } from "../config/db.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { Business } from "../models/Business.js";
 import { User } from "../models/User.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
@@ -111,10 +112,19 @@ async function main() {
   // (seed.ts only creates the Size/toppings groups on the two pizzas; this backfills the burger
   // and drink examples referenced in the product spec without touching restaurants that already
   // have their own custom groups on these items.)
+  // Phase 21 — if this restaurant's own menu is already canonical (businessId set on its
+  // MenuItem docs, matching real post-migration shape — see seed.ts), any modifier group
+  // backfilled here for one of its items must carry the same businessId. Omitting it would make
+  // the group invisible to the canonical read/pricing path (which fetches
+  // ModifierGroup.find({businessId, menuItemId})) even though its parent item resolves fine —
+  // a real, easy-to-miss inconsistency, not just cosmetic staleness.
+  const modifierGroupBusinessId = restaurant.businessId ? { businessId: restaurant.businessId } : {};
+
   const classicBurger = items.find((i) => i.name === "Classic Burger");
   if (classicBurger && (await ModifierGroup.countDocuments({ menuItemId: classicBurger._id })) === 0) {
     await ModifierGroup.create({
       restaurantId,
+      ...modifierGroupBusinessId,
       menuItemId: classicBurger._id,
       name: "Add-ons",
       minSelect: 0,
@@ -132,6 +142,7 @@ async function main() {
   if (coke && (await ModifierGroup.countDocuments({ menuItemId: coke._id })) === 0) {
     await ModifierGroup.create({
       restaurantId,
+      ...modifierGroupBusinessId,
       menuItemId: coke._id,
       name: "Size",
       minSelect: 1,
@@ -723,6 +734,11 @@ async function ensureSecondaryRestaurant(spec: SecondaryRestaurantSpec) {
       });
     }
 
+    // Phase 21 — each fresh secondary demo restaurant is its own single-location Business,
+    // created with a canonical (businessId-scoped) menu directly, matching real post-migration
+    // shape — same reasoning as seed.ts's primary demo-restaurant.
+    const business = await Business.create({ name: spec.name, slug: spec.slug, ownerId: owner._id, status: "active" });
+
     restaurant = await Restaurant.create({
       name: spec.name,
       slug: spec.slug,
@@ -731,16 +747,24 @@ async function ensureSecondaryRestaurant(spec: SecondaryRestaurantSpec) {
       state: spec.state,
       country: spec.country,
       ownerId: owner._id,
+      businessId: business._id,
       status: "active",
     });
     owner.role = "restaurant_owner";
     owner.restaurantId = restaurant._id;
+    owner.businessId = business._id;
     await owner.save();
 
-    const category = await Category.create({ restaurantId: restaurant._id, name: spec.categoryName, sortOrder: 0 });
+    const category = await Category.create({
+      restaurantId: restaurant._id,
+      businessId: business._id,
+      name: spec.categoryName,
+      sortOrder: 0,
+    });
     menuItems = await MenuItem.insertMany(
       spec.items.map((item, i) => ({
         restaurantId: restaurant!._id,
+        businessId: business._id,
         categoryId: category._id,
         name: item.name,
         description: item.description,

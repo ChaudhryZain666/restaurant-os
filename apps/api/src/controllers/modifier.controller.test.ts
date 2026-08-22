@@ -9,6 +9,7 @@ import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
   createTestModifierGroup,
@@ -114,5 +115,53 @@ describe("modifier groups", () => {
       .send({ minSelect: 2 });
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Phase 21 — legacy modifier-group writes are retired (410) once the business is migrated", () => {
+  it("createModifierGroup/updateModifierGroup/deleteModifierGroup all 410 for a migrated business, but stay 200 for an unmigrated one", async () => {
+    const business = await createTestBusiness();
+    const migratedRestaurant = await createTestRestaurant({ businessId: business._id });
+    const canonicalCategory = await createTestCategory(migratedRestaurant._id, { businessId: business._id });
+    const canonicalItem = await createTestMenuItem(migratedRestaurant._id, canonicalCategory._id, { businessId: business._id });
+    const canonicalGroup = await createTestModifierGroup(migratedRestaurant._id, canonicalItem._id, { businessId: business._id });
+    const migratedOwner = await createTestUser("restaurant_owner", migratedRestaurant._id, { businessId: business._id });
+    const migratedOwnerToken = tokenFor(migratedOwner);
+
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${migratedRestaurant.id}/menu/${canonicalItem.id}/modifiers`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired", minSelect: 0, maxSelect: 1, options: [{ name: "X", priceAdjustment: 0 }] });
+    expect(createRes.status).toBe(410);
+    expect(createRes.body.error.code).toBe("MENU_MIGRATED");
+
+    const updateRes = await request(app)
+      .patch(`/api/v1/restaurants/${migratedRestaurant.id}/menu/${canonicalItem.id}/modifiers/${canonicalGroup.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired" });
+    expect(updateRes.status).toBe(410);
+
+    const deleteRes = await request(app)
+      .delete(`/api/v1/restaurants/${migratedRestaurant.id}/menu/${canonicalItem.id}/modifiers/${canonicalGroup.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`);
+    expect(deleteRes.status).toBe(410);
+
+    const stillExists = await ModifierGroup.findById(canonicalGroup.id);
+    expect(stillExists).not.toBeNull();
+
+    // The exact same operation against restaurantA (never migrated) still works normally.
+    const unmigratedRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/menu/${menuItemA.id}/modifiers`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ name: "Still works", minSelect: 0, maxSelect: 1, options: [{ name: "X", priceAdjustment: 0 }] });
+    expect(unmigratedRes.status).toBe(201);
+
+    await Promise.all([
+      ModifierGroup.deleteMany({ businessId: business._id }),
+      MenuItem.deleteMany({ businessId: business._id }),
+      Category.deleteMany({ businessId: business._id }),
+      User.deleteOne({ _id: migratedOwner._id }),
+      Restaurant.deleteOne({ _id: migratedRestaurant._id }),
+    ]);
   });
 });

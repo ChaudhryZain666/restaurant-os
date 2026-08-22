@@ -5,10 +5,18 @@ const categorySchema = new Schema(
   {
     // No standalone index: the compound index below already covers restaurantId-only queries
     // via its leading-field prefix.
-    // Legacy per-location scoping field. Stays required/populated for every document (never
-    // dropped — see Phase 20's docs section), but becomes dead/forensic-only the moment a
-    // document also carries businessId: no query reads both fields on the same document.
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    // Legacy per-location scoping field. Required for a legacy (not-yet-canonical) document, but
+    // NOT required once businessId is set (Phase 21) — a canonical create via
+    // /businesses/:businessId/categories has no single location to populate this with. Never
+    // dropped once populated (see Phase 20's docs section) — becomes dead/forensic-only the
+    // moment a document also carries businessId: no query reads both fields on the same document.
+    restaurantId: {
+      type: Schema.Types.ObjectId,
+      ref: "Restaurant",
+      required: function (this: { businessId?: unknown }) {
+        return !this.businessId;
+      },
+    },
     // Phase 20 — set once this Category has been migrated (or created) as a business-scoped
     // canonical document. Optional at the schema level, same treatment Restaurant.businessId got
     // in Phase 18, so a not-yet-migrated document is still valid. See

@@ -6,7 +6,15 @@ const menuItemSchema = new Schema(
     // No standalone index on restaurantId: the compound index below already covers
     // restaurantId-only queries via its leading-field prefix — a separate single-field index
     // would be a pure duplicate (extra write/storage cost, zero query-plan benefit).
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    // Phase 21 — required only for a legacy (not-yet-canonical) document; see Category.ts's
+    // restaurantId for the full rationale.
+    restaurantId: {
+      type: Schema.Types.ObjectId,
+      ref: "Restaurant",
+      required: function (this: { businessId?: unknown }) {
+        return !this.businessId;
+      },
+    },
     // Phase 20 — see Category.ts's businessId for the full rationale.
     businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true, index: true },

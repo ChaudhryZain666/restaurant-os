@@ -8,6 +8,7 @@ import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
   createTestRestaurant,
@@ -80,7 +81,7 @@ describe("PATCH /restaurants/:restaurantId/menu/:id tenant boundary (Phase 0 aud
     expect(res.body.data.item.restaurantId).toBe(restaurantA.id);
 
     const stored = await MenuItem.findById(menuItemId);
-    expect(stored!.restaurantId.toString()).toBe(restaurantA.id);
+    expect(stored!.restaurantId!.toString()).toBe(restaurantA.id);
     expect(stored!.name).toBe("Updated Name");
   });
 
@@ -151,5 +152,69 @@ describe("GET /restaurants/:restaurantId/menu/items (staff, includes hidden item
   it("rejects unauthenticated access", async () => {
     const res = await request(app).get(`/api/v1/restaurants/${restaurantA.id}/menu/items`);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("Phase 21 — legacy menu-item writes are retired (410) once the business is migrated; canonical reads still resolve", () => {
+  it("createMenuItem/updateMenuItem/deleteMenuItem all 410 for a migrated business, and both listMenu and listAllMenuItems resolve the canonical menu correctly", async () => {
+    const business = await createTestBusiness();
+    const migratedRestaurant = await createTestRestaurant({ businessId: business._id });
+    const canonicalCategory = await createTestCategory(migratedRestaurant._id, { businessId: business._id, name: "Canonical Category" });
+    const canonicalItem = await createTestMenuItem(migratedRestaurant._id, canonicalCategory._id, {
+      businessId: business._id,
+      name: "Canonical Item",
+      price: 9,
+    });
+    const migratedOwner = await createTestUser("restaurant_owner", migratedRestaurant._id, { businessId: business._id });
+    const migratedOwnerToken = tokenFor(migratedOwner);
+
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${migratedRestaurant.id}/menu`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired", price: 1, categoryId: canonicalCategory.id });
+    expect(createRes.status).toBe(410);
+    expect(createRes.body.error.code).toBe("MENU_MIGRATED");
+
+    const updateRes = await request(app)
+      .patch(`/api/v1/restaurants/${migratedRestaurant.id}/menu/${canonicalItem.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired" });
+    expect(updateRes.status).toBe(410);
+
+    const deleteRes = await request(app)
+      .delete(`/api/v1/restaurants/${migratedRestaurant.id}/menu/${canonicalItem.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`);
+    expect(deleteRes.status).toBe(410);
+
+    const stillExists = await MenuItem.findById(canonicalItem.id);
+    expect(stillExists).not.toBeNull();
+
+    // Reads go through resolveMenuForLocation and correctly resolve the canonical menu — this is
+    // the previously-untested canonical branch of both listMenu and listAllMenuItems.
+    const publicRes = await request(app).get(`/api/v1/restaurants/${migratedRestaurant.id}/menu`);
+    expect(publicRes.status).toBe(200);
+    expect(publicRes.body.data.items.some((i: { id: string; name: string }) => i.id === canonicalItem.id && i.name === "Canonical Item")).toBe(
+      true
+    );
+
+    const staffRes = await request(app)
+      .get(`/api/v1/restaurants/${migratedRestaurant.id}/menu/items`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`);
+    expect(staffRes.status).toBe(200);
+    expect(staffRes.body.data.items.some((i: { id: string }) => i.id === canonicalItem.id)).toBe(true);
+
+    // The exact same operation against restaurantA (never migrated) still works normally.
+    const unmigratedRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/menu`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ name: "Still works", price: 1, categoryId: categoryA.id });
+    expect(unmigratedRes.status).toBe(201);
+
+    await Promise.all([
+      MenuItem.deleteMany({ businessId: business._id }),
+      Category.deleteMany({ businessId: business._id }),
+      User.deleteOne({ _id: migratedOwner._id }),
+      Restaurant.deleteOne({ _id: migratedRestaurant._id }),
+    ]);
   });
 });

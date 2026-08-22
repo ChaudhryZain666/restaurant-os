@@ -28,6 +28,9 @@ export class ApiError extends Error {
   static conflict(message: string) {
     return new ApiError(409, ErrorCode.CONFLICT, message);
   }
+  static gone(message: string, details?: unknown) {
+    return new ApiError(410, ErrorCode.MENU_MIGRATED, message, details);
+  }
   static tooManyRequests(message: string) {
     return new ApiError(429, ErrorCode.RATE_LIMITED, message);
   }

@@ -5,6 +5,7 @@ import { MenuItem } from "../models/MenuItem.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { invalidateMenuCache } from "../services/menuCache.service.js";
+import { assertMenuNotMigrated } from "../services/menuResolution.service.js";
 
 export async function listCategories(req: Request, res: Response) {
   const { restaurantId } = req.params;
@@ -14,6 +15,7 @@ export async function listCategories(req: Request, res: Response) {
 
 export async function createCategory(req: Request, res: Response) {
   const { restaurantId } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const body = req.body as CategoryInput;
   const category = await Category.create({ ...body, restaurantId });
   await invalidateMenuCache(restaurantId);
@@ -22,6 +24,7 @@ export async function createCategory(req: Request, res: Response) {
 
 export async function updateCategory(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const updates = req.body as UpdateCategoryInput;
   const category = await Category.findOneAndUpdate(
     { _id: id, restaurantId },
@@ -35,6 +38,7 @@ export async function updateCategory(req: Request, res: Response) {
 
 export async function deleteCategory(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
 
   const itemCount = await MenuItem.countDocuments({ restaurantId, categoryId: id });
   if (itemCount > 0) {

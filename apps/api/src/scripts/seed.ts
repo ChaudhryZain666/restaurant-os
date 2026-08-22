@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectDB } from "../config/db.js";
 import { User } from "../models/User.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { Business } from "../models/Business.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
@@ -35,9 +36,21 @@ async function seed() {
 
   let restaurant = await Restaurant.findOne({ slug: "demo-restaurant" });
   if (!restaurant) {
+    // Phase 21 — seeded restaurants get a Business + canonical (businessId-scoped) menu directly,
+    // matching real post-migration shape, rather than the legacy restaurantId-only shape the old
+    // write endpoints (now retired for migrated businesses) used to produce. Keeps local dev data
+    // consistent with what the real migration actually leaves behind.
+    const business = await Business.create({
+      name: "Demo Restaurant",
+      slug: "demo-restaurant",
+      ownerId: owner._id,
+      status: "active",
+    });
+
     restaurant = await Restaurant.create({
       name: "Demo Restaurant",
       slug: "demo-restaurant",
+      businessId: business._id,
       description: "Wood-fired pizza, smash burgers, and made-from-scratch sides — a neighborhood spot serving Springfield since day one.",
       phone: "+1-555-0100",
       email: "hello@demo-restaurant.local",
@@ -81,16 +94,23 @@ async function seed() {
 
   const categoryCount = await Category.countDocuments({ restaurantId: restaurant._id });
   if (categoryCount === 0) {
-    const [pizza, burgers, salad, sides, dessert, drinks] = await Category.insertMany([
-      { restaurantId: restaurant._id, name: "Pizza", sortOrder: 0 },
-      { restaurantId: restaurant._id, name: "Burgers", sortOrder: 1 },
-      { restaurantId: restaurant._id, name: "Salad", sortOrder: 2 },
-      { restaurantId: restaurant._id, name: "Sides", sortOrder: 3 },
-      { restaurantId: restaurant._id, name: "Dessert", sortOrder: 4 },
-      { restaurantId: restaurant._id, name: "Drinks", sortOrder: 5 },
-    ]);
+    // Every category/item/modifier-group document below also gets businessId set (via this
+    // .map(), rather than repeating it on each literal) so seeded data matches real
+    // post-migration canonical shape directly — see the import-block comment above.
+    const withBusinessId = <T extends object>(docs: T[]) => docs.map((doc) => ({ ...doc, businessId: restaurant.businessId }));
 
-    const menuItems = await MenuItem.insertMany([
+    const [pizza, burgers, salad, sides, dessert, drinks] = await Category.insertMany(
+      withBusinessId([
+        { restaurantId: restaurant._id, name: "Pizza", sortOrder: 0 },
+        { restaurantId: restaurant._id, name: "Burgers", sortOrder: 1 },
+        { restaurantId: restaurant._id, name: "Salad", sortOrder: 2 },
+        { restaurantId: restaurant._id, name: "Sides", sortOrder: 3 },
+        { restaurantId: restaurant._id, name: "Dessert", sortOrder: 4 },
+        { restaurantId: restaurant._id, name: "Drinks", sortOrder: 5 },
+      ])
+    );
+
+    const menuItems = await MenuItem.insertMany(withBusinessId([
       {
         restaurantId: restaurant._id,
         categoryId: pizza._id,
@@ -181,14 +201,14 @@ async function seed() {
         imageUrl: "/menu-images/coke.svg",
         sortOrder: 0,
       },
-    ]);
+    ]));
 
     const margherita = menuItems.find((i) => i.name === "Margherita Pizza")!;
     const pepperoni = menuItems.find((i) => i.name === "Pepperoni Pizza")!;
     const classicBurger = menuItems.find((i) => i.name === "Classic Burger")!;
     const coke = menuItems.find((i) => i.name === "Coke")!;
 
-    await ModifierGroup.insertMany([
+    await ModifierGroup.insertMany(withBusinessId([
       {
         restaurantId: restaurant._id,
         menuItemId: margherita._id,
@@ -253,7 +273,7 @@ async function seed() {
           { name: "Large", priceAdjustment: 1, sortOrder: 1 },
         ],
       },
-    ]);
+    ]));
 
     console.log("[seed] inserted categories, menu items, and modifier groups for demo-restaurant");
   }

@@ -8,6 +8,7 @@ import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
   createTestRestaurant,
@@ -101,7 +102,7 @@ describe("categories", () => {
     expect(res.body.data.category.restaurantId).toBe(restaurantA.id);
 
     const stored = await Category.findById(category.id);
-    expect(stored!.restaurantId.toString()).toBe(restaurantA.id);
+    expect(stored!.restaurantId!.toString()).toBe(restaurantA.id);
   });
 
   it("cannot delete a category that still has menu items", async () => {
@@ -157,5 +158,53 @@ describe("categories", () => {
     // The public menu bundle's categories list is filtered to isActive: true.
     const menuRes = await request(app).get(`/api/v1/restaurants/${restaurantA.id}/menu`);
     expect(menuRes.body.data.categories.some((c: { id: string }) => c.id === category.id)).toBe(false);
+  });
+});
+
+describe("Phase 21 — legacy category writes are retired (410) once the business is migrated", () => {
+  it("createCategory/updateCategory/deleteCategory all 410 for a migrated business, but stay 200 for an unmigrated one", async () => {
+    const business = await createTestBusiness();
+    const migratedRestaurant = await createTestRestaurant({ businessId: business._id });
+    const canonicalCategory = await createTestCategory(migratedRestaurant._id, { businessId: business._id });
+    // businessHasCanonicalMenu checks MenuItem, not Category — a canonical MenuItem must exist too.
+    await createTestMenuItem(migratedRestaurant._id, canonicalCategory._id, { businessId: business._id });
+    const migratedOwner = await createTestUser("restaurant_owner", migratedRestaurant._id, { businessId: business._id });
+    const migratedOwnerToken = tokenFor(migratedOwner);
+
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${migratedRestaurant.id}/categories`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired" });
+    expect(createRes.status).toBe(410);
+    expect(createRes.body.error.code).toBe("MENU_MIGRATED");
+
+    const updateRes = await request(app)
+      .patch(`/api/v1/restaurants/${migratedRestaurant.id}/categories/${canonicalCategory.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`)
+      .send({ name: "Should be retired" });
+    expect(updateRes.status).toBe(410);
+
+    const deleteRes = await request(app)
+      .delete(`/api/v1/restaurants/${migratedRestaurant.id}/categories/${canonicalCategory.id}`)
+      .set("Authorization", `Bearer ${migratedOwnerToken}`);
+    expect(deleteRes.status).toBe(410);
+
+    // Confirm nothing was actually deleted — the canonical category is a shared business document.
+    const stillExists = await Category.findById(canonicalCategory.id);
+    expect(stillExists).not.toBeNull();
+
+    // The exact same operation against restaurantA (never migrated) still works normally.
+    const unmigratedRes = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/categories`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ name: "Still works" });
+    expect(unmigratedRes.status).toBe(201);
+
+    await Promise.all([
+      MenuItem.deleteMany({ businessId: business._id }),
+      Category.deleteMany({ businessId: business._id }),
+      User.deleteOne({ _id: migratedOwner._id }),
+      Restaurant.deleteOne({ _id: migratedRestaurant._id }),
+    ]);
   });
 });

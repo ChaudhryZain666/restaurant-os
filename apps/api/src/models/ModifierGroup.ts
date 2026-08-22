@@ -15,7 +15,8 @@ export interface ModifierOptionSubdoc {
 // class of problem documented in apps/api/src/models/User.ts, just triggered by a nested
 // subdocument array here instead of an imported enum.
 export interface ModifierGroupDoc {
-  restaurantId: Types.ObjectId;
+  /** Phase 21 — optional once businessId is set; see Category.ts's restaurantId for the rationale. */
+  restaurantId?: Types.ObjectId;
   /** Phase 20 — see Category.ts's businessId for the full rationale. */
   businessId?: Types.ObjectId;
   menuItemId: Types.ObjectId;
@@ -40,7 +41,14 @@ const modifierGroupSchema = new Schema<ModifierGroupDoc>(
   {
     // No standalone index on restaurantId: the compound index below already covers
     // restaurantId-only queries via its leading-field prefix.
-    restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    // Phase 21 — required only for a legacy (not-yet-canonical) document.
+    restaurantId: {
+      type: Schema.Types.ObjectId,
+      ref: "Restaurant",
+      required: function (this: { businessId?: unknown }) {
+        return !this.businessId;
+      },
+    },
     businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
     menuItemId: { type: Schema.Types.ObjectId, ref: "MenuItem", required: true, index: true },
     name: { type: String, required: true, trim: true },

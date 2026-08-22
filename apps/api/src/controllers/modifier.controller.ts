@@ -5,6 +5,7 @@ import { MenuItem } from "../models/MenuItem.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { invalidateMenuCache } from "../services/menuCache.service.js";
+import { assertMenuNotMigrated } from "../services/menuResolution.service.js";
 
 async function assertMenuItemInRestaurant(restaurantId: string, menuItemId: string) {
   const exists = await MenuItem.exists({ _id: menuItemId, restaurantId });
@@ -19,6 +20,7 @@ export async function listModifierGroups(req: Request, res: Response) {
 
 export async function createModifierGroup(req: Request, res: Response) {
   const { restaurantId, menuItemId } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   await assertMenuItemInRestaurant(restaurantId, menuItemId);
 
   const body = req.body as ModifierGroupInput;
@@ -29,6 +31,7 @@ export async function createModifierGroup(req: Request, res: Response) {
 
 export async function updateModifierGroup(req: Request, res: Response) {
   const { restaurantId, menuItemId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const updates = req.body as UpdateModifierGroupInput;
 
   // The zod schema only catches minSelect > maxSelect when both are sent together — a partial
@@ -60,6 +63,7 @@ export async function updateModifierGroup(req: Request, res: Response) {
 
 export async function deleteModifierGroup(req: Request, res: Response) {
   const { restaurantId, menuItemId, id } = req.params;
+  await assertMenuNotMigrated(restaurantId);
   const group = await ModifierGroup.findOneAndDelete({ _id: id, restaurantId, menuItemId });
   if (!group) throw ApiError.notFound("Modifier group not found");
   await invalidateMenuCache(restaurantId);
