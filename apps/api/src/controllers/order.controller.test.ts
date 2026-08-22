@@ -1192,6 +1192,7 @@ describe("Phase 20 — canonical business menu order pricing, end to end through
   let canonicalCategory: Awaited<ReturnType<typeof createTestCategory>>;
   let canonicalItem: Awaited<ReturnType<typeof createTestMenuItem>>;
   let canonicalCustomerToken: string;
+  let canonicalOwnerToken: string;
 
   beforeAll(async () => {
     canonicalBusiness = await createTestBusiness();
@@ -1223,6 +1224,10 @@ describe("Phase 20 — canonical business menu order pricing, end to end through
     });
     const canonicalCustomer = await createTestUser("customer");
     canonicalCustomerToken = tokenFor(canonicalCustomer);
+    const canonicalOwner = await createTestUser("restaurant_owner", canonicalLocationA._id, {
+      businessId: canonicalBusiness._id,
+    });
+    canonicalOwnerToken = tokenFor(canonicalOwner);
   });
 
   afterAll(async () => {
@@ -1298,5 +1303,69 @@ describe("Phase 20 — canonical business menu order pricing, end to end through
       { locationId: canonicalLocationA._id, menuItemId: canonicalItem._id },
       { $set: { priceOverride: 14 } }
     );
+  });
+
+  it("Phase 21 — order snapshot stays immutable when the mutation is a real PUT .../override request through the real route, not just a direct DB write", async () => {
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationA.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: canonicalItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(createRes.status).toBe(201);
+    const orderId = createRes.body.data.order.id;
+    const originalUnitPrice = createRes.body.data.order.items[0].unitPrice;
+
+    const overrideRes = await request(app)
+      .put(`/api/v1/restaurants/${canonicalLocationA.id}/menu/${canonicalItem.id}/override`)
+      .set("Authorization", `Bearer ${canonicalOwnerToken}`)
+      .send({ priceOverride: 777 });
+    expect(overrideRes.status).toBe(200);
+
+    const fetchRes = await request(app)
+      .get(`/api/v1/orders/${orderId}`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`);
+    expect(fetchRes.body.data.order.items[0].unitPrice).toBe(originalUnitPrice);
+
+    // Restore the known-good override value for the rest of this describe block.
+    await request(app)
+      .put(`/api/v1/restaurants/${canonicalLocationA.id}/menu/${canonicalItem.id}/override`)
+      .set("Authorization", `Bearer ${canonicalOwnerToken}`)
+      .send({ priceOverride: 14 });
+  });
+
+  it("Phase 21 — reorder re-prices against the current canonical/override state, and reports an item as unavailable if it's since been canonical-hidden with no override", async () => {
+    const createRes = await request(app)
+      .post(`/api/v1/restaurants/${canonicalLocationA.id}/orders`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: canonicalItem.id, quantity: 1, selectedModifiers: [] }] });
+    const orderId = createRes.body.data.order.id;
+
+    // Reorder immediately: still priced at A's current override (14).
+    const reorderRes = await request(app)
+      .post(`/api/v1/orders/${orderId}/reorder`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`);
+    expect(reorderRes.status).toBe(200);
+    expect(reorderRes.body.data.items[0].unitPrice).toBe(14);
+    expect(reorderRes.body.data.unavailableItems).toHaveLength(0);
+
+    // Canonical-hide the item with no override anywhere — reorder must now report it unavailable
+    // via the canonical path, not silently price it.
+    await MenuItem.updateOne({ _id: canonicalItem._id }, { $set: { isAvailable: false } });
+    await MenuItemLocationOverride.deleteOne({ locationId: canonicalLocationA._id, menuItemId: canonicalItem._id });
+
+    const reorderAfterHideRes = await request(app)
+      .post(`/api/v1/orders/${orderId}/reorder`)
+      .set("Authorization", `Bearer ${canonicalCustomerToken}`);
+    expect(reorderAfterHideRes.status).toBe(200);
+    expect(reorderAfterHideRes.body.data.items).toHaveLength(0);
+    expect(reorderAfterHideRes.body.data.unavailableItems).toHaveLength(1);
+
+    // Restore for the rest of the describe block.
+    await MenuItem.updateOne({ _id: canonicalItem._id }, { $set: { isAvailable: true } });
+    await MenuItemLocationOverride.create({
+      businessId: canonicalBusiness._id,
+      locationId: canonicalLocationA._id,
+      menuItemId: canonicalItem._id,
+      priceOverride: 14,
+    });
   });
 });

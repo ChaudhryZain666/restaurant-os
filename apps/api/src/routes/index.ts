@@ -25,6 +25,9 @@ import { geocodingRouter } from "./geocoding.routes.js";
 import { customerRouter } from "./customer.routes.js";
 import { uploadRouter } from "./upload.routes.js";
 import { businessRouter } from "./business.routes.js";
+import { businessCategoryRouter } from "./businessCategory.routes.js";
+import { businessMenuRouter } from "./businessMenu.routes.js";
+import { businessModifierRouter } from "./businessModifier.routes.js";
 
 export const apiRouter = Router();
 
@@ -32,6 +35,9 @@ apiRouter.use("/auth", authRouter);
 apiRouter.use("/users", userRouter);
 apiRouter.use("/orders", orderRouter);
 apiRouter.use("/businesses", businessRouter);
+apiRouter.use("/businesses/:businessId/categories", businessCategoryRouter);
+apiRouter.use("/businesses/:businessId/menu", businessMenuRouter);
+apiRouter.use("/businesses/:businessId/menu/:menuItemId/modifiers", businessModifierRouter);
 apiRouter.use("/restaurants", restaurantRouter);
 apiRouter.use("/restaurants/:restaurantId/categories", categoryRouter);
 apiRouter.use("/restaurants/:restaurantId/menu", menuRouter);

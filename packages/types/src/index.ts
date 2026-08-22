@@ -7,6 +7,7 @@ export * from "./types/business.js";
 export * from "./types/category.js";
 export * from "./types/modifier.js";
 export * from "./types/menu.js";
+export * from "./types/override.js";
 export * from "./types/order.js";
 export * from "./types/loyalty.js";
 export * from "./types/analytics.js";

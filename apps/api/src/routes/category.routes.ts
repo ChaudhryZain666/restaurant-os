@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { categorySchema, updateCategorySchema } from "@restaurant/validation";
+import { categoryOverrideSchema, categorySchema, updateCategorySchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
@@ -8,7 +8,9 @@ import { validateBody } from "../middleware/validate.js";
 import {
   createCategory,
   deleteCategory,
+  deleteCategoryOverride,
   listCategories,
+  putCategoryOverride,
   updateCategory,
 } from "../controllers/category.controller.js";
 
@@ -30,3 +32,15 @@ categoryRouter.patch(
   asyncHandler(updateCategory)
 );
 categoryRouter.delete("/:id", requirePermission("restaurant.categories.write"), asyncHandler(deleteCategory));
+// Phase 21 — per-location override on a canonical category (isActive/sortOrder).
+categoryRouter.put(
+  "/:id/override",
+  requirePermission("restaurant.categories.write"),
+  validateBody(categoryOverrideSchema),
+  asyncHandler(putCategoryOverride)
+);
+categoryRouter.delete(
+  "/:id/override",
+  requirePermission("restaurant.categories.write"),
+  asyncHandler(deleteCategoryOverride)
+);
