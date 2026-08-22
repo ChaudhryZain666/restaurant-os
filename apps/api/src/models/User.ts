@@ -28,8 +28,20 @@ export interface UserDoc {
   email: string;
   passwordHash: string;
   role: UserRole;
-  /** Set only for restaurant-scoped roles (owner/manager/staff/kitchen_staff). */
+  /** Set only for restaurant-scoped roles (owner/manager/staff/kitchen_staff). Pre-Phase-18 field,
+   *  still the sole source of truth for every route guarded by requireTenantMatch — untouched by
+   *  the Phase 18 Business/Location fields below so no existing authorization path changes. */
   restaurantId?: Types.ObjectId;
+  /** Phase 18, additive — owner/manager/staff/kitchen_staff get this from their restaurant's
+   *  businessId at invite/creation time. Not yet read by any pre-Phase-18 route; backs the new
+   *  requireBusinessMatch/requireLocationAccess middleware only. */
+  businessId?: Types.ObjectId;
+  /** Phase 18, additive — which of the business's locations (Restaurant docs) this user can act
+   *  on. Owner/manager get implicit access to every location under their businessId (checked via
+   *  requireLocationAccess, not stored here); staff/kitchen_staff need explicit membership.
+   *  Defaults to [restaurantId] at invite time (see staff.controller.ts's inviteStaff), same
+   *  single-location behavior as today unless a manager later PATCHes it to add more. */
+  locationIds: Types.ObjectId[];
   phone?: string;
   refreshTokenVersion: number;
   addresses: AddressDoc[];
@@ -74,6 +86,8 @@ const userSchema = new Schema<UserDoc>(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: USER_ROLES, default: "customer", index: true },
     restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", index: true },
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    locationIds: { type: [Schema.Types.ObjectId], ref: "Restaurant", default: [] },
     phone: { type: String },
     refreshTokenVersion: { type: Number, default: 0 },
     addresses: { type: [addressSchema], default: [] },

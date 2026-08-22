@@ -257,3 +257,38 @@ describe("staff invite resend (Phase 16)", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("staff location assignment (Phase 18)", () => {
+  it("a newly invited staff member's locationIds defaults to just the inviting restaurant", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/staff`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send(invitePayload());
+    expect(res.status).toBe(201);
+
+    const staff = await User.findById(res.body.data.staff.id);
+    expect(staff!.locationIds.map((id) => id.toString())).toEqual([restaurantA.id]);
+  });
+
+  it("an owner can PATCH a staff member's locationIds to add a second location", async () => {
+    const restaurantC = await createTestRestaurant();
+    try {
+      const invite = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/staff`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send(invitePayload());
+      const staffId = invite.body.data.staff.id;
+
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${staffId}`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ locationIds: [restaurantA.id, restaurantC.id] });
+
+      expect(res.status).toBe(200);
+      const staff = await User.findById(staffId);
+      expect(staff!.locationIds.map((id) => id.toString()).sort()).toEqual([restaurantA.id, restaurantC.id].sort());
+    } finally {
+      await Restaurant.deleteOne({ _id: restaurantC._id });
+    }
+  });
+});

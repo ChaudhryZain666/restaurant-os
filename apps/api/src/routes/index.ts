@@ -24,12 +24,14 @@ import { deliveryRouter } from "./delivery.routes.js";
 import { geocodingRouter } from "./geocoding.routes.js";
 import { customerRouter } from "./customer.routes.js";
 import { uploadRouter } from "./upload.routes.js";
+import { businessRouter } from "./business.routes.js";
 
 export const apiRouter = Router();
 
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/users", userRouter);
 apiRouter.use("/orders", orderRouter);
+apiRouter.use("/businesses", businessRouter);
 apiRouter.use("/restaurants", restaurantRouter);
 apiRouter.use("/restaurants/:restaurantId/categories", categoryRouter);
 apiRouter.use("/restaurants/:restaurantId/menu", menuRouter);

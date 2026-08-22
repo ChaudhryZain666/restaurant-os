@@ -16,8 +16,12 @@ export const updateStaffSchema = z
   .object({
     role: z.enum(STAFF_ROLES).optional(),
     isActive: z.boolean().optional(),
+    // Phase 18 — which of the business's locations (Restaurant ids) this staff member can act on.
+    // Not yet surfaced in any admin UI; PATCHable at the API level so the capability exists ahead
+    // of a future multi-select control, laying groundwork without building that UI this phase.
+    locationIds: z.array(z.string().min(1)).optional(),
   })
-  .refine((v) => v.role !== undefined || v.isActive !== undefined, {
-    message: "Provide at least one of role or isActive",
+  .refine((v) => v.role !== undefined || v.isActive !== undefined || v.locationIds !== undefined, {
+    message: "Provide at least one of role, isActive, or locationIds",
   });
 export type UpdateStaffInput = z.infer<typeof updateStaffSchema>;

@@ -438,3 +438,133 @@ multi-location.
 of a restaurant regardless of what a future custom domain resolves *to* — exactly as this doc's
 Phase 8 section already noted. A custom domain is additive routing on top of the existing model,
 not a replacement for it.
+
+## Phase 18 — Business/Location Foundation (implemented; supersedes Phase 16's proposed shape)
+
+Phase 16 (above) sketched multi-location as "`Restaurant` becomes a Brand, gaining a child
+`Location` collection" that would carry address/coordinates/settings, implying every operational
+document (`Order`, `Table`, `MenuItem`, ...) would eventually need to move from `restaurantId` to a
+new `locationId`. Phase 18 implements a **different, smaller-footprint shape** after actually
+reconnoitering the codebase in depth (Phase 16's proposal was explicitly "documentation only,"
+written without that verification): `Restaurant` **is** the location, unchanged, and a new,
+thin `Business` model sits above it purely for ownership/identity grouping. This is a deliberate
+correction, not an inconsistency — the reasoning follows.
+
+### Why this shape, not Phase 16's
+
+`Restaurant` already *is* a location-shaped document — it has always carried `address`,
+`latitude`/`longitude`, `slug`, and a `settings` subdocument with `currency`, `timezone`,
+`businessHours`, delivery radius/fee, and payment toggles, all of which are inherently
+per-physical-place facts. Moving those onto a brand-new `Location` collection (Phase 16's
+proposal) would mean cascading a `locationId` through `Order`, `Table`, `MenuItem`, `Category`,
+`ModifierGroup`, `Promotion`, `LoyaltyAccount`, `Payment`, `Refund`, and `AuditLog`, rewriting
+~20 route files' tenant param from `:restaurantId` to `:locationId`, and touching every frontend
+page that fetches by restaurant — the exact "touches nearly every collection in the system" cost
+Phase 16 itself named as the reason not to attempt it speculatively.
+
+Keeping `Restaurant` as the location and adding `Business` as a new parent achieves the identical
+domain goal (an owner/manager can be associated with more than one physical location) for a
+fraction of the blast radius: every existing route, slug, QR code, JWT claim, order number
+sequence, menu item, and frontend page keeps working **byte-for-byte unchanged**, because nothing
+about what `Restaurant` means or how it's queried changes. The only new concept is a link from
+`Restaurant` up to an owning `Business`. `Restaurant` is not renamed to `Location` in code this
+phase (that mechanical rename buys no safety and was explicitly deferred — see below).
+
+### Domain model
+
+- **`Business`** (new model, `apps/api/src/models/Business.ts`) — the commercial/brand entity:
+  `name`, `slug` (unique), `description`, `logo`, `coverImage`, `ownerId` (ref `User`), `status`
+  (`pending`/`active`/`suspended`), `brandColor`. Deliberately has **no** `currency`/`timezone`
+  fields — those stay purely location-level (see scope table below), so nothing forces every
+  location of a business onto one timezone or currency.
+- **`Restaurant`** (existing, extended) — gains `businessId: ObjectId` (ref `Business`, required
+  after migration, indexed). Everything else is unchanged.
+- **`User`** — gains `businessId?: ObjectId` and `locationIds: ObjectId[]` (default `[]`) as new,
+  additive fields. The existing `restaurantId` field is untouched and remains the sole source of
+  truth for every pre-Phase-18 route's authorization (`requireTenantMatch`, the JWT, every
+  controller) — this is what makes the migration zero-risk to the already-shipped product.
+  `businessId`/`locationIds` back an entirely new, additively-wired authorization path
+  (`requireBusinessMatch`/`requireLocationAccess`, `middleware/businessLocation.ts`) that no
+  existing route uses yet.
+
+### Scope classification (per subsystem)
+
+| Domain | Scope | Status |
+|---|---|---|
+| Orders, Tables/QR, delivery config, timezone, business hours, currency | Location (`Restaurant`, unchanged) | Already correct — no change was needed, since `Restaurant` was always location-shaped |
+| Payments/Refunds | Follow the Order → Location; provider config stays platform-level | Already correct — no change needed |
+| Menu (`Category`/`MenuItem`/`ModifierGroup`) | **Target**: business-scoped canonical item + location-level availability override | Documented target only, deliberately not built this phase (see below) |
+| Loyalty, Promotions, order-number sequencing | Stays location-scoped (today's `restaurantId`-keyed uniqueness) | Unchanged; explicit future decision — only move to business-scoped if a real multi-location owner needs shared loyalty balances or promo codes across locations |
+| Customers | Already business/location-agnostic — `User(role=customer)` was never restaurant-scoped; per-location customer lists are computed by aggregating `Order`s | Already correct |
+| Business-level analytics aggregation ("all locations combined") | New capability | Deferred — see currency-aggregation warning below |
+| Multi-business-per-user ("agency" access) | `User.businessId` is singular, same shape as today's `restaurantId` | **Known, accepted limitation** — not fixed this phase, written down so it's a deliberate tradeoff, not a rediscovery |
+
+**Menu — why the schema wasn't touched this phase**: `MenuItem`/`ModifierGroup` today are fully
+independent, denormalized documents (their own `name`/`price`/`description`), with no
+canonical/template concept and no clone tooling anywhere in the codebase. Adding a `businessId`
+scoping field to them now would not implement "shared menu" — it would only let you filter across
+a business's items, a different and less useful thing, and could mislead a future reader into
+thinking the scoping field *is* the solution. The actual target shape, for whenever this is
+built: a business-scoped canonical `MenuItem` plus a new, sparse `MenuItemLocationOverride`
+collection (`{businessId, locationId, menuItemId, isAvailable}`) — only rows for items actually
+hidden at a specific location need exist. At that point, `orderPricing.service.ts`'s
+tenant-isolation guard (`MenuItem.find({_id, restaurantId, isAvailable:true})`, which today trusts
+`{_id, restaurantId}` together as proof of ownership) needs a real redesign, not just a rename:
+once menu items aren't restaurant-owned documents, "available at a sibling location of the same
+business" must never be sufficient to let a customer order it at a different location — that
+check has to become an explicit per-location lookup, not an implicit side effect of a shared
+`businessId` filter.
+
+**Business-level analytics — the currency-aggregation guardrail**: whenever a "revenue across all
+of my business's locations" endpoint is built, it must never sum `Order.total` across locations
+with different `settings.currency` values into one number — that's mathematically invalid (summing
+USD + EUR + GBP). Either require all locations under one business to share a currency (simplest,
+enforceable at location-creation time) or return a currency-keyed breakdown, never a single blended
+total.
+
+### Explicitly deferred (not built this phase)
+
+- Renaming `Restaurant` → `Location` in code/routes/frontend — no safety benefit, high blast radius.
+- Any admin or storefront UI for creating/switching/viewing multiple locations, or picking an
+  existing business when creating a restaurant (the backend capability exists — see below — but has
+  no UI consumer yet).
+- Actually building the shared-menu-with-override data model described above.
+- Business-level analytics aggregation endpoints.
+- `Order.orderNumber` / `LoyaltyAccount` / `Promotion` uniqueness-scope changes.
+- `Business` getting its own `slug`/storefront landing page.
+- Cascading `Business.status` suspension down to actually blocking orders — the field exists and is
+  migrated to a sane value (mirrored from the source `Restaurant.status`), but no controller can
+  currently change it away from that value, so there is no live enforcement gap today, just an
+  inert field ready for the next phase to wire up.
+- `brandColor` resolution: `Restaurant.settings.brandColor` remains authoritative for what actually
+  renders on a location's storefront (unchanged — it's the only one any render path reads today);
+  `Business.brandColor` is a future pre-fill convenience for creating new locations under a
+  business, not consumed by any render path yet. Written down explicitly so it isn't left ambiguous
+  for whoever builds the next UI on top of it.
+
+### What was actually implemented
+
+- `Business` model; `Restaurant.businessId`; `User.businessId`/`User.locationIds`.
+- `createRestaurant` (`restaurant.controller.ts`) — now accepts an optional `businessId` in its
+  request body. Omitted: today's exact behavior, plus a `Business` is created alongside the
+  `Restaurant` in the same transaction. Provided: creates a **second location under an existing
+  business** (no new owner invited — the existing business's owner already has implicit access to
+  every location under their `businessId`) — this is the concrete proof that a business can have
+  multiple locations, reusing the existing, already-tested transaction shape.
+- `inviteStaff`/`updateStaff` (`staff.controller.ts`) — new staff now also get `businessId` and
+  `locationIds: [restaurantId]` set at invite time; `updateStaff` can PATCH `locationIds`, laying
+  the groundwork for a staff member covering more than one location without yet building a
+  multi-select UI for it.
+- JWT/`req.user` — `businessId`/`locationIds` added as new optional claims, re-derived from the
+  current `User` document at every login/refresh (never copied from an old token, so a staff
+  member's location grant changes take effect on next login/refresh).
+- `middleware/businessLocation.ts` (new file, additive alongside `middleware/tenant.ts`, not a
+  replacement) — `requireBusinessMatch`/`requireLocationAccess`, wired into three new, net-new
+  routes under `/businesses` (`GET /businesses/me`, `GET /businesses/:businessId/locations`,
+  `GET /businesses/:businessId/locations/:locationId`) that exercise the whole path — real JWT
+  claims through real middleware to a real DB lookup — over an actual HTTP round trip. No existing
+  route was modified to use this new authorization path.
+- `apps/api/src/scripts/migrateToBusinessLocation.ts` — idempotent, two-pass migration (Restaurant→
+  Business backfill, then User sync), with a pre-flight check that fails loudly rather than
+  silently if it finds one `ownerId` reused across multiple `Restaurant` documents (which the naive
+  one-Business-per-Restaurant migration would otherwise incorrectly split into two Businesses).

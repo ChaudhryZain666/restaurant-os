@@ -9,6 +9,10 @@ export interface AccessTokenPayload {
   sub: string;
   role: UserRole;
   restaurantId?: string;
+  /** Phase 18, additive — re-derived from the current User document at every sign/refresh (never
+   *  copied from an old token), so a location grant change takes effect on next login/refresh. */
+  businessId?: string;
+  locationIds?: string[];
 }
 
 export interface RefreshTokenPayload {

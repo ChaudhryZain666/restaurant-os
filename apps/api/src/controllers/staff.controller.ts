@@ -55,6 +55,12 @@ export async function inviteStaff(req: Request, res: Response) {
     role,
     phone,
     restaurantId,
+    // Phase 18, additive — mirrors today's single-location restaurantId assignment exactly
+    // (businessId may still be undefined if this restaurant hasn't been migrated yet; locationIds
+    // defaults to just this one restaurant, same reach as restaurantId gave before this field
+    // existed, extendable later via updateStaff without re-inviting).
+    businessId: restaurant.businessId,
+    locationIds: [restaurantId],
     isActive: true,
     inviteTokenHash: hash,
     inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),

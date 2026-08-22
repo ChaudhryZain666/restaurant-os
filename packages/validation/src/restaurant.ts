@@ -8,16 +8,29 @@ const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
 // way to ever get that user created first (see docs — the provisioning chicken-and-egg gap). The
 // owner is now provisioned atomically alongside the restaurant, via the same invite-token pattern
 // staff invites already use (see restaurant.controller.ts's createRestaurant).
-export const createRestaurantSchema = z.object({
-  name: z.string().min(2).max(120),
-  slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
-  timezone: z.string().min(1).optional(),
-  currency: z.string().length(3).optional(),
-  owner: z.object({
-    name: z.string().min(2).max(80),
-    email: z.string().email(),
-  }),
-});
+export const createRestaurantSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
+    timezone: z.string().min(1).optional(),
+    currency: z.string().length(3).optional(),
+    // Phase 18 — omitted (the default): `owner` is required, and a new Business is created
+    // alongside this Restaurant, same as before this field existed. Provided: this Restaurant
+    // becomes a second location under an existing Business instead — no new owner is
+    // created/invited (the existing business's owner already covers every location under it), so
+    // `owner` must be omitted rather than silently ignored.
+    businessId: z.string().min(1).optional(),
+    owner: z
+      .object({
+        name: z.string().min(2).max(80),
+        email: z.string().email(),
+      })
+      .optional(),
+  })
+  .refine((v) => (v.businessId ? !v.owner : Boolean(v.owner)), {
+    message: "Provide either `owner` (to create a new business) or `businessId` (to add a location to an existing one), not both",
+    path: ["owner"],
+  });
 export type CreateRestaurantInput = z.infer<typeof createRestaurantSchema>;
 
 export const businessHoursDaySchema = z

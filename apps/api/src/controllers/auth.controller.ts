@@ -69,6 +69,12 @@ async function issueSession(res: Response, user: HydratedDocument<UserDoc>) {
     sub: user.id as string,
     role: user.role,
     restaurantId: user.restaurantId?.toString(),
+    // Phase 18, additive — re-derived from the CURRENT user document every time a session is
+    // issued (login, refresh, accept-invite, ...), never carried forward from an old token, so a
+    // location grant change (see staff.controller.ts's updateStaff) takes effect on next
+    // login/refresh rather than never.
+    businessId: user.businessId?.toString(),
+    locationIds: user.locationIds?.map((id) => id.toString()),
   });
   const refreshToken = await issueRefreshToken(user.id);
   setRefreshCookie(res, refreshToken);

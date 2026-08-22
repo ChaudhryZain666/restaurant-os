@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:demo": "tsx src/scripts/seed-demo-data.ts",
+    "migrate:business-location": "tsx src/scripts/migrateToBusinessLocation.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

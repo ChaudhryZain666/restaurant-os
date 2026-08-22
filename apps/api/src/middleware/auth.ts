@@ -6,7 +6,15 @@ import { ApiError } from "../utils/ApiError.js";
 declare global {
   namespace Express {
     interface Request {
-      user?: { id: string; role: UserRole; restaurantId?: string };
+      user?: {
+        id: string;
+        role: UserRole;
+        restaurantId?: string;
+        // Phase 18, additive — see token.service.ts's AccessTokenPayload. Not read by any
+        // pre-Phase-18 route; backs middleware/businessLocation.ts only.
+        businessId?: string;
+        locationIds?: string[];
+      };
     }
   }
 }
@@ -19,7 +27,13 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
 
   try {
     const payload = verifyAccessToken(header.slice("Bearer ".length));
-    req.user = { id: payload.sub, role: payload.role, restaurantId: payload.restaurantId };
+    req.user = {
+      id: payload.sub,
+      role: payload.role,
+      restaurantId: payload.restaurantId,
+      businessId: payload.businessId,
+      locationIds: payload.locationIds,
+    };
     next();
   } catch {
     next(ApiError.unauthorized("Invalid or expired access token"));

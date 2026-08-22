@@ -5,6 +5,7 @@ import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { CreateRestaurantInput, UpdateRestaurantInput } from "@restaurant/validation";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
+import { Business, type BusinessDoc } from "../models/Business.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
@@ -31,15 +32,28 @@ const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff
  * orderable before its owner has actually set anything up. getRestaurantBySlug already only
  * resolves status:"active" restaurants, so this is enforced for free — no separate gating logic
  * needed on the public read path.
+ *
+ * Phase 18 — `businessId` in the body branches this into a second mode: instead of creating a new
+ * Business + owner (the default, unchanged behavior below), it attaches a new Restaurant (location)
+ * to an EXISTING Business. No owner is created/invited in that mode — the existing Business's owner
+ * already has implicit access to every location under their businessId (see
+ * middleware/businessLocation.ts's requireLocationAccess), so there's nothing to invite. This is
+ * the concrete proof that a business can have multiple locations; no UI calls it yet this phase.
  */
 export async function createRestaurant(req: Request, res: Response) {
-  const { name, slug, timezone, currency, owner } = req.body as CreateRestaurantInput;
+  const { name, slug, timezone, currency, owner, businessId } = req.body as CreateRestaurantInput;
 
   const existingSlug = await Restaurant.findOne({ slug });
   if (existingSlug) throw ApiError.conflict("That restaurant slug is already taken");
 
-  const existingOwnerEmail = await User.findOne({ email: owner.email });
-  if (existingOwnerEmail) throw ApiError.conflict("An account with this email already exists");
+  let existingBusiness: HydratedDocument<BusinessDoc> | null = null;
+  if (businessId) {
+    existingBusiness = await Business.findById(businessId);
+    if (!existingBusiness) throw ApiError.notFound("Business not found");
+  } else {
+    const existingOwnerEmail = await User.findOne({ email: owner!.email });
+    if (existingOwnerEmail) throw ApiError.conflict("An account with this email already exists");
+  }
 
   const unusablePassword = randomBytes(32).toString("hex");
   const passwordHash = await bcrypt.hash(unusablePassword, 12);
@@ -50,14 +64,38 @@ export async function createRestaurant(req: Request, res: Response) {
   try {
     try {
       restaurant = (await session.withTransaction(async () => {
+        if (existingBusiness) {
+          // Second-location-under-an-existing-business branch: no owner created, the business's
+          // existing owner already covers this location via requireLocationAccess's businessId
+          // bypass.
+          const [createdRestaurant] = await Restaurant.create(
+            [
+              {
+                name,
+                slug,
+                ownerId: existingBusiness!.ownerId,
+                businessId: existingBusiness!._id,
+                status: "pending",
+                settings: {
+                  ...(timezone ? { timezone } : {}),
+                  ...(currency ? { currency } : {}),
+                },
+              },
+            ],
+            { session }
+          );
+          return createdRestaurant;
+        }
+
+        // Default branch — unchanged from before Phase 18, plus a new Business created alongside.
         // Owner created first: User.restaurantId is optional, so this needs no placeholder value —
         // unlike Restaurant.ownerId, which is required and can be set correctly on the very first
         // write once the owner's _id exists.
         const [createdOwner] = await User.create(
           [
             {
-              name: owner.name,
-              email: owner.email,
+              name: owner!.name,
+              email: owner!.email,
               passwordHash,
               role: "restaurant_owner",
               isActive: true,
@@ -68,12 +106,18 @@ export async function createRestaurant(req: Request, res: Response) {
           { session }
         );
 
+        const [createdBusiness] = await Business.create(
+          [{ name, slug, ownerId: createdOwner._id, status: "pending" }],
+          { session }
+        );
+
         const [createdRestaurant] = await Restaurant.create(
           [
             {
               name,
               slug,
               ownerId: createdOwner._id,
+              businessId: createdBusiness._id,
               status: "pending",
               settings: {
                 ...(timezone ? { timezone } : {}),
@@ -85,16 +129,18 @@ export async function createRestaurant(req: Request, res: Response) {
         );
 
         createdOwner.restaurantId = createdRestaurant._id;
+        createdOwner.businessId = createdBusiness._id;
         await createdOwner.save({ session });
 
         return createdRestaurant;
       })) as HydratedDocument<RestaurantDoc>;
     } catch (err) {
-      // The pre-checks above (slug/email lookups) narrow the common case to a clean 409, but
-      // can't close a genuine race: two concurrent requests for the same slug/email can both pass
-      // those checks before either transaction commits. The unique indexes on Restaurant.slug and
-      // User.email are the real backstop — this just translates their raw duplicate-key error
-      // into the same clean 409 the pre-check would have given a slightly-slower request.
+      // The pre-checks above (slug/email/business lookups) narrow the common case to a clean 409,
+      // but can't close a genuine race: two concurrent requests for the same slug/email can both
+      // pass those checks before either transaction commits. The unique indexes on Restaurant.slug,
+      // Business.slug, and User.email are the real backstop — this just translates their raw
+      // duplicate-key error into the same clean 409 the pre-check would have given a
+      // slightly-slower request.
       if ((err as { code?: number }).code === 11000) {
         throw ApiError.conflict("That restaurant slug or owner email is already in use");
       }
@@ -111,14 +157,18 @@ export async function createRestaurant(req: Request, res: Response) {
     action: "restaurant.created",
     targetType: "restaurant",
     targetId: restaurant._id,
-    metadata: { ownerEmail: owner.email },
+    metadata: existingBusiness ? { addedToExistingBusinessId: existingBusiness._id.toString() } : { ownerEmail: owner!.email },
   });
 
-  const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
-  try {
-    await getEmailService().send(ownerInviteEmail(owner.email, acceptUrl, { restaurantName: name }));
-  } catch (err) {
-    logger.error("failed to send owner-invite email", { error: (err as Error).message });
+  // Only the "create a new owner" branch has anyone to invite — the existing-business branch
+  // attaches a location to an owner who already has an account and access.
+  if (!existingBusiness) {
+    const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
+    try {
+      await getEmailService().send(ownerInviteEmail(owner!.email, acceptUrl, { restaurantName: name }));
+    } catch (err) {
+      logger.error("failed to send owner-invite email", { error: (err as Error).message });
+    }
   }
 
   sendSuccess(res, { restaurant: restaurant.toJSON() }, 201);

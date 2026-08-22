@@ -2,6 +2,7 @@ import mongoose, { type HydratedDocument } from "mongoose";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
+import { Business } from "../models/Business.js";
 import { User, type UserDoc } from "../models/User.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
@@ -56,6 +57,16 @@ export async function createTestRestaurant(overrides: Partial<Record<string, unk
   });
 }
 
+export async function createTestBusiness(overrides: Partial<Record<string, unknown>> = {}) {
+  return Business.create({
+    name: "Test Business",
+    slug: unique("test-business"),
+    ownerId: new mongoose.Types.ObjectId(),
+    status: "active",
+    ...overrides,
+  });
+}
+
 export async function createTestUser(
   role: UserRole,
   restaurantId?: mongoose.Types.ObjectId,
@@ -76,6 +87,10 @@ export function tokenFor(user: HydratedDocument<UserDoc>) {
     sub: user.id as string,
     role: user.role,
     restaurantId: user.restaurantId?.toString(),
+    // Phase 18, additive — mirrors auth.controller.ts's issueSession exactly, so tests exercising
+    // the new Business/Location authorization path can use this same established helper.
+    businessId: user.businessId?.toString(),
+    locationIds: user.locationIds?.map((id) => id.toString()),
   });
 }
 

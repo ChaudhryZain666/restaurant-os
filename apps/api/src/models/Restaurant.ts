@@ -73,6 +73,12 @@ const restaurantSchema = new Schema(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     status: { type: String, enum: ["pending", "active", "suspended"], default: "active" },
     settings: { type: restaurantSettingsSchema, default: () => ({}) },
+    // Phase 18 — a Restaurant is a physical location; Business is the owning brand/commercial
+    // entity that can have more than one. Every Restaurant gets one via migration
+    // (migrateToBusinessLocation.ts) or via createRestaurant going forward, so it's required in
+    // practice — but NOT `required: true` at the schema level, so a not-yet-migrated document
+    // (mid-rollout) can still be read/written without a validation error.
+    businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
   },
   { timestamps: true, toJSON: idTransform }
 );

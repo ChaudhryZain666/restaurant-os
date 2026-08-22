@@ -245,6 +245,88 @@ describe("restaurant creation (Phase 14 provisioning)", () => {
     const orphanedOwner = await User.findOne({ email: loserEmail });
     expect(orphanedOwner).toBeNull();
   });
+
+  it("(Phase 18) creates a Business alongside the Restaurant when businessId is omitted, and backfills the owner's businessId", async () => {
+    const ownerEmail = `biz-default-${Date.now()}@test.local`;
+    cleanupEmails.push(ownerEmail);
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ name: "Biz Default", slug: `biz-default-${Date.now()}`, owner: { name: "Biz Owner", email: ownerEmail } });
+
+    expect(res.status).toBe(201);
+    cleanupIds.push(res.body.data.restaurant.id);
+    expect(res.body.data.restaurant.businessId).toBeDefined();
+
+    const owner = await User.findById(res.body.data.restaurant.ownerId);
+    expect(owner!.businessId!.toString()).toBe(res.body.data.restaurant.businessId);
+
+    const { Business } = await import("../models/Business.js");
+    const business = await Business.findById(res.body.data.restaurant.businessId);
+    expect(business).not.toBeNull();
+    expect(business!.name).toBe("Biz Default");
+    expect(business!.ownerId.toString()).toBe(res.body.data.restaurant.ownerId);
+    await Business.deleteOne({ _id: business!._id });
+  });
+
+  it("(Phase 18) businessId provided: attaches a second location to an existing business, without creating a new owner", async () => {
+    const { Business } = await import("../models/Business.js");
+    const existingOwner = await createTestUser("restaurant_owner");
+    cleanupIds.push(existingOwner.id);
+    const business = await Business.create({
+      name: "Two-Location Co",
+      slug: `two-location-co-${Date.now()}`,
+      ownerId: existingOwner._id,
+      status: "active",
+    });
+
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ name: "Second Spot", slug: `second-spot-${Date.now()}`, businessId: business.id });
+
+    expect(res.status).toBe(201);
+    cleanupIds.push(res.body.data.restaurant.id);
+    expect(res.body.data.restaurant.businessId).toBe(business.id);
+    // Reuses the existing business's owner — no new User was created for this location.
+    expect(res.body.data.restaurant.ownerId).toBe(existingOwner.id);
+    const usersWithThisEmailPattern = await User.countDocuments({ restaurantId: res.body.data.restaurant.id });
+    expect(usersWithThisEmailPattern).toBe(0);
+
+    await Business.deleteOne({ _id: business._id });
+  });
+
+  it("(Phase 18) rejects businessId pointing at a business that doesn't exist", async () => {
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ name: "Ghost Business", slug: `ghost-business-${Date.now()}`, businessId: "6a0000000000000000000000" });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("(Phase 18) rejects providing both owner and businessId together", async () => {
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({
+        name: "Both Provided",
+        slug: `both-provided-${Date.now()}`,
+        businessId: "6a0000000000000000000000",
+        owner: { name: "X", email: `both-${Date.now()}@test.local` },
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("(Phase 18) rejects providing neither owner nor businessId", async () => {
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ name: "Neither Provided", slug: `neither-provided-${Date.now()}` });
+
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("restaurant readiness & publish (Phase 14)", () => {
