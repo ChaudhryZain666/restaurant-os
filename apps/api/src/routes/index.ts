@@ -32,6 +32,9 @@ import { businessDomainRouter } from "./businessDomain.routes.js";
 import { restaurantDomainRouter } from "./restaurantDomain.routes.js";
 import { businessAnalyticsRouter } from "./businessAnalytics.routes.js";
 import { businessPromotionRouter } from "./businessPromotion.routes.js";
+import { businessSubscriptionRouter } from "./businessSubscription.routes.js";
+import { billingWebhookRouter } from "./billingWebhook.routes.js";
+import { planRouter } from "./plan.routes.js";
 
 export const apiRouter = Router();
 
@@ -45,6 +48,9 @@ apiRouter.use("/businesses/:businessId/menu/:menuItemId/modifiers", businessModi
 apiRouter.use("/businesses/:businessId/domains", businessDomainRouter);
 apiRouter.use("/businesses/:businessId/analytics", businessAnalyticsRouter);
 apiRouter.use("/businesses/:businessId/promotions", businessPromotionRouter);
+apiRouter.use("/businesses/:businessId/subscription", businessSubscriptionRouter);
+apiRouter.use("/webhooks/billing", billingWebhookRouter);
+apiRouter.use("/plans", planRouter);
 apiRouter.use("/restaurants", restaurantRouter);
 apiRouter.use("/restaurants/:restaurantId/domains", restaurantDomainRouter);
 apiRouter.use("/restaurants/:restaurantId/categories", categoryRouter);

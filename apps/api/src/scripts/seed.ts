@@ -7,9 +7,52 @@ import { Business } from "../models/Business.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
+import { Plan } from "../models/Plan.js";
 
 async function seed() {
   await connectDB();
+
+  // Phase 24 — the Plan catalog itself. No real commercial pricing exists yet (pricing is
+  // deliberately left empty — see packages/types/src/types/plan.ts), so this seeds only the
+  // structural catalog entries a subscription can reference, upserted by code so re-running seed
+  // never creates duplicates or clobbers isActive if it's been changed by hand.
+  await Plan.findOneAndUpdate(
+    { code: "owner" },
+    {
+      $setOnInsert: {
+        code: "owner",
+        name: "Owner",
+        type: "OWNER",
+        pricing: [],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "agency" },
+    {
+      $setOnInsert: {
+        code: "agency",
+        name: "Agency",
+        type: "AGENCY",
+        pricing: [],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  console.log("[seed] ensured plan catalog (owner, agency)");
 
   const platformAdminEmail = "platform-admin@restaurant.local";
   let platformAdmin = await User.findOne({ email: platformAdminEmail });

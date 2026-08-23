@@ -118,7 +118,13 @@ const RESTAURANT_GROUPS: NavGroup[] = [
   },
   {
     label: "Settings",
-    items: [{ to: "/settings", label: "Settings", icon: IconSettings, permission: "restaurant.settings.manage" }],
+    items: [
+      { to: "/settings", label: "Settings", icon: IconSettings, permission: "restaurant.settings.manage" },
+      // Phase 24 — business-level regardless of location count (unlike Business Analytics/
+      // Promotions above), so this is never multiLocationOnly: every business has exactly one
+      // subscription whether it has one location or several.
+      { to: "/billing", label: "Billing", icon: IconWallet, permission: "billing.read" },
+    ],
   },
 ];
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
+  paginationQuerySchema,
   updateRestaurantStatusSchema,
   updateUserStatusSchema,
 } from "@restaurant/validation";
@@ -13,6 +14,7 @@ import {
   getPlatformOverview,
   getPlatformRestaurantDetail,
   listPlatformRestaurants,
+  listPlatformSubscriptions,
   listPlatformUsers,
   resendOwnerInvite,
   updateRestaurantStatus,
@@ -45,6 +47,12 @@ platformRouter.post(
   "/restaurants/:id/resend-owner-invite",
   requirePermission("platform.restaurants.manage"),
   asyncHandler(resendOwnerInvite)
+);
+platformRouter.get(
+  "/subscriptions",
+  requirePermission("platform.restaurants.manage"),
+  validateQuery(paginationQuerySchema),
+  asyncHandler(listPlatformSubscriptions)
 );
 platformRouter.get(
   "/users",

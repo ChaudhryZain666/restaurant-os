@@ -10,6 +10,7 @@ import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
 import { Table } from "../models/Table.js";
+import { Plan } from "../models/Plan.js";
 import { signAccessToken } from "../services/token.service.js";
 import { generateTableToken } from "../services/tableToken.service.js";
 import { redis } from "../config/redis.js";
@@ -164,6 +165,22 @@ export async function createTestTable(restaurantId: mongoose.Types.ObjectId, ove
     name: unique("Table"),
     capacity: 2,
     qrToken: generateTableToken(),
+    ...overrides,
+  });
+}
+
+export async function createTestPlan(overrides: Partial<Record<string, unknown>> = {}) {
+  return Plan.create({
+    code: unique("plan"),
+    name: "Test Plan",
+    type: "OWNER",
+    pricing: [],
+    entitlements: [
+      { key: "custom_domains", value: true },
+      { key: "business_analytics", value: true },
+      { key: "business_promotions", value: true },
+    ],
+    isActive: true,
     ...overrides,
   });
 }

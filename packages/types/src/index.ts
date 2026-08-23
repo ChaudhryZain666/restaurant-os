@@ -22,3 +22,5 @@ export * from "./types/delivery.js";
 export * from "./types/geocoding.js";
 export * from "./types/customer.js";
 export * from "./types/domain.js";
+export * from "./types/plan.js";
+export * from "./types/subscription.js";

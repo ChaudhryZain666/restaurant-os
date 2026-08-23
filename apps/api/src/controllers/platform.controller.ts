@@ -12,9 +12,13 @@ import { Order } from "../models/Order.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { DomainMapping } from "../models/DomainMapping.js";
+import { Subscription } from "../models/Subscription.js";
+import { Plan } from "../models/Plan.js";
+import { Business } from "../models/Business.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { recordAuditEvent } from "../services/audit.service.js";
+import type { PaginationQueryInput } from "@restaurant/validation";
 import { escapeRegex, paginateQuery } from "../utils/pagination.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
@@ -172,6 +176,15 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     DomainMapping.find({ locationId: restaurant._id }).sort({ createdAt: -1 }),
   ]);
 
+  // Phase 24 — read-only billing visibility for investigation, same rationale as domains above:
+  // platform_admin has no write access to billing (that stays owner-only via billing.manage,
+  // which platform_admin never holds). Provider IDs are stripped — they're an external billing
+  // system's internal reference, not something a support investigation needs to see.
+  const subscription = restaurant.businessId
+    ? await Subscription.findOne({ ownerType: "business", ownerId: restaurant.businessId }).sort({ createdAt: -1 })
+    : null;
+  const subscriptionPlan = subscription ? await Plan.findById(subscription.planId) : null;
+
   sendSuccess(res, {
     restaurant: restaurant.toJSON(),
     businessLocationCount,
@@ -179,6 +192,18 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
       const { verificationToken: _verificationToken, ...rest } = d.toJSON();
       return rest;
     }),
+    subscription: subscription
+      ? {
+          status: subscription.status,
+          billingInterval: subscription.billingInterval,
+          currentPeriodEnd: subscription.currentPeriodEnd,
+          trialEnd: subscription.trialEnd ?? null,
+          cancelAt: subscription.cancelAt ?? null,
+          provider: subscription.provider,
+          planCode: subscriptionPlan?.code ?? null,
+          planName: subscriptionPlan?.name ?? null,
+        }
+      : null,
     owner: owner
       ? {
           id: owner.id as string,
@@ -308,4 +333,46 @@ export async function updateUserStatus(req: Request, res: Response) {
   }
 
   sendSuccess(res, { user: user.toJSON() });
+}
+
+/**
+ * Phase 24 — the platform-wide counterpart to getPlatformRestaurantDetail's per-restaurant
+ * `subscription` field above: a read-only overview list, not a billing dashboard (no admin
+ * actions here — cancelling/changing a business's plan stays owner-only via billing.manage,
+ * which platform_admin never holds). Provider IDs are stripped for the same reason as above.
+ */
+export async function listPlatformSubscriptions(req: Request, res: Response) {
+  const { page, limit } = req.query as unknown as PaginationQueryInput;
+
+  const result = await paginateQuery(Subscription.find().sort({ createdAt: -1 }), { page, limit });
+
+  const businessIds = [...new Set(result.items.map((s) => s.ownerId.toString()))];
+  const planIds = [...new Set(result.items.map((s) => s.planId.toString()))];
+  const [businesses, plans] = await Promise.all([
+    Business.find({ _id: { $in: businessIds } }).select("name slug"),
+    Plan.find({ _id: { $in: planIds } }).select("code name"),
+  ]);
+  const businessById = new Map(businesses.map((b) => [b.id as string, b]));
+  const planById = new Map(plans.map((p) => [p.id as string, p]));
+
+  const items = result.items.map((s) => {
+    const business = s.ownerType === "business" ? businessById.get(s.ownerId.toString()) : undefined;
+    const plan = planById.get(s.planId.toString());
+    return {
+      id: s.id as string,
+      ownerType: s.ownerType,
+      businessName: business?.name,
+      businessSlug: business?.slug,
+      planCode: plan?.code,
+      planName: plan?.name,
+      status: s.status,
+      billingInterval: s.billingInterval,
+      currentPeriodEnd: s.currentPeriodEnd,
+      trialEnd: s.trialEnd ?? null,
+      provider: s.provider,
+      createdAt: (s as unknown as { createdAt: Date }).createdAt.toISOString(),
+    };
+  });
+
+  sendSuccess(res, { ...result, items });
 }

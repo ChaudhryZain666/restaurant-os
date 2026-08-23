@@ -8,7 +8,16 @@ import { AUDIT_ACTION_LABELS } from "../lib/auditLog";
 
 const PAGE_SIZE = 30;
 
-const TARGET_TYPE_OPTIONS: Array<AuditTargetType | "all"> = ["all", "order", "payment", "restaurant", "user", "domain", "promotion"];
+const TARGET_TYPE_OPTIONS: Array<AuditTargetType | "all"> = [
+  "all",
+  "order",
+  "payment",
+  "restaurant",
+  "user",
+  "domain",
+  "promotion",
+  "subscription",
+];
 const TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
   order: "Orders",
   payment: "Payments",
@@ -16,6 +25,7 @@ const TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
   user: "Users",
   domain: "Domains",
   promotion: "Promotions",
+  subscription: "Subscriptions",
 };
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";

@@ -1553,3 +1553,242 @@ small addition: business promotions applicable to the active location render rea
   analytics/promotions — the two features are independent; a custom domain still resolves to exactly
   one location, and that location's orders/promotions are counted through the same
   `restaurantId`-scoped path regardless of which domain a customer used to place them.
+
+## Phase 24 — Billing & Subscription Architecture
+
+Phase 24 builds the platform's own commercial billing/subscription **foundation** — a
+provider-agnostic domain model, lifecycle state machine, entitlement mechanism, and minimal owner-
+facing UX. It is explicitly **not** a real billing provider integration: no real prices are invented,
+no live credentials exist, and nothing in this phase gates any existing feature. This is a different
+financial domain from the existing customer-order `PaymentProvider`/`Payment` system (Phase 15) and
+is deliberately kept separate from it end to end.
+
+### Reconnaissance findings that shaped the design
+
+- No trial/plan/tier/subscription field existed anywhere before this phase — confirmed by full reads
+  of `Business.ts`/`Restaurant.ts` and a repo-wide grep. `Business` has exactly one `ownerId` (a
+  single required `User` ref); `User` has exactly one optional `businessId`. No `agencyId` exists
+  anywhere except a reserved, documented-as-unused field on `SupportTicket` — confirming there is no
+  Agency entity to build against yet (deferred to Phase 25).
+- `requireBusinessMatch()`/`requireTenantMatch()` are the only authorization primitives above
+  location scope, both keyed off `req.user.businessId` — there is no "above Business" concept.
+- `req.user` is populated directly from JWT claims with **no per-request DB read**
+  (`middleware/auth.ts`); claims are only re-derived at login/refresh. This independently confirms
+  the design conclusion below: subscription/entitlement status must never be embedded in a JWT claim
+  — it has to be checked live from the DB on every subscription-sensitive request, the same way every
+  other permission already is.
+- `PaymentProvider`/`MockPaymentProvider`/`PaymentWebhookEvent`/`payment.service.ts`'s
+  `processProviderEvent` and `refundPayment` are the exact, directly-mirrorable precedent for
+  provider abstraction, webhook idempotency, and atomic state-transition guarding — reused here as a
+  pattern, never as shared code, since payments and billing are different financial domains with
+  different lifecycles and different idempotency stores.
+
+### Core architectural decision — Subscription ownership
+
+A `Subscription` attaches to a polymorphic `{ownerType: "business" | "agency", ownerId}` pair, never
+directly to `Restaurant`/Location and never hard-coded to `Business` either. Today only
+`ownerType: "business"` is reachable through any real code path — no `Agency` collection exists to
+point `ownerType: "agency"` at yet. This is the one design choice that simultaneously satisfies every
+constraint the brief lists (never assumes one subscription = one restaurant/location; never bakes
+agency assumptions into `User.businessId`; stays structurally compatible with a future Agency entity)
+without speculatively building Agency membership now. **Phase 25 only needs to add the `Agency`
+model and start creating `ownerType: "agency"` subscriptions through this same, unchanged
+Subscription/lifecycle/entitlement code** — nothing here needs to change to support it.
+
+`Plan.type` (`"OWNER" | "AGENCY"`, the commercial tier) is a separate field from `Subscription.ownerType`
+(the structural pointer to who holds it) — they correlate in practice but are independently evolvable.
+
+### Domain model
+
+**`Plan`** (`apps/api/src/models/Plan.ts`) — a small, mostly-static catalog: `code` (unique), `name`,
+`type`, `pricing[]` (`{interval, amountCents?, currency?}` — `amountCents`/`currency` deliberately
+**absent** on every seeded entry; no real commercial pricing has been decided, and this is documented
+in-code as a pending business decision, never an invented number), `entitlements[]`
+(`{key, value: boolean|number|string}`), `isActive`.
+
+**`Subscription`** (`apps/api/src/models/Subscription.ts`) — `ownerType`, `ownerId`, `planId`,
+`status` (six states, see below), `billingInterval`, `currentPeriodStart`/`currentPeriodEnd`,
+`trialStart`/`trialEnd`, `cancelAt`/`cancelledAt`, `provider` (`"mock" | "internal"` —
+`"internal"` marks a platform-granted subscription with no real payment relationship: grandfathered
+pre-existing businesses, future comps — explicit and auditable, never a silent bypass),
+`providerCustomerId`/`providerSubscriptionId`. Two indexes:
+- `{ownerType, ownerId}` unique, partial on `status IN [trialing, active, past_due, cancelling]` — at
+  most one **live** subscription per owner at the DB level (mirrors `DomainMapping`'s "one active
+  domain per location" pattern). A cancelled/expired subscription is never deleted (financial
+  history, matching `Payment`/`Refund`'s convention); re-subscribing creates a **new** document,
+  never resurrecting the old one.
+- `{provider, providerSubscriptionId}` unique, partial on `providerSubscriptionId` being a string —
+  mirrors `Payment.ts`'s `{provider, providerRef}` pattern exactly: a real external subscription id
+  must never map to two different `Subscription` documents.
+
+**`BillingWebhookEvent`** — byte-for-byte the same shape as `PaymentWebhookEvent`
+(`provider, eventId, eventType, payload, processedAt, processingError`, unique `{provider, eventId}`),
+deliberately a **separate collection**, even though the shape is identical — financial domains stay
+unmixed.
+
+### Lifecycle state machine
+
+Six states, each serving a distinct purpose: `trialing, active, past_due, cancelling, cancelled,
+expired`. `expired` ("trial ended without converting") is kept distinct from `cancelled` ("a paid
+subscription was actually cancelled") since they mean different things to an owner and to future
+analytics. Valid transitions (`subscriptionStateMachine.ts`, enforced everywhere `status` is ever
+set — no raw `$set` on it anywhere else):
+
+```
+trialing   → active, cancelled, expired
+active     → cancelling, past_due, cancelled
+past_due   → active, cancelled
+cancelling → cancelled, active        // "active" = un-cancel before period end
+cancelled  → (terminal)
+expired    → (terminal)
+```
+
+**Cancellation is state-dependent, not one-size-fits-all**: only `active` supports the scheduled
+"stays usable until period end" path (`active → cancelling`) — a `trialing` subscription has never
+been charged and a `past_due` one has already failed to bill, so cancelling either of those is
+**immediate** (`→ cancelled` directly), regardless of the caller's `atPeriodEnd` intent; there is no
+paid period to let the customer keep using. Cancelling an already-`cancelling` subscription is
+rejected outright (it's already scheduled) rather than silently escalating to an immediate cancel.
+
+A provider-reported `"cancelled"` while our side is still `"trialing"` always maps to our
+`"expired"` — an involuntary trial expiry. A user-initiated cancel *during* a trial never goes
+through a webhook at all; it's the owner's direct `cancelSubscription()` call, applied immediately.
+
+### Billing provider abstraction
+
+Mirrors `apps/api/src/payments/` exactly, in a new, separate `apps/api/src/billing/` directory:
+`BillingProvider.ts` (interface: `createCustomer`, `createSubscription`, `retrieveSubscription`,
+`cancelSubscription`, `changePlan`, `verifyWebhookSignature`), `MockBillingProvider.ts` (real,
+deterministic in-memory implementation with a genuine HMAC-SHA256 `verifyWebhookSignature` — the
+only adapter that runs today), `index.ts` (`getBillingProvider()` lazy singleton, selected by
+`BILLING_PROVIDER` env var — `"mock"` is the only valid value this phase; the enum has no second
+option yet rather than a placeholder that would silently no-op if selected). No real provider stub
+file exists — a stub with no real code behind it would overstate what's done.
+
+The provider's own status vocabulary (`trialing|active|past_due|cancelled`) is deliberately smaller
+than our six-state `SubscriptionStatus` — `cancelling`/`expired` are business-side interpretations
+layered on top of what a provider actually reports, not states a provider itself needs to track.
+
+### Webhook / idempotency
+
+`POST /webhooks/billing/:provider` — top-level, not nested under `/businesses`, mirroring
+`/webhooks/payments/:provider` exactly: authenticated by signature, not a session, so no
+`requireAuth`. `processBillingProviderEvent` (`subscription.service.ts`) mirrors
+`processProviderEvent` exactly: `BillingWebhookEvent.create(...)` first as the atomic dedup check
+(duplicate key → already handled, return early) → look up `Subscription` by
+`{provider, providerSubscriptionId}` → resolve the target status → validate via
+`isValidSubscriptionTransition` (invalid → log + record `processingError`, never throw) → atomic
+`findOneAndUpdate({_id, status: {$ne: to}})` guard → mark `processedAt`. Unlike the payment webhook
+handler (which needs a transaction because it writes to two related documents, `Payment` and
+`Order`), this only ever writes one document, so a plain atomic guard is sufficient — closer to
+`refundPayment`'s single-document "reserve-then-call" shape.
+
+A **dev/test-only** driver, `POST /businesses/:businessId/subscription/mock-advance`
+(`billingMockDriver.controller.ts`, mounted only when `BILLING_PROVIDER=mock`), drives a real,
+self-signed event through this exact same path — the billing equivalent of the existing
+`payment.routes.ts` `mock-complete` endpoint. It is not a shortcut around signature verification; it
+signs its own payload and verifies it before processing, exactly as a genuine webhook delivery would.
+
+### Concurrency
+
+- **Duplicate webhook delivery**: closed by `BillingWebhookEvent`'s unique index.
+- **Same event processed twice / two simultaneous deliveries of the same event**: closed by the
+  `status: {$ne: to}` guard on the subscription update.
+- **Concurrent subscription-creation attempts for the same owner**: closed by the
+  `{ownerType, ownerId}` partial unique index — the loser's insert fails with a duplicate-key error,
+  caught and translated to a clean 409 (verified under true `Promise.all` concurrency in tests).
+- **Activation and cancellation arriving close together**: whichever transition the DB accepts first
+  wins; the loser is validated against the subscription's now-current status, so an out-of-order pair
+  either applies cleanly in whichever order actually lands, or is rejected as invalid from the state
+  that won — never silently corrupts state.
+
+### Entitlements
+
+`apps/api/src/services/entitlement.service.ts` — `getEntitlements(plan)` and `hasEntitlement(plan, key)`,
+plan-level only (no per-subscription override layer this phase). A boolean entitlement is
+present-and-true; a numeric one is present-and-positive (a limit of `0` means "not entitled," not
+"unlimited" — there is no unlimited sentinel); an absent key is always `false` — no implicit
+default-allow. Seeded with a small, honestly-justified starter set tied to features that already
+exist and are already business-scoped (`custom_domains`, `business_analytics`,
+`business_promotions`) — real, checkable keys with real values, but **deliberately not wired into
+any existing route's authorization chain this phase**, per the explicit instruction not to
+prematurely gate features that already work. Custom domains, business analytics, and business
+promotions all keep working exactly as before, completely ungated.
+
+### Migration / backward compatibility
+
+Every business created before this phase has **no** `Subscription` document at all — absence, not a
+wrong status. No existing route checks subscription state, so this was already safe as-is.
+`apps/api/src/scripts/backfillSubscriptions.ts` (`--dry-run` supported; logic in the importable
+`subscriptionBackfill.service.ts`) creates one `active`, `provider: "internal"` (grandfathered, no
+real billing relationship), `owner`-plan `Subscription` per business that has **zero** `Subscription`
+documents at all (live or historical) — naturally idempotent, a business with any subscription
+document is always skipped. `currentPeriodEnd` is set 100 years out and documented in-code as
+"grandfathered, not a real billing period," never left ambiguous. Run for real against the dev
+database (dry-run inspected first): 323 pre-existing businesses grandfathered, re-run confirmed a
+no-op.
+
+### API surface
+
+```
+GET  /businesses/:businessId/subscription                 billing.read  (owner+manager)
+POST /businesses/:businessId/subscription                 billing.manage (owner-only) — start (mock)
+POST /businesses/:businessId/subscription/cancel           billing.manage
+POST /businesses/:businessId/subscription/reactivate       billing.manage
+POST /businesses/:businessId/subscription/change-plan      billing.manage
+GET  /businesses/:businessId/subscription/entitlements     billing.read
+POST /businesses/:businessId/subscription/mock-advance     billing.manage — dev/test only, BILLING_PROVIDER=mock
+POST /webhooks/billing/:provider                           public, signature-verified only
+GET  /plans                                                 any authenticated user (read-only catalog)
+GET  /platform/subscriptions                                platform.restaurants.manage — read-only overview
+```
+
+No subscription id appears in the lifecycle URLs — a business has at most one live subscription (DB-
+enforced), so actions are addressed by `businessId` alone. Two new permissions, `billing.read`
+(owner + manager) and `billing.manage` (owner-only) — a dedicated pair rather than reusing
+`restaurant.settings.manage`, since billing is a higher-sensitivity domain where a manager plausibly
+should see status without being able to change it. `platform_admin` gets read-only visibility only
+(`GET /platform/subscriptions`, and a `subscription` field on the existing
+`GET /platform/restaurants/:id`, provider ids stripped) — no write access to any business's billing.
+
+### Audit logging
+
+New `AuditLog` target type `"subscription"` and actions `subscription.created`/`plan_changed`/
+`cancellation_requested`/`reactivated`/`cancelled` — human-initiated actions only. Webhook-driven
+status changes are **not** audited: `AuditLog.actorUserId` is a required field with no clean human
+actor for a system/provider-driven event, matching the existing precedent (`payment.service.ts`'s
+`processProviderEvent` doesn't call `recordAuditEvent` either, for the same reason). Since `AuditLog`
+stays `restaurantId`-scoped, a business-level billing event fans out one entry per `Restaurant` under
+the business — the same helper shape Phase 23 established for business-wide promotions.
+
+### Admin UX
+
+**Owner-facing**: `BillingPage.tsx` (`/billing`), never `multiLocationOnly` — every business has
+exactly one subscription regardless of location count, unlike Analytics/Promotions. Shows plan,
+status, trial/period dates, cancel/reactivate actions, and (mock-only) a "Start subscription" action
+when none exists, plus a labeled dev-only "Simulate trial conversion" button.
+
+**Platform-admin**: `PlatformSubscriptionsPage.tsx` replaces the earlier `/platform/subscriptions`
+placeholder stub with a real, read-only, paginated list (business, plan, status, period, provider) —
+no administrative actions.
+
+### What was deliberately deferred (explicit non-goals, per the brief)
+
+- Agency membership architecture, real POS/public API/AI/WhatsApp/SMS features, advanced CRM/loyalty,
+  final branding — all out of scope, unchanged from prior phases' non-goals.
+- A real billing provider integration — `MockBillingProvider` is the only adapter that runs; a real
+  one would implement the same `BillingProvider` interface, with `SafepayProvider.ts` as the
+  precedent for the verification a real financial adapter needs before it can be trusted.
+- Any real commercial pricing decision — `Plan.pricing` stays structurally ready but empty.
+- Wiring entitlements into any existing route's authorization — the mechanism is real and tested on
+  its own, not yet load-bearing anywhere.
+- Speculative usage limits, self-serve plan-comparison/pricing pages, invoicing/receipts.
+
+### Commercial decisions still required (explicitly not made by this phase)
+
+- Actual prices for `owner`/`agency` plans, in which currencies.
+- Final trial length (currently a configuration default, `TRIAL_PERIOD_DAYS=14`, not a commercial
+  decision).
+- Which real billing provider to integrate, and when.
+- Whether/how existing grandfathered (`provider: "internal"`) businesses ever transition onto a real
+  paid plan.

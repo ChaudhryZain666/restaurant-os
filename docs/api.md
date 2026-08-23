@@ -71,6 +71,18 @@
 
 /api/v1/restaurants/:restaurantId/loyalty/me         GET  The caller's loyalty account at this restaurant
 /api/v1/restaurants/:restaurantId/loyalty/me/history GET
+
+# Phase 24 — billing & subscription foundation (see docs/multi-tenant-storefront-architecture.md); no subscription id in the URL — a business has at most one live subscription (DB-enforced)
+/api/v1/businesses/:businessId/subscription               GET   requires requireBusinessMatch + billing.read (owner+manager)
+/api/v1/businesses/:businessId/subscription               POST  requires requireBusinessMatch + billing.manage (owner-only) — {planCode, billingInterval}, starts against the mock provider
+/api/v1/businesses/:businessId/subscription/cancel         POST  billing.manage — active->cancelling (scheduled) or trialing/past_due->cancelled (immediate)
+/api/v1/businesses/:businessId/subscription/reactivate      POST  billing.manage — cancelling->active
+/api/v1/businesses/:businessId/subscription/change-plan     POST  billing.manage — {planCode}
+/api/v1/businesses/:businessId/subscription/entitlements    GET   billing.read
+/api/v1/businesses/:businessId/subscription/mock-advance    POST  billing.manage — dev/test only, only mounted when BILLING_PROVIDER=mock; {status}
+/api/v1/webhooks/billing/:provider                          POST  Public — signature-verified only, mirrors /webhooks/payments/:provider
+/api/v1/plans                                                GET   Any authenticated user — read-only Plan catalog (no pricing guaranteed present)
+/api/v1/platform/subscriptions                               GET   platform.restaurants.manage — paginated, read-only, every business's subscription
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never
@@ -168,6 +180,19 @@ change, for no operational benefit over a one-click manual action. To make sure 
 a silent gap in practice, the admin `OrderPaymentAdmin` component surfaces an explicit "This order
 was cancelled but the payment hasn't been refunded yet" warning whenever a cancelled order's most
 recent payment is still `paid` or `partially_refunded`.
+
+## Billing (Phase 24 — platform subscriptions, separate from Payments above)
+
+`apps/api/src/billing/` defines a provider-agnostic `BillingProvider` interface — deliberately
+separate from `apps/api/src/payments/PaymentProvider.ts`. Customer-order payments and platform
+subscription billing are different financial domains with different lifecycles, different webhook
+streams (`BillingWebhookEvent` vs `PaymentWebhookEvent`), and different idempotency stores; mixing
+them would make either one harder to reason about safely. Only `MockBillingProvider` exists today
+(`BILLING_PROVIDER=mock`, the only valid value) — no real billing provider is integrated, and no
+real prices have been decided (`Plan.pricing` entries may have no `amountCents` at all). Webhooks
+land at `POST /webhooks/billing/:provider` (no auth — signature-verified instead, same shape as the
+payment webhook route). See `docs/multi-tenant-storefront-architecture.md`'s Phase 24 section for
+the full domain model, lifecycle state machine, entitlement mechanism, and migration design.
 
 ## Public API / integration readiness (Phase 16 — foundation audit, not built)
 

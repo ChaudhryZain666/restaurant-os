@@ -66,6 +66,17 @@ const envSchema = z.object({
   // DNS TXT lookups (apps/api/src/dns/NodeDnsVerifier.ts) and is the only provider that should ever
   // be selected in production.
   DNS_VERIFIER: z.enum(["mock", "node"]).default("mock"),
+
+  // Billing (Phase 24 platform subscriptions — deliberately separate from PAYMENT_PROVIDER above,
+  // a different financial domain). "mock" is the only valid value this phase and the only one that
+  // actually runs — see apps/api/src/billing/MockBillingProvider.ts. No real billing provider is
+  // integrated; this env var exists so a real one can be added later without touching any call site.
+  BILLING_PROVIDER: z.enum(["mock"]).default("mock"),
+  MOCK_BILLING_WEBHOOK_SECRET: z.string().default("mock-billing-webhook-secret-dev-only"),
+  // No final trial-length commercial decision has been made — this stays configuration, never a
+  // hardcoded literal in application code. 14 here is a working default for local development/
+  // testing only, not a commercial decision (see docs' Phase 24 "commercial decisions required" list).
+  TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).default(14),
 });
 
 const parsed = envSchema.safeParse(process.env);

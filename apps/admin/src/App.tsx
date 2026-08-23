@@ -34,6 +34,8 @@ import { PlatformUsersPage } from "./pages/PlatformUsersPage";
 import { SetupPage } from "./pages/SetupPage";
 import { LocationsPage } from "./pages/LocationsPage";
 import { PrintOrderPage } from "./pages/PrintOrderPage";
+import { BillingPage } from "./pages/BillingPage";
+import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
 
 const RESTAURANT_ROLES = [
   "restaurant_owner",
@@ -195,6 +197,14 @@ export function App() {
           }
         />
         <Route
+          path="/billing"
+          element={
+            <RequireAuth permission="billing.read">
+              <BillingPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/audit-log"
           element={
             <RequireAuth permission="restaurant.audit.read">
@@ -263,11 +273,7 @@ export function App() {
           path="/platform/subscriptions"
           element={
             <RequireAuth roles={["platform_admin"]}>
-              <PlaceholderPage
-                title="Subscriptions"
-                description="Billing plans, subscription status and payment history per restaurant."
-                whyItMatters="No billing or payment-processing integration exists yet anywhere on the platform — this depends on that being built first."
-              />
+              <PlatformSubscriptionsPage />
             </RequireAuth>
           }
         />

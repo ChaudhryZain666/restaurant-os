@@ -21,4 +21,9 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "promotion.activated": "Promotion activated",
   "promotion.deactivated": "Promotion deactivated",
   "promotion.deleted": "Promotion deleted",
+  "subscription.created": "Subscription started",
+  "subscription.plan_changed": "Subscription plan changed",
+  "subscription.cancellation_requested": "Subscription cancellation requested",
+  "subscription.reactivated": "Subscription reactivated",
+  "subscription.cancelled": "Subscription cancelled",
 };
