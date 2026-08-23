@@ -53,6 +53,14 @@
 /api/v1/restaurants/:restaurantId/menu/:menuItemId/modifiers/:id/override  PUT/DELETE    requires tenant match + restaurant.modifiers.write
 /api/v1/restaurants/:restaurantId/menu/overrides                          GET            requires tenant match + restaurant.menu.read — every override row for this location in one call: {categoryOverrides, menuItemOverrides, modifierGroupOverrides}
 
+# Phase 23 — business-wide analytics + promotions
+/api/v1/businesses/:businessId/analytics/overview  GET  ?from=&to=&locationIds= — requires requireBusinessMatch + restaurant.analytics.read — revenue/AOV grouped by currency, never blended
+/api/v1/businesses/:businessId/analytics/trends    GET  same auth — per-day series, currency-grouped
+/api/v1/businesses/:businessId/analytics/products  GET  same auth — business-wide top-selling items
+/api/v1/businesses/:businessId/promotions          GET/POST     requires requireBusinessMatch + restaurant.promotions.manage — POST body includes locationIds (the selected subset, validated to belong to this business)
+/api/v1/businesses/:businessId/promotions/:id      PATCH/DELETE same auth
+/api/v1/restaurants/:restaurantId/promotions       GET   also returns any business promotion targeting this location, tagged scope:"business" alongside this location's own scope:"location" rows (Phase 23) — unchanged otherwise
+
 /api/v1/restaurants/:restaurantId/orders          POST    Any authenticated customer (ordering FROM this restaurant)
 /api/v1/restaurants/:restaurantId/orders          GET     requires restaurant.orders.read + tenant match
 /api/v1/restaurants/:restaurantId/orders/:id/status PATCH requires restaurant.orders.manage + tenant match

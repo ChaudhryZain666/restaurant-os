@@ -39,6 +39,11 @@ interface NavItem {
   permission?: Permission;
   /** Only for the rare item with no single natural backend permission (Dashboard, Kitchen). */
   roles?: readonly UserRole[];
+  /** Phase 23 — hidden entirely at a single location, matching Locations/domain-switcher's own
+   *  established gating: a single-location owner's one location already IS the business, so
+   *  business-wide analytics/promotions would just be a confusing duplicate of the page they
+   *  already have. */
+  multiLocationOnly?: boolean;
 }
 
 interface NavGroup {
@@ -83,6 +88,13 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     label: "Marketing",
     items: [
       { to: "/promotions", label: "Promotions", icon: IconTag, permission: "restaurant.promotions.manage" },
+      {
+        to: "/business-promotions",
+        label: "Business Promotions",
+        icon: IconTag,
+        permission: "restaurant.promotions.manage",
+        multiLocationOnly: true,
+      },
       { to: "/loyalty", label: "Loyalty", icon: IconStar, permission: "restaurant.analytics.read" },
     ],
   },
@@ -90,6 +102,13 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     label: "Insights",
     items: [
       { to: "/analytics", label: "Analytics", icon: IconChart, permission: "restaurant.analytics.read" },
+      {
+        to: "/business-analytics",
+        label: "Business Analytics",
+        icon: IconChart,
+        permission: "restaurant.analytics.read",
+        multiLocationOnly: true,
+      },
       { to: "/audit-log", label: "Audit log", icon: IconClipboard, permission: "restaurant.audit.read" },
     ],
   },
@@ -158,13 +177,24 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
   ].join(" ");
 }
 
-function itemVisible(item: NavItem, role: UserRole): boolean {
+function itemVisible(item: NavItem, role: UserRole, isMultiLocation: boolean): boolean {
+  if (item.multiLocationOnly && !isMultiLocation) return false;
   if (item.permission) return roleHasPermission(role, item.permission);
   if (item.roles) return item.roles.includes(role);
   return true;
 }
 
-function NavGroupList({ groups, role, onNavigate }: { groups: NavGroup[]; role: UserRole; onNavigate?: () => void }) {
+function NavGroupList({
+  groups,
+  role,
+  isMultiLocation,
+  onNavigate,
+}: {
+  groups: NavGroup[];
+  role: UserRole;
+  isMultiLocation: boolean;
+  onNavigate?: () => void;
+}) {
   // Filtering here (rather than trusting each NavGroup array to already be role-correct) is what
   // keeps "what's shown in nav" and "what the route/API actually allows" from drifting apart again
   // — a restaurant_staff seeing a "Delivery" or "Analytics" link that 403s the moment they click it
@@ -172,7 +202,7 @@ function NavGroupList({ groups, role, onNavigate }: { groups: NavGroup[]; role: 
   // `permission` App.tsx's RequireAuth checks (rather than a second hand-maintained role list) is
   // what makes that class of drift structurally impossible now, not just fixed once.
   const visibleGroups = groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => itemVisible(item, role)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => itemVisible(item, role, isMultiLocation)) }))
     .filter((group) => group.items.length > 0);
 
   return (
@@ -253,11 +283,12 @@ export function Layout() {
           <NavGroupList
             groups={isKitchenStaff ? KITCHEN_GROUPS : RESTAURANT_GROUPS}
             role={user.role}
+            isMultiLocation={locations.length > 1}
             onNavigate={() => setMobileOpen(false)}
           />
         )}
         {isPlatformAdmin && user && (
-          <NavGroupList groups={PLATFORM_GROUPS} role={user.role} onNavigate={() => setMobileOpen(false)} />
+          <NavGroupList groups={PLATFORM_GROUPS} role={user.role} isMultiLocation={false} onNavigate={() => setMobileOpen(false)} />
         )}
       </div>
     </>

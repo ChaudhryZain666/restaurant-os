@@ -1385,3 +1385,171 @@ should be assumed working until they are:
   provider's automatic-certificate API), not application code, and entirely unbuilt here.
 - **A trusted-host / `trust proxy` decision**, only if per-domain sitemap generation (or any other
   future server-rendered, host-aware response) is ever built.
+
+## Phase 23 — Business-Wide Analytics & Promotions
+
+Phases 18-22 built a real Business → Location architecture, but every cross-cutting capability
+(analytics, promotions) stayed strictly single-location. Phase 23 adds a genuine business-wide
+layer on top — without touching the mature, working location-level systems underneath, which are
+completely unchanged.
+
+### Currency safety — the central constraint
+
+No FX-conversion infrastructure exists anywhere in this codebase (confirmed by reconnaissance
+before writing any code — a grep for `exchangeRate`/`conversion`/`forex` across the whole repo
+returns nothing real), and building one was explicitly out of scope for this phase. That leaves
+exactly one safe design: **monetary business-wide metrics are grouped by currency, never summed
+across currencies.** `BusinessAnalyticsOverview.revenueByCurrency`/`averageOrderValueByCurrency`
+are arrays of `{currency, amount}`, never a single blended number. Order-count metrics
+(`totalOrders`, orders-by-location) need no currency and are safely combined across every location
+regardless. A single-currency business (the common case) sees this collapse naturally to one array
+entry — no special-cased UI branch needed for that case.
+
+### Timezone safety
+
+Per-location "today"/"this week" (the existing `analytics.service.ts`, unchanged) was already
+timezone-correct. At the **business** level, "today" has no single well-defined meaning across
+locations in different timezones — rather than picking an arbitrary anchor-location convention
+that could silently mismatch what an owner sees on any individual location's own page, business
+analytics use an **explicit calendar date range** (`from`/`to`, default last 7 days) instead of
+relative labels. Each location's contribution to that range is computed using that location's own
+timezone (`getRestaurantAnalyticsForRange`/`getDailyTimeSeries`, both already timezone-aware), then
+combined — never a single shared UTC boundary applied to every location.
+
+### Business analytics — architecture
+
+New, narrow functions in `apps/api/src/services/analytics.service.ts` — `getRestaurantAnalyticsForRange`
+(totals for an arbitrary date range, one location) and `getTopSellingItemsForRange` (a higher
+per-location limit than the existing today/this-week `topSellingItems`, since business-wide product
+ranking re-ranks across every location's own top items afterward, and asking each location for only
+its own top 5 risks undercounting an item that's consistently popular everywhere but never anyone's
+single top-5). Deliberately **new** functions, not a generalization of the existing
+`getRestaurantAnalytics` — that function's today/this-week semantics stay byte-for-byte unchanged
+for the single-location dashboard.
+
+`apps/api/src/services/businessAnalytics.service.ts` (new) fans out to these once per location under
+a business (`Restaurant.find({businessId})`, the same "resolve every location, then fan out" shape
+already established by Phase 22's `invalidateMenuCacheForBusiness` and business-domain list) via
+`Promise.all` — a bounded, small fan-out matching a business's actual location count, not an N+1
+antipattern; `Order` has no `businessId` field to aggregate against directly, and no location's day
+boundary can be computed correctly without that location's own timezone, so a single cross-restaurant
+mega-aggregation couldn't be both correct and simple. Combines in JS: `totalOrders` (summed),
+`revenueByCurrency`/`averageOrderValueByCurrency` (grouped — the latter recomputed from
+currency-grouped revenue and paid-order-count totals, never an average of already-averaged
+per-location AOVs, which would silently misweight a small location the same as a large one),
+`byLocation` (per-location breakdown), day-bucketed `trends` (currency-grouped), and business-wide
+`topSellingItems` (grouped by `menuItemId` — accurate for a canonical, Phase-21-migrated shared-menu
+business, where the same item genuinely shares one id everywhere; a location still on the legacy
+per-location menu path won't have its items merged into a same-named canonical item elsewhere, a
+documented minor limitation).
+
+**API** (`/businesses/:businessId/analytics/{overview,trends,products}?from=&to=&locationIds=`):
+`requireBusinessMatch()` + the existing `restaurant.analytics.read` permission (already owner+manager,
+not staff/kitchen_staff) — no new RBAC entry. An optional `locationIds` filter is validated against
+the business's own `Restaurant.find({businessId})` set server-side; a requested id that doesn't
+belong to this business is silently dropped, never trusted to expand scope — the one place a
+client-supplied filter could otherwise leak cross-business data. `platform_admin` gets no route here
+(consistent with the Phase 22 domain-management decision) — investigative visibility, if ever needed,
+would extend the existing `/platform/restaurants/:id` endpoint, not this one.
+
+**Frontend**: `BusinessAnalyticsPage.tsx`, shown only when a business has more than one location
+(`Layout.tsx`'s new `multiLocationOnly` nav-item flag) — a single-location owner's one location
+already *is* the business, so the existing per-location `AnalyticsPage.tsx` remains untouched and
+sufficient. A date-range picker, one metric card per currency (never blended), a location-comparison
+table, a trend chart with a per-currency selector, and business-wide top products.
+
+### Business-wide promotions — architecture
+
+`Promotion` gained additive fields: `businessId?` (ref Business, indexed) and `locationIds?`
+(ref Restaurant, the selected subset) — a promotion is EITHER location-scoped (`restaurantId` set,
+the original shape, completely unchanged) OR business-scoped (`businessId` + non-empty `locationIds`,
+`restaurantId` unset). `restaurantId`'s requiredness became conditional
+(`required: function(){return !this.businessId}`), mirroring the exact Phase 21 `Category`/`MenuItem`
+precedent.
+
+**Two partial unique indexes** replace the single original one (mirroring `Payment.ts`'s established
+multi-partial-index pattern and Phase 22's `DomainMapping` precedent):
+- `{restaurantId, code}` unique, `partialFilterExpression: {restaurantId: {$exists: true}}` —
+  unchanged behavior for every existing location promotion.
+- `{businessId, code}` unique, `partialFilterExpression: {businessId: {$exists: true}}` — new;
+  prevents code reuse within one business's own business promotions, while different businesses
+  freely reuse the same code (matching how different restaurants' location promotions already could).
+
+Changing an index's *options* (adding a partial filter) does **not** get picked up automatically by
+Mongoose against an existing database — the old, differently-configured index with the same name
+keeps running until explicitly dropped and recreated (`collection.dropIndex`/`createIndex`, or
+`Model.syncIndexes()`). This was hit directly during this phase's own testing (a stale
+non-partial `restaurantId_1_code_1` index caused a real `E11000` collision between two *different*
+businesses' promotions, both correctly having `restaurantId: undefined`) and fixed for this dev
+database — **a real deployment migrating this schema change needs the same explicit index sync
+before the new partial-filtered uniqueness guarantee actually holds**, not just a code deploy.
+
+**`validatePromoCode(restaurantId, code, subtotal, businessId?)`** — the `businessId` parameter
+(new, optional; the order's own already-loaded `restaurant.businessId`, so no extra query at the
+one real call site) makes the lookup resolve BOTH a location promotion (`restaurantId` matches
+directly, unchanged) AND a business promotion (`businessId` matches **and** `locationIds` contains
+this *specific* `restaurantId` — an exact membership check, never "any location of the same
+business"). `recordPromoUsage` (the atomic conditional-`$inc` usage-limit guard) is **unchanged** —
+already keyed by the promotion's own `_id`, it works identically and safely for both scopes,
+including under concurrent redemption at two *different* locations of the same business promotion.
+
+**Conflict/precedence rules — explicit, not silently chosen:**
+- One promo code per order, unchanged — `createOrderSchema.promoCode` was always a single optional
+  string, never an array; this phase does not introduce multi-code stacking.
+- A business promotion and a location promotion at the same location never structurally conflict —
+  each code resolves to exactly one `Promotion` (mutually exclusive by the index design above); a
+  customer picks one code, never both. There is nothing to arbitrate.
+- A location removed from `locationIds` stops resolving there on the very next validation call (a
+  live lookup, never cached) — no special-case code needed.
+- A suspended location already 404s before promo validation is ever reached (`createOrder`'s
+  existing `Restaurant.findOne({_id, status:"active"})`) — falls out of existing behavior.
+- Editing a promotion after orders exist never retroactively changes those orders — `Order` already
+  stores an immutable discount snapshot at creation time, never live-linked to the `Promotion`
+  document. Confirmed unchanged, not new work.
+
+**API** (`/businesses/:businessId/promotions`, same `requireBusinessMatch()` +
+`restaurant.promotions.manage` pattern as categories/menu/domains): list/create/update/delete. Every
+submitted `locationIds` entry is validated server-side to actually belong to this business
+(`Restaurant.countDocuments`) — a foreign id is **rejected** (400), not silently dropped, unlike the
+analytics read-side filter: creating a promotion is a write, and an owner who genuinely selected 3
+locations but silently got 2 saved would be a real, confusing gap.
+
+The existing `/restaurants/:restaurantId/promotions` **list** endpoint is extended (create/
+update/delete for location promotions are completely unchanged) to also return any business
+promotion whose `locationIds` include this restaurant, tagged `scope: "business"` alongside this
+location's own `scope: "location"` rows — a location admin sees everything actually affecting their
+storefront, not just what they personally own. Editing a business promotion is only ever possible
+from the business-level page — the location-scoped PATCH/DELETE routes filter by `{_id, restaurantId}`,
+which a business-promotion document (no `restaurantId`) can never match, so this exclusion falls out
+of the existing query shape rather than needing an explicit check.
+
+**Audit logging** (new — promotions previously wrote none at all, a real pre-existing gap closed
+alongside this phase's new business-promotion logging): new `AuditLog` target type `"promotion"` and
+actions `promotion.created`/`updated`/`activated`/`deactivated`/`deleted`. A business promotion's
+audit event fans out **one entry per targeted location** (not a single business-scoped entry) so
+each location's own admin sees it in their own existing audit log view — the same
+`GET /restaurants/:restaurantId/audit-log` that already exists, unchanged.
+
+### Admin UX
+
+`BusinessPromotionsPage.tsx` (new, shown only when multi-location) follows `PromotionsPage.tsx`'s
+existing list/create/toggle/delete pattern plus a location checkbox multi-select against the
+business's own fetched location list — never free text. `PromotionsPage.tsx` itself gained one
+small addition: business promotions applicable to the active location render read-only, tagged
+"Business-wide," with "Manage from Business Promotions" instead of edit controls.
+
+### What was NOT built this phase (explicitly deferred)
+
+- A public API, POS integrations, AI features, driver/inventory/staff-scheduling management, native
+  apps, a full BI/reporting platform, agency/multi-business accounts, SaaS billing — all explicitly
+  out of scope per the brief.
+- Real FX conversion — the currency-grouping design above is the permanent shape for this phase, not
+  a stopgap; building real conversion would be a deliberate, separate future decision, not an
+  oversight here.
+- `platform_admin` business-analytics visibility — not built; the existing
+  `/platform/restaurants/:id` endpoint remains the investigative surface for platform admins, and
+  extending it to business-wide analytics was not requested this phase.
+- Per-domain sitemap / any interaction between custom domains (Phase 22) and business-wide
+  analytics/promotions — the two features are independent; a custom domain still resolves to exactly
+  one location, and that location's orders/promotions are counted through the same
+  `restaurantId`-scoped path regardless of which domain a customer used to place them.

@@ -126,7 +126,12 @@ export async function createOrder(req: Request, res: Response) {
 
   // A promo code is re-validated here from scratch — the same check the cart's "preview" call
   // already ran, but nothing from that earlier call (including its discount amount) is trusted.
-  const appliedPromo = promoCode ? await validatePromoCode(restaurantId, promoCode, subtotal) : null;
+  // businessId is passed through so a business-wide promotion (Phase 23) can resolve too, scoped
+  // to exactly this restaurant being in that promotion's own locationIds — never "any location of
+  // the same business."
+  const appliedPromo = promoCode
+    ? await validatePromoCode(restaurantId, promoCode, subtotal, restaurant.businessId?.toString())
+    : null;
   const promoDiscount = appliedPromo?.discount ?? 0;
 
   // 1 point = 1 currency unit discount, applied before tax

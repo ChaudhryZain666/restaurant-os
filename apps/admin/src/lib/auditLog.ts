@@ -16,4 +16,9 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "domain.activated": "Custom domain activated",
   "domain.deactivated": "Custom domain deactivated",
   "domain.removed": "Custom domain removed",
+  "promotion.created": "Promotion created",
+  "promotion.updated": "Promotion updated",
+  "promotion.activated": "Promotion activated",
+  "promotion.deactivated": "Promotion deactivated",
+  "promotion.deleted": "Promotion deleted",
 };

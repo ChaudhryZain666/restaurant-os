@@ -1,5 +1,5 @@
 import mongoose, { Types } from "mongoose";
-import type { DailyAnalyticsPoint, RestaurantAnalytics } from "@restaurant/types";
+import type { AnalyticsTopItem, DailyAnalyticsPoint, RestaurantAnalytics } from "@restaurant/types";
 import { Order } from "../models/Order.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -41,7 +41,7 @@ export async function timezoneAwareDayStart(date: Date, timezone: string): Promi
  *  pre-aggregated daily rollup collection would only be justified past a scale (many years of
  *  daily-granularity queries across many restaurants) this platform is nowhere near yet; adding
  *  one now would be speculative complexity with no current need to justify it. */
-const MAX_RANGE_DAYS = 92;
+export const MAX_RANGE_DAYS = 92;
 
 interface FacetResult {
   ordersToday: Array<{ count: number }>;
@@ -173,4 +173,130 @@ export async function getDailyTimeSeries(restaurantId: string, from: Date, to: D
     points.push({ date: key, orders: row?.orders ?? 0, revenue: Math.round((row?.revenue ?? 0) * 100) / 100 });
   }
   return points;
+}
+
+export interface RangeAnalytics {
+  orders: number;
+  revenue: number;
+  /** Count of paid, non-cancelled orders — the denominator behind `averageOrderValue`. Exposed
+   *  separately (not just the ratio) so callers combining several locations' revenue into one
+   *  currency-grouped total can recompute a correct weighted average instead of averaging
+   *  already-averaged per-location numbers (which would silently misweight small vs large
+   *  locations). */
+  paidOrderCount: number;
+  averageOrderValue: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  topSellingItems: AnalyticsTopItem[];
+}
+
+interface RangeFacetResult {
+  orders: Array<{ count: number }>;
+  revenue: Array<{ total: number; count: number }>;
+  completedOrders: Array<{ count: number }>;
+  cancelledOrders: Array<{ count: number }>;
+  topSellingItems: Array<{ _id: Types.ObjectId; name: string; quantitySold: number }>;
+}
+
+/**
+ * Phase 23 — business-wide analytics fans out to this per-location function once per location
+ * under a business (see businessAnalytics.service.ts), never a single mega-aggregation across
+ * restaurantIds: each location's OWN timezone determines its own day boundaries for the SAME
+ * requested calendar-date range, so a shared UTC boundary would be wrong for at least one location
+ * whenever timezones differ. Deliberately a new function rather than a generalization of
+ * getRestaurantAnalytics above — that function's today/this-week semantics stay byte-for-byte
+ * unchanged for the existing single-location dashboard; this one only serves the new, separate
+ * range-based need. `from`/`to` are both calendar-date instants, inclusive on both ends.
+ */
+export async function getRestaurantAnalyticsForRange(
+  restaurantId: string,
+  from: Date,
+  to: Date,
+  timezone: string
+): Promise<RangeAnalytics> {
+  const restaurantObjectId = new Types.ObjectId(restaurantId);
+  const rangeStart = await timezoneAwareDayStart(from, timezone);
+  const dayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+  const rangeEndExclusive = await timezoneAwareDayStart(dayAfterTo, timezone);
+
+  const [result] = await Order.aggregate<RangeFacetResult>([
+    { $match: { restaurantId: restaurantObjectId, createdAt: { $gte: rangeStart, $lt: rangeEndExclusive } } },
+    {
+      $facet: {
+        orders: [{ $count: "count" }],
+        revenue: [
+          { $match: { paymentStatus: "paid", status: { $ne: "cancelled" } } },
+          { $group: { _id: null, total: { $sum: "$total" }, count: { $sum: 1 } } },
+        ],
+        completedOrders: [{ $match: { status: "completed" } }, { $count: "count" }],
+        cancelledOrders: [{ $match: { status: "cancelled" } }, { $count: "count" }],
+        topSellingItems: [
+          { $match: { status: { $ne: "cancelled" } } },
+          { $unwind: "$items" },
+          {
+            $group: {
+              _id: "$items.menuItemId",
+              name: { $first: "$items.name" },
+              quantitySold: { $sum: "$items.quantity" },
+            },
+          },
+          { $sort: { quantitySold: -1 } },
+          { $limit: 5 },
+        ],
+      },
+    },
+  ]);
+
+  const revenue = result.revenue[0];
+  const revenueTotal = revenue?.total ?? 0;
+  const paidOrderCount = revenue?.count ?? 0;
+
+  return {
+    orders: result.orders[0]?.count ?? 0,
+    revenue: Math.round(revenueTotal * 100) / 100,
+    paidOrderCount,
+    averageOrderValue: paidOrderCount > 0 ? Math.round((revenueTotal / paidOrderCount) * 100) / 100 : 0,
+    completedOrders: result.completedOrders[0]?.count ?? 0,
+    cancelledOrders: result.cancelledOrders[0]?.count ?? 0,
+    topSellingItems: result.topSellingItems.map((i) => ({
+      menuItemId: i._id.toString(),
+      name: i.name,
+      quantitySold: i.quantitySold,
+    })),
+  };
+}
+
+/**
+ * Dedicated top-items query for the business-wide products endpoint — a higher per-location
+ * `limit` than getRestaurantAnalyticsForRange's fixed top-5 (business analytics re-ranks across
+ * every location's own top items afterward; asking each location for only its own top 5 risks
+ * undercounting an item that's, say, consistently 6th-8th everywhere but genuinely more popular
+ * business-wide than a true top-5 item at one single location).
+ */
+export async function getTopSellingItemsForRange(
+  restaurantId: string,
+  from: Date,
+  to: Date,
+  timezone: string,
+  limit: number
+): Promise<AnalyticsTopItem[]> {
+  const restaurantObjectId = new Types.ObjectId(restaurantId);
+  const rangeStart = await timezoneAwareDayStart(from, timezone);
+  const dayAfterTo = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+  const rangeEndExclusive = await timezoneAwareDayStart(dayAfterTo, timezone);
+
+  const rows = await Order.aggregate<{ _id: Types.ObjectId; name: string; quantitySold: number }>([
+    {
+      $match: {
+        restaurantId: restaurantObjectId,
+        createdAt: { $gte: rangeStart, $lt: rangeEndExclusive },
+        status: { $ne: "cancelled" },
+      },
+    },
+    { $unwind: "$items" },
+    { $group: { _id: "$items.menuItemId", name: { $first: "$items.name" }, quantitySold: { $sum: "$items.quantity" } } },
+    { $sort: { quantitySold: -1 } },
+    { $limit: limit },
+  ]);
+  return rows.map((r) => ({ menuItemId: r._id.toString(), name: r.name, quantitySold: r.quantitySold }));
 }

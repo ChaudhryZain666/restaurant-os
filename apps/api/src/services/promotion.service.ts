@@ -11,14 +11,29 @@ function roundCurrency(amount: number): number {
  * both the customer-facing "check my code" preview and createOrder itself, so a code can never be
  * accepted at preview time and rejected (or priced differently) when the order is actually placed.
  * Throws ApiError.badRequest with a customer-facing reason on any invalid/inapplicable code.
+ *
+ * Phase 23 — `businessId` (optional, the order's own restaurant.businessId, already loaded at the
+ * one real call site so this costs no extra query) makes the lookup resolve BOTH a location
+ * promotion (restaurantId matches directly, unchanged from before this phase) AND a business
+ * promotion (businessId matches AND `locationIds` contains this specific restaurantId — an exact
+ * membership check, not "any location of the same business"). A business promotion targeting
+ * Location A must never resolve at Location B of the same business: the `locationIds: restaurantId`
+ * clause is what enforces that, and it's tested explicitly (promotion.controller.test.ts).
  */
 export async function validatePromoCode(
   restaurantId: string,
   rawCode: string,
-  subtotal: number
+  subtotal: number,
+  businessId?: string
 ): Promise<{ promotion: PromotionDoc & { id: string }; discount: number }> {
   const code = rawCode.trim().toUpperCase();
-  const promotion = await Promotion.findOne({ restaurantId, code });
+  const promotion = await Promotion.findOne({
+    code,
+    $or: [
+      { restaurantId },
+      ...(businessId ? [{ businessId, locationIds: restaurantId }] : []),
+    ],
+  });
   if (!promotion) throw ApiError.badRequest("Invalid promo code");
   if (!promotion.isActive) throw ApiError.badRequest("This promo code is no longer active");
 

@@ -21,9 +21,14 @@ export const AUDIT_ACTIONS = [
   "domain.activated",
   "domain.deactivated",
   "domain.removed",
+  "promotion.created",
+  "promotion.updated",
+  "promotion.activated",
+  "promotion.deactivated",
+  "promotion.deleted",
 ] as const;
 
-export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain"] as const;
+export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion"] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];

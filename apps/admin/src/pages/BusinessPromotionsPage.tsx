@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Promotion, PromotionType } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useActiveLocationId } from "../context/LocationContext";
-import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
+import { useAuth } from "../context/AuthContext";
+import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { IconTag } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -17,10 +16,11 @@ interface Draft {
   minOrderAmount: string;
   endDate: string;
   usageLimit: string;
+  locationIds: string[];
 }
 
 function emptyDraft(): Draft {
-  return { code: "", name: "", type: "percentage", value: "", minOrderAmount: "0", endDate: "", usageLimit: "" };
+  return { code: "", name: "", type: "percentage", value: "", minOrderAmount: "0", endDate: "", usageLimit: "", locationIds: [] };
 }
 
 function statusOf(promo: Promotion): { label: string; tone: "success" | "neutral" | "warning" | "danger" } {
@@ -30,9 +30,17 @@ function statusOf(promo: Promotion): { label: string; tone: "success" | "neutral
   return { label: "Active", tone: "success" };
 }
 
-export function PromotionsPage() {
-  const restaurantId = useActiveLocationId();
-  const currency = useRestaurantCurrency();
+/**
+ * Phase 23 — one promotion, owner-selected subset of the business's own locations. Shown only when
+ * a business has more than one location (see Layout.tsx's nav gating); location-only promotions
+ * keep working exactly as before, managed from the existing per-location PromotionsPage.tsx, which
+ * now also shows (read-only) any business promotion targeting that location.
+ */
+export function BusinessPromotionsPage() {
+  const { user } = useAuth();
+  const businessId = user!.businessId!;
+  const { locations } = useActiveLocation();
+
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +50,7 @@ export function PromotionsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function reload() {
-    const { promotions } = await apiClient.request<{ promotions: Promotion[] }>(`/restaurants/${restaurantId}/promotions`);
+    const { promotions } = await apiClient.request<{ promotions: Promotion[] }>(`/businesses/${businessId}/promotions`);
     setPromotions(promotions);
   }
 
@@ -52,12 +60,23 @@ export function PromotionsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  function toggleLocation(locationId: string) {
+    setDraft((d) => ({
+      ...d,
+      locationIds: d.locationIds.includes(locationId) ? d.locationIds.filter((id) => id !== locationId) : [...d.locationIds, locationId],
+    }));
+  }
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (draft.locationIds.length === 0) {
+      setError("Select at least one location");
+      return;
+    }
     setSaving(true);
     try {
-      await apiClient.request(`/restaurants/${restaurantId}/promotions`, {
+      await apiClient.request(`/businesses/${businessId}/promotions`, {
         method: "POST",
         body: {
           code: draft.code,
@@ -67,6 +86,7 @@ export function PromotionsPage() {
           minOrderAmount: Number(draft.minOrderAmount) || 0,
           endDate: draft.endDate ? new Date(draft.endDate).toISOString() : undefined,
           usageLimit: draft.usageLimit ? Number(draft.usageLimit) : undefined,
+          locationIds: draft.locationIds,
         },
       });
       setDraft(emptyDraft());
@@ -83,7 +103,7 @@ export function PromotionsPage() {
     setError(null);
     setBusyId(promo.id);
     try {
-      await apiClient.request(`/restaurants/${restaurantId}/promotions/${promo.id}`, {
+      await apiClient.request(`/businesses/${businessId}/promotions/${promo.id}`, {
         method: "PATCH",
         body: { isActive: !promo.isActive },
       });
@@ -100,7 +120,7 @@ export function PromotionsPage() {
     setError(null);
     setBusyId(promo.id);
     try {
-      await apiClient.request(`/restaurants/${restaurantId}/promotions/${promo.id}`, { method: "DELETE" });
+      await apiClient.request(`/businesses/${businessId}/promotions/${promo.id}`, { method: "DELETE" });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -115,14 +135,14 @@ export function PromotionsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Promotions</h1>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Business Promotions</h1>
           <p className="text-sm text-muted">
-            Create discount codes customers can apply at checkout. Every code is validated and priced server-side —
-            nothing here can be tricked into applying a discount your rules don't actually allow.
+            One code, applied at exactly the locations you select — never at any other location, even one of your
+            own. Every code is validated and priced server-side.
           </p>
         </div>
         <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "New promotion"}
+          {showForm ? "Cancel" : "New business promotion"}
         </Button>
       </div>
 
@@ -134,7 +154,7 @@ export function PromotionsPage() {
 
       {showForm && (
         <Card>
-          <h2 className="mb-3 font-heading text-lg font-medium text-foreground">New promotion</h2>
+          <h2 className="mb-3 font-heading text-lg font-medium text-foreground">New business promotion</h2>
           <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               Code
@@ -142,7 +162,7 @@ export function PromotionsPage() {
                 required
                 value={draft.code}
                 onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
-                placeholder="e.g. WELCOME10"
+                placeholder="e.g. WEEKEND20"
                 className={inputClass}
               />
             </label>
@@ -152,7 +172,7 @@ export function PromotionsPage() {
                 required
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="e.g. New customer 10% off"
+                placeholder="e.g. Weekend 20% off"
                 className={inputClass}
               />
             </label>
@@ -202,7 +222,7 @@ export function PromotionsPage() {
                 className={inputClass}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            <label className="flex flex-col gap-1 text-sm">
               Expires (optional)
               <input
                 type="date"
@@ -211,8 +231,17 @@ export function PromotionsPage() {
                 className={`max-w-[10rem] ${inputClass}`}
               />
             </label>
+            <fieldset className="flex flex-col gap-1.5 rounded-lg border border-border p-3 text-sm sm:col-span-2">
+              <legend className="px-1 text-sm font-medium text-foreground">Locations</legend>
+              {locations.map((loc) => (
+                <label key={loc.id} className="flex items-center gap-2">
+                  <input type="checkbox" checked={draft.locationIds.includes(loc.id)} onChange={() => toggleLocation(loc.id)} />
+                  {loc.name}
+                </label>
+              ))}
+            </fieldset>
             <Button type="submit" size="sm" disabled={saving} className="self-start sm:col-span-2">
-              {saving ? "Creating..." : "Create promotion"}
+              {saving ? "Creating..." : "Create business promotion"}
             </Button>
           </form>
         </Card>
@@ -221,14 +250,17 @@ export function PromotionsPage() {
       {promotions.length === 0 ? (
         <EmptyState
           icon={<IconTag className="h-6 w-6" />}
-          title="No promotions yet"
-          description="Create a code like WELCOME10 to give customers a reason to order direct."
+          title="No business promotions yet"
+          description="Create a code that applies across the locations you choose."
         />
       ) : (
         <Card>
           <ul className="flex flex-col divide-y divide-border">
             {promotions.map((promo) => {
               const status = statusOf(promo);
+              const targetNames = (promo.locationIds ?? [])
+                .map((id) => locations.find((l) => l.id === id)?.name ?? id)
+                .join(", ");
               return (
                 <li key={promo.id} className="flex flex-wrap items-center gap-3 py-3">
                   <div className="min-w-[10rem] flex-1">
@@ -238,37 +270,31 @@ export function PromotionsPage() {
                       </span>
                       {promo.name}
                       <Badge tone={status.tone}>{status.label}</Badge>
-                      {promo.scope === "business" && <Badge tone="info">Business-wide</Badge>}
                     </p>
                     <p className="text-xs text-muted">
-                      {promo.type === "percentage" ? `${promo.value}% off` : `${formatCurrency(promo.value, currency)} off`}
-                      {promo.minOrderAmount > 0 ? ` · min. order ${formatCurrency(promo.minOrderAmount, currency)}` : ""}
+                      {promo.type === "percentage" ? `${promo.value}% off` : `${promo.value} off`}
                       {" · "}
                       {promo.usageCount} use{promo.usageCount === 1 ? "" : "s"}
                       {promo.usageLimit ? ` of ${promo.usageLimit}` : ""}
                       {promo.endDate ? ` · expires ${new Date(promo.endDate).toLocaleDateString()}` : ""}
+                      {" · "}
+                      Applies at: {targetNames || "—"}
                     </p>
                   </div>
-                  {promo.scope === "business" ? (
-                    <span className="text-xs text-muted">Manage from Business Promotions</span>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => toggleActive(promo)}
-                        disabled={busyId === promo.id}
-                        className="text-sm font-medium text-foreground/70 hover:text-foreground hover:underline"
-                      >
-                        {promo.isActive ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        onClick={() => remove(promo)}
-                        disabled={busyId === promo.id}
-                        className="text-sm font-medium text-danger hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                  <button
+                    onClick={() => toggleActive(promo)}
+                    disabled={busyId === promo.id}
+                    className="text-sm font-medium text-foreground/70 hover:text-foreground hover:underline"
+                  >
+                    {promo.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                  <button
+                    onClick={() => remove(promo)}
+                    disabled={busyId === promo.id}
+                    className="text-sm font-medium text-danger hover:underline"
+                  >
+                    Delete
+                  </button>
                 </li>
               );
             })}

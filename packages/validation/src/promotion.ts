@@ -36,3 +36,22 @@ export const validatePromoSchema = z.object({
   subtotal: z.number().nonnegative(),
 });
 export type ValidatePromoInput = z.infer<typeof validatePromoSchema>;
+
+// Phase 23 — business-wide promotions. Same base fields as a location promotion, plus the
+// selected-locations list (the reason a business promotion exists at all — see
+// docs/multi-tenant-storefront-architecture.md's Phase 23 section for the scope model).
+const locationIdsField = z.array(z.string().min(1)).min(1, "Select at least one location");
+
+export const businessPromotionSchema = promotionBaseSchema
+  .extend({ locationIds: locationIdsField })
+  .refine((v) => v.type !== "percentage" || v.value <= 100, PERCENTAGE_ISSUE);
+export type BusinessPromotionInput = z.infer<typeof businessPromotionSchema>;
+
+export const updateBusinessPromotionSchema = promotionBaseSchema
+  .extend({ locationIds: locationIdsField })
+  .partial()
+  .refine((v) => {
+    if (v.type !== "percentage" || v.value === undefined) return true;
+    return v.value <= 100;
+  }, PERCENTAGE_ISSUE);
+export type UpdateBusinessPromotionInput = z.infer<typeof updateBusinessPromotionSchema>;

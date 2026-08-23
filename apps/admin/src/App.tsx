@@ -13,10 +13,12 @@ import { CustomersPage } from "./pages/CustomersPage";
 import { LoyaltyPage } from "./pages/LoyaltyPage";
 import { StaffPage } from "./pages/StaffPage";
 import { PromotionsPage } from "./pages/PromotionsPage";
+import { BusinessPromotionsPage } from "./pages/BusinessPromotionsPage";
 import { OrdersManagementPage } from "./pages/OrdersManagementPage";
 import { KitchenPage } from "./pages/KitchenPage";
 import { TablesPage } from "./pages/TablesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { RestaurantSupportPage } from "./pages/RestaurantSupportPage";
 import { RestaurantTicketDetailPage } from "./pages/RestaurantTicketDetailPage";
@@ -129,6 +131,14 @@ export function App() {
           }
         />
         <Route
+          path="/business-promotions"
+          element={
+            <RequireAuth permission="restaurant.promotions.manage">
+              <BusinessPromotionsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/loyalty"
           element={
             <RequireAuth permission="restaurant.analytics.read">
@@ -141,6 +151,14 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.analytics.read">
               <AnalyticsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/business-analytics"
+          element={
+            <RequireAuth permission="restaurant.analytics.read">
+              <BusinessAnalyticsPage />
             </RequireAuth>
           }
         />

@@ -39,7 +39,8 @@ const domainMappingSchema = new Schema(
 // mappings for the same location. A pending/verified row for a *different* candidate hostname is
 // still allowed to coexist with the currently-active one (the domain-replacement flow).
 domainMappingSchema.index({ locationId: 1 }, { unique: true, partialFilterExpression: { status: "active" } });
-domainMappingSchema.index({ businessId: 1 });
+// businessId's own index (for the business-wide domain list) comes from the field-level
+// `index: true` above — a separate schema.index({businessId:1}) call here would be a duplicate.
 
 export type DomainMappingDoc = InferSchemaType<typeof domainMappingSchema>;
 export const DomainMapping = model<DomainMappingDoc>("DomainMapping", domainMappingSchema);

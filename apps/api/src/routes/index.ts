@@ -30,6 +30,8 @@ import { businessMenuRouter } from "./businessMenu.routes.js";
 import { businessModifierRouter } from "./businessModifier.routes.js";
 import { businessDomainRouter } from "./businessDomain.routes.js";
 import { restaurantDomainRouter } from "./restaurantDomain.routes.js";
+import { businessAnalyticsRouter } from "./businessAnalytics.routes.js";
+import { businessPromotionRouter } from "./businessPromotion.routes.js";
 
 export const apiRouter = Router();
 
@@ -41,6 +43,8 @@ apiRouter.use("/businesses/:businessId/categories", businessCategoryRouter);
 apiRouter.use("/businesses/:businessId/menu", businessMenuRouter);
 apiRouter.use("/businesses/:businessId/menu/:menuItemId/modifiers", businessModifierRouter);
 apiRouter.use("/businesses/:businessId/domains", businessDomainRouter);
+apiRouter.use("/businesses/:businessId/analytics", businessAnalyticsRouter);
+apiRouter.use("/businesses/:businessId/promotions", businessPromotionRouter);
 apiRouter.use("/restaurants", restaurantRouter);
 apiRouter.use("/restaurants/:restaurantId/domains", restaurantDomainRouter);
 apiRouter.use("/restaurants/:restaurantId/categories", categoryRouter);
