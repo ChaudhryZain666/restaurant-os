@@ -29,6 +29,7 @@ import { ownerInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { computeReadiness } from "../services/restaurantReadiness.service.js";
 import { getRestaurantAnalytics } from "../services/analytics.service.js";
+import { sumAmountsByCurrency } from "../services/businessAnalytics.service.js";
 
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -377,6 +378,41 @@ export async function listPlatformSubscriptions(req: Request, res: Response) {
   });
 
   sendSuccess(res, { ...result, items });
+}
+
+/**
+ * Phase 27 — GET /platform/revenue: a real, currency-grouped MRR figure, never a fake blended
+ * total. Only LIVE, actually-billing statuses count toward MRR (active/past_due/cancelling — a
+ * cancelling subscription is still paying until its period ends; trialing has never been charged,
+ * so it's reported separately as a pipeline count, not revenue). Yearly plans are normalized to a
+ * monthly figure (amount / 12) so a mix of monthly/yearly subscribers on the same plan still sums
+ * correctly within their own currency. Reuses businessAnalytics.service.ts's sumAmountsByCurrency
+ * — the same "group by currency, never blend" convention Phase 23 established, not a second one.
+ */
+export async function getPlatformRevenue(_req: Request, res: Response) {
+  const liveSubscriptions = await Subscription.find({ status: { $in: ["active", "past_due", "cancelling"] } }).select(
+    "planId billingInterval status"
+  );
+  const trialingCount = await Subscription.countDocuments({ status: "trialing" });
+
+  const planIds = [...new Set(liveSubscriptions.map((s) => s.planId.toString()))];
+  const plans = await Plan.find({ _id: { $in: planIds } }).select("pricing");
+  const planById = new Map(plans.map((p) => [p.id as string, p]));
+
+  const monthlyAmounts: Array<{ currency: string; amount: number }> = [];
+  for (const sub of liveSubscriptions) {
+    const plan = planById.get(sub.planId.toString());
+    const pricing = plan?.pricing.find((p) => p.interval === sub.billingInterval);
+    if (!pricing?.amountCents || !pricing.currency) continue; // no real price configured — excluded, never guessed
+    const monthlyCents = sub.billingInterval === "yearly" ? pricing.amountCents / 12 : pricing.amountCents;
+    monthlyAmounts.push({ currency: pricing.currency, amount: monthlyCents / 100 });
+  }
+
+  sendSuccess(res, {
+    mrrByCurrency: sumAmountsByCurrency(monthlyAmounts),
+    liveSubscriptionCount: liveSubscriptions.length,
+    trialingCount,
+  });
 }
 
 /**

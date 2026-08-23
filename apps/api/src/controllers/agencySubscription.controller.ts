@@ -1,15 +1,19 @@
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
-import type { ChangeSubscriptionPlanInput, CreateSubscriptionInput } from "@restaurant/validation";
+import type { ChangeSubscriptionPlanInput, CreateSubscriptionInput, PaginationQueryInput } from "@restaurant/validation";
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import type { SubscriptionDoc } from "../models/Subscription.js";
+import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
+import { paginateQuery } from "../utils/pagination.js";
+import { env } from "../config/env.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
 import { getEntitlements } from "../services/entitlement.service.js";
 import {
   cancelAgencySubscription,
   changeAgencySubscriptionPlan,
+  createCheckoutSessionForAgency,
   createSubscriptionForAgency,
   getSubscriptionForAgency,
   reactivateAgencySubscription,
@@ -24,7 +28,11 @@ import {
  */
 async function toResponseShape(subscription: HydratedDocument<SubscriptionDoc>) {
   const plan = await Plan.findById(subscription.planId);
-  return { subscription: subscription.toJSON(), plan: plan ? plan.toJSON() : null };
+  const pastDueDeadline =
+    subscription.status === "past_due"
+      ? new Date(subscription.updatedAt.getTime() + env.PAST_DUE_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+  return { subscription: subscription.toJSON(), plan: plan ? plan.toJSON() : null, pastDueDeadline };
 }
 
 export async function getAgencySubscriptionHandler(req: Request, res: Response) {
@@ -107,4 +115,21 @@ export async function getAgencyEntitlementsHandler(req: Request, res: Response) 
   const plan = await Plan.findById(subscription.planId);
   if (!plan) throw ApiError.notFound("Subscription plan not found");
   sendSuccess(res, { entitlements: getEntitlements(plan as PlanDoc) });
+}
+
+export async function createAgencyCheckoutHandler(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const body = req.body as CreateSubscriptionInput;
+  const checkout = await createCheckoutSessionForAgency(agencyId, body.planCode, body.billingInterval);
+  sendSuccess(res, { checkout });
+}
+
+export async function getAgencyBillingHistoryHandler(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const { page, limit } = req.query as unknown as PaginationQueryInput;
+  const result = await paginateQuery(BillingHistoryEvent.find({ ownerType: "agency", ownerId: agencyId }).sort({ occurredAt: -1 }), {
+    page,
+    limit,
+  });
+  sendSuccess(res, { ...result, items: result.items.map((e) => e.toJSON()) });
 }

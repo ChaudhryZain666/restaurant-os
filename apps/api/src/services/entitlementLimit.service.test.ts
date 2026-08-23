@@ -1,0 +1,157 @@
+import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import request from "supertest";
+import { createApp } from "../app.js";
+import { connectDB } from "../config/db.js";
+import { Business } from "../models/Business.js";
+import { Plan } from "../models/Plan.js";
+import { Restaurant } from "../models/Restaurant.js";
+import { Subscription } from "../models/Subscription.js";
+import { User } from "../models/User.js";
+import {
+  closeTestConnections,
+  createTestBusiness,
+  createTestPlan,
+  createTestRestaurant,
+  createTestSubscription,
+  createTestUser,
+  tokenFor,
+} from "../test-utils/fixtures.js";
+import { canCreateLocation, hasFeatureEntitlement, reserveLocationSlot } from "./entitlementLimit.service.js";
+
+const app = createApp();
+
+const businessIds: string[] = [];
+const restaurantIds: string[] = [];
+const userIds: string[] = [];
+const planIds: string[] = [];
+
+afterAll(async () => {
+  await Promise.all([
+    Subscription.deleteMany({ ownerType: "business", ownerId: { $in: businessIds } }),
+    Restaurant.deleteMany({ _id: { $in: restaurantIds } }),
+    Business.deleteMany({ _id: { $in: businessIds } }),
+    Plan.deleteMany({ _id: { $in: planIds } }),
+    User.deleteMany({ _id: { $in: userIds } }),
+  ]);
+  await closeTestConnections();
+});
+
+beforeAll(async () => {
+  await connectDB();
+});
+
+describe("hasFeatureEntitlement — no-subscription default vs a real gating plan", () => {
+  it("defaults to TRUE for a business with no subscription at all (never breaks a grandfathered business)", async () => {
+    const business = await createTestBusiness();
+    businessIds.push(business.id);
+    const allowed = await hasFeatureEntitlement("business", business.id as string, "custom_domains");
+    expect(allowed).toBe(true);
+  });
+
+  it("is TRUE when the live subscription's plan grants the key, FALSE when the plan explicitly lacks it", async () => {
+    const business = await createTestBusiness();
+    businessIds.push(business.id);
+    const grantingPlan = await createTestPlan({ entitlements: [{ key: "custom_domains", value: true }] });
+    const restrictivePlan = await createTestPlan({ entitlements: [{ key: "business_analytics", value: true }] });
+    planIds.push(grantingPlan.id, restrictivePlan.id);
+
+    const sub = await createTestSubscription("business", business._id, grantingPlan._id);
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(true);
+
+    await Subscription.updateOne({ _id: sub._id }, { $set: { planId: restrictivePlan._id } });
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(false);
+  });
+});
+
+describe("requireEntitlement middleware — real HTTP, business_analytics gated route", () => {
+  it("a business subscribed to a plan WITHOUT business_analytics is denied; one WITH it (or no subscription) is allowed", async () => {
+    const restrictedBiz = await createTestBusiness();
+    const restrictedLoc = await createTestRestaurant({ businessId: restrictedBiz._id });
+    const restrictedOwner = await createTestUser("restaurant_owner", restrictedLoc._id, { businessId: restrictedBiz._id });
+    const restrictivePlan = await createTestPlan({ entitlements: [{ key: "custom_domains", value: true }] });
+    businessIds.push(restrictedBiz.id);
+    restaurantIds.push(restrictedLoc.id);
+    userIds.push(restrictedOwner.id as string);
+    planIds.push(restrictivePlan.id);
+    await createTestSubscription("business", restrictedBiz._id, restrictivePlan._id);
+
+    const denied = await request(app)
+      .get(`/api/v1/businesses/${restrictedBiz.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${tokenFor(restrictedOwner)}`);
+    expect(denied.status).toBe(403);
+
+    const noSubBiz = await createTestBusiness();
+    const noSubLoc = await createTestRestaurant({ businessId: noSubBiz._id });
+    const noSubOwner = await createTestUser("restaurant_owner", noSubLoc._id, { businessId: noSubBiz._id });
+    businessIds.push(noSubBiz.id);
+    restaurantIds.push(noSubLoc.id);
+    userIds.push(noSubOwner.id as string);
+
+    const allowed = await request(app)
+      .get(`/api/v1/businesses/${noSubBiz.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${tokenFor(noSubOwner)}`);
+    expect(allowed.status).toBe(200);
+  });
+});
+
+describe("location limits — canCreateLocation / reserveLocationSlot", () => {
+  it("reserveLocationSlot throws 409 once the limit is reached, and never increments past it", async () => {
+    const business = await createTestBusiness();
+    const plan = await createTestPlan({ entitlements: [{ key: "max_locations", value: 1 }] });
+    businessIds.push(business.id);
+    planIds.push(plan.id);
+    await createTestSubscription("business", business._id, plan._id);
+
+    expect(await canCreateLocation(business.id as string)).toBe(true);
+    await reserveLocationSlot(business.id as string);
+    expect(await canCreateLocation(business.id as string)).toBe(false);
+
+    await expect(reserveLocationSlot(business.id as string)).rejects.toMatchObject({ statusCode: 409 });
+
+    const reloaded = await Business.findById(business._id);
+    expect(reloaded!.locationCount).toBe(1);
+  });
+
+  it("under true concurrency, two simultaneous reservations against a limit of 1 yield exactly one success", async () => {
+    const business = await createTestBusiness();
+    const plan = await createTestPlan({ entitlements: [{ key: "max_locations", value: 1 }] });
+    businessIds.push(business.id);
+    planIds.push(plan.id);
+    await createTestSubscription("business", business._id, plan._id);
+
+    const results = await Promise.allSettled([reserveLocationSlot(business.id as string), reserveLocationSlot(business.id as string)]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const reloaded = await Business.findById(business._id);
+    expect(reloaded!.locationCount).toBe(1);
+  });
+
+  it("real HTTP: creating a location beyond the plan's max_locations is rejected with a clean 409, and the slot is released on a genuine failure", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    const plan = await createTestPlan({ entitlements: [{ key: "max_locations", value: 1 }] });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(plan.id);
+    await createTestSubscription("business", business._id, plan._id);
+    // The fixture-created location above bypasses reserveLocationSlot entirely (a direct Mongoose
+    // .create(), not the guarded HTTP endpoint) — set the counter to reflect reality, exactly what
+    // scripts/backfillLocationCounts.ts does for real pre-existing businesses.
+    await Business.updateOne({ _id: business._id }, { $set: { locationCount: 1 } });
+
+    const stamp = Date.now();
+    const res = await request(app)
+      .post(`/api/v1/businesses/${business.id}/locations`)
+      .set("Authorization", `Bearer ${tokenFor(owner)}`)
+      .send({ name: "Second Location", slug: `entitlement-limit-loc-${stamp}` });
+    expect(res.status).toBe(409);
+
+    const reloaded = await Business.findById(business._id);
+    expect(reloaded!.locationCount).toBe(1); // still 1 — the rejected attempt never incremented it further
+  });
+});

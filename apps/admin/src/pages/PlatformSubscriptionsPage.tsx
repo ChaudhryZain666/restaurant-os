@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Paginated, SubscriptionStatus } from "@restaurant/types";
+import type { CurrencyAmount, Paginated, SubscriptionStatus } from "@restaurant/types";
 import { Badge, Card, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 
@@ -14,8 +14,14 @@ interface PlatformSubscriptionRow {
   billingInterval: "monthly" | "yearly";
   currentPeriodEnd: string;
   trialEnd: string | null;
-  provider: "mock" | "internal";
+  provider: "mock" | "internal" | "paddle";
   createdAt: string;
+}
+
+interface PlatformRevenue {
+  mrrByCurrency: CurrencyAmount[];
+  liveSubscriptionCount: number;
+  trialingCount: number;
 }
 
 const STATUS_TONE: Record<SubscriptionStatus, "success" | "neutral" | "warning" | "danger"> = {
@@ -39,6 +45,7 @@ const PAGE_SIZE = 20;
 export function PlatformSubscriptionsPage() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Paginated<PlatformSubscriptionRow> | null>(null);
+  const [revenue, setRevenue] = useState<PlatformRevenue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +58,13 @@ export function PlatformSubscriptionsPage() {
       .finally(() => setLoading(false));
   }, [page]);
 
+  useEffect(() => {
+    apiClient
+      .request<PlatformRevenue>("/platform/revenue")
+      .then(setRevenue)
+      .catch(() => undefined);
+  }, []);
+
   const rows = result?.items ?? [];
 
   return (
@@ -59,6 +73,37 @@ export function PlatformSubscriptionsPage() {
         <h1 className="font-heading text-2xl font-semibold text-foreground">Subscriptions</h1>
         <p className="text-sm text-muted">Every business's subscription, across the whole platform. Read-only.</p>
       </div>
+
+      {revenue && (
+        <Card className="flex flex-wrap gap-6">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">MRR</p>
+            {revenue.mrrByCurrency.length === 0 ? (
+              <p className="font-heading text-lg font-medium text-foreground">—</p>
+            ) : (
+              // Phase 23's "group by currency, never blend" principle — each currency shown as its
+              // own figure, never summed into one misleading number.
+              <div className="flex flex-wrap gap-3">
+                {revenue.mrrByCurrency.map((c) => (
+                  <p key={c.currency} className="font-heading text-lg font-medium text-foreground">
+                    {c.amount.toLocaleString(undefined, { style: "currency", currency: c.currency })}
+                    <span className="ml-1 text-xs font-normal text-muted">{c.currency}/mo</span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">Live subscriptions</p>
+            <p className="font-heading text-lg font-medium text-foreground">{revenue.liveSubscriptionCount}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">Trialing</p>
+            <p className="font-heading text-lg font-medium text-foreground">{revenue.trialingCount}</p>
+          </div>
+        </Card>
+      )}
+
       {error && (
         <p role="alert" className="text-danger">
           {error}

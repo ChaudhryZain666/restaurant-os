@@ -7,6 +7,8 @@ export interface CreateBillingCustomerInput {
 
 export interface ProviderBillingCustomer {
   providerCustomerId: string;
+  email?: string;
+  name?: string;
 }
 
 export interface CreateProviderSubscriptionInput {
@@ -32,12 +34,69 @@ export interface ProviderSubscriptionSnapshot {
   trialEnd?: Date;
 }
 
+/**
+ * Phase 27 — everything a checkout-launch endpoint needs to hand the frontend, normalized across
+ * two real shapes a provider might use: a redirect-based hosted checkout page (`url`), or a
+ * client-side overlay widget the provider's own JS SDK renders (`clientToken` + `providerPriceId`,
+ * e.g. Paddle.js's `Paddle.Checkout.open(...)`). Exactly one of `url`/`clientToken` is meaningful,
+ * selected by `mode` — callers must not assume both are present.
+ */
+export type ProviderCheckoutMode = "overlay" | "redirect";
+
+export interface CreateCheckoutSessionInput {
+  providerCustomerId: string;
+  providerPriceId: string;
+  /** Opaque data threaded back to us on the eventual webhook (Paddle's "custom data" concept) —
+   *  how a checkout-creation event gets matched to the owner that initiated it, since no
+   *  providerSubscriptionId exists until the provider creates one on successful payment. */
+  metadata: Record<string, string>;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface ProviderCheckoutSession {
+  mode: ProviderCheckoutMode;
+  /** Present when mode === "redirect". */
+  url?: string;
+  /** Present when mode === "overlay" — an opaque token/config the frontend passes to the
+   *  provider's own client-side SDK, never a secret credential. */
+  clientToken?: string;
+  providerPriceId?: string;
+}
+
+export interface ProviderInvoice {
+  providerInvoiceId: string;
+  status: "paid" | "pending" | "failed";
+  amountCents: number;
+  currency: string;
+  /** The provider's own hosted invoice/receipt page — see docs/commercial-decisions.md's "Invoice
+   *  policy" section for why this platform doesn't generate its own PDF invoices when the provider
+   *  (a Merchant of Record) already issues a compliant one. */
+  hostedUrl?: string;
+  issuedAt: Date;
+}
+
 export interface ProviderBillingWebhookEvent {
   eventId: string;
   eventType: string;
   providerSubscriptionId: string;
   status: ProviderSubscriptionStatus;
   raw: unknown;
+  /**
+   * Phase 27 — present ONLY on a checkout-completion event (a brand-new subscription being
+   * reported for the very first time, born from createCheckoutSession rather than
+   * createSubscription). Carries back exactly the metadata createCheckoutSession's caller passed
+   * in, so processBillingProviderEvent can create a new Subscription document for the right owner
+   * without ever having to trust anything the frontend claims. Absent on every ordinary
+   * status-transition event for an already-existing subscription.
+   */
+  checkoutMetadata?: {
+    ownerType: "business" | "agency";
+    ownerId: string;
+    planCode: string;
+    billingInterval: "monthly" | "yearly";
+    providerCustomerId: string;
+  };
 }
 
 /**
@@ -45,20 +104,27 @@ export interface ProviderBillingWebhookEvent {
  * apps/api/src/payments/PaymentProvider.ts. Customer order payments and platform subscription
  * billing are different financial domains with different lifecycles, different webhook streams,
  * and different idempotency stores (BillingWebhookEvent vs PaymentWebhookEvent); mixing them would
- * make either one harder to reason about safely. Only the operations this phase's lifecycle
- * actually needs are here — no real provider is integrated (see MockBillingProvider.ts, the only
- * adapter that runs today). A real adapter would implement this same interface; see
- * apps/api/src/payments/SafepayProvider.ts's header comment for the level of verification a real
- * financial adapter needs before it can be trusted, as the precedent for what NOT to skip.
+ * make either one harder to reason about safely. Two adapters implement this today:
+ * MockBillingProvider.ts (the only one that actually runs in tests/local dev) and
+ * PaddleBillingProvider.ts (Phase 27 — real, network-capable code against Paddle's documented
+ * Billing API, but never exercised against a live account; see that file's header comment for
+ * exactly what's verified vs. assumed, mirroring apps/api/src/payments/SafepayProvider.ts's own
+ * honesty precedent).
  */
 export interface BillingProvider {
   readonly name: string;
   readonly signatureHeaderName: string;
   createCustomer(input: CreateBillingCustomerInput): Promise<ProviderBillingCustomer>;
+  retrieveCustomer(providerCustomerId: string): Promise<ProviderBillingCustomer>;
   createSubscription(input: CreateProviderSubscriptionInput): Promise<ProviderSubscriptionSnapshot>;
   retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionSnapshot>;
   cancelSubscription(providerSubscriptionId: string, atPeriodEnd: boolean): Promise<ProviderSubscriptionSnapshot>;
+  /** Un-cancels a scheduled (not yet effective) cancellation. */
+  reactivateSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionSnapshot>;
   changePlan(providerSubscriptionId: string, newPlanCode: string): Promise<ProviderSubscriptionSnapshot>;
+  createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession>;
+  /** Null if the provider has no record of this invoice reference. */
+  retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderBillingWebhookEvent | null;
 }

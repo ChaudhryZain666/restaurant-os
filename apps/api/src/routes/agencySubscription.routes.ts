@@ -1,13 +1,15 @@
 import { Router } from "express";
-import { changeSubscriptionPlanSchema, createSubscriptionSchema } from "@restaurant/validation";
+import { changeSubscriptionPlanSchema, createSubscriptionSchema, paginationQuerySchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAgencyMatch, requireAgencyPermission } from "../middleware/agency.js";
-import { validateBody } from "../middleware/validate.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
 import {
   cancelAgencySubscriptionHandler,
   changeAgencyPlanHandler,
+  createAgencyCheckoutHandler,
   createAgencySubscriptionHandler,
+  getAgencyBillingHistoryHandler,
   getAgencyEntitlementsHandler,
   getAgencySubscriptionHandler,
   reactivateAgencySubscriptionHandler,
@@ -26,12 +28,24 @@ agencySubscriptionRouter.get(
   requireAgencyPermission("agency.billing.read"),
   asyncHandler(getAgencyEntitlementsHandler)
 );
+agencySubscriptionRouter.get(
+  "/billing-history",
+  requireAgencyPermission("agency.billing.read"),
+  validateQuery(paginationQuerySchema),
+  asyncHandler(getAgencyBillingHistoryHandler)
+);
 
 agencySubscriptionRouter.post(
   "/",
   requireAgencyPermission("agency.billing.manage"),
   validateBody(createSubscriptionSchema),
   asyncHandler(createAgencySubscriptionHandler)
+);
+agencySubscriptionRouter.post(
+  "/checkout",
+  requireAgencyPermission("agency.billing.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(createAgencyCheckoutHandler)
 );
 agencySubscriptionRouter.post(
   "/cancel",

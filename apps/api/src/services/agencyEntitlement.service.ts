@@ -20,10 +20,15 @@ import { ApiError } from "../utils/ApiError.js";
 const NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES = 3;
 
 async function getMaxBusinesses(agencyId: string): Promise<number> {
+  // Phase 27 — provider:"internal" (grandfathered/comped, no real commercial relationship) is
+  // deliberately excluded here too, treated identically to "no subscription at all" — the same
+  // fix entitlementLimit.service.ts's resolveOwnerPlan needed, for the identical reason: a
+  // grandfathered subscription must never introduce a NEW restriction a real one would.
   const subscription = await Subscription.findOne({
     ownerType: "agency",
     ownerId: agencyId,
     status: { $in: ["trialing", "active", "past_due", "cancelling"] },
+    provider: { $ne: "internal" },
   });
   if (!subscription) return NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES;
 

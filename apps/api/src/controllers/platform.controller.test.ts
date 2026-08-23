@@ -3,14 +3,19 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { AuditLog } from "../models/AuditLog.js";
+import { Business } from "../models/Business.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
+import { Plan } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { Subscription } from "../models/Subscription.js";
 import { User } from "../models/User.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
+  createTestPlan,
   createTestRestaurant,
   createTestUser,
   tokenFor,
@@ -57,7 +62,7 @@ afterAll(async () => {
     User.deleteMany({ _id: { $in: [platformAdminId, ownerAId, customerId] } }),
   ]);
   await closeTestConnections();
-});
+}, 20_000);
 
 describe("GET /platform/restaurants/:id — single-restaurant overview (Phase 16)", () => {
   it("platform admin sees profile, owner, readiness, analytics, and recent activity", async () => {
@@ -348,7 +353,7 @@ describe("PATCH /platform/users/:id/status", () => {
     expect(loginAfter.status).toBe(200);
 
     await User.deleteOne({ _id: staff._id });
-  });
+  }, 20_000); // four sequential HTTP round-trips (incl. bcrypt hashing on login) — real, not flaky logic
 
   it("records an audit event scoped to the user's own restaurant", async () => {
     const staff = await createTestUser("restaurant_staff", restaurantA._id, { email: `platform-audit-${Date.now()}@test.local` });
@@ -431,4 +436,63 @@ describe("POST /platform/restaurants/:id/resend-owner-invite (Phase 14)", () => 
       .set("Authorization", `Bearer ${ownerAToken}`);
     expect(res.status).toBe(403);
   });
+});
+
+describe("GET /platform/revenue (Phase 27) — currency-grouped MRR, never a blended total", () => {
+  it("groups live subscriptions' monthly-normalized revenue by currency, excludes trialing, requires platform_admin", async () => {
+    const usdPlan = await createTestPlan({ pricing: [{ interval: "monthly", amountCents: 10000, currency: "USD" }] });
+    const eurPlan = await createTestPlan({ pricing: [{ interval: "yearly", amountCents: 120000, currency: "EUR" }] });
+    const businessUsd = await createTestBusiness();
+    const businessEur = await createTestBusiness();
+    const businessTrialing = await createTestBusiness();
+
+    await Subscription.create([
+      {
+        ownerType: "business",
+        ownerId: businessUsd._id,
+        planId: usdPlan._id,
+        status: "active",
+        billingInterval: "monthly",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        provider: "internal",
+      },
+      {
+        ownerType: "business",
+        ownerId: businessEur._id,
+        planId: eurPlan._id,
+        status: "active",
+        billingInterval: "yearly",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        provider: "internal",
+      },
+      {
+        ownerType: "business",
+        ownerId: businessTrialing._id,
+        planId: usdPlan._id,
+        status: "trialing",
+        billingInterval: "monthly",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        provider: "mock",
+      },
+    ]);
+
+    const res = await request(app).get("/api/v1/platform/revenue").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(res.status).toBe(200);
+
+    const usdEntry = res.body.data.mrrByCurrency.find((e: { currency: string }) => e.currency === "USD");
+    const eurEntry = res.body.data.mrrByCurrency.find((e: { currency: string }) => e.currency === "EUR");
+    expect(usdEntry.amount).toBeGreaterThanOrEqual(100); // $100/mo from businessUsd, plus whatever else is live in this shared dev DB
+    expect(eurEntry.amount).toBeCloseTo(100, 1); // 1200 EUR/yr normalized to 100 EUR/mo
+    expect(res.body.data.trialingCount).toBeGreaterThanOrEqual(1);
+
+    const denied = await request(app).get("/api/v1/platform/revenue").set("Authorization", `Bearer ${ownerAToken}`);
+    expect(denied.status).toBe(403);
+
+    await Subscription.deleteMany({ ownerId: { $in: [businessUsd._id, businessEur._id, businessTrialing._id] } });
+    await Business.deleteMany({ _id: { $in: [businessUsd._id, businessEur._id, businessTrialing._id] } });
+    await Plan.deleteMany({ _id: { $in: [usdPlan._id, eurPlan._id] } });
+  }, 20_000); // several sequential DB writes + two HTTP round-trips
 });

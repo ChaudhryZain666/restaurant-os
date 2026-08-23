@@ -8,6 +8,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { cloneMenuToRestaurant } from "../services/menuClone.service.js";
+import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
 
 /**
  * Phase 18 — the first, deliberately minimal proof surface for the Business/Location foundation.
@@ -96,6 +97,11 @@ export async function createLocationForBusiness(req: Request, res: Response) {
     cloneSourceId = cloneSource._id;
   }
 
+  // Phase 27 — reserved BEFORE the transaction starts, released on failure below, mirroring
+  // agency.controller.ts's createAgencyBusiness/reserveBusinessSlot pattern exactly: a failed
+  // reservation must abort the whole operation, not partially commit.
+  await reserveLocationSlot(businessId);
+
   const session = await mongoose.startSession();
   let restaurant: HydratedDocument<RestaurantDoc>;
   try {
@@ -123,6 +129,7 @@ export async function createLocationForBusiness(req: Request, res: Response) {
         return createdRestaurant;
       })) as HydratedDocument<RestaurantDoc>;
     } catch (err) {
+      await releaseLocationSlot(businessId);
       if ((err as { code?: number }).code === 11000) {
         throw ApiError.conflict("That restaurant slug is already in use");
       }

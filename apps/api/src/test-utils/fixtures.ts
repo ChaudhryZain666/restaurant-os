@@ -11,6 +11,7 @@ import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
 import { Table } from "../models/Table.js";
 import { Plan } from "../models/Plan.js";
+import { Subscription } from "../models/Subscription.js";
 import { Agency } from "../models/Agency.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { signAccessToken } from "../services/token.service.js";
@@ -189,6 +190,34 @@ export async function createTestPlan(overrides: Partial<Record<string, unknown>>
       { key: "business_promotions", value: true },
     ],
     isActive: true,
+    ...overrides,
+  });
+}
+
+/** Phase 27 — seeds a LIVE subscription directly (no HTTP round-trip), for tests whose subject is
+ *  entitlement/limit ENFORCEMENT rather than subscription creation itself. Defaults to a business
+ *  owner, "active", far-future period end so no test needs to reason about expiry.
+ *  provider defaults to "mock" (a REAL, enforced subscription), never "internal" — "internal"
+ *  (grandfathered/comped) is deliberately EXCLUDED from entitlement/limit enforcement (see
+ *  entitlementLimit.service.ts's/agencyEntitlement.service.ts's resolveOwnerPlan/getMaxBusinesses
+ *  doc comments), so a test wanting to prove real enforcement must not default into that exclusion
+ *  by accident — pass `{provider:"internal"}` explicitly for a test whose subject IS grandfathering. */
+export async function createTestSubscription(
+  ownerType: "business" | "agency",
+  ownerId: mongoose.Types.ObjectId,
+  planId: mongoose.Types.ObjectId,
+  overrides: Partial<Record<string, unknown>> = {}
+) {
+  const now = new Date();
+  return Subscription.create({
+    ownerType,
+    ownerId,
+    planId,
+    status: "active",
+    billingInterval: "monthly",
+    currentPeriodStart: now,
+    currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    provider: "mock",
     ...overrides,
   });
 }

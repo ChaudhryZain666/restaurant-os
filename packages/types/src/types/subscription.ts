@@ -23,9 +23,12 @@ export type SubscriptionStatus = "trialing" | "active" | "past_due" | "cancellin
  * `"internal"` is not a real billing provider — it marks a platform-granted subscription with no
  * real payment relationship (grandfathered pre-existing businesses migrated before this phase
  * existed; future comps). It exists so that state is always explicit and auditable, never a silent
- * bypass of subscription checks.
+ * bypass of subscription checks. `"paddle"` (Phase 27) is the real, provider-agnostic-interface
+ * adapter — see apps/api/src/billing/PaddleBillingProvider.ts's header comment for exactly what's
+ * verified vs. assumed; it has never been exercised against a live Paddle account in this
+ * environment, mirroring apps/api/src/payments/SafepayProvider.ts's own honesty precedent.
  */
-export type SubscriptionProvider = "mock" | "internal";
+export type SubscriptionProvider = "mock" | "internal" | "paddle";
 
 export interface Subscription {
   id: string;

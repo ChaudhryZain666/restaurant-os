@@ -16,6 +16,7 @@ import { computeReadiness } from "../services/restaurantReadiness.service.js";
 import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
+import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
@@ -62,6 +63,15 @@ export async function createRestaurant(req: Request, res: Response) {
   const unusablePassword = randomBytes(32).toString("hex");
   const passwordHash = await bcrypt.hash(unusablePassword, 12);
   const { raw, hash } = generateSecureToken();
+
+  // Phase 27 — only the existing-business branch needs a location-slot reservation: the
+  // new-business branch is creating a brand-new business's FIRST location, which is never itself
+  // limited by a location count (mirrors how business creation isn't limited by a location count
+  // either). Reserved before the transaction, released on failure — same pattern as
+  // business.controller.ts's createLocationForBusiness.
+  if (existingBusiness) {
+    await reserveLocationSlot(existingBusiness._id.toString());
+  }
 
   const session = await mongoose.startSession();
   let restaurant: HydratedDocument<RestaurantDoc>;
@@ -145,6 +155,7 @@ export async function createRestaurant(req: Request, res: Response) {
       // Business.slug, and User.email are the real backstop — this just translates their raw
       // duplicate-key error into the same clean 409 the pre-check would have given a
       // slightly-slower request.
+      if (existingBusiness) await releaseLocationSlot(existingBusiness._id.toString());
       if ((err as { code?: number }).code === 11000) {
         throw ApiError.conflict("That restaurant slug or owner email is already in use");
       }

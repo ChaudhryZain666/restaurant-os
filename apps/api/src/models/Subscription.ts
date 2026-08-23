@@ -27,7 +27,7 @@ const subscriptionSchema = new Schema(
     trialEnd: { type: Date },
     cancelAt: { type: Date },
     cancelledAt: { type: Date },
-    provider: { type: String, enum: ["mock", "internal"], required: true },
+    provider: { type: String, enum: ["mock", "internal", "paddle"], required: true },
     providerCustomerId: { type: String },
     providerSubscriptionId: { type: String },
   },

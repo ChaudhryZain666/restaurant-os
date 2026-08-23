@@ -24,6 +24,15 @@ const businessSchema = new Schema(
     // when unset, or is agency-managed when set. Absence is the default, valid state for every
     // business that existed before this phase; no migration/backfill needed.
     agencyId: { type: Schema.Types.ObjectId, ref: "Agency", index: true },
+    // Phase 27 — maintained counter, incremented ATOMICALLY on location creation (see
+    // entitlementLimit.service.ts's reserveLocationSlot), mirroring Agency.businessCount exactly.
+    // Never computed by counting Restaurant documents on read, so the entitlement guard is a single
+    // atomic findOneAndUpdate, not a check-then-insert race. Existing businesses default to 0 —
+    // scripts/backfillLocationCounts.ts sets every existing business's count to its REAL location
+    // count once, a required one-time deployment step for this phase (see that script's own doc
+    // comment and docs/commercial-decisions.md) so an existing multi-location business's limit isn't
+    // computed against an artificially-low starting count.
+    locationCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true, toJSON: idTransform }
 );

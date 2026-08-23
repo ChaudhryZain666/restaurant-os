@@ -31,6 +31,11 @@ export const AUDIT_ACTIONS = [
   "subscription.cancellation_requested",
   "subscription.reactivated",
   "subscription.cancelled",
+  // Phase 27 — webhook-driven state changes, distinct from the owner-initiated actions above, so a
+  // payment failure/recovery is auditable too, not just direct user actions.
+  "subscription.payment_succeeded",
+  "subscription.payment_failed",
+  "subscription.past_due",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion", "subscription"] as const;

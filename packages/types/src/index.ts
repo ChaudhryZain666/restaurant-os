@@ -27,3 +27,4 @@ export * from "./types/subscription.js";
 export * from "./types/agency.js";
 export * from "./types/agencyRbac.js";
 export * from "./types/agencyAuditLog.js";
+export * from "./types/billingHistory.js";

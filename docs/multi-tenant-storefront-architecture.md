@@ -2291,3 +2291,149 @@ just business-level) explicit assignment — the business remains the unit of as
 **Next highest-value work**: a real billing provider integration (the single largest remaining gap
 before any commercial launch), followed by an agency UX polish pass (in-place business switcher) once
 the underlying mechanism proven this phase has had time to be used in practice.
+
+## Phase 27 — Commercial Plans, Real Subscription Billing & Revenue Infrastructure
+
+### Context
+
+Phase 24 built the billing *foundation*: provider-agnostic `Subscription`/`Plan` models, a mock
+provider, a state machine — deliberately inert (no real pricing, nothing enforced). Phase 27 turns
+this into an actual revenue system: real (if provisional, clearly labeled) pricing, a real-but-
+unexercised provider adapter, a genuine checkout flow, entitlement enforcement wired into real
+request paths, agency+business limits, billing history/invoices, and a dedicated commercial-
+decisions document — without inventing a business decision that hasn't been made, faking a live
+payment integration, or touching the separate restaurant-payment system.
+
+Reconnaissance (3 parallel Explore agents + payment-provider/competitor web research) confirmed:
+`Plan.pricing` was empty in seed data; `hasEntitlement`/`canCreateAnotherBusiness` were dead code
+with zero call sites; only `max_businesses` was actually enforced; Location-count-per-Business had
+zero enforcement anywhere; the JWT already correctly carried no billing/subscription fields; and no
+real billing-provider adapter existed at all. **Provider research**: Stripe cannot be used as a
+*platform* account by a Pakistan-based business (Pakistan isn't a supported onboarding country for
+receiving payouts as a merchant, even though Stripe can charge cards from anywhere). Paddle and
+Lemon Squeezy — both Merchant-of-Record providers handling global tax/VAT compliance and issuing
+their own compliant invoices — support payout to Pakistan (Paddle via Payoneer). **Paddle** was
+selected (stronger B2B subscription/proration tooling) — see `docs/commercial-decisions.md` for the
+full reasoning, competitor pricing research, and every commercial number, each marked PROPOSED or
+DECISION REQUIRED, never silently treated as final.
+
+### Core architectural decisions
+
+**1. `Plan` became commercially real, still 100% data-driven.** New fields:
+`description`, `pricing[].providerPriceId`, `providerProductId`, `trialDays` (per-plan override of
+`env.TRIAL_PERIOD_DAYS`), `metadata`. `amountCents`/`currency` stay optional at the schema level —
+the seeded catalog now populates them with PROPOSED numbers, but an unpriced plan remains valid. A
+`Subscription` retains its own economic terms at creation time (already true, confirmed unchanged) —
+changing a `Plan`'s price later never mutates an existing `Subscription`.
+
+**2. `BillingProvider` interface completed**: `retrieveCustomer`, `createCheckoutSession`
+(normalized `{mode: "overlay"|"redirect", url?, clientToken?}` so a redirect-based provider and
+Paddle's client-side overlay model both fit one interface), `retrieveInvoice`,
+`reactivateSubscription` as an explicit provider call. `MockBillingProvider` implements all of
+these (checkout returns a same-origin mock stub URL the mock driver "completes" exactly like
+`mock-advance` already did for status transitions). `PaddleBillingProvider.ts` (new) implements them
+for real against Paddle's documented Billing API v2 — mirroring `SafepayProvider.ts`'s exact
+methodology: real `fetch`-based HTTP client, fail-closed status mapping, an honest "verified vs
+assumed" doc comment, Paddle's documented `ts:rawBody` HMAC webhook-signature scheme — but **never
+exercised against a live account** (no credentials exist in this environment). `BILLING_PROVIDER`
+gained `"paddle"`; `PADDLE_API_KEY`/`PADDLE_WEBHOOK_SECRET`/`PADDLE_ENV` mirror `SAFEPAY_*`'s shape.
+
+**3. Checkout — a second creation path, not a replacement.** The existing trial-first flow
+(`POST .../subscription`, no payment required, already genuinely webhook-authoritative in spirit)
+is unchanged. `POST .../subscription/checkout` calls `provider.createCheckoutSession(...)` and
+creates **no** `Subscription` document — only the provider's webhook reporting completion
+(`event.checkoutMetadata` carrying `{ownerType, ownerId, planCode, billingInterval,
+providerCustomerId}` back through, since no `providerSubscriptionId` exists until payment succeeds)
+creates one, via a new `handleCheckoutCompletionEvent` branch in `processBillingProviderEvent` —
+reusing the exact same partial-unique-index backstop `createSubscriptionCore` relies on for
+duplicate/concurrent completions. An abandoned checkout is a pure no-op — nothing was ever created.
+
+**4. Entitlement/limit enforcement — one central service, two enforcement shapes.** New
+`entitlementLimit.service.ts` generalizes (never duplicates) `agencyEntitlement.service.ts`'s
+pattern: **feature-flag entitlements** (`custom_domains`, `business_analytics`,
+`business_promotions`) use a new `requireEntitlement` middleware — the first real callers of
+Phase 24's previously-dead `getEntitlements`/`hasEntitlement`; **count-based limits** (locations,
+and — re-exported, not duplicated — agency businesses) stay controller-called atomic reservations
+(`reserveLocationSlot`, mirroring `reserveBusinessSlot` exactly: `Business.locationCount`
+maintained counter, atomic `findOneAndUpdate` guard, reserved before the transaction, released on
+failure), because limits need pre-transaction reservation semantics a boolean middleware can't
+naturally express. Both enforcement points default to **generous/allow** when no live subscription
+exists — the same honesty convention as `NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES` — so this phase's
+enforcement can never retroactively break a grandfathered business or agency that never subscribed.
+A new `scripts/backfillLocationCounts.ts` (required one-time deployment step, mirrors
+`backfillSubscriptions.ts`'s dry-run/idempotent shape) corrects `locationCount` for every business
+that already had locations before this phase existed.
+
+**5. `BillingHistoryEvent`** — a new, polymorphic (`{ownerType, ownerId}`) model, the data source
+for both Billing History and Invoices (a `payment_succeeded` row's `receiptUrl` points at the
+provider's own hosted invoice page — Paddle, a Merchant of Record, issues compliant invoices
+itself, so this platform deliberately does not generate its own PDFs — see
+`docs/commercial-decisions.md`'s Invoice policy). Written by the `*Core` subscription-service
+functions (direct actions) and by `processBillingProviderEvent` (webhook-driven payment events).
+`AuditLog`/`AgencyAuditLog` stay exactly as they are — the security/investigative trail, unchanged;
+this is a new, separate, product-facing read model. Three new `AuditAction`/`AgencyAuditAction`
+entries (`subscription.payment_succeeded`/`payment_failed`/`past_due` and agency equivalents) exist
+for forward-compatibility but are not yet emitted by the automatic webhook path — `BillingHistoryEvent`
+is the actual mechanism for that traceability today.
+
+**6. Failed payments / past_due — messaging, not a competing authority.** `past_due` keeps full
+access (never revoked the instant one payment fails). `PAST_DUE_GRACE_PERIOD_DAYS` (env, default 7,
+explicitly non-final) is exposed to the frontend as a `pastDueDeadline` for UI messaging only — this
+platform deliberately does **not** build a timer that unilaterally cancels a `past_due` subscription,
+since that would compete with the real provider's own dunning/retry process, which reports the
+actual outcome via webhook through the existing, unchanged `past_due` → `active`/`cancelled`
+transitions. Building a synthetic forced-expiry job was considered and rejected as architecturally
+wrong, not merely deferred.
+
+**7. Agency vs. Business billing — documented, no schema change.** Businesses can independently
+subscribe; an agency's own subscription governs only the agency's own limits/features. An
+agency-created business does **not** inherit its agency's subscription. Zero schema change needed —
+already how `{ownerType, ownerId}` polymorphism works; this phase's job was documenting the choice
+so it's never accidentally re-litigated, and confirming (unchanged, re-verified) that
+`AgencyBillingPage`/`BillingPage` only ever call their own respective endpoint.
+
+**8. Platform revenue — currency-grouped, never blended.** New `GET /platform/revenue`: MRR summed
+per currency (yearly plans normalized to a monthly figure), only live/actually-billing statuses
+counted (trialing reported separately as a pipeline count, never as revenue), reusing
+`businessAnalytics.service.ts`'s `sumAmountsByCurrency` (now exported) — the identical Phase 23
+convention, not a second one invented for billing.
+
+### Security & concurrency verification
+
+Real HTTP tests: a business subscribed to a plan lacking `business_analytics` is denied that route,
+one with it (or no subscription at all) is allowed; launching checkout creates no `Subscription`
+document; completing an unknown/already-used mock-checkout token is rejected cleanly (400, never a
+500); under true `Promise.all` concurrency, two checkout sessions for the same business completing
+at once yield exactly one live subscription (the loser's insert collides on the existing partial
+unique index, logged and dropped, not a crash); `reserveLocationSlot` proven under concurrency
+(mirrors Phase 25's business-slot test exactly — two simultaneous reservations against a limit of 1
+yield exactly one success); cross-business and cross-agency billing-history access denied;
+`GET /platform/revenue` requires `platform_admin`. Full pre-existing regression (764+ Jest tests,
+34 Playwright specs) re-run to confirm zero breakage to restaurant payments, individually-owned
+businesses without any subscription, or existing agency flows — the generous no-subscription
+defaults were specifically verified against every existing multi-location-creating test file before
+being finalized (business.controller.test.ts creates at most 3 locations under one business in this
+suite; restaurant.controller.test.ts's platform_admin branch creates 1 — both well inside the
+default of 5).
+
+### Explicitly deferred / commercial decisions still required
+
+See `docs/commercial-decisions.md` for the complete, authoritative list. Summary: final pricing
+sign-off (both plans), refund policy, exact grace-period length, additional-location/business
+self-serve purchasing (architecture supports it; no purchase flow built), real Paddle account
+creation and going live, tax/VAT registration status. Unchanged from Phase 26's own deferred list:
+final visual/branding pass, AI features, POS integrations, public API, advanced delivery-provider
+integrations, WhatsApp/advanced notifications, deep business-wide loyalty, advanced reporting,
+marketplace/app ecosystem.
+
+### Final assessment
+
+Not launch-ready. What's real: pricing architecture, entitlement/limit enforcement (the first actual
+enforcement since Phase 24's Plan model existed), a genuine checkout flow proven end-to-end through
+the mock provider's webhook path, billing history/invoices, currency-aware platform revenue
+reporting, and a real (if unexercised) Paddle adapter ready for real credentials. What's still
+missing before any commercial launch: the real provider has never touched a live account; every
+price is proposed, not approved; no self-serve add-on purchasing; no refund mechanism; no tax
+registration. The next highest-value work is resolving the commercial decisions in
+`docs/commercial-decisions.md` (pricing sign-off first) and then actually standing up a real Paddle
+sandbox account to exercise `PaddleBillingProvider.ts` for the first time against something real.

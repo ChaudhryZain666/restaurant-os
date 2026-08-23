@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Restaurant } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -49,6 +49,15 @@ export function LocationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Restaurant | null>(null);
+  const [limit, setLimit] = useState<{ max: number; current: number; canCreate: boolean } | null>(null);
+
+  useEffect(() => {
+    apiClient
+      .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${user!.businessId}/locations/limit`)
+      .then(setLimit)
+      .catch(() => setLimit(null)); // never block the page on this pure UI pre-check
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateName(name: string) {
     setDraft((d) => ({ ...d, name, slug: slugTouched ? d.slug : slugify(name) }));
@@ -77,6 +86,10 @@ export function LocationsPage() {
       setShowForm(false);
       setDraft(emptyDraft());
       setSlugTouched(false);
+      apiClient
+        .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${user!.businessId}/locations/limit`)
+        .then(setLimit)
+        .catch(() => undefined);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -137,9 +150,16 @@ export function LocationsPage() {
       )}
 
       {!showForm ? (
-        <Button size="sm" onClick={() => setShowForm(true)} className="self-start">
-          + Add another location
-        </Button>
+        <div className="flex flex-col items-start gap-1.5">
+          <Button size="sm" onClick={() => setShowForm(true)} className="self-start" disabled={limit ? !limit.canCreate : false}>
+            + Add another location
+          </Button>
+          {limit && !limit.canCreate && (
+            <p className="text-xs text-danger">
+              You've reached your plan's location limit ({limit.current}/{limit.max}). Upgrade your plan to add more.
+            </p>
+          )}
+        </div>
       ) : (
         <Card className="flex flex-col gap-3">
           <h2 className="font-heading text-lg font-medium text-foreground">New location</h2>

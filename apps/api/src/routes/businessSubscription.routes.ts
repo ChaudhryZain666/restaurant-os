@@ -1,14 +1,21 @@
 import { Router } from "express";
-import { createSubscriptionSchema, changeSubscriptionPlanSchema, mockAdvanceSubscriptionSchema } from "@restaurant/validation";
+import {
+  createSubscriptionSchema,
+  changeSubscriptionPlanSchema,
+  mockAdvanceSubscriptionSchema,
+  paginationQuerySchema,
+} from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireBusinessMatch, requireBusinessPermission as requirePermission } from "../middleware/businessLocation.js";
-import { validateBody } from "../middleware/validate.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
 import { env } from "../config/env.js";
 import {
   cancelSubscriptionHandler,
   changePlanHandler,
+  createCheckoutHandler,
   createSubscription,
+  getBillingHistoryHandler,
   getEntitlementsHandler,
   getSubscription,
   reactivateSubscriptionHandler,
@@ -27,12 +34,24 @@ businessSubscriptionRouter.use(requireAuth, requireBusinessMatch());
 
 businessSubscriptionRouter.get("/", requirePermission("billing.read"), asyncHandler(getSubscription));
 businessSubscriptionRouter.get("/entitlements", requirePermission("billing.read"), asyncHandler(getEntitlementsHandler));
+businessSubscriptionRouter.get(
+  "/billing-history",
+  requirePermission("billing.read"),
+  validateQuery(paginationQuerySchema),
+  asyncHandler(getBillingHistoryHandler)
+);
 
 businessSubscriptionRouter.post(
   "/",
   requirePermission("billing.manage"),
   validateBody(createSubscriptionSchema),
   asyncHandler(createSubscription)
+);
+businessSubscriptionRouter.post(
+  "/checkout",
+  requirePermission("billing.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(createCheckoutHandler)
 );
 businessSubscriptionRouter.post("/cancel", requirePermission("billing.manage"), asyncHandler(cancelSubscriptionHandler));
 businessSubscriptionRouter.post("/reactivate", requirePermission("billing.manage"), asyncHandler(reactivateSubscriptionHandler));

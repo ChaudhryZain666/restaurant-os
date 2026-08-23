@@ -88,3 +88,83 @@ test.describe.serial("owner billing lifecycle via the mock provider (Phase 24)",
     await expect(page.getByText("Cancels on")).not.toBeVisible();
   });
 });
+
+/**
+ * Phase 27 — the real, browser-driven proof of the payment-method-up-front checkout path: unlike
+ * the no-card trial flow above, "Subscribe now" launches a real navigation to the mock provider's
+ * checkout stub page (never a direct database write pretending payment succeeded), and only
+ * confirming payment there activates a subscription via the real webhook-processing path. Also
+ * proves the plan's own pricing renders, and that billing history reflects the real events.
+ */
+test.describe.serial("owner checkout — payment-method-up-front path (Phase 27)", () => {
+  let db: mongoose.Connection;
+
+  test.beforeAll(async () => {
+    const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
+    db = conn;
+  });
+
+  test.afterAll(async () => {
+    await db.close();
+  });
+
+  test("Subscribe now -> mock checkout stub -> confirm payment -> subscription activates immediately, no trial", async ({ page }) => {
+    test.setTimeout(90_000);
+    const stamp = Date.now();
+    const slug = `e2e-checkout-${stamp}`;
+    const restaurantName = `E2E Checkout ${stamp}`;
+    const ownerEmail = `e2e-checkout-owner-${stamp}@test.local`;
+
+    await page.goto("http://localhost:5174/login");
+    await page.locator('input[type="email"]').fill("platform-admin@restaurant.local");
+    await page.locator('input[type="password"]').fill("Admin123!");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/platform$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Restaurants" }).click();
+    await page.getByRole("button", { name: "Create restaurant" }).click();
+    await expect(page).toHaveURL(/\/platform\/restaurants\/new$/);
+    await page.getByLabel("Name", { exact: true }).fill(restaurantName);
+    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Full name").fill("Checkout Owner");
+    await page.getByLabel("Email", { exact: true }).fill(ownerEmail);
+    await page.getByRole("button", { name: "Create restaurant & send invite" }).click();
+    await expect(page.getByText("Restaurant created")).toBeVisible({ timeout: 10_000 });
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await db.collection("users").updateOne(
+      { email: ownerEmail },
+      { $set: { inviteTokenHash: tokenHash, inviteExpiresAt: new Date(Date.now() + 60 * 60 * 1000) } }
+    );
+
+    await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
+    await page.locator('input[type="password"]').fill("CheckoutOwner123!");
+    await page.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Billing" }).click();
+    await expect(page.getByText("No subscription yet.")).toBeVisible({ timeout: 10_000 });
+
+    // --- The seeded Owner plan's real (proposed) pricing renders in the plan picker. ---
+    await expect(page.locator("option", { hasText: "$79.00" })).toHaveCount(1);
+
+    // --- Launch checkout: a real navigation to the mock provider's stub page, not a shortcut. ---
+    await page.getByRole("button", { name: "Subscribe now" }).click();
+    await expect(page).toHaveURL(/\/mock-checkout\//, { timeout: 10_000 });
+    await expect(page.getByText("Mock checkout")).toBeVisible();
+
+    // --- Nothing is active yet until the mock payment is explicitly confirmed. ---
+    await page.getByRole("button", { name: "Confirm mock payment" }).click();
+    await expect(page.getByText("Payment confirmed")).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole("button", { name: "Back to billing" }).click();
+    await expect(page).toHaveURL(/\/billing$/, { timeout: 10_000 });
+    // Checkout implies immediate payment — active right away, never a trial.
+    await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    // --- Billing history reflects the real webhook-driven events, not a client-side fabrication. ---
+    await expect(page.getByText("Subscription started")).toBeVisible();
+    await expect(page.getByText("Payment succeeded")).toBeVisible();
+  });
+});

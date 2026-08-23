@@ -11,6 +11,7 @@ import {
   getBusinessLocation,
   createLocationForBusiness,
 } from "../controllers/business.controller.js";
+import { getLocationLimitHandler } from "../controllers/subscription.controller.js";
 
 /** Mounted at /businesses — a new, net-new namespace (Phase 18). Deliberately does not replace or
  *  modify any /restaurants/:restaurantId/... route. */
@@ -20,6 +21,13 @@ businessRouter.use(requireAuth);
 
 businessRouter.get("/me", asyncHandler(getMyBusiness));
 businessRouter.get("/:businessId/locations", requireBusinessMatch(), asyncHandler(listBusinessLocations));
+// Phase 27 — a pre-check for the "add location" UI affordance, gated the same as creation itself.
+businessRouter.get(
+  "/:businessId/locations/limit",
+  requireBusinessMatch(),
+  requireBusinessPermission("restaurant.settings.manage"),
+  asyncHandler(getLocationLimitHandler)
+);
 // Phase 19 — owner-only (requirePermission mirrors restaurant.routes.ts's PATCH/publish/settings
 // gating: restaurant.settings.manage is held only by restaurant_owner, not manager, matching how
 // Settings/Delivery already restrict who can reshape a restaurant's own configuration).

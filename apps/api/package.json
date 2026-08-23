@@ -13,6 +13,7 @@
     "migrate:business-location": "tsx src/scripts/migrateToBusinessLocation.ts",
     "migrate:menu-canonical": "tsx src/scripts/migrateMenuToCanonical.ts",
     "migrate:backfill-subscriptions": "tsx src/scripts/backfillSubscriptions.ts",
+    "migrate:backfill-location-counts": "tsx src/scripts/backfillLocationCounts.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

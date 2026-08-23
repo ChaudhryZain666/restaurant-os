@@ -68,15 +68,32 @@ const envSchema = z.object({
   DNS_VERIFIER: z.enum(["mock", "node"]).default("mock"),
 
   // Billing (Phase 24 platform subscriptions — deliberately separate from PAYMENT_PROVIDER above,
-  // a different financial domain). "mock" is the only valid value this phase and the only one that
-  // actually runs — see apps/api/src/billing/MockBillingProvider.ts. No real billing provider is
-  // integrated; this env var exists so a real one can be added later without touching any call site.
-  BILLING_PROVIDER: z.enum(["mock"]).default("mock"),
+  // a different financial domain). "mock" is the only provider that actually runs in this
+  // project's own tests — see apps/api/src/billing/MockBillingProvider.ts. "paddle" (Phase 27)
+  // names the real provider decision (docs/commercial-decisions.md's "Provider choice" section);
+  // selecting it without real PADDLE_* credentials throws clearly (getBillingProvider in
+  // billing/index.ts) rather than silently falling back to the mock — mirrors PAYMENT_PROVIDER's
+  // "safepay" precedent exactly.
+  BILLING_PROVIDER: z.enum(["mock", "paddle"]).default("mock"),
   MOCK_BILLING_WEBHOOK_SECRET: z.string().default("mock-billing-webhook-secret-dev-only"),
+  // Paddle: real network-capable adapter as of Phase 27 (apps/api/src/billing/
+  // PaddleBillingProvider.ts), but never exercised against a live account — see that file's header
+  // comment and docs/commercial-decisions.md for exactly what's verified vs. assumed. PADDLE_ENV
+  // picks which of Paddle's two real hosts to call; defaults to "sandbox" so an incomplete
+  // deployment config can never silently reach their production host.
+  PADDLE_API_KEY: z.string().optional(),
+  PADDLE_WEBHOOK_SECRET: z.string().optional(),
+  PADDLE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   // No final trial-length commercial decision has been made — this stays configuration, never a
   // hardcoded literal in application code. 14 here is a working default for local development/
-  // testing only, not a commercial decision (see docs' Phase 24 "commercial decisions required" list).
+  // testing only, not a commercial decision (see docs/commercial-decisions.md). A Plan's own
+  // trialDays (Phase 27) overrides this per-plan when set.
   TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).default(14),
+  // Phase 27 — how long a "past_due" subscription keeps full access before auto-transitioning to
+  // "cancelled" if the provider never reports recovery. No final policy decision has been made
+  // (see docs/commercial-decisions.md's "Failed-payment policy" section) — this is a working,
+  // documented-non-final default, mirroring TRIAL_PERIOD_DAYS's exact precedent.
+  PAST_DUE_GRACE_PERIOD_DAYS: z.coerce.number().int().min(0).default(7),
 });
 
 const parsed = envSchema.safeParse(process.env);

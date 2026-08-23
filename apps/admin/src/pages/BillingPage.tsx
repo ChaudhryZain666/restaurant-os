@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Plan, Subscription } from "@restaurant/types";
+import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -22,11 +22,34 @@ const STATUS_LABEL: Record<Subscription["status"], string> = {
   expired: "Trial expired",
 };
 
+const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
+  subscription_created: "Subscription started",
+  plan_changed: "Plan changed",
+  payment_succeeded: "Payment succeeded",
+  payment_failed: "Payment failed",
+  past_due: "Marked past due",
+  cancellation_requested: "Cancellation scheduled",
+  cancelled: "Cancelled",
+  reactivated: "Reactivated",
+  expired: "Trial expired",
+};
+
+function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): string | null {
+  const entry = pricing.find((p) => p.interval === interval);
+  if (!entry?.amountCents || !entry.currency) return null;
+  const amount = (entry.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: entry.currency });
+  return `${amount}/${interval === "monthly" ? "mo" : "yr"}`;
+}
+
 /**
  * Phase 24 — deliberately minimal owner-facing billing surface: no polished pricing page, no
- * final commercial pricing (Plan.pricing entries may have no amountCents at all — see
- * packages/types/src/types/plan.ts). Shows real, server-authoritative subscription state and the
+ * final commercial pricing sign-off (see docs/commercial-decisions.md — the seeded prices are
+ * PROPOSED, not final). Shows real, server-authoritative subscription state and the
  * mock-provider-backed lifecycle actions; nothing here is invented or simulated client-side.
+ *
+ * Phase 27 — gained plan pricing display, a Billing History section (real BillingHistoryEvent
+ * rows, doubling as the Invoices list via each payment_succeeded row's receiptUrl), past_due
+ * grace-period messaging, and a "pay now" checkout path alongside the existing no-card trial path.
  */
 export function BillingPage() {
   const { user } = useAuth();
@@ -34,7 +57,9 @@ export function BillingPage() {
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [pastDueDeadline, setPastDueDeadline] = useState<string | undefined>();
   const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
+  const [history, setHistory] = useState<BillingHistoryEvent[]>([]);
   const [selectedPlanCode, setSelectedPlanCode] = useState("");
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
   const [loading, setLoading] = useState(true);
@@ -42,13 +67,18 @@ export function BillingPage() {
   const [busy, setBusy] = useState(false);
 
   async function reload() {
-    const [subRes, plansRes] = await Promise.all([
-      apiClient.request<{ subscription: Subscription | null; plan: Plan | null }>(`/businesses/${businessId}/subscription`),
+    const [subRes, plansRes, historyRes] = await Promise.all([
+      apiClient.request<{ subscription: Subscription | null; plan: Plan | null; pastDueDeadline?: string }>(
+        `/businesses/${businessId}/subscription`
+      ),
       apiClient.request<{ plans: Plan[] }>("/plans"),
+      apiClient.request<Paginated<BillingHistoryEvent>>(`/businesses/${businessId}/subscription/billing-history?limit=10`),
     ]);
     setSubscription(subRes.subscription);
     setPlan(subRes.plan);
-    setAvailablePlans(plansRes.plans);
+    setPastDueDeadline(subRes.pastDueDeadline);
+    setAvailablePlans(plansRes.plans.filter((p) => p.type === "OWNER"));
+    setHistory(historyRes.items);
     if (!selectedPlanCode && plansRes.plans[0]) setSelectedPlanCode(plansRes.plans[0].code);
   }
 
@@ -68,6 +98,30 @@ export function BillingPage() {
         body: { planCode: selectedPlanCode, billingInterval },
       });
       await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The payment-method-up-front path (see subscription.service.ts's createCheckoutSessionCore).
+   *  Nothing is created here — the redirect target's own completion is what triggers a real
+   *  Subscription via the webhook path; a "mode: overlay" response (a real provider like Paddle)
+   *  has no client-side widget wired up yet in this admin app — deployment-dependent, documented. */
+  async function checkout() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiClient.request<{ checkout: { mode: string; url?: string } }>(
+        `/businesses/${businessId}/subscription/checkout`,
+        { method: "POST", body: { planCode: selectedPlanCode, billingInterval } }
+      );
+      if (res.checkout.mode === "redirect" && res.checkout.url) {
+        window.location.assign(res.checkout.url);
+      } else {
+        setError("This provider's checkout widget isn't wired into the admin app yet.");
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -161,11 +215,18 @@ export function BillingPage() {
                 <Badge tone={STATUS_TONE[subscription.status]}>{STATUS_LABEL[subscription.status]}</Badge>
               </p>
               <p className="text-sm text-muted">
-                {subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly"}
+                {formatPrice(plan.pricing, subscription.billingInterval) ?? (subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly")}
                 {subscription.provider === "internal" && " · Platform-granted, no billing relationship"}
               </p>
             </div>
           </div>
+
+          {subscription.status === "past_due" && pastDueDeadline && (
+            <Alert tone="warning">
+              Your last payment failed. Please update your payment method by{" "}
+              {new Date(pastDueDeadline).toLocaleDateString()} to avoid losing access.
+            </Alert>
+          )}
 
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {subscription.trialEnd && subscription.status === "trialing" && (
@@ -246,6 +307,7 @@ export function BillingPage() {
                 {availablePlans.map((p) => (
                   <option key={p.code} value={p.code}>
                     {p.name}
+                    {formatPrice(p.pricing, billingInterval) ? ` — ${formatPrice(p.pricing, billingInterval)}` : ""}
                   </option>
                 ))}
               </select>
@@ -264,9 +326,38 @@ export function BillingPage() {
             <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
               {busy ? "Starting..." : "Start subscription"}
             </Button>
+            <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
+              Subscribe now
+            </Button>
           </div>
         </Card>
       )}
+
+      <Card className="flex flex-col gap-3">
+        <h2 className="font-heading text-lg font-medium text-foreground">Billing history</h2>
+        {history.length === 0 ? (
+          <p className="text-sm text-muted">Nothing yet.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border text-sm">
+            {history.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="text-foreground">{HISTORY_LABEL[e.type]}</span>
+                <span className="text-muted">{new Date(e.occurredAt).toLocaleString()}</span>
+                {e.amountCents !== undefined && e.currency && (
+                  <span className="text-foreground">
+                    {(e.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: e.currency })}
+                  </span>
+                )}
+                {e.receiptUrl && (
+                  <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                    Receipt
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

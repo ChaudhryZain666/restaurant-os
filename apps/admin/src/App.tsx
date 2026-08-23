@@ -43,6 +43,7 @@ import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
 import { AgencyMembersPage } from "./pages/AgencyMembersPage";
 import { AgencyBillingPage } from "./pages/AgencyBillingPage";
 import { AgencyBusinessDetailPage } from "./pages/AgencyBusinessDetailPage";
+import { MockCheckoutPage } from "./pages/MockCheckoutPage";
 
 const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
@@ -69,6 +70,9 @@ export function App() {
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
+      {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
+          BILLING_PROVIDER=mock (the API returns this path only from the mock provider). */}
+      <Route path="/mock-checkout/:token" element={<MockCheckoutPage />} />
       {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
           tab via window.open from an order card's Print action. */}
       <Route

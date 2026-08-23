@@ -33,3 +33,29 @@ export async function mockAdvanceSubscription(req: Request, res: Response) {
   const updated = await getSubscriptionForBusiness(businessId);
   sendSuccess(res, { subscription: updated!.toJSON() });
 }
+
+/**
+ * Phase 27 — the checkout-completion equivalent of mockAdvanceSubscription above: what the admin
+ * app's mock checkout stub page (MockCheckoutPage.tsx) POSTs to when the user clicks "Confirm mock
+ * payment." Public (no auth) — the opaque token itself is the only credential, exactly like a real
+ * provider's checkout redirect callback would be. Drives the SAME signature-verification and
+ * idempotent event-processing path a genuine webhook delivery would, never a shortcut DB write.
+ */
+export async function completeMockCheckout(req: Request, res: Response) {
+  const { token } = req.params;
+
+  const mockProvider = getMockBillingProvider();
+  let payload: Record<string, unknown>;
+  try {
+    payload = mockProvider.completeCheckoutSession(token);
+  } catch (err) {
+    throw ApiError.badRequest((err as Error).message);
+  }
+  const { rawBody, signatureHeader } = mockProvider.signPayload(payload);
+  const event = mockProvider.verifyWebhookSignature(rawBody, signatureHeader);
+  if (!event) throw new Error("mock provider failed to verify its own freshly-signed payload");
+
+  await processBillingProviderEvent(mockProvider.name, event);
+
+  sendSuccess(res, { completed: true });
+}

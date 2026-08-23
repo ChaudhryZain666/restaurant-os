@@ -12,10 +12,12 @@ import { Plan } from "../models/Plan.js";
 async function seed() {
   await connectDB();
 
-  // Phase 24 — the Plan catalog itself. No real commercial pricing exists yet (pricing is
-  // deliberately left empty — see packages/types/src/types/plan.ts), so this seeds only the
-  // structural catalog entries a subscription can reference, upserted by code so re-running seed
-  // never creates duplicates or clobbers isActive if it's been changed by hand.
+  // Phase 24 established the Plan catalog structurally, with pricing deliberately left empty.
+  // Phase 27 populates PROPOSED (not commercially final — see docs/commercial-decisions.md)
+  // pricing derived from competitor research, upserted by code so re-running seed never creates
+  // duplicates or clobbers isActive/pricing if it's been changed by hand ($setOnInsert only ever
+  // applies on the FIRST insert — an already-seeded catalog is never silently overwritten by a
+  // later code change, exactly like Phase 25's own precedent for this same upsert shape).
   await Plan.findOneAndUpdate(
     { code: "owner" },
     {
@@ -23,11 +25,25 @@ async function seed() {
         code: "owner",
         name: "Owner",
         type: "OWNER",
-        pricing: [],
+        description: "For a single restaurant or a small multi-location group you run yourself.",
+        // providerPriceId here is a placeholder identifier the MOCK provider accepts as-is (it
+        // never validates authenticity) — NOT a real Paddle price id. A real deployment would
+        // replace these with the actual ids Paddle's dashboard assigns once that product/price
+        // pair is created there (see docs/commercial-decisions.md's "Provider choice" section).
+        pricing: [
+          { interval: "monthly", amountCents: 7900, currency: "USD", providerPriceId: "mock_price_owner_monthly" },
+          { interval: "yearly", amountCents: 79000, currency: "USD", providerPriceId: "mock_price_owner_yearly" },
+        ],
         entitlements: [
           { key: "custom_domains", value: true },
           { key: "business_analytics", value: true },
           { key: "business_promotions", value: true },
+          // Phase 27 — PROPOSED, not a commercial decision: 1 location included on the base plan.
+          // The no-subscription default (entitlementLimit.service.ts) stays generous regardless,
+          // so this only ever applies once a business actually has this live subscription — never
+          // retroactively to an existing grandfathered business. Purchasing additional locations
+          // beyond this count is NOT built this phase (see docs/commercial-decisions.md).
+          { key: "max_locations", value: 1 },
         ],
         isActive: true,
       },
@@ -41,15 +57,21 @@ async function seed() {
         code: "agency",
         name: "Agency",
         type: "AGENCY",
-        pricing: [],
+        description: "For an agency managing multiple client restaurant businesses.",
+        pricing: [
+          { interval: "monthly", amountCents: 19900, currency: "USD", providerPriceId: "mock_price_agency_monthly" },
+          { interval: "yearly", amountCents: 199000, currency: "USD", providerPriceId: "mock_price_agency_yearly" },
+        ],
         entitlements: [
           { key: "custom_domains", value: true },
           { key: "business_analytics", value: true },
           { key: "business_promotions", value: true },
-          // Phase 25 — no commercial limit has been decided; this is a generous, explicitly
-          // non-final development placeholder (see agencyEntitlement.service.ts's doc comment),
-          // not a commercial decision, mirroring TRIAL_PERIOD_DAYS=14's precedent.
-          { key: "max_businesses", value: 10 },
+          // Phase 25/27 — PROPOSED, not a commercial decision (see docs/commercial-decisions.md);
+          // this seeded value (5, matching the "included businesses" pricing proposal) is
+          // intentionally different from agencyEntitlement.service.ts's own
+          // NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES=3 fallback — one is what a REAL subscription
+          // includes, the other is the generous default for an agency with none at all.
+          { key: "max_businesses", value: 5 },
         ],
         isActive: true,
       },

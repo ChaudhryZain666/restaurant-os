@@ -1,5 +1,5 @@
 import type { HydratedDocument } from "mongoose";
-import type { BillingInterval, SubscriptionOwnerType, SubscriptionStatus } from "@restaurant/types";
+import type { BillingHistoryEventType, BillingInterval, SubscriptionOwnerType, SubscriptionStatus } from "@restaurant/types";
 import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
@@ -10,8 +10,9 @@ import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getBillingProvider } from "../billing/index.js";
-import type { ProviderBillingWebhookEvent, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
+import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
+import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 
 const LIVE_STATUSES: SubscriptionStatus[] = ["trialing", "active", "past_due", "cancelling"];
 
@@ -37,6 +38,20 @@ async function resolveOwnerIdentity(
   const agency = await Agency.findById(ownerId);
   if (!agency) return null;
   return { name: agency.name, email: agency.contactEmail };
+}
+
+/** A Plan's own trialDays (Phase 27) overrides env.TRIAL_PERIOD_DAYS when set, so a future plan can
+ *  legitimately differ (e.g. a no-trial plan) without touching the global default every other plan
+ *  still relies on. 0 (from either source) means no trial at all, never a value invented here. */
+function resolveTrialDays(plan: Pick<PlanDoc, "trialDays">): number | undefined {
+  const days = plan.trialDays ?? env.TRIAL_PERIOD_DAYS;
+  return days > 0 ? days : undefined;
+}
+
+/** The interval-matched price, if the plan has one configured — used both to stamp economic terms
+ *  onto a BillingHistoryEvent and to resolve a real provider's price identifier for checkout. */
+function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: BillingInterval) {
+  return plan.pricing.find((p) => p.interval === billingInterval);
 }
 
 /**
@@ -66,13 +81,14 @@ async function createSubscriptionCore(
     providerCustomerId: customer.providerCustomerId,
     planCode: plan.code,
     billingInterval,
-    trialDays: env.TRIAL_PERIOD_DAYS > 0 ? env.TRIAL_PERIOD_DAYS : undefined,
+    trialDays: resolveTrialDays(plan),
   });
 
   const status: SubscriptionStatus = providerSub.status === "trialing" ? "trialing" : "active";
 
+  let subscription: HydratedDocument<SubscriptionDoc>;
   try {
-    return await Subscription.create({
+    subscription = await Subscription.create({
       ownerType,
       ownerId,
       planId: plan._id,
@@ -93,6 +109,77 @@ async function createSubscriptionCore(
     }
     throw err;
   }
+
+  const pricing = resolvePricing(plan, billingInterval);
+  await recordBillingHistoryEvent({
+    ownerType,
+    ownerId,
+    subscriptionId: subscription._id,
+    type: "subscription_created",
+    provider: provider.name as SubscriptionDoc["provider"],
+    amountCents: pricing?.amountCents,
+    currency: pricing?.currency,
+    metadata: { planCode: plan.code },
+  });
+
+  return subscription;
+}
+
+/**
+ * Phase 27 — the checkout entry point: when a payment method needs to be collected up front (no
+ * trial, or a trial requiring a card per the provider's own configuration), rather than the
+ * direct-create path above (which never requires payment info — still exactly how a no-card trial
+ * works, unchanged). NO Subscription document is created here — only once the provider's webhook
+ * reports the checkout actually completed (see processBillingProviderEvent's checkoutMetadata
+ * branch) does a real Subscription come into existence. An abandoned checkout is simply a no-op:
+ * nothing was ever created to clean up.
+ */
+async function createCheckoutSessionCore(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<ProviderCheckoutSession> {
+  const identity = await resolveOwnerIdentity(ownerType, ownerId);
+  if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
+
+  const existing = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
+  if (existing) throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
+
+  const plan = await Plan.findOne({ code: planCode, isActive: true });
+  if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
+
+  const pricing = resolvePricing(plan, billingInterval);
+  if (!pricing?.providerPriceId) {
+    throw ApiError.badRequest("This plan has no checkout price configured for that billing interval yet");
+  }
+
+  const provider = getBillingProvider();
+  const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
+
+  return provider.createCheckoutSession({
+    providerCustomerId: customer.providerCustomerId,
+    providerPriceId: pricing.providerPriceId,
+    metadata: { ownerType, ownerId, planCode: plan.code, billingInterval },
+    successUrl: `${env.ADMIN_ORIGIN}/billing-checkout-complete`,
+    cancelUrl: `${env.ADMIN_ORIGIN}/billing`,
+  });
+}
+
+export async function createCheckoutSessionForBusiness(
+  businessId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<ProviderCheckoutSession> {
+  return createCheckoutSessionCore("business", businessId, planCode, billingInterval);
+}
+
+export async function createCheckoutSessionForAgency(
+  agencyId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<ProviderCheckoutSession> {
+  return createCheckoutSessionCore("agency", agencyId, planCode, billingInterval);
 }
 
 export async function createSubscriptionForBusiness(
@@ -170,6 +257,16 @@ async function cancelSubscriptionCore(
     { new: true }
   );
   if (!updated) throw ApiError.conflict("This subscription was just modified — please retry");
+
+  const historyType: BillingHistoryEventType = targetStatus === "cancelling" ? "cancellation_requested" : "cancelled";
+  await recordBillingHistoryEvent({
+    ownerType,
+    ownerId,
+    subscriptionId: updated._id,
+    type: historyType,
+    provider: updated.provider,
+  });
+
   return updated;
 }
 
@@ -188,12 +285,20 @@ async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, owne
     throw ApiError.badRequest(`Cannot reactivate a subscription with status "${subscription.status}"`);
   }
 
+  const provider = getBillingProvider();
+  if (subscription.providerSubscriptionId) {
+    await provider.reactivateSubscription(subscription.providerSubscriptionId);
+  }
+
   const updated = await Subscription.findOneAndUpdate(
     { _id: subscription._id, status: subscription.status },
     { $set: { status: "active" }, $unset: { cancelAt: "" } },
     { new: true }
   );
   if (!updated) throw ApiError.conflict("This subscription was just modified — please retry");
+
+  await recordBillingHistoryEvent({ ownerType, ownerId, subscriptionId: updated._id, type: "reactivated", provider: updated.provider });
+
   return updated;
 }
 
@@ -224,6 +329,19 @@ async function changeSubscriptionPlanCore(
 
   subscription.planId = plan._id;
   await subscription.save();
+
+  const pricing = resolvePricing(plan, subscription.billingInterval);
+  await recordBillingHistoryEvent({
+    ownerType,
+    ownerId,
+    subscriptionId: subscription._id,
+    type: "plan_changed",
+    provider: subscription.provider,
+    amountCents: pricing?.amountCents,
+    currency: pricing?.currency,
+    metadata: { newPlanCode },
+  });
+
   return subscription;
 }
 
@@ -250,6 +368,99 @@ function resolveTransitionTarget(currentStatus: SubscriptionStatus, providerStat
   return providerStatus;
 }
 
+/** Maps a just-applied status transition to the billing-history event type it represents, or
+ *  undefined for a transition with no distinct history entry of its own. */
+const HISTORY_TYPE_BY_TARGET_STATUS: Partial<Record<SubscriptionStatus, BillingHistoryEventType>> = {
+  active: "payment_succeeded",
+  past_due: "payment_failed",
+  cancelled: "cancelled",
+  expired: "expired",
+};
+
+/**
+ * Phase 27 — a checkout completing reports a BRAND-NEW subscription (no providerSubscriptionId we
+ * already know about), so this creates a Subscription document rather than updating an existing
+ * one — the counterpart to createCheckoutSessionCore, which deliberately created nothing. Reuses
+ * the exact same partial-unique-index backstop createSubscriptionCore relies on: if a duplicate/
+ * concurrent completion for the same owner races this insert, the loser is logged and dropped, not
+ * a second live subscription.
+ */
+async function handleCheckoutCompletionEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
+  const meta = event.checkoutMetadata!;
+  const plan = await Plan.findOne({ code: meta.planCode, isActive: true });
+  if (!plan) {
+    logger.warn("checkout-completion webhook for unknown plan code", { provider: providerName, planCode: meta.planCode });
+    await BillingWebhookEvent.updateOne(
+      { provider: providerName, eventId: event.eventId },
+      { $set: { processingError: `Unknown plan code: ${meta.planCode}` } }
+    );
+    return;
+  }
+
+  const provider = getBillingProvider();
+  const snapshot = await provider.retrieveSubscription(event.providerSubscriptionId);
+  const status: SubscriptionStatus = snapshot.status === "trialing" ? "trialing" : "active";
+
+  let subscription: HydratedDocument<SubscriptionDoc>;
+  try {
+    subscription = await Subscription.create({
+      ownerType: meta.ownerType,
+      ownerId: meta.ownerId,
+      planId: plan._id,
+      status,
+      billingInterval: meta.billingInterval,
+      currentPeriodStart: snapshot.currentPeriodStart,
+      currentPeriodEnd: snapshot.currentPeriodEnd,
+      trialStart: status === "trialing" ? new Date() : undefined,
+      trialEnd: snapshot.trialEnd,
+      provider: providerName,
+      providerCustomerId: meta.providerCustomerId,
+      providerSubscriptionId: event.providerSubscriptionId,
+    });
+  } catch (err) {
+    if ((err as { code?: number }).code === 11000) {
+      logger.info("duplicate checkout-completion event ignored — owner already has a live subscription", {
+        provider: providerName,
+        ownerType: meta.ownerType,
+        ownerId: meta.ownerId,
+      });
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" } }
+      );
+      return;
+    }
+    throw err;
+  }
+
+  const pricing = resolvePricing(plan, meta.billingInterval);
+  await recordBillingHistoryEvent({
+    ownerType: meta.ownerType,
+    ownerId: meta.ownerId,
+    subscriptionId: subscription._id,
+    type: "subscription_created",
+    provider: providerName as SubscriptionDoc["provider"],
+    amountCents: pricing?.amountCents,
+    currency: pricing?.currency,
+    providerReference: event.eventId,
+    metadata: { planCode: plan.code, viaCheckout: true },
+  });
+  if (status === "active") {
+    await recordBillingHistoryEvent({
+      ownerType: meta.ownerType,
+      ownerId: meta.ownerId,
+      subscriptionId: subscription._id,
+      type: "payment_succeeded",
+      provider: providerName as SubscriptionDoc["provider"],
+      amountCents: pricing?.amountCents,
+      currency: pricing?.currency,
+      providerReference: event.eventId,
+    });
+  }
+
+  await BillingWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+}
+
 /**
  * The single entry point every inbound billing webhook (real or mock-simulated) goes through, for
  * BOTH business and agency subscriptions — the lookup below is keyed by providerSubscriptionId
@@ -258,6 +469,10 @@ function resolveTransitionTarget(currentStatus: SubscriptionStatus, providerStat
  * is the source of truth for "have we seen this event before," not an in-application check. No
  * outbound provider call happens inside this function (unlike refundPayment), so a plain atomic
  * guard is sufficient — no transaction needed for a single-document update.
+ *
+ * Phase 27 — event.checkoutMetadata present means this is a checkout completing (a subscription
+ * being reported for the very first time), routed to handleCheckoutCompletionEvent above instead of
+ * the status-transition logic below, which only ever applies to an ALREADY-existing subscription.
  */
 export async function processBillingProviderEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
   try {
@@ -273,6 +488,11 @@ export async function processBillingProviderEvent(providerName: string, event: P
       return;
     }
     throw err;
+  }
+
+  if (event.checkoutMetadata) {
+    await handleCheckoutCompletionEvent(providerName, event);
+    return;
   }
 
   const subscription = await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId });
@@ -304,10 +524,23 @@ export async function processBillingProviderEvent(providerName: string, event: P
 
   // Guarded by status: {$ne: to} so a race between two deliveries of the same real-world
   // transition can't apply it twice — mirrors payment.service.ts's webhook-driven status guard.
-  await Subscription.findOneAndUpdate(
+  const applied = await Subscription.findOneAndUpdate(
     { _id: subscription._id, status: { $ne: targetStatus } },
-    { $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) } }
+    { $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) } },
+    { new: true }
   );
+
+  const historyType = HISTORY_TYPE_BY_TARGET_STATUS[targetStatus];
+  if (applied && historyType) {
+    await recordBillingHistoryEvent({
+      ownerType: subscription.ownerType as SubscriptionOwnerType,
+      ownerId: subscription.ownerId.toString(),
+      subscriptionId: subscription._id,
+      type: historyType,
+      provider: providerName as SubscriptionDoc["provider"],
+      providerReference: event.eventId,
+    });
+  }
 
   await BillingWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
 }

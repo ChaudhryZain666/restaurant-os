@@ -19,6 +19,10 @@ export const AGENCY_AUDIT_ACTIONS = [
   "agency.subscription_plan_changed",
   "agency.subscription_cancellation_requested",
   "agency.subscription_reactivated",
+  // Phase 27 — webhook-driven state changes, mirroring the business-side AUDIT_ACTIONS additions.
+  "agency.subscription_payment_succeeded",
+  "agency.subscription_payment_failed",
+  "agency.subscription_past_due",
 ] as const;
 
 export const AGENCY_AUDIT_TARGET_TYPES = ["agency", "agency_membership", "business", "subscription"] as const;

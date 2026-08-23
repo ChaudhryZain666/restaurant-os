@@ -26,4 +26,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "subscription.cancellation_requested": "Subscription cancellation requested",
   "subscription.reactivated": "Subscription reactivated",
   "subscription.cancelled": "Subscription cancelled",
+  "subscription.payment_succeeded": "Payment succeeded",
+  "subscription.payment_failed": "Payment failed",
+  "subscription.past_due": "Marked past due",
 };

@@ -34,10 +34,12 @@ import { businessAnalyticsRouter } from "./businessAnalytics.routes.js";
 import { businessPromotionRouter } from "./businessPromotion.routes.js";
 import { businessSubscriptionRouter } from "./businessSubscription.routes.js";
 import { billingWebhookRouter } from "./billingWebhook.routes.js";
+import { billingMockCheckoutRouter } from "./billingMockCheckout.routes.js";
 import { planRouter } from "./plan.routes.js";
 import { agencyRouter } from "./agency.routes.js";
 import { agencyMembershipRouter, agencyAcceptInviteRouter } from "./agencyMembership.routes.js";
 import { agencySubscriptionRouter } from "./agencySubscription.routes.js";
+import { env } from "../config/env.js";
 
 export const apiRouter = Router();
 
@@ -53,6 +55,11 @@ apiRouter.use("/businesses/:businessId/analytics", businessAnalyticsRouter);
 apiRouter.use("/businesses/:businessId/promotions", businessPromotionRouter);
 apiRouter.use("/businesses/:businessId/subscription", businessSubscriptionRouter);
 apiRouter.use("/webhooks/billing", billingWebhookRouter);
+// Phase 27 — only exists at all when the mock provider is active, mirroring
+// businessSubscription.routes.ts's mock-advance route gating exactly.
+if (env.BILLING_PROVIDER === "mock") {
+  apiRouter.use("/billing/mock-checkout", billingMockCheckoutRouter);
+}
 apiRouter.use("/plans", planRouter);
 // Phase 25 — agencies/accept-invite mounted BEFORE /agencies itself so the literal "accept-invite"
 // segment can never be swallowed by /agencies/:agencyId's param matching.

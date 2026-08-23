@@ -49,7 +49,9 @@ async function resolveBusinessLocations(businessId: string, locationIdsFilter?: 
   return all.filter((l) => requestedIds.has(l.id));
 }
 
-function sumAmountsByCurrency(entries: Array<{ currency: string; amount: number }>): CurrencyAmount[] {
+/** Exported (Phase 27) — platform.controller.ts's revenue overview reuses this exact grouping
+ *  convention rather than inventing a second one; see that call site for the reasoning. */
+export function sumAmountsByCurrency(entries: Array<{ currency: string; amount: number }>): CurrencyAmount[] {
   const totals = new Map<string, number>();
   for (const e of entries) totals.set(e.currency, (totals.get(e.currency) ?? 0) + e.amount);
   return Array.from(totals.entries()).map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }));

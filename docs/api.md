@@ -108,6 +108,20 @@
 # checks the SAME AGENCY_ROLE_GRANTS map requireBusinessPermission already used (renamed from
 # AGENCY_ROLE_BUSINESS_GRANTS since it now governs both scopes). No new route paths for these —
 # same URLs, now reachable by an authorized agency member too.
+
+# Phase 27 — commercial billing: real (proposed) pricing, checkout, entitlement enforcement, billing history
+/api/v1/businesses/:businessId/subscription/checkout          POST  billing.manage — {planCode, billingInterval}; creates NO Subscription — only the provider's webhook completing checkout does
+/api/v1/businesses/:businessId/subscription/billing-history   GET   billing.read — paginated BillingHistoryEvent (also the Invoices list — payment_succeeded rows carry receiptUrl)
+/api/v1/businesses/:businessId/locations/limit                GET   restaurant.settings.manage — {max, current, canCreate}; a pre-check only, never authoritative (reserveLocationSlot is)
+/api/v1/agencies/:agencyId/subscription/checkout               POST  agency.billing.manage — mirrors the business checkout route
+/api/v1/agencies/:agencyId/subscription/billing-history        GET   agency.billing.read — mirrors the business billing-history route
+/api/v1/billing/mock-checkout/:token/complete                  POST  Public (opaque token only) — only mounted when BILLING_PROVIDER=mock; drives the real webhook path, mirrors mock-advance
+/api/v1/platform/revenue                                       GET   platform.restaurants.manage — currency-grouped MRR (sumAmountsByCurrency), never a blended total
+# custom_domains (restaurantDomain POST), business_analytics (businessAnalytics router),
+# business_promotions (businessPromotion router) are now entitlement-gated too, via the new
+# requireEntitlement middleware (entitlementLimit.service.ts) — same URLs, no new paths, but a
+# subscription whose plan explicitly lacks the entitlement now gets a real 403 where it previously
+# always passed. A business with NO subscription at all is never affected (generous default-allow).
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never
@@ -206,18 +220,26 @@ a silent gap in practice, the admin `OrderPaymentAdmin` component surfaces an ex
 was cancelled but the payment hasn't been refunded yet" warning whenever a cancelled order's most
 recent payment is still `paid` or `partially_refunded`.
 
-## Billing (Phase 24 — platform subscriptions, separate from Payments above)
+## Billing (Phase 24 foundation; Phase 27 — real pricing, checkout, entitlement enforcement)
 
 `apps/api/src/billing/` defines a provider-agnostic `BillingProvider` interface — deliberately
 separate from `apps/api/src/payments/PaymentProvider.ts`. Customer-order payments and platform
 subscription billing are different financial domains with different lifecycles, different webhook
 streams (`BillingWebhookEvent` vs `PaymentWebhookEvent`), and different idempotency stores; mixing
-them would make either one harder to reason about safely. Only `MockBillingProvider` exists today
-(`BILLING_PROVIDER=mock`, the only valid value) — no real billing provider is integrated, and no
-real prices have been decided (`Plan.pricing` entries may have no `amountCents` at all). Webhooks
-land at `POST /webhooks/billing/:provider` (no auth — signature-verified instead, same shape as the
-payment webhook route). See `docs/multi-tenant-storefront-architecture.md`'s Phase 24 section for
-the full domain model, lifecycle state machine, entitlement mechanism, and migration design.
+them would make either one harder to reason about safely. `MockBillingProvider` is the only provider
+this project's own tests select. `PaddleBillingProvider` (Phase 27, `BILLING_PROVIDER=paddle`) is
+real, network-capable code against Paddle's documented Billing API v2 — but has never been
+exercised against a live account (see that file's header comment). `Plan.pricing` now carries
+PROPOSED (not commercially final) pricing on the seeded catalog — see `docs/commercial-decisions.md`
+for every number and every still-open decision. Two creation paths exist: the original no-card
+trial-first `POST .../subscription`, and Phase 27's payment-method-up-front `POST .../subscription/
+checkout` (creates nothing until the provider's webhook reports completion). Feature entitlements
+(`custom_domains`/`business_analytics`/`business_promotions`) are now actually enforced via
+`requireEntitlement` (`entitlementLimit.service.ts`) — the first real callers of the entitlement
+mechanism since Phase 24 built it inert. Webhooks land at `POST /webhooks/billing/:provider` (no
+auth — signature-verified instead, same shape as the payment webhook route). See
+`docs/multi-tenant-storefront-architecture.md`'s Phase 24 and Phase 27 sections for the full domain
+model, lifecycle state machine, entitlement/limit mechanism, and checkout design.
 
 ## Agencies (Phase 25 — Agency → Business → Location; Phase 26 — location-operational access)
 

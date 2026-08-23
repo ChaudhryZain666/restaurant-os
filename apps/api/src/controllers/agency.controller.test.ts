@@ -271,7 +271,14 @@ describe("POST /agencies/:agencyId/businesses — creation, transactional owner-
         billingInterval: "monthly",
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        provider: "internal",
+        // "mock", not "internal" — Phase 27's entitlementLimit.service.ts/agencyEntitlement.service.ts
+        // deliberately exclude provider:"internal" (grandfathered/comped) subscriptions from limit
+        // enforcement, treating them the same as no subscription at all (see those files' doc
+        // comments — a real regression this exact fixture shape exposed against Phase 24's
+        // grandfathering script). This test's whole point is a REAL enforced limit, so it needs a
+        // real (non-internal) provider value, exactly like an actual createSubscriptionForAgency call
+        // would produce.
+        provider: "mock",
       });
 
       agencyIds.push(limitedAgency.id);
@@ -324,7 +331,14 @@ describe("POST /agencies/:agencyId/businesses — creation, transactional owner-
         billingInterval: "monthly",
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        provider: "internal",
+        // "mock", not "internal" — Phase 27's entitlementLimit.service.ts/agencyEntitlement.service.ts
+        // deliberately exclude provider:"internal" (grandfathered/comped) subscriptions from limit
+        // enforcement, treating them the same as no subscription at all (see those files' doc
+        // comments — a real regression this exact fixture shape exposed against Phase 24's
+        // grandfathering script). This test's whole point is a REAL enforced limit, so it needs a
+        // real (non-internal) provider value, exactly like an actual createSubscriptionForAgency call
+        // would produce.
+        provider: "mock",
       });
       agencyIds.push(raceAgency.id);
       userIds.push(raceOwner.id);
