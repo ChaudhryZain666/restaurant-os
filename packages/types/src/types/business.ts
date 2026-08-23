@@ -11,5 +11,10 @@ export interface Business {
   ownerId: string;
   status: "pending" | "active" | "suspended";
   brandColor?: string;
+  /** Phase 25 — optional, additive. Which Agency manages this business, if any. Never replaces
+   *  `ownerId` (the actual business-owner User, unchanged): a business can exist independently
+   *  (unset) or be managed by an Agency (set) — see docs/multi-tenant-storefront-architecture.md's
+   *  Phase 25 section. */
+  agencyId?: string;
   createdAt: string;
 }

@@ -1792,3 +1792,285 @@ no administrative actions.
 - Which real billing provider to integrate, and when.
 - Whether/how existing grandfathered (`provider: "internal"`) businesses ever transition onto a real
   paid plan.
+
+## Phase 25 — Agency Architecture, Multi-Business Management
+
+Phase 24 built `Subscription.ownerType: "business" | "agency"` and `Plan.type: "OWNER" | "AGENCY"` as
+a forward-compatible slot, explicitly deferring the Agency entity itself. Phase 25 builds the real
+thing: `Agency → Business → Location`, with an agency able to manage multiple businesses, invite the
+people who run them, and switch between agencies — all without weakening the tenant isolation the
+last eight phases established. This is a foundation phase: no real billing provider, no final
+pricing, no launch-readiness claim, and — per its own explicit boundary — no deep operational access
+into a managed business's day-to-day running (orders, kitchen, menu editing). See Section 33 below
+for an honest, direct answer to every question the brief asked this phase to answer.
+
+### Reconnaissance findings that shaped the design (verified via 3 parallel Explore agents)
+
+- `User.businessId` is a singular ref, read directly at 8+ call sites, with **zero DB read per
+  request** — `requireAuth` copies JWT claims onto `req.user` directly, re-derived only at
+  login/refresh. `Business.ownerId` is a required singular ref to `User`. No agency field existed
+  anywhere before this phase except the two Phase-24 hooks and an unused, unreferenced
+  `SupportTicket.agencyId`.
+- The codebase's own established pattern for "one user, multiple scoped things" is `User.locationIds`
+  — an array claim embedded in the JWT, refreshed at login. `restaurant_staff`/`kitchen_staff` need
+  explicit array membership; `restaurant_owner`/`restaurant_manager` get *implicit* access to every
+  location under their `businessId` via one DB read in `canAccessRestaurant`. This is the exact shape
+  mirrored for agency membership below.
+- `requireBusinessMatch()` is a 12-line function used identically by all eight
+  `/businesses/:businessId/...` routers. One well-contained extension to it — not eight per-route
+  rewrites — is what makes every existing business-scoped route agency-aware.
+- `subscription.service.ts`'s five functions were hard-coded to `ownerType: "business"` and
+  business-specific lookups; `entitlement.service.ts`/`subscriptionStateMachine.ts` were already
+  ownerType-agnostic.
+- `AuditLog.restaurantId` is required — structurally unable to represent agency-only events (agency
+  created, member invited) that have no restaurant in scope yet. Mirrors the exact reasoning Phase 24
+  used to keep `BillingWebhookEvent` separate from `PaymentWebhookEvent` despite an identical shape.
+- The invite/accept-token pattern (`secureToken.service.ts`, `acceptInvite`'s atomic
+  double-accept-safe `findOneAndUpdate`) was fully reusable as the direct precedent for agency-member
+  invites.
+
+### Core architectural decision — Agency is a new top-level entity, not a Business variant
+
+`Agency {name, slug, description?, logo?, contactEmail, status, businessCount}` — deliberately **no
+`ownerId`** field, unlike `Business`. An Agency's ownership *is* its membership (an `agency_owner`
+row), not a single ref: `Business` predates membership modeling and keeps its legacy singular owner;
+`Agency` is new and has no such baggage to preserve.
+
+`Business.ownerId` stays required and means exactly what it means today: the real business-owner
+`User`, invited by the agency or set at creation — completely unchanged for the individual-owner
+path. A new, optional `Business.agencyId?` (indexed) marks "which agency manages this business, if
+any." Every business created before this phase simply has it unset — a valid, non-migrated state
+(mirrors Phase 24's "absence is safe" reasoning for `Subscription`), so **no migration script was
+needed this phase**.
+
+### `AgencyMembership` — the explicit join model, never a singular `User.agencyId`
+
+```
+AgencyMembership {
+  agencyId, userId, role: "agency_owner"|"agency_admin"|"agency_staff",
+  status: "invited"|"active"|"revoked"|"deactivated",
+  businessIds?: ObjectId[],   // explicit per-business assignment, agency_staff only
+  invitedBy?, inviteTokenHash?, inviteExpiresAt?, acceptedAt?,
+}
+```
+Unique `{agencyId, userId}` — one row per user per agency; a user can hold independent-role rows in
+multiple agencies, which is exactly why this can't be a singular JWT field the way `businessId` is.
+`businessIds` mirrors `User.locationIds` for `restaurant_staff` exactly: `agency_owner`/`agency_admin`
+get *implicit* access to every business under the agency; `agency_staff` needs *explicit* membership
+in this array (no implicit access — absence means no business access yet, never default-allow).
+
+### JWT gains an `agencyMemberships` array claim
+
+`AccessTokenPayload.agencyMemberships?: Array<{agencyId, role}>`, populated from
+`AgencyMembership.find({userId, status:"active"})` at login/refresh only — the same staleness
+contract every other claim already has (a new membership or role change takes effect on next
+login/refresh, not immediately; the frontend's `AuthContext.refreshUser()` exists specifically to let
+a mid-session action like "create an agency" or "accept an invite" get a fresh claim without a full
+logout/login).
+
+### `requireBusinessMatch()`'s new branch — the single highest-leverage change in this phase
+
+```
+1. platform_admin → allow (unchanged)
+2. req.user.businessId === params.businessId → allow (unchanged, zero-DB-read fast path)
+3. NEW: if req.user.agencyMemberships is non-empty, ONE DB read — Business.findById(businessId)
+   .select("agencyId") — if it matches a membership: agency_owner/agency_admin → allow;
+   agency_staff → allow only if membership.businessIds includes this business (one further read).
+4. otherwise → deny
+```
+This one DB read mirrors `canAccessRestaurant`'s existing owner/manager branch precisely — not a new
+pattern. Sets `req.agencyRole` on success, consumed by the new `requireBusinessPermission` (swapped
+in for `requirePermission` on all eight business-scoped routers only): an agency member's *global*
+`role` is `"agency_member"`, which grants nothing in `ROLE_PERMISSIONS` — every real capability flows
+through `req.agencyRole` checked against `AGENCY_ROLE_BUSINESS_GRANTS`, a small map expressed in the
+*existing* `Permission` vocabulary, limited to exactly the permissions the eight business-scoped
+routers actually check (`restaurant.settings.manage`, `billing.read`/`manage`,
+`restaurant.promotions.manage`, `restaurant.analytics.read`, `restaurant.menu.read/write`,
+`restaurant.categories.write`, `restaurant.modifiers.write`) — nothing location-operational is in it
+at all.
+
+### Explicit boundary: business-level access, not location-operational access
+
+Every agency capability the brief lists (create businesses, manage locations list, business
+settings, analytics, promotions, domains-read, subscription) is **business-scoped**
+(`/businesses/:businessId/...`). Day-to-day location operations (orders, kitchen, tables, delivery,
+location staff) remain governed by the *existing*, completely untouched `requireTenantMatch` —
+reachable only by the business's own owner/manager/staff. This matches the brief's own invitation-
+flow description ("the owner should access their Business normally") and avoids retrofitting
+agency-awareness into every location-scoped route in the app. A future phase could extend
+`agency_staff` assignment down to `locationIds` using the identical, already-proven mechanism, if
+ever needed — this is a considered, documented boundary, not an oversight.
+
+### Agency's own permissions — a separate, small `AgencyPermission` type
+
+Governs `/agencies/:agencyId/...` routes themselves (not businesses they manage):
+`agency.manage`, `agency.members.manage`, `agency.businesses.manage`, `agency.billing.read`,
+`agency.billing.manage`. GET routes only require `requireAgencyMatch` (any active membership, any
+role); these permissions gate mutations only, mirroring `billing.read`/`billing.manage`'s read/write
+split. A deliberately separate concern from `AGENCY_ROLE_BUSINESS_GRANTS` above.
+
+### Subscription: generalized core, Phase 24's business functions unchanged as thin wrappers
+
+`subscription.service.ts`'s five functions were refactored into an `{ownerType, ownerId}`-generic
+core with `createSubscriptionForBusiness`/`cancelSubscription`/etc. as thin wrappers — zero behavior
+change (all 34 existing Phase 24 tests pass unmodified). New `createSubscriptionForAgency`/
+`cancelAgencySubscription`/`reactivateAgencySubscription`/`changeAgencySubscriptionPlan` resolve
+identity from `Agency.name`/`contactEmail` instead of `Business`/owner `User`. New
+`/agencies/:agencyId/subscription` mirrors `businessSubscription.routes.ts` exactly. The existing
+`{ownerType, ownerId}` partial unique index already protects against duplicate agency subscriptions
+— no new concurrency work needed, just confirmed reuse.
+
+### Entitlements / usage limits — real, checkable, atomic under concurrency
+
+`Plan` (agency-type) entitlements gain `max_businesses` (numeric), seeded with an explicit,
+documented-as-non-final development placeholder (`10`) — mirrors Phase 24's `TRIAL_PERIOD_DAYS=14`
+precedent exactly. `Agency.businessCount` is a maintained counter, reserved **atomically** via
+`Agency.findOneAndUpdate({_id, businessCount:{$lt:max}}, {$inc:{businessCount:1}})` — the same
+atomic-guard-not-check-then-insert principle Phase 23/24 already established, verified under true
+`Promise.all` concurrency in tests (two simultaneous business-creation requests against a limit of 1
+yield exactly one success). A new, narrow `agencyEntitlement.service.ts` keeps this concern distinct
+from `entitlement` (what a plan includes) and `billing status` (subscription lifecycle), per the
+brief's explicit "do not mix these concepts."
+
+### Agency business creation — mirrors `createRestaurant`'s transactional shape, no impersonation
+
+`createAgencyBusiness` uses the same `mongoose.startSession()`/`withTransaction` pattern as
+`restaurant.controller.ts`'s `createRestaurant`: creates an unusable-password owner `User`, a
+`Business` (`agencyId` set), the first `Restaurant`, reserves the agency's business-count slot
+atomically *before* the transaction (released on any transaction failure, including the genuine race
+the pre-checks can't close), sends the existing `ownerInviteEmail` unchanged, and records both a new
+`AgencyAuditLog` entry and the existing per-restaurant `AuditLog` entry. The agency never
+authenticates *as* the owner — explicit authorization the whole way.
+
+### Agency member invitation — a separate accept flow, own token, not an overload of the existing one
+
+`AgencyMembership` carries its **own** `inviteTokenHash`/`inviteExpiresAt`, distinct from
+`User.inviteTokenHash` — a person could plausibly have a pending business-staff invite and an agency
+invite at the same time, and conflating the two fields would corrupt one or the other. Inviting an
+existing platform account (looked up by email first) touches only the membership row, never the
+`User`'s password; inviting a brand-new person reuses the standard unusable-password mechanism.
+`POST /agencies/accept-invite` mirrors `acceptInvite`'s exact atomic double-accept protection for
+both documents it may touch. Only accounts with role `"customer"` or already `"agency_member"` can be
+invited or self-serve-create an agency — mixing a restaurant-scoped or `platform_admin` identity with
+agency membership is a real product question deferred, not silently allowed.
+
+### `AgencyAuditLog` — new, small, parallel collection, not a schema change to `AuditLog`
+
+Same shape/"log and swallow, never fail the real operation" conventions as `AuditLog`, scoped to
+`agencyId` because agency-only events (agency created, member invited, before any business exists)
+have no restaurant to attach to. Business-scoped actions taken by an agency member (business
+creation) still *also* write the normal per-restaurant `AuditLog` entry — both trails populated, no
+duplication of concern.
+
+### Concurrency — verified under true `Promise.all` in Jest
+
+- **Duplicate business creation against `max_businesses`**: atomic `businessCount` guard, one 201 one
+  409, counter never over-incremented.
+- **Duplicate agency membership accept (same token)**: atomic double-`findOneAndUpdate` guard (User
+  password + AgencyMembership status), one 200 one 400.
+- **Duplicate agency subscription creation**: the existing `{ownerType, ownerId}` partial unique
+  index, reused unchanged.
+- **Cross-agency / cross-business isolation**: proven via real HTTP in Jest (not middleware-unit
+  tests) — an agency member of Agency A can never reach Agency B's businesses, members, subscription,
+  or audit log, and a business's own real owner (invited by an agency) can access their business but
+  never the agency's own administration surface.
+
+### Migration / backward compatibility
+
+None required. `Business.agencyId` is optional and unset by default for every business that existed
+before this phase — a valid, non-migrated state, not a wrong one.
+
+### Platform administration
+
+`GET /platform/agencies` (paginated, mirrors `listPlatformSubscriptions`) — business/member counts
+per agency, read-only. No write access to any agency's members/businesses/billing through this
+surface: `requireAgencyPermission` deliberately does **not** exempt `platform_admin` the way
+`requireAgencyMatch`/`requireBusinessMatch` do, so a platform_admin can reach an agency's own GET
+routes (consistent read visibility) but never its mutations.
+
+### Admin UX
+
+`AgencyContext.tsx` — the agency-switching analog of `LocationContext.tsx`, same "localStorage is a
+UI preference only, never trusted for authorization" philosophy. `AgencyDashboardPage.tsx` (shows a
+self-serve create-agency form for an account with none, or a summary + switcher for one/more),
+`AgencyBusinessesPage.tsx` (list + create — **read-only-plus-create**, deliberately not wired into
+the existing owner-facing Menu/Analytics/Promotions pages; see the boundary decision above),
+`AgencyMembersPage.tsx` (invite/role-change/revoke), `AgencyBillingPage.tsx` (mirrors `BillingPage.tsx`
+for `/agencies/:agencyId/subscription`, no mock-advance dev button — that driver only exists for
+business subscriptions today). A new `RegisterPage.tsx` + `AuthContext.register()` is the admin app's
+*only* self-serve signup, and only for starting an agency — every other admin identity is always
+invited. `roleHomePath()` is the one shared "role → default landing page" mapping (`platform_admin`→
+`/platform`, `agency_member`/`customer` → `/agency`, else → `/`), used by both `LoginPage` and
+`RequireAuth` so they can never drift into a redirect loop.
+
+### What was deliberately deferred (explicit non-goals, matching the brief's Section 29-30)
+
+- **Real SaaS billing provider integration and platform payment receiving** — Phase 24's mock-only
+  architecture, unchanged and unextended this phase.
+- **Final pricing for owner/agency plans** — `max_businesses:10` is a development placeholder, not a
+  commercial decision.
+- **Deep agency-level cross-business analytics/revenue aggregation** — `GET /agencies/:agencyId/
+  businesses` returns per-business summaries (location count, subscription status), never a blended
+  rollup; a real aggregation layer (currency-grouped, timezone-safe, on the scale of Phase 23's
+  business analytics) is explicitly foundation-only, not attempted.
+- **Agency-staff location-level (not just business-level) access** — the mechanism to extend it
+  (`AgencyMembership.businessIds`, mirroring `User.locationIds`) already exists; wiring it into
+  `requireTenantMatch` does not.
+- **Wiring the existing owner-facing admin pages (Menu, Orders, Analytics, Promotions, Domains) into
+  an "acting as agency for business X" context** — the API is agency-aware for every business-scoped
+  route already; the admin frontend's operational pages are not, and extending `LocationContext`/
+  business-selection to support this is a real, separate piece of work.
+- Socket.IO agency rooms, real notification dispatch (the existing BullMQ queue/job-name-union
+  pattern is the integration point, no new sender built), public API, POS, AI features — all
+  unchanged from prior phases' non-goals.
+
+### Section 33 — honest, direct answers
+
+1. Can one agency exist? **Yes**, self-serve, real, tested.
+2. Can an agency have multiple members? **Yes** — `AgencyMembership`, tested with 3 roles.
+3. Can an agency create multiple businesses? **Yes**, up to its plan's `max_businesses` (or a
+   development-placeholder default of 3 with no subscription), atomically enforced.
+4. Can each business have multiple locations? **Yes** — unchanged from Phase 18/19, untouched.
+5. Can each business have its own owner? **Yes** — the agency-created flow invites a real
+   `restaurant_owner`, structurally identical to the platform-admin-created path.
+6. Can agency users switch between businesses? **Partially** — they see and can act on every managed
+   business's *business-level* surface (settings/analytics/promotions/billing) via the API today; the
+   admin UI's switcher for this is deferred (see above). They cannot yet switch into a business's
+   day-to-day operational admin (Menu/Orders/Kitchen) — that boundary is intentional this phase.
+7. Can they then switch between locations? **Not yet** — a direct consequence of #6; the mechanism
+   (`AgencyMembership.businessIds` → `requireTenantMatch`) is not wired.
+8. Is every authorization boundary enforced server-side? **Yes** — proven via real HTTP tests, not
+   middleware-unit tests; localStorage/JWT claims are never trusted as sole authorization, every
+   agency/business access re-verifies against the DB.
+9. Can a business owner access only their own business? **Yes**, unchanged and re-verified.
+10. Can location staff access only their assigned locations? **Yes**, unchanged — `requireTenantMatch`
+    was not touched by this phase, and the existing regression suite proves it still isn't.
+11. Can agency members be restricted appropriately? **Yes** — `agency_staff` needs explicit
+    `businessIds` assignment; `agency_owner`/`agency_admin` get implicit full access, mirroring the
+    proven `restaurant_staff`/owner-manager split.
+12. Can agency subscriptions exist through the Phase 24 billing architecture? **Yes**, fully.
+13. Can agency plan entitlements be evaluated? **Yes** — `getEntitlements`/`hasEntitlement` are
+    ownerType-agnostic and work unchanged; `max_businesses` is real and enforced.
+14. Can future usage limits be added without rewriting controllers? **Yes** —
+    `agencyEntitlement.service.ts`'s `reserveBusinessSlot`/`getMaxBusinesses` pattern generalizes to
+    any future numeric limit the same way.
+15. Do existing single-business owners remain completely unaffected? **Yes** — confirmed by the full
+    existing 753-test Jest suite and 35-spec pre-Phase-25 Playwright suite staying green unmodified.
+16. Does custom-domain management continue working? **Yes**, untouched — `DomainMapping` still keys
+    off `Restaurant`/location, unaffected by `Business.agencyId`.
+17. Does shared-menu architecture remain intact? **Yes**, untouched — `Category`/`MenuItem`
+    canonical/override architecture doesn't know or care whether its `Business` has an `agencyId`.
+18. Do business analytics and promotions remain tenant-safe? **Yes** — an agency member reaching them
+    goes through the same, now-extended `requireBusinessMatch`, which resolves to exactly one
+    business per request, same isolation guarantee as before.
+19. Are all important agency actions auditable? **Yes** — `AgencyAuditLog` for agency-scoped events,
+    the existing `AuditLog` (fanned out per-restaurant) for business-scoped ones, mirroring the
+    established dual-trail pattern from Phase 23's business promotions.
+20. Is the architecture ready for a real billing provider later? **Yes** — no change needed; the
+    provider abstraction is already ownerType-agnostic.
+21. Is the architecture ready for delivery-provider integrations later? **No change either way** —
+    this phase didn't touch delivery at all; that remains exactly as ready (or not) as before.
+22. What is still genuinely missing before "commercially complete"? Real billing, real pricing, the
+    UI wiring for #6/#7 above, agency-level analytics aggregation, and everything already listed as
+    deferred in Phases 22-24 (public API, POS, AI, notifications). This phase is a real, tested
+    foundation — not a launch-ready product, and this report makes no such claim.

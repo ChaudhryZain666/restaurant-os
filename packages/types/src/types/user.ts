@@ -1,4 +1,5 @@
 import type { UserRole } from "./rbac.js";
+import type { AgencyMembershipRole } from "./agency.js";
 
 export interface PublicUser {
   id: string;
@@ -15,6 +16,11 @@ export interface PublicUser {
    *  businessId (see apps/api's requireTenantMatch), so this stays empty for them by design, not
    *  by omission. Staff/kitchen_staff: the specific locations they're scoped to. */
   locationIds?: string[];
+  /** Phase 25 — every AGENCY this account has an active (accepted) membership in, and their role
+   *  in each. Empty for accounts with no agency affiliation. Drives AgencyContext's agency
+   *  switcher; never trusted as the sole authorization source (the server re-verifies on every
+   *  request — see requireBusinessMatch/requireAgencyMatch). */
+  agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
   phone?: string;
   createdAt: string;
 }

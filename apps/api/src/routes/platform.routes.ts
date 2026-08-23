@@ -13,6 +13,7 @@ import { validateBody, validateQuery } from "../middleware/validate.js";
 import {
   getPlatformOverview,
   getPlatformRestaurantDetail,
+  listPlatformAgencies,
   listPlatformRestaurants,
   listPlatformSubscriptions,
   listPlatformUsers,
@@ -53,6 +54,12 @@ platformRouter.get(
   requirePermission("platform.restaurants.manage"),
   validateQuery(paginationQuerySchema),
   asyncHandler(listPlatformSubscriptions)
+);
+platformRouter.get(
+  "/agencies",
+  requirePermission("platform.restaurants.manage"),
+  validateQuery(paginationQuerySchema),
+  asyncHandler(listPlatformAgencies)
 );
 platformRouter.get(
   "/users",

@@ -7,6 +7,7 @@ import "./index.css";
 import { App } from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { LocationProvider } from "./context/LocationContext";
+import { AgencyProvider } from "./context/AgencyContext";
 
 const queryClient = new QueryClient();
 
@@ -18,7 +19,9 @@ createRoot(document.getElementById("root")!).render(
           <ToastProvider>
             <AuthProvider>
               <LocationProvider>
-                <App />
+                <AgencyProvider>
+                  <App />
+                </AgencyProvider>
               </LocationProvider>
             </AuthProvider>
           </ToastProvider>

@@ -55,6 +55,27 @@ export function ownerInviteEmail(to: string, acceptUrl: string, details: { resta
   };
 }
 
+export function agencyMemberInviteEmail(
+  to: string,
+  acceptUrl: string,
+  details: { agencyName: string; inviterName: string; roleLabel: string; isNewAccount: boolean }
+): EmailMessage {
+  const setupLine = details.isNewAccount
+    ? "Accept your invitation and set your password"
+    : "Accept your invitation";
+  return {
+    to,
+    subject: `You've been invited to join ${details.agencyName} on Tablecloth`,
+    html: layout(
+      `You're invited to ${details.agencyName}`,
+      `<p>${details.inviterName} has invited you to join <strong>${details.agencyName}</strong> as a <strong>${details.roleLabel}</strong>.</p>
+       <p><a href="${acceptUrl}" style="color:#c2410c;">${setupLine}</a></p>
+       <p style="color:#78716c; font-size: 13px;">This invite link expires in 7 days.</p>`
+    ),
+    text: `${details.inviterName} invited you to join ${details.agencyName} on Tablecloth as a ${details.roleLabel}.\n\n${setupLine}: ${acceptUrl}\n\nThis link expires in 7 days.`,
+  };
+}
+
 export function staffInviteEmail(
   to: string,
   acceptUrl: string,

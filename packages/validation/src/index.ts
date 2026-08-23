@@ -20,3 +20,4 @@ export * from "./customer.js";
 export * from "./auditLog.js";
 export * from "./domain.js";
 export * from "./subscription.js";
+export * from "./agency.js";

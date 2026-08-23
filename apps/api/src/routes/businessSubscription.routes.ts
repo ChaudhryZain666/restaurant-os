@@ -2,8 +2,7 @@ import { Router } from "express";
 import { createSubscriptionSchema, changeSubscriptionPlanSchema, mockAdvanceSubscriptionSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
-import { requireBusinessMatch } from "../middleware/businessLocation.js";
+import { requireBusinessMatch, requireBusinessPermission as requirePermission } from "../middleware/businessLocation.js";
 import { validateBody } from "../middleware/validate.js";
 import { env } from "../config/env.js";
 import {

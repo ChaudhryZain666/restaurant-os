@@ -19,6 +19,11 @@ const businessSchema = new Schema(
     // under this business — Restaurant.settings.brandColor stays the one field any storefront
     // render path actually reads. See the ADR for why this isn't resolved/merged anywhere yet.
     brandColor: { type: String, maxlength: 7 },
+    // Phase 25 — additive, optional. Which Agency manages this business, if any. NEVER replaces
+    // ownerId above (the actual business-owner User, unchanged) — a business exists independently
+    // when unset, or is agency-managed when set. Absence is the default, valid state for every
+    // business that existed before this phase; no migration/backfill needed.
+    agencyId: { type: Schema.Types.ObjectId, ref: "Agency", index: true },
   },
   { timestamps: true, toJSON: idTransform }
 );

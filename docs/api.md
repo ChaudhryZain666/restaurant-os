@@ -83,6 +83,20 @@
 /api/v1/webhooks/billing/:provider                          POST  Public — signature-verified only, mirrors /webhooks/payments/:provider
 /api/v1/plans                                                GET   Any authenticated user — read-only Plan catalog (no pricing guaranteed present)
 /api/v1/platform/subscriptions                               GET   platform.restaurants.manage — paginated, read-only, every business's subscription
+
+# Phase 25 — agency foundation (see docs/multi-tenant-storefront-architecture.md); Agency -> Business -> Location, business-level access only (never location-operational — see the phase's documented boundary)
+/api/v1/agencies                                              POST  requireAuth (role must be customer/agency_member) — self-serve, caller becomes agency_owner
+/api/v1/agencies/me                                           GET   requireAuth — every agency the caller has an ACTIVE membership in, with their role
+/api/v1/agencies/:agencyId                                    GET   requireAgencyMatch (any active membership)
+/api/v1/agencies/:agencyId/businesses                         GET   requireAgencyMatch — per-business summaries (location count, subscription status) — NOT a revenue rollup
+/api/v1/agencies/:agencyId/businesses                         POST  requireAgencyMatch + agency.businesses.manage — transactional: owner User + Business + first Restaurant, atomic max_businesses guard
+/api/v1/agencies/:agencyId/audit-log                          GET   requireAgencyMatch — paginated AgencyAuditLog
+/api/v1/agencies/:agencyId/members                            GET   requireAgencyMatch
+/api/v1/agencies/:agencyId/members                            POST  requireAgencyMatch + agency.members.manage — invites a new or existing eligible account
+/api/v1/agencies/:agencyId/members/:membershipId              PATCH requireAgencyMatch + agency.members.manage — role/status/businessIds (guards against removing the last active owner)
+/api/v1/agencies/accept-invite                                POST  Public — signature-style token, mirrors /auth/accept-invite's atomic double-accept protection
+/api/v1/agencies/:agencyId/subscription                       GET/POST/.../cancel/.../reactivate/.../change-plan/.../entitlements — mirrors /businesses/:businessId/subscription exactly, gated by agency.billing.read/manage
+/api/v1/platform/agencies                                     GET   platform.restaurants.manage — paginated, read-only, business/member counts per agency
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never
@@ -193,6 +207,22 @@ real prices have been decided (`Plan.pricing` entries may have no `amountCents` 
 land at `POST /webhooks/billing/:provider` (no auth — signature-verified instead, same shape as the
 payment webhook route). See `docs/multi-tenant-storefront-architecture.md`'s Phase 24 section for
 the full domain model, lifecycle state machine, entitlement mechanism, and migration design.
+
+## Agencies (Phase 25 — Agency → Business → Location)
+
+An Agency organizationally manages zero or more Businesses (`Business.agencyId`, additive and
+optional — never replaces `Business.ownerId`, the real business-owner). Membership is explicit
+(`AgencyMembership`, mirrors `User.locationIds`' implicit-owner/explicit-staff shape) and carried as
+an array claim on the JWT (`agencyMemberships`), never a singular field, since one person can hold
+independent roles across multiple agencies. `requireBusinessMatch()` (used by every
+`/businesses/:businessId/...` route already documented above) gained one extra branch so an agency
+member reaches exactly the businesses their agency manages — no separate authorization system, no
+per-route changes. Agency access is deliberately **business-level only** — an agency creates
+businesses and invites their owners, it does not operate day-to-day location operations
+(orders/kitchen/menu edits stay the invited owner's/staff's, via the existing, untouched
+`requireTenantMatch`). See `docs/multi-tenant-storefront-architecture.md`'s Phase 25 section for the
+full domain model, concurrency guarantees, and an honest answer to every scope question the phase
+was asked to resolve.
 
 ## Public API / integration readiness (Phase 16 — foundation audit, not built)
 

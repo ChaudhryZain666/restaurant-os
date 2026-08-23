@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
-import { requireBusinessMatch } from "../middleware/businessLocation.js";
+import { requireBusinessMatch, requireBusinessPermission as requirePermission } from "../middleware/businessLocation.js";
 import { getBusinessOverview, getBusinessProducts, getBusinessTrends } from "../controllers/businessAnalytics.controller.js";
 
 /** Mounted at /businesses/:businessId/analytics — reuses restaurant.analytics.read (already

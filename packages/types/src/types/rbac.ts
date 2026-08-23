@@ -8,6 +8,7 @@ export const USER_ROLES = [
   "restaurant_staff",
   "kitchen_staff",
   "customer",
+  "agency_member",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
@@ -101,6 +102,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage"],
   kitchen_staff: ["restaurant.orders.read", "restaurant.orders.manage"],
   customer: [],
+  // Phase 25 — a coarse top-level identity only (person whose primary identity is agency
+  // affiliation, no business of their own). Deliberately empty: every real capability an agency
+  // member has flows through their per-agency AgencyMembership role (agencyRoleHasPermission /
+  // agencyRoleGrantsBusinessPermission in agencyRbac.ts), never a flat global grant here — a person
+  // can be agency_owner in one agency and agency_staff in another, which a single global role value
+  // can't express. See middleware/agency.ts and businessLocation.ts's requireBusinessPermission.
+  agency_member: [],
 };
 
 export function roleHasPermission(role: UserRole, permission: Permission): boolean {

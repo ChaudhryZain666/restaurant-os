@@ -4,6 +4,7 @@ import { roleHasPermission, type Permission, type UserRole } from "@restaurant/t
 import { useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
+import { useAgency } from "../context/AgencyContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import {
   IconBook,
@@ -167,6 +168,25 @@ const PLATFORM_GROUPS: NavGroup[] = [
   { label: "Settings", items: [{ to: "/platform/settings", label: "System configuration", icon: IconSliders, roles: ["platform_admin"] }] },
 ];
 
+// Phase 25 — an agency_member (or a fresh "customer" account that hasn't created/joined an agency
+// yet) sees this instead of RESTAURANT_GROUPS: business-level oversight (create businesses, invite
+// their owners, manage the team, agency billing), never the day-to-day operational surface
+// (Orders/Kitchen/Menu/etc.) — see docs/multi-tenant-storefront-architecture.md's Phase 25
+// "business-level, not location-operational" boundary. `roles` here (not `permission`) since these
+// routes gate on AgencyPermission/agency membership, a different vocabulary than the site-wide
+// Permission type NavItem.permission checks.
+const AGENCY_GROUPS: NavGroup[] = [
+  { label: "Overview", items: [{ to: "/agency", label: "Dashboard", icon: IconGrid, end: true, roles: ["agency_member", "customer"] }] },
+  {
+    label: "Agency",
+    items: [
+      { to: "/agency/businesses", label: "Businesses", icon: IconStore, roles: ["agency_member", "customer"] },
+      { to: "/agency/members", label: "Team", icon: IconUsers, roles: ["agency_member", "customer"] },
+      { to: "/agency/billing", label: "Billing", icon: IconWallet, roles: ["agency_member", "customer"] },
+    ],
+  },
+];
+
 const ROLE_LABELS: Record<string, string> = {
   platform_admin: "Platform admin",
   restaurant_owner: "Owner",
@@ -174,6 +194,7 @@ const ROLE_LABELS: Record<string, string> = {
   restaurant_staff: "Staff",
   kitchen_staff: "Kitchen staff",
   customer: "Customer",
+  agency_member: "Agency",
 };
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
@@ -247,9 +268,11 @@ function IconClose({ className }: { className?: string }) {
 export function Layout() {
   const { user, logout } = useAuth();
   const { activeLocationId, locations, switchLocation } = useActiveLocation();
+  const { activeAgencyId, agencies, switchAgency } = useAgency();
   const isPlatformAdmin = user?.role === "platform_admin";
   const isKitchenStaff = user?.role === "kitchen_staff";
-  const isRestaurantScoped = user && !isPlatformAdmin;
+  const isAgencyScoped = user?.role === "agency_member" || user?.role === "customer";
+  const isRestaurantScoped = Boolean(user) && !isPlatformAdmin && !isAgencyScoped;
   const [mobileOpen, setMobileOpen] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -274,7 +297,9 @@ export function Layout() {
         </span>
         <div className="min-w-0">
           <p className="truncate font-heading text-sm font-semibold text-foreground">Tablecloth</p>
-          <p className="truncate text-xs text-muted">{isPlatformAdmin ? "Platform admin" : "Restaurant admin"}</p>
+          <p className="truncate text-xs text-muted">
+            {isPlatformAdmin ? "Platform admin" : isAgencyScoped ? "Agency admin" : "Restaurant admin"}
+          </p>
         </div>
         <button
           onClick={() => setMobileOpen(false)}
@@ -295,6 +320,9 @@ export function Layout() {
         )}
         {isPlatformAdmin && user && (
           <NavGroupList groups={PLATFORM_GROUPS} role={user.role} isMultiLocation={false} onNavigate={() => setMobileOpen(false)} />
+        )}
+        {isAgencyScoped && user && (
+          <NavGroupList groups={AGENCY_GROUPS} role={user.role} isMultiLocation={false} onNavigate={() => setMobileOpen(false)} />
         )}
       </div>
     </>
@@ -348,6 +376,23 @@ export function Layout() {
                     {locations.map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {isAgencyScoped && agencies.length > 1 && (
+                <label className="hidden items-center gap-1.5 text-sm sm:flex">
+                  <span className="text-muted">Agency:</span>
+                  <select
+                    value={activeAgencyId ?? ""}
+                    onChange={(e) => switchAgency(e.target.value)}
+                    aria-label="Active agency"
+                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                  >
+                    {agencies.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
                       </option>
                     ))}
                   </select>

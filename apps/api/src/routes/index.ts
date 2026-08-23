@@ -35,6 +35,9 @@ import { businessPromotionRouter } from "./businessPromotion.routes.js";
 import { businessSubscriptionRouter } from "./businessSubscription.routes.js";
 import { billingWebhookRouter } from "./billingWebhook.routes.js";
 import { planRouter } from "./plan.routes.js";
+import { agencyRouter } from "./agency.routes.js";
+import { agencyMembershipRouter, agencyAcceptInviteRouter } from "./agencyMembership.routes.js";
+import { agencySubscriptionRouter } from "./agencySubscription.routes.js";
 
 export const apiRouter = Router();
 
@@ -51,6 +54,12 @@ apiRouter.use("/businesses/:businessId/promotions", businessPromotionRouter);
 apiRouter.use("/businesses/:businessId/subscription", businessSubscriptionRouter);
 apiRouter.use("/webhooks/billing", billingWebhookRouter);
 apiRouter.use("/plans", planRouter);
+// Phase 25 — agencies/accept-invite mounted BEFORE /agencies itself so the literal "accept-invite"
+// segment can never be swallowed by /agencies/:agencyId's param matching.
+apiRouter.use("/agencies/accept-invite", agencyAcceptInviteRouter);
+apiRouter.use("/agencies/:agencyId/members", agencyMembershipRouter);
+apiRouter.use("/agencies/:agencyId/subscription", agencySubscriptionRouter);
+apiRouter.use("/agencies", agencyRouter);
 apiRouter.use("/restaurants", restaurantRouter);
 apiRouter.use("/restaurants/:restaurantId/domains", restaurantDomainRouter);
 apiRouter.use("/restaurants/:restaurantId/categories", categoryRouter);

@@ -2,13 +2,18 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, Card } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
-import { roleHomePath } from "../lib/roleHome";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
-export function LoginPage() {
-  const { login } = useAuth();
+/**
+ * Phase 25 — the admin app's only self-serve signup, and only for one reason: starting an agency.
+ * Every other admin identity is always invited by someone already in the system. Lands directly on
+ * /agency, where a fresh "customer"-role account sees the create-agency form.
+ */
+export function RegisterPage() {
+  const { register } = useAuth();
   const navigate = useNavigate();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,11 +24,10 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const user = await login(email, password);
-      navigate(roleHomePath(user.role));
+      await register(name, email, password);
+      navigate("/agency");
     } catch (err) {
       setError((err as Error).message);
-    } finally {
       setSubmitting(false);
     }
   }
@@ -38,30 +42,26 @@ export function LoginPage() {
           <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Sign in</h1>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Create your account</h1>
+          <p className="text-sm text-muted">For starting an agency that manages multiple businesses.</p>
           <label className="flex flex-col gap-1 text-sm text-foreground">
-            Email
-            <input
-              type="email"
-              className={inputClass}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            Full name
+            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
           </label>
           <label className="flex flex-col gap-1 text-sm text-foreground">
-            <span className="flex items-center justify-between">
-              Password
-              <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
-                Forgot password?
-              </Link>
-            </span>
+            Email
+            <input type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-foreground">
+            Password
             <input
               type="password"
               className={inputClass}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={8}
+              autoComplete="new-password"
             />
           </label>
           {error && (
@@ -70,12 +70,12 @@ export function LoginPage() {
             </Alert>
           )}
           <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Signing in..." : "Sign in"}
+            {submitting ? "Creating account..." : "Create account"}
           </Button>
           <p className="text-center text-xs text-muted">
-            Starting an agency?{" "}
-            <Link to="/register" className="font-medium text-primary hover:underline">
-              Create an account
+            Already have an account?{" "}
+            <Link to="/login" className="font-medium text-primary hover:underline">
+              Sign in
             </Link>
           </p>
         </form>

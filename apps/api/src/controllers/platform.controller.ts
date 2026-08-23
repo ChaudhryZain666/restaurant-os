@@ -15,6 +15,8 @@ import { DomainMapping } from "../models/DomainMapping.js";
 import { Subscription } from "../models/Subscription.js";
 import { Plan } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
+import { Agency } from "../models/Agency.js";
+import { AgencyMembership } from "../models/AgencyMembership.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { recordAuditEvent } from "../services/audit.service.js";
@@ -373,6 +375,43 @@ export async function listPlatformSubscriptions(req: Request, res: Response) {
       createdAt: (s as unknown as { createdAt: Date }).createdAt.toISOString(),
     };
   });
+
+  sendSuccess(res, { ...result, items });
+}
+
+/**
+ * Phase 25 — GET /platform/agencies: read-only platform-wide overview, mirroring
+ * listPlatformSubscriptions above exactly. No write access to any agency's members/businesses/
+ * billing through this surface — platform_admin visibility only, matching the existing boundary
+ * (agencies are managed entirely through their own /agencies/:agencyId/... routes, gated by
+ * requireAgencyMatch/requireAgencyPermission, which platform_admin deliberately bypasses via
+ * requireAgencyMatch's exemption but requireAgencyPermission never grants).
+ */
+export async function listPlatformAgencies(req: Request, res: Response) {
+  const { page, limit } = req.query as unknown as PaginationQueryInput;
+
+  const result = await paginateQuery(Agency.find().sort({ createdAt: -1 }), { page, limit });
+  const agencyIds = result.items.map((a) => a._id);
+
+  const [businessCounts, memberCounts] = await Promise.all([
+    Business.aggregate([{ $match: { agencyId: { $in: agencyIds } } }, { $group: { _id: "$agencyId", count: { $sum: 1 } } }]),
+    AgencyMembership.aggregate([
+      { $match: { agencyId: { $in: agencyIds }, status: "active" } },
+      { $group: { _id: "$agencyId", count: { $sum: 1 } } },
+    ]),
+  ]);
+  const businessCountByAgency = new Map(businessCounts.map((c) => [c._id.toString(), c.count as number]));
+  const memberCountByAgency = new Map(memberCounts.map((c) => [c._id.toString(), c.count as number]));
+
+  const items = result.items.map((a) => ({
+    id: a.id as string,
+    name: a.name,
+    slug: a.slug,
+    status: a.status,
+    businessCount: businessCountByAgency.get((a._id as { toString(): string }).toString()) ?? 0,
+    memberCount: memberCountByAgency.get((a._id as { toString(): string }).toString()) ?? 0,
+    createdAt: (a as unknown as { createdAt: Date }).createdAt.toISOString(),
+  }));
 
   sendSuccess(res, { ...result, items });
 }

@@ -36,6 +36,14 @@ import { LocationsPage } from "./pages/LocationsPage";
 import { PrintOrderPage } from "./pages/PrintOrderPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
+import { RegisterPage } from "./pages/RegisterPage";
+import { AcceptAgencyInvitePage } from "./pages/AcceptAgencyInvitePage";
+import { AgencyDashboardPage } from "./pages/AgencyDashboardPage";
+import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
+import { AgencyMembersPage } from "./pages/AgencyMembersPage";
+import { AgencyBillingPage } from "./pages/AgencyBillingPage";
+
+const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
 const RESTAURANT_ROLES = [
   "restaurant_owner",
@@ -57,6 +65,8 @@ export function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
       {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
           tab via window.open from an order card's Print action. */}
       <Route
@@ -201,6 +211,38 @@ export function App() {
           element={
             <RequireAuth permission="billing.read">
               <BillingPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyDashboardPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency/businesses"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyBusinessesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency/members"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyMembersPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency/billing"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyBillingPage />
             </RequireAuth>
           }
         />

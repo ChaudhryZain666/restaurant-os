@@ -19,8 +19,25 @@ interface AuthContextValue {
   user: PublicUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<PublicUser>;
+  /** Phase 25 — the admin app's only self-serve entry point, and only for one reason: starting an
+   *  agency (every other admin identity — owner/manager/staff/kitchen_staff — is always invited by
+   *  someone already in the system, never self-registered here). Creates a plain "customer"-role
+   *  account via the same /auth/register endpoint apps/web's storefront registration already uses. */
+  register: (name: string, email: string, password: string) => Promise<PublicUser>;
   acceptInvite: (token: string, password: string) => Promise<PublicUser>;
+  /** Phase 25 — the agency-membership counterpart, hitting /agencies/accept-invite instead. A
+   *  password is optional here (only required server-side for a brand-new account — an invite to
+   *  an existing platform user needs none, see agencyMembership.controller.ts's acceptAgencyInvite). */
+  acceptAgencyInvite: (token: string, password?: string) => Promise<PublicUser>;
   logout: () => Promise<void>;
+  /** Phase 25 — re-derives the access token AND `user` fresh from the server, without a full
+   *  login round-trip. Needed after any action that changes claims mid-session (creating an
+   *  agency, accepting an agency invite while already logged in as a different identity isn't
+   *  possible, but accepting while ALREADY authenticated as the invited account is) — every claim
+   *  in this app (businessId, locationIds, and now agencyMemberships) is only ever re-derived at
+   *  login/refresh, never live, so the frontend must explicitly ask for a refresh rather than
+   *  expect one to happen automatically. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -72,10 +89,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user;
   }
 
+  async function register(name: string, email: string, password: string) {
+    const data = await apiClient.request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: { name, email, password },
+      skipRefresh: true,
+    });
+    apiClient.setAccessToken(data.accessToken);
+    setUser(data.user);
+    return data.user;
+  }
+
   async function acceptInvite(token: string, password: string) {
     const data = await apiClient.request<AuthResponse>("/auth/accept-invite", {
       method: "POST",
       body: { token, password },
+      skipRefresh: true,
+    });
+    apiClient.setAccessToken(data.accessToken);
+    setUser(data.user);
+    return data.user;
+  }
+
+  async function acceptAgencyInvite(token: string, password?: string) {
+    const data = await apiClient.request<AuthResponse>("/agencies/accept-invite", {
+      method: "POST",
+      body: { token, ...(password ? { password } : {}) },
       skipRefresh: true,
     });
     apiClient.setAccessToken(data.accessToken);
@@ -89,8 +128,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function refreshUser() {
+    const refreshed = await apiClient.tryRefresh();
+    if (!refreshed) return;
+    const { user } = await apiClient.request<{ user: PublicUser }>("/auth/me");
+    setUser(user);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, acceptInvite, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, login, register, acceptInvite, acceptAgencyInvite, logout, refreshUser }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

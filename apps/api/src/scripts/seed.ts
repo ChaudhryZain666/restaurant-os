@@ -46,6 +46,10 @@ async function seed() {
           { key: "custom_domains", value: true },
           { key: "business_analytics", value: true },
           { key: "business_promotions", value: true },
+          // Phase 25 — no commercial limit has been decided; this is a generous, explicitly
+          // non-final development placeholder (see agencyEntitlement.service.ts's doc comment),
+          // not a commercial decision, mirroring TRIAL_PERIOD_DAYS=14's precedent.
+          { key: "max_businesses", value: 10 },
         ],
         isActive: true,
       },

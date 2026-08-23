@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
 import { redis } from "../config/redis.js";
 import { parseTtlSeconds } from "../utils/ttl.js";
-import type { UserRole } from "@restaurant/types";
+import type { AgencyMembershipRole, UserRole } from "@restaurant/types";
 
 export interface AccessTokenPayload {
   sub: string;
@@ -13,6 +13,12 @@ export interface AccessTokenPayload {
    *  copied from an old token), so a location grant change takes effect on next login/refresh. */
   businessId?: string;
   locationIds?: string[];
+  /** Phase 25, additive — re-queried fresh from AgencyMembership at every sign/refresh, same
+   *  staleness contract as businessId/locationIds above: a new membership or role change takes
+   *  effect on next login/refresh, not immediately. Mirrors locationIds' array-claim shape because
+   *  a user can hold independent roles across multiple agencies — a singular claim can't express
+   *  that the way businessId can for the (always-singular) business case. */
+  agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
 }
 
 export interface RefreshTokenPayload {

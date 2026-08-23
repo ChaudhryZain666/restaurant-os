@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { roleHasPermission, type Permission, type UserRole } from "@restaurant/types";
 import { useAuth } from "../context/AuthContext";
+import { roleHomePath } from "../lib/roleHome";
 
 interface RequireAuthProps {
   children: ReactNode;
@@ -30,11 +31,11 @@ export function RequireAuth({ permission, roles, children }: RequireAuthProps) {
   const allowed = permission ? roleHasPermission(user.role, permission) : roles ? roles.includes(user.role) : true;
   if (!allowed) {
     // Route to THIS user's own default landing page, not unconditionally "/" — "/" itself is
-    // restaurant-role-gated (see App.tsx), so a platform_admin landing here (an old bookmark, a
-    // stray link — anything other than a fresh login, which already lands them correctly via
-    // LoginPage) would otherwise be bounced back to "/", fail the same check, and loop forever.
-    // Mirrors LoginPage's own post-login redirect so there's exactly one "role -> home" mapping.
-    return <Navigate to={user.role === "platform_admin" ? "/platform" : "/"} replace />;
+    // restaurant-role-gated (see App.tsx), so a platform_admin (or, as of Phase 25, an
+    // agency_member/customer) landing here would otherwise be bounced back to "/", fail the same
+    // check, and loop forever. roleHomePath is the one shared "role -> home" mapping (also used by
+    // LoginPage's post-login redirect) so the two can never drift apart into a loop again.
+    return <Navigate to={roleHomePath(user.role)} replace />;
   }
   return <>{children}</>;
 }

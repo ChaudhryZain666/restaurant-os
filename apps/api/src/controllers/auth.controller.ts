@@ -20,6 +20,7 @@ import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
 import { emailChangeVerificationEmail, passwordResetEmail } from "../email/templates.js";
+import type { AgencyMembershipRole } from "@restaurant/types";
 import { generateSecureToken, hashToken } from "../services/secureToken.service.js";
 import {
   issueRefreshToken,
@@ -29,6 +30,7 @@ import {
   signAccessToken,
   verifyRefreshToken,
 } from "../services/token.service.js";
+import { getActiveAgencyMemberships } from "../services/agencyMembership.service.js";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_CHANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -53,7 +55,9 @@ function setRefreshCookie(res: Response, token: string) {
   });
 }
 
-function toPublicUser(user: HydratedDocument<UserDoc>) {
+/** Exported (Phase 25) — agencyMembership.controller.ts's acceptInvite reuses this exact shape so
+ *  accepting an agency invite logs the person in the same way accepting a staff/owner invite does. */
+export function toPublicUser(user: HydratedDocument<UserDoc>, agencyMemberships: Array<{ agencyId: string; role: AgencyMembershipRole }> = []) {
   return {
     id: user.id as string,
     name: user.name,
@@ -62,11 +66,17 @@ function toPublicUser(user: HydratedDocument<UserDoc>) {
     restaurantId: user.restaurantId?.toString(),
     businessId: user.businessId?.toString(),
     locationIds: user.locationIds?.map((id) => id.toString()),
+    agencyMemberships,
     phone: user.phone,
   };
 }
 
-async function issueSession(res: Response, user: HydratedDocument<UserDoc>) {
+/** Exported (Phase 25) — reused by agencyMembership.controller.ts's acceptInvite. */
+export async function issueSession(
+  res: Response,
+  user: HydratedDocument<UserDoc>,
+  agencyMemberships: Array<{ agencyId: string; role: AgencyMembershipRole }>
+) {
   const accessToken = signAccessToken({
     sub: user.id as string,
     role: user.role,
@@ -77,6 +87,9 @@ async function issueSession(res: Response, user: HydratedDocument<UserDoc>) {
     // login/refresh rather than never.
     businessId: user.businessId?.toString(),
     locationIds: user.locationIds?.map((id) => id.toString()),
+    // Phase 25 — same reasoning, re-queried fresh by the caller (getActiveAgencyMemberships) every
+    // time a session is issued, never carried forward.
+    agencyMemberships,
   });
   const refreshToken = await issueRefreshToken(user.id);
   setRefreshCookie(res, refreshToken);
@@ -92,7 +105,8 @@ export async function register(req: Request, res: Response) {
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ name, email, passwordHash, phone });
 
-  const accessToken = await issueSession(res, user);
+  // A brand-new account can't have any agency memberships yet — skip the query.
+  const accessToken = await issueSession(res, user, []);
   sendSuccess(res, { user: toPublicUser(user), accessToken }, 201);
 }
 
@@ -107,8 +121,9 @@ export async function login(req: Request, res: Response) {
 
   if (user.isActive === false) throw ApiError.forbidden("This account has been deactivated");
 
-  const accessToken = await issueSession(res, user);
-  sendSuccess(res, { user: toPublicUser(user), accessToken });
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  const accessToken = await issueSession(res, user, agencyMemberships);
+  sendSuccess(res, { user: toPublicUser(user, agencyMemberships), accessToken });
 }
 
 export async function refresh(req: Request, res: Response) {
@@ -130,21 +145,24 @@ export async function refresh(req: Request, res: Response) {
   if (user.isActive === false) throw ApiError.forbidden("This account has been deactivated");
 
   await revokeRefreshToken(payload.sub, payload.jti);
-  const accessToken = await issueSession(res, user);
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  const accessToken = await issueSession(res, user, agencyMemberships);
   sendSuccess(res, { accessToken });
 }
 
 export async function me(req: Request, res: Response) {
   const user = await User.findById(req.user!.id);
   if (!user) throw ApiError.unauthorized("User no longer exists");
-  sendSuccess(res, { user: toPublicUser(user) });
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  sendSuccess(res, { user: toPublicUser(user, agencyMemberships) });
 }
 
 export async function updateMe(req: Request, res: Response) {
   const updates = req.body as UpdateProfileInput;
   const user = await User.findByIdAndUpdate(req.user!.id, { $set: updates }, { new: true, runValidators: true });
   if (!user) throw ApiError.unauthorized("User no longer exists");
-  sendSuccess(res, { user: toPublicUser(user) });
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  sendSuccess(res, { user: toPublicUser(user, agencyMemberships) });
 }
 
 export async function requestPasswordReset(req: Request, res: Response) {
@@ -210,8 +228,9 @@ export async function acceptInvite(req: Request, res: Response) {
   );
   if (!user) throw ApiError.badRequest("This invitation link is invalid or has expired");
 
-  const accessToken = await issueSession(res, user);
-  sendSuccess(res, { user: toPublicUser(user), accessToken });
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  const accessToken = await issueSession(res, user, agencyMemberships);
+  sendSuccess(res, { user: toPublicUser(user, agencyMemberships), accessToken });
 }
 
 /**
@@ -235,8 +254,9 @@ export async function changePassword(req: Request, res: Response) {
   await user.save();
   await revokeAllRefreshTokens(user.id as string);
 
-  const accessToken = await issueSession(res, user);
-  sendSuccess(res, { user: toPublicUser(user), accessToken });
+  const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
+  const accessToken = await issueSession(res, user, agencyMemberships);
+  sendSuccess(res, { user: toPublicUser(user, agencyMemberships), accessToken });
 }
 
 /**

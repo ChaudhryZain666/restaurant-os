@@ -24,3 +24,6 @@ export * from "./types/customer.js";
 export * from "./types/domain.js";
 export * from "./types/plan.js";
 export * from "./types/subscription.js";
+export * from "./types/agency.js";
+export * from "./types/agencyRbac.js";
+export * from "./types/agencyAuditLog.js";

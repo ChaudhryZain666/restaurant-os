@@ -3,8 +3,7 @@ import { createLocationSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenantMatch } from "../middleware/tenant.js";
-import { requireBusinessMatch } from "../middleware/businessLocation.js";
-import { requirePermission } from "../middleware/rbac.js";
+import { requireBusinessMatch, requireBusinessPermission } from "../middleware/businessLocation.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   getMyBusiness,
@@ -27,7 +26,7 @@ businessRouter.get("/:businessId/locations", requireBusinessMatch(), asyncHandle
 businessRouter.post(
   "/:businessId/locations",
   requireBusinessMatch(),
-  requirePermission("restaurant.settings.manage"),
+  requireBusinessPermission("restaurant.settings.manage"),
   validateBody(createLocationSchema),
   asyncHandler(createLocationForBusiness)
 );

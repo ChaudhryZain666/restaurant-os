@@ -1,8 +1,9 @@
 import type { HydratedDocument } from "mongoose";
-import type { BillingInterval, SubscriptionStatus } from "@restaurant/types";
+import type { BillingInterval, SubscriptionOwnerType, SubscriptionStatus } from "@restaurant/types";
 import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
+import { Agency } from "../models/Agency.js";
 import { User } from "../models/User.js";
 import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -12,39 +13,55 @@ import { getBillingProvider } from "../billing/index.js";
 import type { ProviderBillingWebhookEvent, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
 
+const LIVE_STATUSES: SubscriptionStatus[] = ["trialing", "active", "past_due", "cancelling"];
+
+const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
+
 /**
- * Owner-plan subscription creation — the only reachable path today (ownerType is always "business"
- * here; see Subscription.ts's header comment for why the field itself stays polymorphic anyway).
- * The partial unique index on {ownerType, ownerId} is the real concurrency guard: two simultaneous
- * create attempts for the same business race the insert, and the loser gets a clean 409, not a
- * silent duplicate — the pre-check below only narrows the common case.
+ * Phase 25 — resolves the {name, email} a billing provider customer record needs, for either owner
+ * type. `Business`'s owner-plan path (createSubscriptionForBusiness) was the only reachable one
+ * through Phase 24; this is the shared core both it and the new agency path
+ * (createSubscriptionForAgency) now go through, so Phase 24's business behavior/tests are
+ * byte-for-byte unchanged — only the lookup itself was extracted.
  */
-export async function createSubscriptionForBusiness(
-  businessId: string,
+async function resolveOwnerIdentity(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string
+): Promise<{ name: string; email: string } | null> {
+  if (ownerType === "business") {
+    const business = await Business.findById(ownerId);
+    if (!business) return null;
+    const owner = await User.findById(business.ownerId).select("email name");
+    return { name: business.name, email: owner?.email ?? "" };
+  }
+  const agency = await Agency.findById(ownerId);
+  if (!agency) return null;
+  return { name: agency.name, email: agency.contactEmail };
+}
+
+/**
+ * Shared core for both `createSubscriptionForBusiness` and `createSubscriptionForAgency`. The
+ * partial unique index on {ownerType, ownerId} is the real concurrency guard: two simultaneous
+ * create attempts for the same owner race the insert, and the loser gets a clean 409, not a silent
+ * duplicate — the pre-check below only narrows the common case.
+ */
+async function createSubscriptionCore(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string,
   planCode: string,
   billingInterval: BillingInterval
 ): Promise<HydratedDocument<SubscriptionDoc>> {
-  const business = await Business.findById(businessId);
-  if (!business) throw ApiError.notFound("Business not found");
+  const identity = await resolveOwnerIdentity(ownerType, ownerId);
+  if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
-  const existing = await Subscription.findOne({
-    ownerType: "business",
-    ownerId: business._id,
-    status: { $in: ["trialing", "active", "past_due", "cancelling"] },
-  });
-  if (existing) throw ApiError.conflict("This business already has an active subscription");
+  const existing = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
+  if (existing) throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
 
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
 
-  const owner = await User.findById(business.ownerId).select("email name");
   const provider = getBillingProvider();
-  const customer = await provider.createCustomer({
-    ownerType: "business",
-    ownerId: business.id as string,
-    email: owner?.email ?? "",
-    name: business.name,
-  });
+  const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
   const providerSub = await provider.createSubscription({
     providerCustomerId: customer.providerCustomerId,
     planCode: plan.code,
@@ -56,8 +73,8 @@ export async function createSubscriptionForBusiness(
 
   try {
     return await Subscription.create({
-      ownerType: "business",
-      ownerId: business._id,
+      ownerType,
+      ownerId,
       planId: plan._id,
       status,
       billingInterval,
@@ -72,26 +89,45 @@ export async function createSubscriptionForBusiness(
   } catch (err) {
     // Backstop for the genuine race the pre-check above can't close.
     if ((err as { code?: number }).code === 11000) {
-      throw ApiError.conflict("This business already has an active subscription");
+      throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
     }
     throw err;
   }
+}
+
+export async function createSubscriptionForBusiness(
+  businessId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("business", businessId, planCode, billingInterval);
+}
+
+export async function createSubscriptionForAgency(
+  agencyId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("agency", agencyId, planCode, billingInterval);
 }
 
 export async function getSubscriptionForBusiness(businessId: string): Promise<HydratedDocument<SubscriptionDoc> | null> {
   return Subscription.findOne({ ownerType: "business", ownerId: businessId }).sort({ createdAt: -1 });
 }
 
-/** There is at most one LIVE subscription per business (the partial unique index enforces this at
- *  the DB level), so lifecycle actions are addressed by businessId alone — no subscription id in
- *  the URL, matching the API surface in the Phase 24 plan. */
-async function getLiveSubscriptionOrThrow(businessId: string): Promise<HydratedDocument<SubscriptionDoc>> {
-  const subscription = await Subscription.findOne({
-    ownerType: "business",
-    ownerId: businessId,
-    status: { $in: ["trialing", "active", "past_due", "cancelling"] },
-  });
-  if (!subscription) throw ApiError.notFound("This business has no active subscription");
+export async function getSubscriptionForAgency(agencyId: string): Promise<HydratedDocument<SubscriptionDoc> | null> {
+  return Subscription.findOne({ ownerType: "agency", ownerId: agencyId }).sort({ createdAt: -1 });
+}
+
+/** There is at most one LIVE subscription per owner (the partial unique index enforces this at
+ *  the DB level), so lifecycle actions are addressed by ownerId alone — no subscription id in
+ *  the URL, matching the API surface established in Phase 24. */
+async function getLiveSubscriptionOrThrow(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  const subscription = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
+  if (!subscription) throw ApiError.notFound(`This ${OWNER_LABEL[ownerType]} has no active subscription`);
   return subscription;
 }
 
@@ -104,11 +140,12 @@ async function getLiveSubscriptionOrThrow(businessId: string): Promise<HydratedD
  * subscription is retained as an internal capability (used by tests exercising the provider
  * abstraction directly) but not exposed through the owner-facing API this phase.
  */
-export async function cancelSubscription(
-  businessId: string,
+async function cancelSubscriptionCore(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string,
   atPeriodEnd = true
 ): Promise<HydratedDocument<SubscriptionDoc>> {
-  const subscription = await getLiveSubscriptionOrThrow(businessId);
+  const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
   if (subscription.status === "cancelling") {
     throw ApiError.badRequest("This subscription is already scheduled to cancel");
   }
@@ -136,9 +173,17 @@ export async function cancelSubscription(
   return updated;
 }
 
+export async function cancelSubscription(businessId: string, atPeriodEnd = true): Promise<HydratedDocument<SubscriptionDoc>> {
+  return cancelSubscriptionCore("business", businessId, atPeriodEnd);
+}
+
+export async function cancelAgencySubscription(agencyId: string, atPeriodEnd = true): Promise<HydratedDocument<SubscriptionDoc>> {
+  return cancelSubscriptionCore("agency", agencyId, atPeriodEnd);
+}
+
 /** Un-cancels a scheduled (not yet effective) cancellation — only valid from "cancelling". */
-export async function reactivateSubscription(businessId: string): Promise<HydratedDocument<SubscriptionDoc>> {
-  const subscription = await getLiveSubscriptionOrThrow(businessId);
+async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, ownerId: string): Promise<HydratedDocument<SubscriptionDoc>> {
+  const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
   if (!isValidSubscriptionTransition(subscription.status, "active")) {
     throw ApiError.badRequest(`Cannot reactivate a subscription with status "${subscription.status}"`);
   }
@@ -152,11 +197,20 @@ export async function reactivateSubscription(businessId: string): Promise<Hydrat
   return updated;
 }
 
-export async function changeSubscriptionPlan(
-  businessId: string,
+export async function reactivateSubscription(businessId: string): Promise<HydratedDocument<SubscriptionDoc>> {
+  return reactivateSubscriptionCore("business", businessId);
+}
+
+export async function reactivateAgencySubscription(agencyId: string): Promise<HydratedDocument<SubscriptionDoc>> {
+  return reactivateSubscriptionCore("agency", agencyId);
+}
+
+async function changeSubscriptionPlanCore(
+  ownerType: SubscriptionOwnerType,
+  ownerId: string,
   newPlanCode: string
 ): Promise<HydratedDocument<SubscriptionDoc>> {
-  const subscription = await getLiveSubscriptionOrThrow(businessId);
+  const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
   if (!["trialing", "active", "past_due"].includes(subscription.status)) {
     throw ApiError.badRequest(`Cannot change plan on a subscription with status "${subscription.status}"`);
   }
@@ -171,6 +225,14 @@ export async function changeSubscriptionPlan(
   subscription.planId = plan._id;
   await subscription.save();
   return subscription;
+}
+
+export async function changeSubscriptionPlan(businessId: string, newPlanCode: string): Promise<HydratedDocument<SubscriptionDoc>> {
+  return changeSubscriptionPlanCore("business", businessId, newPlanCode);
+}
+
+export async function changeAgencySubscriptionPlan(agencyId: string, newPlanCode: string): Promise<HydratedDocument<SubscriptionDoc>> {
+  return changeSubscriptionPlanCore("agency", agencyId, newPlanCode);
 }
 
 export async function getPlanForSubscription(subscription: Pick<SubscriptionDoc, "planId">): Promise<HydratedDocument<PlanDoc> | null> {
@@ -189,12 +251,13 @@ function resolveTransitionTarget(currentStatus: SubscriptionStatus, providerStat
 }
 
 /**
- * The single entry point every inbound billing webhook (real or mock-simulated) goes through.
- * Idempotent by construction, mirroring payment.service.ts's processProviderEvent exactly: the
- * insert into BillingWebhookEvent is the source of truth for "have we seen this event before," not
- * an in-application check. No outbound provider call happens inside this function (unlike
- * refundPayment), so a plain atomic guard is sufficient — no transaction needed for a single-
- * document update.
+ * The single entry point every inbound billing webhook (real or mock-simulated) goes through, for
+ * BOTH business and agency subscriptions — the lookup below is keyed by providerSubscriptionId
+ * alone, ownerType-agnostic, so no change was needed here for Phase 25. Idempotent by construction,
+ * mirroring payment.service.ts's processProviderEvent exactly: the insert into BillingWebhookEvent
+ * is the source of truth for "have we seen this event before," not an in-application check. No
+ * outbound provider call happens inside this function (unlike refundPayment), so a plain atomic
+ * guard is sufficient — no transaction needed for a single-document update.
  */
 export async function processBillingProviderEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
   try {

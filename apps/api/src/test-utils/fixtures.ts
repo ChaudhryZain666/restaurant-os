@@ -11,6 +11,8 @@ import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
 import { Table } from "../models/Table.js";
 import { Plan } from "../models/Plan.js";
+import { Agency } from "../models/Agency.js";
+import { AgencyMembership } from "../models/AgencyMembership.js";
 import { signAccessToken } from "../services/token.service.js";
 import { generateTableToken } from "../services/tableToken.service.js";
 import { redis } from "../config/redis.js";
@@ -83,7 +85,10 @@ export async function createTestUser(
   });
 }
 
-export function tokenFor(user: HydratedDocument<UserDoc>) {
+export function tokenFor(
+  user: HydratedDocument<UserDoc>,
+  agencyMemberships: Array<{ agencyId: string; role: "agency_owner" | "agency_admin" | "agency_staff" }> = []
+) {
   return signAccessToken({
     sub: user.id as string,
     role: user.role,
@@ -92,6 +97,9 @@ export function tokenFor(user: HydratedDocument<UserDoc>) {
     // the new Business/Location authorization path can use this same established helper.
     businessId: user.businessId?.toString(),
     locationIds: user.locationIds?.map((id) => id.toString()),
+    // Phase 25 — same reasoning; tests pass this explicitly rather than querying AgencyMembership,
+    // since a test's fixture setup already knows exactly what it created.
+    agencyMemberships,
   });
 }
 
@@ -181,6 +189,33 @@ export async function createTestPlan(overrides: Partial<Record<string, unknown>>
       { key: "business_promotions", value: true },
     ],
     isActive: true,
+    ...overrides,
+  });
+}
+
+export async function createTestAgency(overrides: Partial<Record<string, unknown>> = {}) {
+  return Agency.create({
+    name: "Test Agency",
+    slug: unique("test-agency"),
+    contactEmail: unique("agency") + "@test.local",
+    status: "active",
+    ...overrides,
+  });
+}
+
+/** Creates an ACTIVE membership directly (no invite/accept flow) — pair with tokenFor's second
+ *  argument to get a token whose agencyMemberships claim matches what was actually created. */
+export async function createTestAgencyMembership(
+  agencyId: mongoose.Types.ObjectId,
+  userId: mongoose.Types.ObjectId,
+  overrides: Partial<Record<string, unknown>> = {}
+) {
+  return AgencyMembership.create({
+    agencyId,
+    userId,
+    role: "agency_owner",
+    status: "active",
+    acceptedAt: new Date(),
     ...overrides,
   });
 }
