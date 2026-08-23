@@ -6,6 +6,7 @@ import { ErrorBoundary, ToastProvider } from "@restaurant/ui";
 import "./index.css";
 import { App } from "./App";
 import { AuthProvider } from "./context/AuthContext";
+import { BusinessProvider } from "./context/BusinessContext";
 import { LocationProvider } from "./context/LocationContext";
 import { AgencyProvider } from "./context/AgencyContext";
 
@@ -18,11 +19,13 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <ToastProvider>
             <AuthProvider>
-              <LocationProvider>
-                <AgencyProvider>
-                  <App />
-                </AgencyProvider>
-              </LocationProvider>
+              <AgencyProvider>
+                <BusinessProvider>
+                  <LocationProvider>
+                    <App />
+                  </LocationProvider>
+                </BusinessProvider>
+              </AgencyProvider>
             </AuthProvider>
           </ToastProvider>
         </BrowserRouter>

@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { agencyRoleGrantsBusinessPermission, roleHasPermission, type Permission } from "@restaurant/types";
+import { agencyRoleGrantsPermission, roleHasPermission, type Permission } from "@restaurant/types";
 import { Business } from "../models/Business.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -56,7 +56,12 @@ export function requireBusinessMatch(paramName = "businessId") {
   };
 }
 
-async function agencyGrantsBusinessAccess(
+/**
+ * Exported (Phase 26) — tenant.ts's resolveTenantAccess reuses this exact function one hop deeper
+ * (Restaurant -> businessId -> this) rather than re-deriving agency-access logic a second time for
+ * location-scoped routes.
+ */
+export async function agencyGrantsBusinessAccess(
   userId: string,
   memberships: Array<{ agencyId: string; role: "agency_owner" | "agency_admin" | "agency_staff" }>,
   targetBusinessId: string
@@ -87,14 +92,14 @@ async function agencyGrantsBusinessAccess(
  * businessCategory, businessMenu, businessModifier). An agency member's own site-wide `role` is
  * `"agency_member"`, which grants nothing in ROLE_PERMISSIONS (see rbac.ts) — every real
  * capability they have flows through their per-business `req.agencyRole` (set by
- * requireBusinessMatch above) instead. Location-scoped routers keep plain `requirePermission`,
- * completely unchanged.
+ * requireBusinessMatch above) instead. Phase 26's location-scoped analog is
+ * `requireTenantPermission` in tenant.ts, sharing the same `AGENCY_ROLE_GRANTS` map.
  */
 export function requireBusinessPermission(...permissions: Permission[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(ApiError.unauthorized());
     const hasAll = permissions.every(
-      (p) => roleHasPermission(req.user!.role, p) || (req.agencyRole !== undefined && agencyRoleGrantsBusinessPermission(req.agencyRole, p))
+      (p) => roleHasPermission(req.user!.role, p) || (req.agencyRole !== undefined && agencyRoleGrantsPermission(req.agencyRole, p))
     );
     if (!hasAll) return next(ApiError.forbidden());
     next();

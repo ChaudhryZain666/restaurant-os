@@ -42,22 +42,24 @@ import { AgencyDashboardPage } from "./pages/AgencyDashboardPage";
 import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
 import { AgencyMembersPage } from "./pages/AgencyMembersPage";
 import { AgencyBillingPage } from "./pages/AgencyBillingPage";
+import { AgencyBusinessDetailPage } from "./pages/AgencyBusinessDetailPage";
 
 const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
-const RESTAURANT_ROLES = [
-  "restaurant_owner",
-  "restaurant_manager",
-  "restaurant_staff",
-  "kitchen_staff",
-] as const;
-
 // Every route below either gates on `permission` — matching the exact backend permission its
 // page's own API calls require, read from the single ROLE_PERMISSIONS source of truth in
-// @restaurant/types — or, where a route has no single natural backend permission (Dashboard,
-// Kitchen: visible to every restaurant-scoped role; the still-unbuilt platform PlaceholderPage
-// stubs: no backend endpoint exists yet to derive a permission from), falls back to `roles`. See
-// RequireAuth.tsx and Layout.tsx's NavGroupList for the matching nav-visibility half of this.
+// @restaurant/types — or, where a route has no single natural backend permission (the still-unbuilt
+// platform PlaceholderPage stubs: no backend endpoint exists yet to derive a permission from), falls
+// back to `roles`. See RequireAuth.tsx and Layout.tsx's NavGroupList for the matching nav-visibility
+// half of this.
+//
+// Phase 26 — Dashboard/Kitchen/Print used to gate on a bare `roles: RESTAURANT_ROLES` array. That
+// meant an agency_member acting inside a managed business (whose own site-wide `role` never becomes
+// "restaurant_owner" etc.) could never pass them no matter what their agency role granted. Converted
+// to `permission` (a permission every previously-guarded role already holds, so zero behavior change
+// for existing accounts) so RequireAuth's single agency-aware permission check covers all three —
+// see RequireAuth.tsx's doc comment for exactly how an agency member's effective permission set is
+// computed while acting inside a business.
 export function App() {
   return (
     <Routes>
@@ -72,7 +74,7 @@ export function App() {
       <Route
         path="/print/:mode/:id"
         element={
-          <RequireAuth roles={[...RESTAURANT_ROLES, "platform_admin"]}>
+          <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
             <PrintOrderPage />
           </RequireAuth>
         }
@@ -81,7 +83,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <RequireAuth roles={[...RESTAURANT_ROLES]}>
+            <RequireAuth permission="restaurant.orders.read">
               <DashboardPage />
             </RequireAuth>
           }
@@ -97,7 +99,7 @@ export function App() {
         <Route
           path="/kitchen"
           element={
-            <RequireAuth roles={[...RESTAURANT_ROLES]}>
+            <RequireAuth permission="restaurant.orders.manage">
               <KitchenPage />
             </RequireAuth>
           }
@@ -227,6 +229,14 @@ export function App() {
           element={
             <RequireAuth roles={[...AGENCY_ROLES]}>
               <AgencyBusinessesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency/businesses/:businessId"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyBusinessDetailPage />
             </RequireAuth>
           }
         />

@@ -6,9 +6,12 @@ import { test, expect } from "@playwright/test";
  * itself is proven via the existing owner-invite-pending badge, not a full accept round-trip,
  * matching this spec's "one focused journey" scope), invites a team member, and — the core
  * security proof — a second, entirely unrelated agency cannot see the first agency's businesses.
- * Deliberately does not exercise "switching into a managed business's own admin" — that's explicit
- * out-of-scope this phase (see docs/multi-tenant-storefront-architecture.md's Phase 25 section);
- * an agency creates businesses and invites their owners, it doesn't operate them day-to-day.
+ *
+ * Phase 26 extends the SAME journey to cross the boundary Phase 25 deliberately stopped at:
+ * entering the managed business's actual operational admin (Menu/Orders), confirmed via the
+ * "Managing ... via ..." banner and successful (non-403) page loads, then exiting cleanly back to
+ * the Agency section — proving BusinessContext/LocationContext/requireTenantMatch's agency branch
+ * all actually work end to end through the real browser UI, not just Jest's HTTP-level proof.
  */
 test.describe.serial("agency foundation — create, manage businesses, invite team, isolation (Phase 25)", () => {
   test("agency owner journey end to end, plus cross-agency isolation", async ({ page, browser }) => {
@@ -46,6 +49,27 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
 
     await expect(page.getByText(`Agency Client ${stamp}`)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Invite pending")).toBeVisible();
+
+    // --- Phase 26: enter the managed business's real operational admin as the agency owner
+    // (implicit access, no explicit businessIds assignment needed), confirm Menu/Orders actually
+    // load (proves requireTenantMatch's agency branch, not just requireBusinessMatch's), then exit
+    // cleanly back to the Agency section. ---
+    await page.getByRole("link", { name: "Manage" }).click();
+    await expect(page).toHaveURL(/\/agency\/businesses\/[a-f0-9]+$/, { timeout: 10_000 });
+    await page.getByRole("button", { name: "Manage this business" }).click();
+    await expect(page).toHaveURL("http://localhost:5174/", { timeout: 10_000 });
+    await expect(page.getByText(`Managing Agency Client ${stamp}`)).toBeVisible();
+    await expect(page.getByText(`via Test Agency ${stamp}`)).toBeVisible();
+
+    await page.getByRole("link", { name: "Menu", exact: true }).click();
+    await expect(page).toHaveURL(/\/menu$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Orders", exact: true }).click();
+    await expect(page).toHaveURL(/\/orders$/, { timeout: 10_000 });
+
+    await page.getByRole("button", { name: "← Back to Agency" }).click();
+    await expect(page).toHaveURL(/\/agency\/businesses$/, { timeout: 10_000 });
+    await expect(page.getByText(`Agency Client ${stamp}`)).toBeVisible();
 
     // --- Invite a team member. ---
     await page.getByRole("link", { name: "Team" }).click();

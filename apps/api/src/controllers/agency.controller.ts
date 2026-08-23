@@ -260,6 +260,78 @@ export async function createAgencyBusiness(req: Request, res: Response) {
   sendSuccess(res, { business: business.toJSON(), restaurant: restaurant.toJSON() }, 201);
 }
 
+/**
+ * GET /agencies/:agencyId/businesses/:businessId — Phase 26, the entry point for "Manage this
+ * business": fuller detail than the list endpoint's per-row summary (full location list, not just
+ * a count). Scoped to `agencyId` in the query itself (not just requireAgencyMatch) so a business
+ * that belongs to a DIFFERENT agency 404s exactly like "doesn't exist" rather than leaking that it
+ * exists under someone else's agency.
+ */
+export async function getAgencyBusiness(req: Request, res: Response) {
+  const { agencyId, businessId } = req.params;
+
+  const business = await Business.findOne({ _id: businessId, agencyId });
+  if (!business) throw ApiError.notFound("Business not found");
+
+  const [owner, locations, subscription] = await Promise.all([
+    User.findById(business.ownerId).select("name email inviteTokenHash"),
+    Restaurant.find({ businessId }).select("name slug status settings.timezone settings.currency").sort({ createdAt: 1 }),
+    Subscription.findOne({ ownerType: "business", ownerId: businessId }).select("status planId currentPeriodEnd"),
+  ]);
+
+  sendSuccess(res, {
+    business: business.toJSON(),
+    owner: owner ? { name: owner.name, email: owner.email, invitePending: Boolean(owner.inviteTokenHash) } : null,
+    locations: locations.map((l) => l.toJSON()),
+    subscription: subscription?.toJSON() ?? null,
+  });
+}
+
+/**
+ * POST /agencies/:agencyId/businesses/:businessId/resend-owner-invite — mirrors
+ * platform.controller.ts's resendOwnerInvite / staff.controller.ts's resendStaffInvite exactly
+ * (fresh token invalidates the old one; refuses once already accepted). The one difference: the
+ * owner here is looked up via Business.ownerId, not a Restaurant's — an agency-created business's
+ * owner invite is a business-level concept, even though the email content still names the first
+ * location (ownerInviteEmail's existing shape, unchanged from creation time).
+ */
+export async function resendAgencyBusinessOwnerInvite(req: Request, res: Response) {
+  const { agencyId, businessId } = req.params;
+
+  const business = await Business.findOne({ _id: businessId, agencyId });
+  if (!business) throw ApiError.notFound("Business not found");
+
+  const owner = await User.findById(business.ownerId);
+  if (!owner) throw ApiError.notFound("This business's owner account no longer exists");
+  if (!owner.inviteTokenHash) {
+    throw ApiError.badRequest("This business's owner has already accepted their invitation.");
+  }
+
+  const { raw, hash } = generateSecureToken();
+  owner.inviteTokenHash = hash;
+  owner.inviteExpiresAt = new Date(Date.now() + OWNER_INVITE_TTL_MS);
+  await owner.save();
+
+  const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
+  try {
+    await getEmailService().send(ownerInviteEmail(owner.email, acceptUrl, { restaurantName: business.name }));
+  } catch (err) {
+    logger.error("failed to send agency-business owner-invite resend email", { error: (err as Error).message });
+  }
+
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.business_owner_invite_resent",
+    targetType: "business",
+    targetId: business._id,
+    metadata: { ownerEmail: owner.email },
+  });
+
+  sendSuccess(res, { message: `Invitation resent to ${owner.email}.` });
+}
+
 export async function getAgencyAuditLog(req: Request, res: Response) {
   const { agencyId } = req.params;
   const { page, limit } = req.query as unknown as PaginationQueryInput;

@@ -349,7 +349,7 @@ describe("POST /agencies/:agencyId/businesses — creation, transactional owner-
 describe("requireBusinessMatch's agency branch — the core cross-tenant security proof", () => {
   it("agency_owner has implicit access to a business the agency manages (via a real business-scoped route)", async () => {
     const res = await request(app).get(`/api/v1/businesses/${managedBusiness.id}/subscription`).set("Authorization", `Bearer ${ownerToken}`);
-    expect(res.status).toBe(200); // billing.read granted via AGENCY_ROLE_BUSINESS_GRANTS
+    expect(res.status).toBe(200); // billing.read granted via AGENCY_ROLE_GRANTS
   });
 
   it("agency_admin has implicit access too, but cannot reach billing.manage-gated actions", async () => {
@@ -406,6 +406,154 @@ describe("requireBusinessMatch's agency branch — the core cross-tenant securit
 
     const agencyRes = await request(app).get(`/api/v1/agencies/${agency.id}`).set("Authorization", `Bearer ${realOwnerToken}`);
     expect(agencyRes.status).toBe(403);
+  });
+});
+
+describe("requireTenantMatch's agency branch (Phase 26) — location-operational access", () => {
+  it("agency_owner reaches Orders (read) and Staff (manage-gated) for a location under a managed business", async () => {
+    const orders = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/orders`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(orders.status).toBe(200);
+
+    const staff = await request(app).get(`/api/v1/restaurants/${managedLocation.id}/staff`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(staff.status).toBe(200);
+  });
+
+  it("agency_admin reaches Orders/Tables but NOT Staff — staff.manage is deliberately owner-only among agency roles", async () => {
+    const orders = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/orders`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(orders.status).toBe(200);
+
+    const tables = await request(app).get(`/api/v1/restaurants/${managedLocation.id}/tables`).set("Authorization", `Bearer ${adminToken}`);
+    expect(tables.status).toBe(200);
+
+    const staff = await request(app).get(`/api/v1/restaurants/${managedLocation.id}/staff`).set("Authorization", `Bearer ${adminToken}`);
+    expect(staff.status).toBe(403);
+  });
+
+  it("agency_staff without businessIds assignment is denied Orders entirely (tenant match itself fails)", async () => {
+    const unassignedStaff = await createTestUser("agency_member");
+    userIds.push(unassignedStaff.id);
+    await createTestAgencyMembership(agency._id, unassignedStaff._id, { role: "agency_staff" });
+    const unassignedToken = tokenFor(unassignedStaff, [{ agencyId: agency.id, role: "agency_staff" }]);
+
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/orders`)
+      .set("Authorization", `Bearer ${unassignedToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("agency_staff, once assigned via businessIds, reaches Orders (read) but not Tables (no tables.manage grant)", async () => {
+    // agencyStaffUser was assigned managedBusiness earlier in this file's business-scoped tests.
+    const orders = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/orders`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    expect(orders.status).toBe(200);
+
+    const tables = await request(app).get(`/api/v1/restaurants/${managedLocation.id}/tables`).set("Authorization", `Bearer ${staffToken}`);
+    expect(tables.status).toBe(403);
+  });
+
+  it("Domains: agency_owner passes tenant-match+settings.manage (reaches body validation, not a 403); agency_staff is denied outright", async () => {
+    const ownerRes = await request(app)
+      .post(`/api/v1/restaurants/${managedLocation.id}/domains`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({});
+    expect(ownerRes.status).toBe(400); // validation failure proves it got PAST authorization
+
+    const staffRes = await request(app)
+      .post(`/api/v1/restaurants/${managedLocation.id}/domains`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({});
+    expect(staffRes.status).toBe(403);
+  });
+
+  it("no agency member can reach a location under a business NOT managed by their agency", async () => {
+    const unrelatedLocation = await createTestRestaurant({ businessId: unrelatedBusiness._id });
+    restaurantIds.push(unrelatedLocation.id);
+
+    const res = await request(app).get(`/api/v1/restaurants/${unrelatedLocation.id}/orders`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("a member of a DIFFERENT agency cannot reach this agency's managed location", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/orders`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /agencies/:agencyId/businesses/:businessId — detail (Phase 26)", () => {
+  it("returns business detail with its locations for an authorized member", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.id).toBe(managedBusiness.id);
+    const locationIds = res.body.data.locations.map((l: { id: string }) => l.id);
+    expect(locationIds).toContain(managedLocation.id);
+  });
+
+  it("404s for a business managed by a different agency (never leaks existence)", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${otherAgency.id}/businesses/${managedBusiness.id}`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /agencies/:agencyId/businesses/:businessId/resend-owner-invite (Phase 26)", () => {
+  let pendingBusinessId: string;
+
+  beforeAll(async () => {
+    const stamp = Date.now();
+    const res = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/businesses`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        businessName: `Resend Test Biz ${stamp}`,
+        businessSlug: `resend-test-biz-${stamp}`,
+        ownerName: "Pending Owner",
+        ownerEmail: `resend-test-owner-${stamp}@test.local`,
+        locationName: `Resend Test Loc ${stamp}`,
+        locationSlug: `resend-test-loc-${stamp}`,
+      });
+    pendingBusinessId = res.body.data.business.id;
+    businessIds.push(pendingBusinessId);
+    restaurantIds.push(res.body.data.restaurant.id);
+    userIds.push(res.body.data.business.ownerId as string);
+  });
+
+  it("agency_staff (no agency.businesses.manage) cannot resend; agency_owner can", async () => {
+    const staffAttempt = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/businesses/${pendingBusinessId}/resend-owner-invite`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    expect(staffAttempt.status).toBe(403);
+
+    const ownerAttempt = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/businesses/${pendingBusinessId}/resend-owner-invite`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(ownerAttempt.status).toBe(200);
+
+    const auditEntry = await AgencyAuditLog.findOne({
+      agencyId: agency._id,
+      action: "agency.business_owner_invite_resent",
+      targetId: pendingBusinessId,
+    });
+    expect(auditEntry).not.toBeNull();
+  });
+
+  it("refuses once the owner has already accepted (no inviteTokenHash left)", async () => {
+    const business = await Business.findById(pendingBusinessId);
+    await User.updateOne({ _id: business!.ownerId }, { $unset: { inviteTokenHash: "" } });
+
+    const res = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/businesses/${pendingBusinessId}/resend-owner-invite`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(400);
   });
 });
 

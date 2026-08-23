@@ -3,6 +3,7 @@ import type { Restaurant } from "@restaurant/types";
 import { apiClient } from "../lib/api";
 import { socket, setActiveLocationIdForSocket } from "../lib/socket";
 import { useAuth } from "./AuthContext";
+import { useBusiness } from "./BusinessContext";
 
 interface LocationContextValue {
   /** The location (Restaurant) currently being operated on. Null only while still resolving. */
@@ -44,9 +45,19 @@ function storageKey(businessId: string) {
  * once with whatever the JWT's baked-in restaurantId is, and then need a second, immediate
  * reconnect once the real active-location preference resolves. Waiting for that resolution first
  * costs at most one extra render before the very first connection.
+ *
+ * Phase 26 — the single load-bearing change: reads `activeBusinessId` from BusinessContext instead
+ * of `user.businessId` directly. For a real restaurant-role account those are always identical
+ * (BusinessContext computes activeBusinessId AS user.businessId for those roles), so this is a
+ * behavior-neutral substitution for every existing account. For an agency_member, BusinessContext
+ * supplies the business they've explicitly entered (or null) — which is what makes every existing
+ * operational page (Menu/Orders/Kitchen/Staff/...) work for an acting-as-agency session with zero
+ * page-level changes, since they all resolve their scope through this context or user.businessId,
+ * never a URL param.
  */
 export function LocationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { activeBusinessId } = useBusiness();
   const [locations, setLocations] = useState<Restaurant[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,11 +74,13 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!user.businessId) {
-        // Not yet migrated / no business context at all — fall back to the single restaurantId
-        // this account has always had. No multi-location UI will ever render for this account
-        // (locations stays empty), matching Section 5's "don't complicate the single-location
-        // product" requirement by construction, not by a special case.
+      if (!activeBusinessId) {
+        // Not yet migrated / no business context at all (or an agency member who hasn't entered a
+        // managed business yet) — fall back to the single restaurantId this account has always had
+        // (undefined for an agency member, which correctly resolves to no active location at all).
+        // No multi-location UI will ever render for this account (locations stays empty), matching
+        // Section 5's "don't complicate the single-location product" requirement by construction,
+        // not by a special case.
         setLocations([]);
         setActiveLocationId(user.restaurantId ?? null);
         setLoading(false);
@@ -79,12 +92,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       try {
         const { locations: fetched } = await apiClient.request<{ locations: Restaurant[] }>(
-          `/businesses/${user.businessId}/locations`
+          `/businesses/${activeBusinessId}/locations`
         );
         if (cancelled) return;
         setLocations(fetched);
 
-        const stored = localStorage.getItem(storageKey(user.businessId));
+        const stored = localStorage.getItem(storageKey(activeBusinessId));
         const storedStillValid = stored && fetched.some((l) => l.id === stored);
         const fallback = fetched.find((l) => l.id === user.restaurantId)?.id ?? fetched[0]?.id ?? null;
         const resolved = storedStillValid ? stored : fallback;
@@ -102,12 +115,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.businessId]);
+  }, [user?.id, activeBusinessId]);
 
   const switchLocation = useCallback(
     (locationId: string) => {
-      if (!user?.businessId || locationId === activeLocationId) return;
-      localStorage.setItem(storageKey(user.businessId), locationId);
+      if (!activeBusinessId || locationId === activeLocationId) return;
+      localStorage.setItem(storageKey(activeBusinessId), locationId);
       setActiveLocationId(locationId);
       setActiveLocationIdForSocket(locationId);
       // A real disconnect+reconnect, not a live room-swap — the fresh handshake re-derives room
@@ -116,16 +129,16 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       socket.disconnect();
       socket.connect();
     },
-    [user?.businessId, activeLocationId]
+    [activeBusinessId, activeLocationId]
   );
 
   const refetchLocations = useCallback(async () => {
-    if (!user?.businessId) return;
+    if (!activeBusinessId) return;
     const { locations: fetched } = await apiClient.request<{ locations: Restaurant[] }>(
-      `/businesses/${user.businessId}/locations`
+      `/businesses/${activeBusinessId}/locations`
     );
     setLocations(fetched);
-  }, [user?.businessId]);
+  }, [activeBusinessId]);
 
   const value = useMemo(
     () => ({ activeLocationId, locations, loading, switchLocation, refetchLocations }),

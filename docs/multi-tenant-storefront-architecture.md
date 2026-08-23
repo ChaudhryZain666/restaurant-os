@@ -2074,3 +2074,220 @@ invited. `roleHomePath()` is the one shared "role → default landing page" mapp
     UI wiring for #6/#7 above, agency-level analytics aggregation, and everything already listed as
     deferred in Phases 22-24 (public API, POS, AI, notifications). This phase is a real, tested
     foundation — not a launch-ready product, and this report makes no such claim.
+
+## Phase 26 — Agency Business Operations, Unified Admin Navigation
+
+### Context
+
+Phase 25 deliberately stopped at "business-level access only" — Section 33 answer #6/#7 above says
+so plainly: an agency member could see and manage a business's settings/analytics/promotions/billing,
+but had **no path at all** into that business's actual day-to-day operations (Orders, Kitchen,
+Tables, Staff, location Domains). Phase 26 closes that gap: an agency user can now genuinely operate
+a managed business's locations through the *existing* admin UI — no impersonation, no duplicate
+admin app, no weakening of tenant isolation.
+
+### Reconnaissance findings
+
+Three parallel Explore agents (admin frontend routing/context, backend authorization/sockets,
+operational-page inventory) confirmed the real blocker was deeper than routing:
+
+- Every location-operational route (`/restaurants/:restaurantId/...` — orders, kitchen, tables,
+  staff, menu overrides, location domains) is guarded by `requireTenantMatch()` →
+  `canAccessRestaurant()` (`middleware/tenant.ts`), which had **zero knowledge of
+  `agencyMemberships`** — an agency member 403'd on all of it regardless of any frontend change.
+- Every operational admin page already resolves its scope through exactly two idioms —
+  `useActiveLocationId()` (`LocationContext`) or `user!.businessId!` (`AuthContext`) — never a URL
+  param, and the API client injects nothing. This meant **no page itself needed to change** if the
+  *context* supplying those ids could be made to work for an agency member too.
+- `LocationContext` resolved its business scope strictly from `user.businessId`, which is always
+  `undefined` for an `agency_member` account (they have no business of their own) — so an agency
+  user got `locations: []` permanently, with no code path to ever populate it for a business they
+  merely manage.
+- Every route currently gated by a bare `roles: RESTAURANT_ROLES` array (Dashboard, Kitchen, Print)
+  could never admit an `agency_member`, since that account's own site-wide `role` never becomes
+  `"restaurant_owner"` etc. by entering a business.
+
+### Core architectural decisions
+
+**1. `canAccessRestaurant` gained an agency branch, reusing Phase 25's exact function one hop
+deeper.** `businessLocation.ts`'s `agencyGrantsBusinessAccess` (previously module-private) is now
+exported and reused verbatim from `tenant.ts`: after the existing owner/manager/staff/kitchen_staff
+checks fail, if the user holds any agency membership, resolve the target restaurant's `businessId`
+(the same read the owner/manager branch already does) and call `agencyGrantsBusinessAccess` — no
+agency-access logic is duplicated. Because `canAccessRestaurant` is shared by both
+`requireTenantMatch` (Express) and the Socket.IO handshake, this one change fixes **both** REST and
+socket authorization. A new `resolveTenantAccess()` is the one real implementation (returns
+`{allowed, agencyRole?}`); `canAccessRestaurant` is now a thin boolean wrapper around it so the
+socket handshake's call site needed no change, while `requireTenantMatch` uses the richer result to
+set `req.agencyRole` — mirroring `requireBusinessMatch`'s identical pattern exactly.
+
+**Design decision**: `agency_staff`'s explicit `AgencyMembership.businessIds` assignment grants
+access to *every* location under that business, not a further location-level list. Phase 25
+established business as the unit of explicit assignment; a second, location-level assignment axis
+wasn't asked for and would only add complexity with no proven need.
+
+**2. One unified permission-grant map, not two.** `Permission` (`rbac.ts`) is a single flat
+vocabulary already reused across business- and location-scoped routes (e.g.
+`restaurant.settings.manage` gates both a business-level domain list *and* a location-level domain
+write). `AGENCY_ROLE_BUSINESS_GRANTS` was renamed to `AGENCY_ROLE_GRANTS` (function
+`agencyRoleGrantsBusinessPermission` → `agencyRoleGrantsPermission`) and now governs both
+`requireBusinessPermission` (business-scoped routers) and the new `requireTenantPermission`
+(location-scoped routers) — one map, no risk of drift between the two scopes. New grants added:
+
+```
+agency_owner  += restaurant.orders.read, restaurant.orders.manage, restaurant.tables.manage,
+                 restaurant.staff.manage, restaurant.audit.read
+agency_admin  += restaurant.orders.read, restaurant.orders.manage, restaurant.tables.manage,
+                 restaurant.audit.read                    (no staff.manage — owner-only, HR-adjacent)
+agency_staff  += restaurant.orders.read                    (read-only: Orders/Kitchen view, no
+                                                             manage, no tables, no staff)
+```
+
+`restaurant.payments.manage` is **deliberately excluded from every agency role** — restaurant
+payment-provider credentials stay owner-only, a conservative, documented product decision distinct
+from SaaS billing (`billing.manage`, already granted to `agency_owner`).
+
+**3. `requireTenantPermission(...permissions)`** — the location-scoped analog of
+`requireBusinessPermission`, swapped in via the same import-alias trick Phase 25 used
+(`import { requireTenantMatch, requireTenantPermission as requirePermission } from "../middleware/
+tenant.js"`) on `restaurantOrder.routes.ts`, `table.routes.ts`, `staff.routes.ts`,
+`restaurantDomain.routes.ts`. `menu.routes.ts`/`category.routes.ts`/`modifier.routes.ts` (location
+overrides) only enforce `requireTenantMatch()` with no router-level permission gate, so they became
+agency-aware automatically once `requireTenantMatch` itself admits agency users — no change needed.
+
+**4. Socket.IO** — the handshake now copies `agencyMemberships` onto `socket.data` (previously
+missing), and its existing `canAccessRestaurant(...)` call becomes agency-aware for free via #1. No
+other socket change was needed: disconnect/reconnect-on-location-switch already worked
+(`LocationContext.tsx`), it just needed correct inputs reaching it (see #5).
+
+**5. Frontend — a new `BusinessContext`, not a page-by-page rewrite.** `BusinessContext.tsx`
+computes `activeBusinessId` as `user.businessId` for real restaurant-role accounts (zero behavior
+change) or as an agency member's explicitly-entered business (`enterBusiness()`, persisted to
+`localStorage["enteredBusiness:{userId}"]` as `{businessId, businessName, agencyId, agencyName,
+agencyRole}` — display names carried through from the caller so Layout's banner needs no extra
+fetch). **The one load-bearing change**: `LocationContext.tsx` now reads `activeBusinessId` from
+`useBusiness()` instead of `user.businessId` directly — every downstream resolution (`GET
+/businesses/:businessId/locations`, the localStorage location preference, the socket `locationId`)
+is otherwise unchanged. This is the single seam that makes every existing operational page
+(Menu/Orders/Kitchen/Staff/Delivery/Domains/Settings/...) work for an acting-as-agency session with
+**zero page-level changes** — exactly mirroring Phase 25's single-seam `requireBusinessMatch`
+extension, just on the frontend.
+
+**6. Route guards converted from `roles` to `permission`.** `App.tsx`'s own stated convention
+already prefers `permission` (a documented reaction to a past Phase 11 nav/route-drift bug). The
+three remaining `roles: RESTAURANT_ROLES`-gated routes — `/` (Dashboard), `/kitchen`, `/print/:mode/
+:id` — were converted to `permission="restaurant.orders.read"` / `"restaurant.orders.manage"` /
+`"restaurant.orders.read"` respectively (permissions every previously-guarded role already holds, so
+zero behavior change for existing accounts), with `/print` gaining an explicit `allowPlatformAdmin`
+bypass prop on `RequireAuth` for its one platform_admin carve-out. `RequireAuth`'s permission check
+now also passes when `BusinessContext.agencyRoleForActiveBusiness` grants the permission, via the
+SAME `agencyRoleGrantsPermission`/`AGENCY_ROLE_GRANTS` the server checks — client and server can
+never drift apart on what an agency role can reach.
+
+**7. Layout — a fourth nav state.** `isRestaurantScoped` now keys off `BusinessContext.
+activeBusinessId` (true for a real restaurant-role account's own business, or an agency member's
+entered one); `isAgencyScoped` (nav selection) is true only when agency-role AND no business
+currently entered. Acting-as renders the same `RESTAURANT_GROUPS` nav, filtered by
+`agencyRoleGrantsPermission` alongside the existing `roleHasPermission` check (so `agency_staff`
+correctly doesn't see Staff/Tables), plus a persistent "Managing **{business}** via {agency} · ←
+Back to Agency" banner. The Kitchen nav item, previously ungated (relying on every real restaurant
+role happening to have `orders.manage`), is now explicitly `permission`-gated too — an
+`agency_staff` acting inside a business does NOT have that grant, and an ungated nav item would
+otherwise show a link that 403s on click, the exact Phase-11 drift class this convention exists to
+prevent. `Outlet`'s remount key now includes `activeBusinessId` alongside `activeLocationId`, so
+switching businesses always forces a fresh fetch even if the two businesses happen to resolve to the
+same relative location position.
+
+**8. New pages.** `AgencyBusinessDetailPage.tsx` (`/agency/businesses/:businessId` — one of the few
+genuinely param-based routes, since this is a distinct resource view, not a context-driven
+operational page): business overview, owner invite status with a **resend-invite** action (new
+`resendAgencyBusinessOwnerInvite`, mirroring `platform.controller.ts`'s/`staff.controller.ts`'s
+existing resend pattern exactly — fresh token invalidates the old one, refuses once already
+accepted), full locations list, subscription snapshot (shown only if the caller's agency role grants
+`billing.read`), and the **"Manage this business"** button that calls
+`businessContext.enterBusiness(...)` and navigates to `/`. `AgencyBusinessesPage.tsx` gained a
+"Manage" link per row into the new detail page.
+
+**9. Audit trail — no new dual-write for routine operations.** Phase 25's `AgencyAuditLog` +
+`AuditLog` dual-write was for discrete, significant agency-initiated events (business created).
+Routine operational actions taken by an agency member while acting-as a business (marking an order
+ready, editing a table) continue to write only the existing `AuditLog` — its actor is always the
+real, non-impersonated agency user, already satisfying "who did what to which business/location."
+Entering/managing a business (resend-invite) does get an `AgencyAuditLog` entry
+(`agency.business_owner_invite_resent`, new action), consistent with Phase 25's granularity.
+
+### Security & concurrency verification
+
+Proven via real HTTP requests against the actual routers (not middleware-unit tests), extending
+`agency.controller.test.ts`: `agency_owner`/`agency_admin` reach Orders/Tables/Staff/Domains for a
+managed business's locations; `agency_admin` is denied Staff specifically (the one deliberately
+owner-only grant); `agency_staff` without a `businessIds` assignment is denied outright (tenant match
+itself fails, before any permission check); once assigned, `agency_staff` reaches Orders (read) but
+not Tables (no grant); no agency member — any role — reaches a location under a business their
+agency doesn't manage, or a business managed by a *different* agency. `GET .../businesses/
+:businessId` 404s (not 403) for a business under a different agency, never leaking existence.
+`resendAgencyBusinessOwnerInvite` is permission-gated (`agency.businesses.manage`) and refuses once
+already accepted. The full pre-existing 764-test Jest suite (753 + this phase's 31 new tests) and all
+34 Playwright specs (33 pre-existing + this phase's extended `agency-management.spec.ts`) pass
+unmodified — zero regression to individual-owner businesses, location isolation, menu, orders,
+kitchen, delivery, payments, analytics, promotions, domains, billing, or audit logging.
+
+### Migration
+
+None required — `Business.agencyId` remains optional and unset by default (Phase 25's precedent);
+this phase added no new fields to any persisted document except the new `AgencyAuditLog` action enum
+entry, which is purely additive to a string-enum field.
+
+### What was deliberately deferred (matching the brief's own Section 38 non-goals list)
+
+Real billing provider integration and platform payment receiving, final pricing, delivery-provider
+integrations, public API, POS, AI features, WhatsApp integration, advanced agency BI beyond Phase
+23's existing per-business summaries, full invoicing, a final branding/design pass — all unchanged
+from Phase 25's own deferred list. New to this phase's own scope: agency-staff location-level (not
+just business-level) explicit assignment — the business remains the unit of assignment by design
+(see decision #1's reasoning).
+
+### Section 40 — honest final assessment
+
+- **Agency architecture**: solid and now load-bearing end to end — an agency member can create a
+  business, invite its owner, and actually operate its locations, all server-verified.
+- **Agency UX**: functional, not yet polished — the enter/exit flow works and is discoverable (one
+  button, one banner, one "Back to Agency" link), but has had no dedicated visual design pass.
+- **Business switching**: works (exit one, enter another) but is a two-click round-trip through the
+  Businesses list, not a single in-place switcher like the location `<select>` — a reasonable next
+  UX improvement, not attempted this phase to keep scope bounded.
+- **Location switching**: fully reused, unchanged — Phase 19's `LocationContext` now transparently
+  serves agency-entered businesses too.
+- **Operational access**: real for Orders/Kitchen/Tables/Staff/Domains, scoped correctly per agency
+  role.
+- **RBAC**: one unified permission map now governs business- and location-scoped agency grants;
+  proven not to leak platform_admin or cross-agency/cross-business access.
+- **Tenant isolation**: unchanged and re-verified — `requireTenantMatch`'s real restaurant-role fast
+  paths are untouched; the entire existing isolation test suite passes unmodified.
+- **Menu**: canonical writes (business-level, Phase 21) and location overrides both correctly
+  reachable per the same grant map; `resolveMenuForLocation` untouched.
+- **Orders / Kitchen**: real, tested, permission-scoped (owner/admin manage, staff read-only).
+- **Delivery**: untouched this phase; delivery *settings* are reachable via `restaurant.settings.
+  manage` (already granted to owner/admin) exactly like before.
+- **Payments**: deliberately NOT granted to any agency role — restaurant payment-provider
+  credentials remain owner-only, distinct from agency subscription billing.
+- **Analytics / Promotions**: unchanged from Phase 25 (business-level, already agency-aware);
+  location-level analytics/promotions now also reachable through the new tenant-match branch.
+- **Domains**: location-level domain writes now correctly reachable for owner/admin via the same
+  `restaurant.settings.manage` grant already used at business level.
+- **Billing**: agency subscription and business subscription remain completely separate systems, as
+  before — this phase touched neither.
+- **Audit logging**: business/location actions still attribute to the real agency user via the
+  existing `AuditLog`; agency-level actions (business creation, invite resends) via `AgencyAuditLog`.
+- **Testing**: full regression standard met — real HTTP authorization tests, a real browser-driven
+  Playwright journey (register → create agency → create business → enter → Menu/Orders → exit →
+  isolation), zero regressions across 764 Jest tests and 34 Playwright specs.
+- **Global readiness**: still a foundation, not a launch-ready product — no real billing provider, no
+  final pricing, no delivery-provider integrations, no polish pass.
+- **Remaining commercial blockers**: real billing/payment-receiving, final pricing, a dedicated
+  agency UX/design pass (in-place business switcher, richer dashboard), agency-staff location-level
+  assignment if ever needed, and everything already listed as deferred in Phases 22-25.
+
+**Next highest-value work**: a real billing provider integration (the single largest remaining gap
+before any commercial launch), followed by an agency UX polish pass (in-place business switcher) once
+the underlying mechanism proven this phase has had time to be used in practice.

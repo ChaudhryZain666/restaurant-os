@@ -2,8 +2,7 @@ import { Router } from "express";
 import { createTableSchema, updateTableSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
-import { requireTenantMatch } from "../middleware/tenant.js";
+import { requireTenantMatch, requireTenantPermission as requirePermission } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createTable,

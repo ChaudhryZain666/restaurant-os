@@ -1,10 +1,11 @@
 import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { roleHasPermission, type Permission, type UserRole } from "@restaurant/types";
+import { agencyRoleGrantsPermission, roleHasPermission, type AgencyMembershipRole, type Permission, type UserRole } from "@restaurant/types";
 import { useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useAgency } from "../context/AgencyContext";
+import { useBusiness } from "../context/BusinessContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import {
   IconBook,
@@ -69,7 +70,13 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     label: "Orders",
     items: [
       { to: "/orders", label: "Orders", icon: IconClipboard, permission: "restaurant.orders.read" },
-      { to: "/kitchen", label: "Kitchen", icon: IconKitchen },
+      // Phase 26 — explicitly permission-gated now (mirrors the route itself, converted the same
+      // phase): previously ungated here since every real restaurant role happened to have
+      // restaurant.orders.manage, but an agency_staff acting inside a business does NOT (read-only
+      // by design), and an ungated nav item would otherwise show a link that 403s on click — the
+      // exact Phase 11 drift class itemVisible/RequireAuth deriving from one shared source exists
+      // to prevent.
+      { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage" },
       { to: "/tables", label: "Tables", icon: IconTable, permission: "restaurant.tables.manage" },
     ],
   },
@@ -204,9 +211,11 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
   ].join(" ");
 }
 
-function itemVisible(item: NavItem, role: UserRole, isMultiLocation: boolean): boolean {
+function itemVisible(item: NavItem, role: UserRole, isMultiLocation: boolean, agencyRole: AgencyMembershipRole | null): boolean {
   if (item.multiLocationOnly && !isMultiLocation) return false;
-  if (item.permission) return roleHasPermission(role, item.permission);
+  if (item.permission) {
+    return roleHasPermission(role, item.permission) || (agencyRole !== null && agencyRoleGrantsPermission(agencyRole, item.permission));
+  }
   if (item.roles) return item.roles.includes(role);
   return true;
 }
@@ -215,11 +224,16 @@ function NavGroupList({
   groups,
   role,
   isMultiLocation,
+  agencyRole = null,
   onNavigate,
 }: {
   groups: NavGroup[];
   role: UserRole;
   isMultiLocation: boolean;
+  /** Phase 26 — set only while an agency_member is acting inside a managed business, so nav
+   *  visibility for RESTAURANT_GROUPS matches exactly what that agency role can reach there (the
+   *  same AGENCY_ROLE_GRANTS the server's requireBusinessPermission/requireTenantPermission check). */
+  agencyRole?: AgencyMembershipRole | null;
   onNavigate?: () => void;
 }) {
   // Filtering here (rather than trusting each NavGroup array to already be role-correct) is what
@@ -229,7 +243,7 @@ function NavGroupList({
   // `permission` App.tsx's RequireAuth checks (rather than a second hand-maintained role list) is
   // what makes that class of drift structurally impossible now, not just fixed once.
   const visibleGroups = groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => itemVisible(item, role, isMultiLocation)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => itemVisible(item, role, isMultiLocation, agencyRole)) }))
     .filter((group) => group.items.length > 0);
 
   return (
@@ -269,10 +283,16 @@ export function Layout() {
   const { user, logout } = useAuth();
   const { activeLocationId, locations, switchLocation } = useActiveLocation();
   const { activeAgencyId, agencies, switchAgency } = useAgency();
+  const { activeBusinessId, isActingAsAgency, agencyRoleForActiveBusiness, activeBusinessName, activeAgencyName, exitBusiness } = useBusiness();
   const isPlatformAdmin = user?.role === "platform_admin";
-  const isKitchenStaff = user?.role === "kitchen_staff";
-  const isAgencyScoped = user?.role === "agency_member" || user?.role === "customer";
-  const isRestaurantScoped = Boolean(user) && !isPlatformAdmin && !isAgencyScoped;
+  const isKitchenStaff = user?.role === "kitchen_staff" && !isActingAsAgency;
+  // Phase 26 — an agency_member who has entered a managed business is restaurant-scoped for nav
+  // purposes (sees RESTAURANT_GROUPS, filtered by their agency role's grants), not agency-scoped —
+  // the "Agency" section (create/list businesses, team, agency billing) only makes sense OUTSIDE an
+  // entered business. isRestaurantScoped now keys off activeBusinessId (BusinessContext), which for
+  // a real restaurant-role account is always their own user.businessId — zero behavior change there.
+  const isAgencyScoped = (user?.role === "agency_member" || user?.role === "customer") && !isActingAsAgency;
+  const isRestaurantScoped = Boolean(user) && !isPlatformAdmin && Boolean(activeBusinessId);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -298,7 +318,13 @@ export function Layout() {
         <div className="min-w-0">
           <p className="truncate font-heading text-sm font-semibold text-foreground">Tablecloth</p>
           <p className="truncate text-xs text-muted">
-            {isPlatformAdmin ? "Platform admin" : isAgencyScoped ? "Agency admin" : "Restaurant admin"}
+            {isPlatformAdmin
+              ? "Platform admin"
+              : isActingAsAgency
+                ? "Managing via agency"
+                : isAgencyScoped
+                  ? "Agency admin"
+                  : "Restaurant admin"}
           </p>
         </div>
         <button
@@ -310,11 +336,27 @@ export function Layout() {
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-4">
+        {isActingAsAgency && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
+            <p className="font-medium text-foreground">Managing {activeBusinessName}</p>
+            <p className="text-muted">via {activeAgencyName}</p>
+            <button
+              onClick={() => {
+                exitBusiness();
+                navigate("/agency/businesses");
+              }}
+              className="mt-1.5 font-medium text-primary hover:underline"
+            >
+              ← Back to Agency
+            </button>
+          </div>
+        )}
         {isRestaurantScoped && user && (
           <NavGroupList
             groups={isKitchenStaff ? KITCHEN_GROUPS : RESTAURANT_GROUPS}
             role={user.role}
             isMultiLocation={locations.length > 1}
+            agencyRole={agencyRoleForActiveBusiness}
             onNavigate={() => setMobileOpen(false)}
           />
         )}
@@ -427,8 +469,11 @@ export function Layout() {
               displayed page's local state is lost (open modals, in-progress form fields); Layout
               itself (nav, header, socket status) lives outside this keyed subtree and is
               untouched. platform_admin/no-business accounts have a constant (null) key here, so
-              they're never affected. */}
-          <Outlet key={activeLocationId} />
+              they're never affected. Phase 26 — activeBusinessId included too: an agency member
+              entering a DIFFERENT managed business can land on the same location-list-relative
+              position (e.g. "first location") without activeLocationId itself changing, which
+              would otherwise skip the remount and leave the previous business's data on screen. */}
+          <Outlet key={`${activeBusinessId ?? ""}:${activeLocationId ?? ""}`} />
         </main>
       </div>
     </div>

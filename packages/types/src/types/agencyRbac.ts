@@ -4,7 +4,7 @@ import type { AgencyMembershipRole } from "./agency.js";
 /**
  * Phase 25 — a deliberately separate, small permission model from `Permission` (rbac.ts). This one
  * governs the agency's OWN routes (`/agencies/:agencyId/...` — members, agency-level subscription,
- * business creation), distinct from `AGENCY_ROLE_BUSINESS_GRANTS` below, which governs what an
+ * business creation), distinct from `AGENCY_ROLE_GRANTS` below, which governs what an
  * agency role can do on a BUSINESS the agency manages (the existing, unchanged `Permission` type,
  * checked via `requireBusinessPermission` on business-scoped routers only).
  *
@@ -35,17 +35,28 @@ export function agencyRoleHasPermission(role: AgencyMembershipRole, permission: 
 }
 
 /**
- * What an agency role can do on a specific BUSINESS it's authorized for, expressed in the existing
- * `Permission` vocabulary (`rbac.ts`) so `requireBusinessPermission` can check it alongside the
- * normal `roleHasPermission` check with no new permission language to learn. Deliberately limited to
- * exactly the permissions the eight business-scoped routers actually check (business.routes.ts,
- * businessSubscription/Domain/Promotion/Analytics/Category/Menu/Modifier.routes.ts) — nothing
- * location-operational (orders/kitchen/tables/staff) is here at all, since those live under
- * `/restaurants/:restaurantId/...` and stay governed by the existing, untouched
- * `requireTenantMatch` — see docs/multi-tenant-storefront-architecture.md's Phase 25 section for the
- * full "business-level, not location-operational" boundary reasoning.
+ * What an agency role can do on a specific BUSINESS it's authorized for — AND, as of Phase 26, on
+ * that business's individual LOCATIONS too — expressed in the existing `Permission` vocabulary
+ * (`rbac.ts`) so `requireBusinessPermission` (business-scoped routers) and `requireTenantPermission`
+ * (location-scoped routers) can both check it alongside the normal `roleHasPermission` check, with
+ * no new permission language to learn.
+ *
+ * `Permission` is a single flat vocabulary already reused across business- and location-scoped
+ * routes (e.g. `restaurant.settings.manage` gates both a business-level domain list AND a
+ * location-level domain write) — kept as ONE map, not two, specifically to avoid drift on the
+ * permissions that appear at both scopes.
+ *
+ * Phase 25 established this as business-level only (menu/settings/promotions/analytics/billing —
+ * the eight business-scoped routers). Phase 26 crosses that deliberate boundary and adds the
+ * location-operational permissions (orders/tables/staff/audit) needed for an agency member to
+ * actually operate a managed business's Orders/Kitchen/Tables/Staff pages — see
+ * docs/multi-tenant-storefront-architecture.md's Phase 26 section for the full reasoning, including
+ * why `restaurant.payments.manage` is deliberately excluded from every agency role (restaurant
+ * payment-provider credentials stay owner-only) and why `agency_staff`'s explicit
+ * `AgencyMembership.businessIds` assignment grants every location under that business rather than
+ * introducing a second, location-level assignment axis.
  */
-export const AGENCY_ROLE_BUSINESS_GRANTS: Record<AgencyMembershipRole, readonly Permission[]> = {
+export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permission[]> = {
   agency_owner: [
     "restaurant.settings.manage",
     "billing.read",
@@ -56,6 +67,11 @@ export const AGENCY_ROLE_BUSINESS_GRANTS: Record<AgencyMembershipRole, readonly 
     "restaurant.categories.write",
     "restaurant.menu.write",
     "restaurant.modifiers.write",
+    "restaurant.orders.read",
+    "restaurant.orders.manage",
+    "restaurant.tables.manage",
+    "restaurant.staff.manage",
+    "restaurant.audit.read",
   ],
   agency_admin: [
     "restaurant.settings.manage",
@@ -66,10 +82,14 @@ export const AGENCY_ROLE_BUSINESS_GRANTS: Record<AgencyMembershipRole, readonly 
     "restaurant.categories.write",
     "restaurant.menu.write",
     "restaurant.modifiers.write",
+    "restaurant.orders.read",
+    "restaurant.orders.manage",
+    "restaurant.tables.manage",
+    "restaurant.audit.read",
   ],
-  agency_staff: ["billing.read", "restaurant.analytics.read", "restaurant.menu.read"],
+  agency_staff: ["billing.read", "restaurant.analytics.read", "restaurant.menu.read", "restaurant.orders.read"],
 };
 
-export function agencyRoleGrantsBusinessPermission(role: AgencyMembershipRole, permission: Permission): boolean {
-  return AGENCY_ROLE_BUSINESS_GRANTS[role].includes(permission);
+export function agencyRoleGrantsPermission(role: AgencyMembershipRole, permission: Permission): boolean {
+  return AGENCY_ROLE_GRANTS[role].includes(permission);
 }

@@ -14,6 +14,7 @@ export const AGENCY_AUDIT_ACTIONS = [
   "agency.member_role_changed",
   "agency.member_removed",
   "agency.business_created",
+  "agency.business_owner_invite_resent",
   "agency.subscription_created",
   "agency.subscription_plan_changed",
   "agency.subscription_cancellation_requested",

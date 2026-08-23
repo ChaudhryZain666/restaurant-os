@@ -33,6 +33,9 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
       socket.data.restaurantId = payload.restaurantId;
       socket.data.businessId = payload.businessId;
       socket.data.locationIds = payload.locationIds;
+      // Phase 26 — copied so an agency member's requested location can resolve to a real
+      // restaurant:{id} room via canAccessRestaurant's agency branch below.
+      socket.data.agencyMemberships = payload.agencyMemberships;
       // Phase 19 — a client-supplied locationId (the admin's currently active location; see
       // apps/admin/src/lib/socket.ts) is NEVER trusted on its own, same as any URL param: it only
       // ever takes effect if canAccessRestaurant confirms this specific token's user actually has
@@ -44,7 +47,14 @@ export function createSocketServer(httpServer: HttpServer): SocketIOServer {
       socket.data.roomRestaurantId = payload.restaurantId;
       if (requestedLocationId && requestedLocationId !== payload.restaurantId) {
         canAccessRestaurant(
-          { role: payload.role, restaurantId: payload.restaurantId, businessId: payload.businessId, locationIds: payload.locationIds },
+          {
+            id: payload.sub,
+            role: payload.role,
+            restaurantId: payload.restaurantId,
+            businessId: payload.businessId,
+            locationIds: payload.locationIds,
+            agencyMemberships: payload.agencyMemberships,
+          },
           requestedLocationId
         )
           .then((allowed) => {

@@ -9,8 +9,10 @@ import {
   createAgencyBusiness,
   getAgency,
   getAgencyAuditLog,
+  getAgencyBusiness,
   getMyAgencies,
   listAgencyBusinesses,
+  resendAgencyBusinessOwnerInvite,
 } from "../controllers/agency.controller.js";
 
 export const agencyRouter = Router();
@@ -33,6 +35,13 @@ agencyRouter.post(
   requireAgencyPermission("agency.businesses.manage"),
   validateBody(createAgencyBusinessSchema),
   asyncHandler(createAgencyBusiness)
+);
+agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
+agencyRouter.post(
+  "/:agencyId/businesses/:businessId/resend-owner-invite",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.businesses.manage"),
+  asyncHandler(resendAgencyBusinessOwnerInvite)
 );
 agencyRouter.get(
   "/:agencyId/audit-log",

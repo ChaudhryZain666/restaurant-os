@@ -97,6 +97,17 @@
 /api/v1/agencies/accept-invite                                POST  Public — signature-style token, mirrors /auth/accept-invite's atomic double-accept protection
 /api/v1/agencies/:agencyId/subscription                       GET/POST/.../cancel/.../reactivate/.../change-plan/.../entitlements — mirrors /businesses/:businessId/subscription exactly, gated by agency.billing.read/manage
 /api/v1/platform/agencies                                     GET   platform.restaurants.manage — paginated, read-only, business/member counts per agency
+
+# Phase 26 — agency LOCATION-operational access (crosses Phase 25's "business-level only" boundary)
+/api/v1/agencies/:agencyId/businesses/:businessId              GET   requireAgencyMatch — business detail: owner status, full locations list, subscription snapshot; 404s (not 403) for a business under a different agency
+/api/v1/agencies/:agencyId/businesses/:businessId/resend-owner-invite POST requireAgencyMatch + agency.businesses.manage — mirrors platform.controller.ts's/staff.controller.ts's resend pattern
+# Every /restaurants/:restaurantId/... route (orders, tables, staff, location domains — see above)
+# is now agency-aware too: requireTenantMatch's canAccessRestaurant gained an agency branch
+# reusing businessLocation.ts's agencyGrantsBusinessAccess one hop deeper, and orders/tables/staff/
+# restaurantDomain routers swapped requirePermission for the new requireTenantPermission, which
+# checks the SAME AGENCY_ROLE_GRANTS map requireBusinessPermission already used (renamed from
+# AGENCY_ROLE_BUSINESS_GRANTS since it now governs both scopes). No new route paths for these —
+# same URLs, now reachable by an authorized agency member too.
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never
@@ -208,7 +219,7 @@ land at `POST /webhooks/billing/:provider` (no auth — signature-verified inste
 payment webhook route). See `docs/multi-tenant-storefront-architecture.md`'s Phase 24 section for
 the full domain model, lifecycle state machine, entitlement mechanism, and migration design.
 
-## Agencies (Phase 25 — Agency → Business → Location)
+## Agencies (Phase 25 — Agency → Business → Location; Phase 26 — location-operational access)
 
 An Agency organizationally manages zero or more Businesses (`Business.agencyId`, additive and
 optional — never replaces `Business.ownerId`, the real business-owner). Membership is explicit
@@ -217,12 +228,24 @@ an array claim on the JWT (`agencyMemberships`), never a singular field, since o
 independent roles across multiple agencies. `requireBusinessMatch()` (used by every
 `/businesses/:businessId/...` route already documented above) gained one extra branch so an agency
 member reaches exactly the businesses their agency manages — no separate authorization system, no
-per-route changes. Agency access is deliberately **business-level only** — an agency creates
-businesses and invites their owners, it does not operate day-to-day location operations
-(orders/kitchen/menu edits stay the invited owner's/staff's, via the existing, untouched
-`requireTenantMatch`). See `docs/multi-tenant-storefront-architecture.md`'s Phase 25 section for the
-full domain model, concurrency guarantees, and an honest answer to every scope question the phase
-was asked to resolve.
+per-route changes.
+
+Phase 25 deliberately stopped this at **business-level only** (settings/menu/analytics/promotions/
+billing). Phase 26 crossed that boundary for **location-operational** access (orders/kitchen/tables/
+staff/location domains): `middleware/tenant.ts`'s `canAccessRestaurant`/`requireTenantMatch` gained
+the identical kind of branch, reusing `businessLocation.ts`'s `agencyGrantsBusinessAccess` one hop
+deeper (Restaurant → businessId → Business → agencyId → membership) rather than a second
+authorization system. A single `AGENCY_ROLE_GRANTS` map (renamed from `AGENCY_ROLE_BUSINESS_GRANTS`)
+now governs both scopes via `requireBusinessPermission`/`requireTenantPermission`, since `Permission`
+is one flat vocabulary reused at both levels. `agency_owner`/`agency_admin` get orders/tables
+management (owner-only also gets staff management); `agency_staff` gets orders read-only, still
+gated behind the same explicit `AgencyMembership.businessIds` assignment Phase 25 established — no
+new location-level assignment axis. `restaurant.payments.manage` is granted to no agency role,
+deliberately. The Socket.IO handshake now carries `agencyMemberships` too, so a client-requested
+`locationId` resolves correctly for an agency member exactly like it already did for a real
+restaurant-role account. See `docs/multi-tenant-storefront-architecture.md`'s Phase 25 and Phase 26
+sections for the full domain model, concurrency guarantees, and an honest answer to every scope
+question each phase was asked to resolve.
 
 ## Public API / integration readiness (Phase 16 — foundation audit, not built)
 

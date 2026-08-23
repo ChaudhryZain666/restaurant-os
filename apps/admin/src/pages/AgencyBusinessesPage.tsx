@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import type { Paginated } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -24,13 +25,9 @@ function emptyDraft() {
 }
 
 /**
- * Phase 25 — read-only-plus-create: the agency creates businesses and invites their owners (see
- * agency.controller.ts's createAgencyBusiness), but does NOT operate them day-to-day from here —
- * once an owner accepts, THEY manage menu/orders/etc. normally from their own account, per the
- * "business-level, not location-operational" boundary documented in
- * docs/multi-tenant-storefront-architecture.md's Phase 25 section. Wiring this list into the
- * existing owner-facing Menu/Analytics/Promotions pages (an "acting as agency for business X"
- * context) is explicitly deferred, not attempted here.
+ * Phase 25 — list + create. Phase 26 added the "Manage" link into AgencyBusinessDetailPage, which
+ * is where the actual "enter this business's operational admin" action lives (see that page's doc
+ * comment) — this list itself stays a summary view, not the entry point.
  */
 export function AgencyBusinessesPage() {
   const { activeAgencyId } = useAgency();
@@ -178,6 +175,7 @@ export function AgencyBusinessesPage() {
                 <th className="py-2 pr-3 font-medium">Locations</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Subscription</th>
+                <th className="py-2 pr-3 font-medium" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -197,6 +195,11 @@ export function AgencyBusinessesPage() {
                     <Badge tone={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge>
                   </td>
                   <td className="py-2.5 pr-3 text-muted">{b.subscriptionStatus ?? "—"}</td>
+                  <td className="py-2.5 pr-3 text-right">
+                    <Link to={`/agency/businesses/${b.id}`} className="text-sm font-medium text-primary hover:underline">
+                      Manage
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
