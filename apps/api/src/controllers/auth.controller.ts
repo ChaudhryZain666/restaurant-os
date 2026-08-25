@@ -68,6 +68,7 @@ export function toPublicUser(user: HydratedDocument<UserDoc>, agencyMemberships:
     locationIds: user.locationIds?.map((id) => id.toString()),
     agencyMemberships,
     phone: user.phone,
+    mustChangePassword: user.mustChangePassword ?? false,
   };
 }
 
@@ -90,6 +91,7 @@ export async function issueSession(
     // Phase 25 — same reasoning, re-queried fresh by the caller (getActiveAgencyMemberships) every
     // time a session is issued, never carried forward.
     agencyMemberships,
+    mustChangePassword: user.mustChangePassword ?? false,
   });
   const refreshToken = await issueRefreshToken(user.id);
   setRefreshCookie(res, refreshToken);
@@ -251,6 +253,11 @@ export async function changePassword(req: Request, res: Response) {
   if (!valid) throw ApiError.badRequest("Current password is incorrect");
 
   user.passwordHash = await bcrypt.hash(newPassword, 12);
+  // Phase 28 — this is also how a temporary-password (agency-provisioned "direct access") account
+  // clears mustChangePassword: the same re-authenticate-then-set-a-new-password flow works whether
+  // "current password" is a real long-term password or a one-time temporary one. No separate
+  // endpoint needed.
+  user.mustChangePassword = false;
   await user.save();
   await revokeAllRefreshTokens(user.id as string);
 

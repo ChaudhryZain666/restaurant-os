@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import type { LoyaltyAccount, LoyaltyTransaction } from "@restaurant/types";
-import { Alert, Card, EmptyState, Skeleton } from "@restaurant/ui";
+import { useNavigate } from "react-router-dom";
+import type { LoyaltyAccount, LoyaltyReward, LoyaltyTransaction } from "@restaurant/types";
+import { Alert, Button, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { useRestaurant } from "../context/RestaurantContext";
 import { useNoIndex } from "../hooks/useNoIndex";
 
@@ -18,8 +20,11 @@ function StarGlyph({ className }: { className?: string }) {
 export function LoyaltyPage() {
   useNoIndex();
   const { restaurant } = useRestaurant();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [account, setAccount] = useState<LoyaltyAccount | null>(null);
   const [history, setHistory] = useState<LoyaltyTransaction[]>([]);
+  const [rewards, setRewards] = useState<LoyaltyReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,14 +35,21 @@ export function LoyaltyPage() {
     Promise.all([
       apiClient.request<{ account: LoyaltyAccount }>(`/restaurants/${restaurant.id}/loyalty/me`),
       apiClient.request<{ transactions: LoyaltyTransaction[] }>(`/restaurants/${restaurant.id}/loyalty/me/history`),
+      apiClient.request<{ rewards: LoyaltyReward[] }>(`/restaurants/${restaurant.id}/loyalty/rewards`),
     ])
-      .then(([accountData, historyData]) => {
+      .then(([accountData, historyData, rewardsData]) => {
         setAccount(accountData.account);
         setHistory(historyData.transactions);
+        setRewards(rewardsData.rewards);
       })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
   }, [restaurant]);
+
+  function redeemReward(reward: LoyaltyReward) {
+    const cartHref = restaurant ? `/r/${restaurant.slug}/cart` : "/cart";
+    navigate(cartHref, { state: { redeemRewardPoints: reward.pointCost } });
+  }
 
   if (loading) {
     return (
@@ -69,6 +81,31 @@ export function LoyaltyPage() {
           <p className="text-sm opacity-90">{TIER_LABELS[account?.tier ?? "bronze"]} tier</p>
         </div>
       </Card>
+
+      <div className="flex flex-col gap-2">
+        <h2 className="font-medium text-foreground">Rewards</h2>
+        {rewards.length === 0 ? (
+          <p className="text-sm text-muted">No rewards set up yet — you can still redeem points as a discount at checkout.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
+            {rewards.map((r) => {
+              const affordable = user !== null && (account?.pointsBalance ?? 0) >= r.pointCost;
+              return (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                  <div>
+                    <p className="font-medium text-foreground">{r.name}</p>
+                    {r.description && <p className="text-xs text-muted">{r.description}</p>}
+                    <p className="text-xs text-muted">{r.pointCost} points</p>
+                  </div>
+                  <Button size="sm" variant={affordable ? "primary" : "outline"} disabled={!affordable} onClick={() => redeemReward(r)}>
+                    Redeem
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
         <h2 className="font-medium text-foreground">History</h2>

@@ -12,6 +12,8 @@ import { AgencyAuditLog } from "../models/AgencyAuditLog.js";
 import { Business, type BusinessDoc } from "../models/Business.js";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
+import { Plan } from "../models/Plan.js";
+import { DomainMapping } from "../models/DomainMapping.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
@@ -20,10 +22,11 @@ import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
 import { ownerInviteEmail } from "../email/templates.js";
-import { generateSecureToken } from "../services/secureToken.service.js";
+import { generateSecureToken, generateTemporaryPassword } from "../services/secureToken.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
-import { reserveBusinessSlot } from "../services/agencyEntitlement.service.js";
+import { reserveBusinessSlot, getAgencyEntitlements } from "../services/agencyEntitlement.service.js";
+import { getSubscriptionForAgency } from "../services/subscription.service.js";
 
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff/restaurant invite TTL
 
@@ -116,14 +119,19 @@ export async function listAgencyBusinesses(req: Request, res: Response) {
   const result = await paginateQuery(Business.find({ agencyId }).sort({ createdAt: -1 }), { page, limit });
   const businessIds = result.items.map((b) => b._id);
 
-  const [locationCounts, subscriptions, owners] = await Promise.all([
+  const [locationCounts, subscriptions, owners, domainCounts] = await Promise.all([
     Restaurant.aggregate([{ $match: { businessId: { $in: businessIds } } }, { $group: { _id: "$businessId", count: { $sum: 1 } } }]),
     Subscription.find({ ownerType: "business", ownerId: { $in: businessIds } }),
     User.find({ _id: { $in: result.items.map((b) => b.ownerId) } }).select("name email inviteTokenHash"),
+    // Phase 28 — same read-only visibility pattern platform.controller.ts's getPlatformRestaurantDetail
+    // already uses for domains: count only, never a write surface here (domain management itself
+    // stays owner-only via DomainSettingsPanel.tsx, unchanged).
+    DomainMapping.aggregate([{ $match: { businessId: { $in: businessIds } } }, { $group: { _id: "$businessId", count: { $sum: 1 } } }]),
   ]);
   const countByBusiness = new Map(locationCounts.map((c) => [c._id.toString(), c.count as number]));
   const subscriptionByBusiness = new Map(subscriptions.map((s) => [s.ownerId.toString(), s.status]));
   const ownerById = new Map(owners.map((o) => [o.id as string, o]));
+  const domainCountByBusiness = new Map(domainCounts.map((c) => [c._id.toString(), c.count as number]));
 
   const items = result.items.map((b) => {
     const owner = ownerById.get(b.ownerId.toString());
@@ -134,6 +142,7 @@ export async function listAgencyBusinesses(req: Request, res: Response) {
       ownerName: owner?.name,
       ownerEmail: owner?.email,
       ownerInvitePending: Boolean(owner?.inviteTokenHash),
+      domainCount: domainCountByBusiness.get((b._id as { toString(): string }).toString()) ?? 0,
     };
   });
 
@@ -142,15 +151,25 @@ export async function listAgencyBusinesses(req: Request, res: Response) {
 
 /**
  * POST /agencies/:agencyId/businesses — mirrors restaurant.controller.ts's createRestaurant
- * transactional shape (owner User + Business + first Restaurant, unusable password + invite
- * token, same accept-invite flow). The agency never authenticates AS the owner — no impersonation,
- * explicit authorization the whole way (see docs' Phase 25 section). The one addition is the
- * atomic business-slot reservation (agencyEntitlement.service.ts), called BEFORE the transaction:
- * a failed reservation must abort the whole operation, not partially commit.
+ * transactional shape (owner User + Business + first Restaurant, same accept-invite flow for the
+ * default mode). The agency never authenticates AS the owner — no impersonation for the default
+ * "invite" mode. The one addition is the atomic business-slot reservation
+ * (agencyEntitlement.service.ts), called BEFORE the transaction: a failed reservation must abort
+ * the whole operation, not partially commit.
+ *
+ * Phase 28 — `provisioningMode: "direct"` is a deliberate, audited exception to that no-
+ * impersonation principle, confirmed with the product owner: the agency gets a real, system-
+ * generated one-time password (never agency-typed — see secureToken.service.ts's
+ * generateTemporaryPassword) to relay to the owner out of band, instead of an email invite. The
+ * owner still always sets their OWN real password before doing anything else — `mustChangePassword`
+ * forces that on first login (see middleware/auth.ts) — the agency's knowledge of a working
+ * credential is intentionally short-lived, not a standing capability. The plaintext password is
+ * returned exactly once, in this response, never logged, never persisted anywhere but the bcrypt
+ * hash.
  */
 export async function createAgencyBusiness(req: Request, res: Response) {
   const { agencyId } = req.params;
-  const { businessName, businessSlug, ownerName, ownerEmail, locationName, locationSlug, timezone, currency } =
+  const { businessName, businessSlug, ownerName, ownerEmail, locationName, locationSlug, timezone, currency, provisioningMode } =
     req.body as CreateAgencyBusinessInput;
 
   const [existingBusinessSlug, existingLocationSlug, existingOwnerEmail] = await Promise.all([
@@ -164,8 +183,9 @@ export async function createAgencyBusiness(req: Request, res: Response) {
 
   await reserveBusinessSlot(agencyId);
 
-  const unusablePassword = randomBytes(32).toString("hex");
-  const passwordHash = await bcrypt.hash(unusablePassword, 12);
+  const isDirect = provisioningMode === "direct";
+  const temporaryPassword = isDirect ? generateTemporaryPassword() : randomBytes(32).toString("hex");
+  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
   const { raw, hash } = generateSecureToken();
 
   const session = await mongoose.startSession();
@@ -182,8 +202,11 @@ export async function createAgencyBusiness(req: Request, res: Response) {
               passwordHash,
               role: "restaurant_owner",
               isActive: true,
-              inviteTokenHash: hash,
-              inviteExpiresAt: new Date(Date.now() + OWNER_INVITE_TTL_MS),
+              // "direct" mode: real access immediately, no invite token, but forced to set a real
+              // password before reaching anything else. "invite" mode: unchanged Phase 25 behavior.
+              ...(isDirect
+                ? { mustChangePassword: true }
+                : { inviteTokenHash: hash, inviteExpiresAt: new Date(Date.now() + OWNER_INVITE_TTL_MS) }),
             },
           ],
           { session }
@@ -234,10 +257,10 @@ export async function createAgencyBusiness(req: Request, res: Response) {
       agencyId,
       actorUserId: req.user!.id,
       actorRole: req.user!.role,
-      action: "agency.business_created",
+      action: isDirect ? "agency.business_owner_access_created" : "agency.business_created",
       targetType: "business",
       targetId: business._id,
-      metadata: { businessName },
+      metadata: { businessName, provisioningMode },
     }),
     recordAuditEvent({
       restaurantId: restaurant._id,
@@ -246,9 +269,21 @@ export async function createAgencyBusiness(req: Request, res: Response) {
       action: "restaurant.created",
       targetType: "restaurant",
       targetId: restaurant._id,
-      metadata: { agencyId, ownerEmail },
+      metadata: { agencyId, ownerEmail, provisioningMode },
     }),
   ]);
+
+  if (isDirect) {
+    // No email round-trip for this mode — the agency relays the credential out of band. Returned
+    // exactly once; nothing about it is persisted or logged anywhere beyond this response and the
+    // bcrypt hash already saved above.
+    sendSuccess(
+      res,
+      { business: business.toJSON(), restaurant: restaurant.toJSON(), ownerTemporaryPassword: temporaryPassword },
+      201
+    );
+    return;
+  }
 
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
@@ -273,10 +308,13 @@ export async function getAgencyBusiness(req: Request, res: Response) {
   const business = await Business.findOne({ _id: businessId, agencyId });
   if (!business) throw ApiError.notFound("Business not found");
 
-  const [owner, locations, subscription] = await Promise.all([
+  const [owner, locations, subscription, domains] = await Promise.all([
     User.findById(business.ownerId).select("name email inviteTokenHash"),
     Restaurant.find({ businessId }).select("name slug status settings.timezone settings.currency").sort({ createdAt: 1 }),
     Subscription.findOne({ ownerType: "business", ownerId: businessId }).select("status planId currentPeriodEnd"),
+    // Phase 28 — read-only visibility only (status/hostname), same reasoning as
+    // listAgencyBusinesses's domainCount: management stays owner-only via DomainSettingsPanel.tsx.
+    DomainMapping.find({ businessId }).select("hostname status"),
   ]);
 
   sendSuccess(res, {
@@ -284,6 +322,7 @@ export async function getAgencyBusiness(req: Request, res: Response) {
     owner: owner ? { name: owner.name, email: owner.email, invitePending: Boolean(owner.inviteTokenHash) } : null,
     locations: locations.map((l) => l.toJSON()),
     subscription: subscription?.toJSON() ?? null,
+    domains: domains.map((d) => d.toJSON()),
   });
 }
 
@@ -330,6 +369,45 @@ export async function resendAgencyBusinessOwnerInvite(req: Request, res: Respons
   });
 
   sendSuccess(res, { message: `Invitation resent to ${owner.email}.` });
+}
+
+/**
+ * GET /agencies/:agencyId/dashboard — Phase 28. Every figure here is a real query, most of them
+ * reusing data other endpoints already compute per-row (listAgencyBusinesses' status/owner-invite
+ * fields, getSubscriptionForAgency, getAgencyEntitlements) — no new data model, and no blended/fake
+ * metric. Modeled directly on platform.controller.ts's getPlatformOverview/getPlatformRevenue
+ * pattern, just agency-scoped instead of platform-wide.
+ */
+export async function getAgencyDashboard(req: Request, res: Response) {
+  const { agencyId } = req.params;
+
+  const businesses = await Business.find({ agencyId }).select("status locationCount ownerId");
+  const businessIds = businesses.map((b) => b._id);
+  const ownerIds = businesses.map((b) => b.ownerId);
+
+  const [subscription, usage, pendingMemberInvites, owners, businessIdsWithDomain] = await Promise.all([
+    getSubscriptionForAgency(agencyId),
+    getAgencyEntitlements(agencyId),
+    AgencyMembership.countDocuments({ agencyId, status: "invited" }),
+    User.find({ _id: { $in: ownerIds } }).select("inviteTokenHash"),
+    DomainMapping.distinct("businessId", { businessId: { $in: businessIds } }),
+  ]);
+  const plan = subscription ? await Plan.findById(subscription.planId) : null;
+
+  sendSuccess(res, {
+    subscription: subscription ? subscription.toJSON() : null,
+    plan: plan ? plan.toJSON() : null,
+    usage,
+    businessCount: businesses.length,
+    activeBusinessCount: businesses.filter((b) => b.status === "active").length,
+    // "pending" = created but the owner hasn't finished onboarding (accepted invite / set up their
+    // own access yet) — distinct from "suspended", which is a different, unrelated state.
+    businessesNeedingSetup: businesses.filter((b) => b.status === "pending").length,
+    locationsTotal: businesses.reduce((sum, b) => sum + (b.locationCount ?? 0), 0),
+    domainsConfiguredCount: businessIdsWithDomain.length,
+    pendingOwnerInvites: owners.filter((o) => Boolean(o.inviteTokenHash)).length,
+    pendingMemberInvites,
+  });
 }
 
 export async function getAgencyAuditLog(req: Request, res: Response) {

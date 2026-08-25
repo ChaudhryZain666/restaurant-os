@@ -38,7 +38,7 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 export function Layout() {
   const { user, logout } = useAuth();
   const { lines } = useCart();
-  const { restaurant, loading: restaurantLoading, error: restaurantError } = useRestaurant();
+  const { restaurant, loading: restaurantLoading, error: restaurantError, resolvedVia } = useRestaurant();
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
   // Every restaurant-facing link (brand, Menu, Cart, Loyalty) is slug-aware so navigation never
@@ -219,10 +219,18 @@ export function Layout() {
       </main>
 
       <footer className="border-t border-border px-4 py-6 text-center text-sm text-muted sm:px-6">
-        <p>
-          {restaurant?.name ?? "Restaurant"} · Powered by a platform built for real restaurants, not a website
-          builder.
-        </p>
+        {resolvedVia === "domain" ? (
+          // Phase 28 — a white-label custom domain shouldn't unnecessarily expose the underlying
+          // platform's own branding (Section 7's "platform branding is not unnecessarily exposed").
+          // `resolvedVia` already existed for exactly this purpose (Phase 22) but nothing read it
+          // here until now.
+          <p>{restaurant?.name ?? "Restaurant"}</p>
+        ) : (
+          <p>
+            {restaurant?.name ?? "Restaurant"} · Powered by a platform built for real restaurants, not a website
+            builder.
+          </p>
+        )}
       </footer>
 
       <HelpWidget />

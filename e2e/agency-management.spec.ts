@@ -177,7 +177,11 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
       billingInterval: "monthly",
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      provider: "internal",
+      // provider:"mock" (never "internal") — Phase 27 deliberately excludes provider:"internal"
+      // (grandfathered) subscriptions from all limit enforcement, so this test's premise (a real
+      // plan-derived limit actually blocking a second business) requires a real, non-grandfathered
+      // subscription record.
+      provider: "mock",
       createdAt: new Date(),
       updatedAt: new Date(),
     });

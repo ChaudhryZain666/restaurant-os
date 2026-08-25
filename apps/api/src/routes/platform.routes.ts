@@ -11,6 +11,8 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import {
+  getPlatformAnalytics,
+  getPlatformConfig,
   getPlatformOverview,
   getPlatformRestaurantDetail,
   getPlatformRevenue,
@@ -63,6 +65,8 @@ platformRouter.get(
   asyncHandler(listPlatformAgencies)
 );
 platformRouter.get("/revenue", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformRevenue));
+platformRouter.get("/analytics", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformAnalytics));
+platformRouter.get("/config", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformConfig));
 platformRouter.get(
   "/users",
   requirePermission("platform.users.manage"),

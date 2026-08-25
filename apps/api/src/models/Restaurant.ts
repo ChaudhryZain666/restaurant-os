@@ -8,6 +8,16 @@ import { idTransform } from "../utils/schemaOptions.js";
 // known-working pattern used throughout this codebase's other models.
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 
+// Phase 28 — evaluated in delivery.service.ts by picking the tier with the SMALLEST maxDistanceKm
+// that still covers the order's actual distance, so entry order in this array never matters.
+const deliveryFeeTierSchema = new Schema(
+  {
+    maxDistanceKm: { type: Number, required: true, min: 0.1 },
+    fee: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 const businessHoursDaySchema = new Schema(
   {
     day: { type: String, enum: WEEKDAYS, required: true },
@@ -40,6 +50,9 @@ const restaurantSettingsSchema = new Schema(
     // docs/delivery-architecture.md. No default: undefined means "not configured," distinct from
     // 0 (which would mean "only deliver to this exact point").
     deliveryRadiusKm: { type: Number, min: 0.1, max: 100 },
+    // Phase 28 — optional distance-tiered pricing, layered on top of the flat deliveryFee above
+    // (used as a fallback when this is unset/empty). See deliveryFeeTierSchema's own comment.
+    deliveryFeeTiers: { type: [deliveryFeeTierSchema], default: [] },
     businessHours: { type: [businessHoursDaySchema], default: [] },
     temporarilyPaused: { type: Boolean, default: false },
     pausedReason: { type: String, maxlength: 200 },
@@ -47,6 +60,12 @@ const restaurantSettingsSchema = new Schema(
     // Validated server-side as a strict 6-digit hex pattern (packages/validation), so this can
     // never carry anything beyond a color.
     brandColor: { type: String, maxlength: 7 },
+    // Phase 28 — restaurant-level feature toggles, exact precedent of dineInEnabled/deliveryEnabled
+    // above: a boolean that hides the corresponding nav/route (Layout.tsx's itemVisible, App.tsx's
+    // RequireAuth) on top of existing permission checks, never deletes any underlying data. Turning
+    // either back on restores full functionality immediately — nothing is destroyed when disabled.
+    kitchenEnabled: { type: Boolean, default: true },
+    staffEnabled: { type: Boolean, default: true },
   },
   { _id: false }
 );

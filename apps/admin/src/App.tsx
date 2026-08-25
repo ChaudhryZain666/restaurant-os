@@ -6,7 +6,6 @@ import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { MenuManagementPage } from "./pages/MenuManagementPage";
 import { DeliveryPage } from "./pages/DeliveryPage";
 import { CustomersPage } from "./pages/CustomersPage";
@@ -36,7 +35,10 @@ import { LocationsPage } from "./pages/LocationsPage";
 import { PrintOrderPage } from "./pages/PrintOrderPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
+import { PlatformAnalyticsPage } from "./pages/PlatformAnalyticsPage";
+import { SystemConfigPage } from "./pages/SystemConfigPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { AgencySignupWizardPage } from "./pages/AgencySignupWizardPage";
 import { AcceptAgencyInvitePage } from "./pages/AcceptAgencyInvitePage";
 import { AgencyDashboardPage } from "./pages/AgencyDashboardPage";
 import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
@@ -44,6 +46,7 @@ import { AgencyMembersPage } from "./pages/AgencyMembersPage";
 import { AgencyBillingPage } from "./pages/AgencyBillingPage";
 import { AgencyBusinessDetailPage } from "./pages/AgencyBusinessDetailPage";
 import { MockCheckoutPage } from "./pages/MockCheckoutPage";
+import { ForcePasswordChangePage } from "./pages/ForcePasswordChangePage";
 
 const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
@@ -69,10 +72,25 @@ export function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route path="/register" element={<RegisterPage />} />
+      {/* Phase 28 — the plan-first agency signup wizard, additive to /register (unchanged, still
+          exercised directly by e2e/agency-management.spec.ts). */}
+      <Route path="/start" element={<AgencySignupWizardPage />} />
       <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
       {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
           BILLING_PROVIDER=mock (the API returns this path only from the mock provider). */}
       <Route path="/mock-checkout/:token" element={<MockCheckoutPage />} />
+      {/* Phase 28 — no permission/roles gate (any authenticated identity can land here); RequireAuth
+          itself is what forces every OTHER route to redirect here while mustChangePassword is true.
+          No <Layout> wrapper, same reasoning as /print/:mode/:id — this is a standalone interstitial,
+          not a page with nav. */}
+      <Route
+        path="/force-password-change"
+        element={
+          <RequireAuth>
+            <ForcePasswordChangePage />
+          </RequireAuth>
+        }
+      />
       {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
           tab via window.open from an order card's Print action. */}
       <Route
@@ -337,11 +355,7 @@ export function App() {
           path="/platform/analytics"
           element={
             <RequireAuth roles={["platform_admin"]}>
-              <PlaceholderPage
-                title="Platform analytics"
-                description="Cross-restaurant totals and trends — total orders, revenue and growth across every tenant."
-                whyItMatters="Today's analytics endpoint only returns numbers scoped to one restaurant at a time; a platform-wide view needs a new aggregation endpoint."
-              />
+              <PlatformAnalyticsPage />
             </RequireAuth>
           }
         />
@@ -373,11 +387,7 @@ export function App() {
           path="/platform/settings"
           element={
             <RequireAuth roles={["platform_admin"]}>
-              <PlaceholderPage
-                title="System configuration"
-                description="Platform-wide defaults and toggles — not a single restaurant's settings, but the rules the whole platform runs on."
-                whyItMatters="Each restaurant already configures its own ordering rules; this would be for platform-level defaults and feature flags across all of them."
-              />
+              <SystemConfigPage />
             </RequireAuth>
           }
         />

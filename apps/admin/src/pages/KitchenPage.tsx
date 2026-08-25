@@ -5,6 +5,7 @@ import { getStatusTimestamp, formatElapsed } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useSocketStatus } from "../hooks/useSocketStatus";
 import {
   actionLabel,
@@ -97,6 +98,7 @@ export function KitchenPage() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const socketStatus = useSocketStatus();
+  const { restaurant: restaurantSettings, loading: settingsLoading } = useRestaurantSettings();
 
   async function reload() {
     const { orders } = await apiClient.request<{ orders: Order[] }>(`/restaurants/${restaurantId}/orders?active=true`);
@@ -134,7 +136,23 @@ export function KitchenPage() {
     }
   }
 
-  if (loading) return <p>Loading kitchen orders...</p>;
+  if (loading || settingsLoading) return <p>Loading kitchen orders...</p>;
+
+  if (restaurantSettings?.settings.kitchenEnabled === false) {
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="font-heading text-2xl font-semibold text-foreground">Kitchen</h1>
+        <p className="text-sm text-muted">
+          Kitchen operations are turned off for this restaurant. Orders continue to work normally — this screen is
+          just hidden. Re-enable it from{" "}
+          <a href="/settings" className="font-medium text-primary hover:underline">
+            Settings → Ordering
+          </a>
+          .
+        </p>
+      </div>
+    );
+  }
 
   const byStatus = (status: OrderStatus) =>
     orders.filter((o) => o.status === status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));

@@ -1,8 +1,12 @@
 import type { HydratedDocument } from "mongoose";
-import type { RestaurantReadiness, RestaurantReadinessCheck } from "@restaurant/types";
+import type { RestaurantReadiness, RestaurantReadinessCheck, SetupChecklistItem } from "@restaurant/types";
 import type { RestaurantDoc } from "../models/Restaurant.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
+import { Table } from "../models/Table.js";
+import { User } from "../models/User.js";
+import { DomainMapping } from "../models/DomainMapping.js";
+import { LoyaltyReward } from "../models/LoyaltyReward.js";
 import { businessHasCanonicalMenu, resolveMenuForLocation } from "./menuResolution.service.js";
 
 /**
@@ -67,4 +71,71 @@ export async function computeReadiness(restaurant: HydratedDocument<RestaurantDo
   ];
 
   return { ready: checks.every((c) => c.complete), checks };
+}
+
+/**
+ * Phase 28 — the broader "get fully set up" checklist (SetupPage.tsx), shown ALONGSIDE
+ * computeReadiness's required checks, never replacing them and never gating publish. Every item is
+ * a real signal from an existing collection — no fake/placeholder status. STAFF_ROLES inlined
+ * rather than imported from @restaurant/types, matching this file's existing Mongoose-schema-enum
+ * convention elsewhere in the codebase (see Restaurant.ts's own doc comment on why).
+ */
+export async function computeSetupChecklist(restaurant: HydratedDocument<RestaurantDoc>): Promise<SetupChecklistItem[]> {
+  const { settings } = restaurant;
+  const kitchenEnabled = settings.kitchenEnabled !== false;
+  const staffEnabled = settings.staffEnabled !== false;
+
+  const [staffCount, tableCount, activeDomain, rewardCount] = await Promise.all([
+    staffEnabled
+      ? User.countDocuments({ restaurantId: restaurant._id, role: { $in: ["restaurant_manager", "restaurant_staff", "kitchen_staff"] } })
+      : Promise.resolve(0),
+    settings.dineInEnabled ? Table.countDocuments({ restaurantId: restaurant._id }) : Promise.resolve(0),
+    DomainMapping.findOne({ locationId: restaurant._id }).sort({ createdAt: -1 }),
+    LoyaltyReward.countDocuments({ restaurantId: restaurant._id }),
+  ]);
+
+  const items: SetupChecklistItem[] = [
+    {
+      key: "branding",
+      label: "Logo, cover image, or brand color set",
+      status: restaurant.logo || restaurant.coverImage || settings.brandColor ? "complete" : "not_started",
+    },
+    {
+      key: "hours",
+      label: "Business hours configured",
+      status: settings.businessHours.length > 0 ? "complete" : "not_started",
+    },
+    {
+      key: "tables",
+      label: "Tables added for QR ordering",
+      status: !settings.dineInEnabled ? "optional" : tableCount > 0 ? "complete" : "not_started",
+    },
+    {
+      key: "kitchen",
+      label: "Kitchen operations",
+      status: !kitchenEnabled ? "optional" : "complete",
+    },
+    {
+      key: "staff",
+      label: "Staff accounts",
+      status: !staffEnabled ? "optional" : staffCount > 0 ? "complete" : "not_started",
+    },
+    {
+      key: "loyalty",
+      label: "Loyalty rewards",
+      status: rewardCount > 0 ? "complete" : "optional",
+    },
+    {
+      key: "domain",
+      label: "Custom domain",
+      status: activeDomain?.status === "active" ? "complete" : activeDomain ? "in_progress" : "optional",
+    },
+    {
+      key: "seo",
+      label: "Search engine metadata",
+      status: "complete",
+    },
+  ];
+
+  return items;
 }

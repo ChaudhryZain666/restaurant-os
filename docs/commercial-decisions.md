@@ -184,3 +184,26 @@ Final visual/branding pass, AI features, POS integrations, public API, advanced 
 integrations (architecture preserved, provider-agnostic — see `docs/delivery-architecture.md`),
 WhatsApp/advanced notifications, deep business-wide loyalty, advanced reporting, marketplace/app
 ecosystem, and everything else already listed as deferred in prior phases' docs.
+
+## 17. Phase 28 — agency-provisioned owner access: a documented exception, not a silent one
+
+**DECISION, confirmed with the product owner**: agencies may now provision a restaurant owner's
+login directly (`provisioningMode: "direct"` on `POST /agencies/:agencyId/businesses`) instead of
+only sending an email invite. This is a deliberate, audited departure from the platform's otherwise
+strict "an agency never knows an owner's credential" principle (see
+`agency.controller.ts`'s `createAgencyBusiness` doc comment) — recorded here so it is never mistaken
+for an oversight or quietly widened in scope.
+
+What actually happens: a real, cryptographically random one-time password is generated server-side
+(`secureToken.service.ts`'s `generateTemporaryPassword` — never agency-typed, so it's never weak or
+reused), returned exactly once in the API response, and never logged or persisted anywhere beyond
+its bcrypt hash. The created account is flagged `mustChangePassword: true`, which both the server
+(`middleware/auth.ts`, blocking every route except `/auth/me` and `/auth/change-password`) and the
+client (`RequireAuth.tsx`, forcing a redirect to `/force-password-change`) enforce independently. The
+owner must set their own real password before reaching anything else — the agency's window of
+knowing a working credential is real but intentionally as short as one login. Every use of this mode
+is written to `AgencyAuditLog` (`agency.business_owner_access_created`).
+
+**DECISION REQUIRED**: whether this mode should ever be available to `agency_staff` (currently
+gated the same as the invite path, `agency.businesses.manage`) or restricted further to
+`agency_owner`/`agency_admin` only, given the trust it extends.

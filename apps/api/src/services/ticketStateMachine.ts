@@ -1,18 +1,13 @@
-import type { TicketStatus } from "@restaurant/types";
+import { TICKET_STATUS_TRANSITIONS, type TicketStatus } from "@restaurant/types";
 
 /**
- * Explicit allowed transitions per status, mirroring orderStateMachine.ts's shape. "closed" is
- * terminal for staff-driven transitions; a customer replying to a resolved/waiting_customer
+ * Phase 28 — TICKET_STATUS_TRANSITIONS moved to @restaurant/types (re-exported here unchanged) so
+ * the admin frontend can filter its status dropdown to the same allowed transitions instead of
+ * discovering them via a 400 from this function. A customer replying to a resolved/waiting_customer
  * ticket is handled as a separate, narrower side effect in the reply endpoint itself (not a
  * client-supplied status value), not modeled as a general transition here.
  */
-const TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
-  open: ["in_progress", "resolved", "closed"],
-  in_progress: ["waiting_customer", "resolved", "closed"],
-  waiting_customer: ["in_progress", "open", "resolved", "closed"],
-  resolved: ["closed", "open", "in_progress"],
-  closed: [],
-};
+const TRANSITIONS = TICKET_STATUS_TRANSITIONS;
 
 export function isValidTicketTransition(from: TicketStatus, to: TicketStatus): boolean {
   return TRANSITIONS[from].includes(to);

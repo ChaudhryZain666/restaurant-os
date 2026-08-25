@@ -15,6 +15,11 @@ export const AGENCY_AUDIT_ACTIONS = [
   "agency.member_removed",
   "agency.business_created",
   "agency.business_owner_invite_resent",
+  // Phase 28 — the agency created a working login directly (temporary password) instead of
+  // sending an email invite. A deliberate, audited exception to the "agency never knows an owner
+  // credential" principle — see agency.controller.ts's createAgencyBusiness doc comment.
+  "agency.business_owner_access_created",
+  "agency.member_invite_resent",
   "agency.subscription_created",
   "agency.subscription_plan_changed",
   "agency.subscription_cancellation_requested",

@@ -44,16 +44,23 @@ entirely on top of Phase 9's untouched eligibility/fee/snapshot pipeline.
 
 ## What is explicitly NOT implemented (future / provider-dependent)
 
-- **No embedded, pin-droppable map, and no visual delivery-radius preview.** See "Map / radius
-  visualization" below for why this was skipped this phase rather than half-built.
+- **Phase 28 update — embedded map now built.** A real, pin-showing map (Leaflet + OpenStreetMap
+  tiles, no API key/billing account — `apps/admin/src/components/MapPreview.tsx`) replaced the
+  external "Preview on a map ↗" Google Maps link in Settings, and now also renders a live
+  delivery-radius circle on the Delivery page. Still view-only: the geocoding/`AddressAutocomplete`
+  flow below remains the only way to CHANGE a location's coordinates — no new geocoding path.
 - **No driving/routing distance, no ETA.** Distance is still straight-line (Haversine) only — see
   Phase 9's "Distance calculation" section; geocoding resolves a *point*, not a route.
   Chosen as the real provider (see below), but **this environment has no real LocationIQ API key**
   — `GEOCODING_PROVIDER=test` is configured instead, a genuinely-implemented, deterministic
   adapter, not a stub. Setting `GEOCODING_PROVIDER=locationiq` + `GEOCODING_API_KEY` is a
   configuration change only; no code changes are needed to go live with real geocoding.
-- **No distance-tiered pricing, no polygon/explicit delivery zones.** Both remain exactly as Phase
-  9 left them — out of scope for the same "don't over-engineer" reasoning.
+- **Phase 28 update — distance-tiered pricing now built.** `Restaurant.settings.deliveryFeeTiers`
+  (optional, `{maxDistanceKm, fee}[]`) lets an owner configure a fee that varies by distance instead
+  of one flat rate; `delivery.service.ts` picks the tightest-fitting bracket that still covers the
+  order's actual `distanceKm` (already computed, previously unused for pricing), falling back to the
+  flat `deliveryFee` when unset — fully backward compatible. Polygon/explicit delivery zones remain
+  out of scope, unchanged from Phase 9.
 - Driver accounts, dispatch, live GPS tracking, route optimization, multi-location, billing,
   custom domains, white-label, WhatsApp, AI, public API, POS/printer integration — all explicitly
   out of scope, unaffected by either phase.
@@ -257,17 +264,16 @@ provider would return to anyone else searching the same text.
   different locations/radii/fees, and each restaurant's own configuration — never the other's — is
   what comes back.
 
-## Map / radius visualization — explicitly skipped (Parts 9/10)
+## Map / radius visualization — built in Phase 28
 
-Neither an embedded pin-droppable map nor a visual "restaurant + radius circle" preview was built.
-LocationIQ's core API (what this phase actually integrates) is geocoding/autocomplete only — an
-interactive map needs a *separate* capability (tile rendering, e.g. Leaflet + a tile provider),
-which is a meaningfully different, separable integration with its own licensing/cost/complexity,
-not a natural extension of "look up an address." Part 10 explicitly permits skipping this "if
-implementing a radius visualization would introduce unnecessary provider complexity" — it would
-here, for a feature (a static preview) the existing "preview on Google Maps ↗" external link
-already serves honestly, at zero added dependency. `SettingsPage`'s "Coming soon" card documents
-this directly rather than silently omitting it.
+Originally skipped in Phase 9/10: LocationIQ's core API is geocoding/autocomplete only, and an
+interactive map needs a *separate* capability (tile rendering) with its own dependency footprint,
+so this phase's "preview on Google Maps ↗" external link served honestly at zero added cost instead.
+Phase 28 added that separate capability deliberately: Leaflet + OpenStreetMap tiles (still free, no
+API key/billing account, so the original cost reasoning stays satisfied) via
+`apps/admin/src/components/MapPreview.tsx`, embedded in both Settings (restaurant location) and
+Delivery (with a live radius circle). This is purely a rendering layer over coordinates the
+geocoding flow already produces — it doesn't change how a coordinate is resolved or validated.
 
 ## Testing (Part 20/21)
 
@@ -356,10 +362,13 @@ coordinates came from geocoding or manual entry; a customer later editing/deleti
 
 ## Delivery fee architecture
 
-`settings.deliveryFee` (Phase 1, a flat per-restaurant rate) is still the only fee model —
-distance-tiered pricing remains out of scope. `createOrder` only ever applies the fee after
-`checkDeliveryEligibility` confirms the address is actually in range; the fee amount itself is
-always server-read, never client-supplied.
+`settings.deliveryFee` (Phase 1, a flat per-restaurant rate) remains the fallback fee. Phase 28
+added an optional `settings.deliveryFeeTiers: {maxDistanceKm, fee}[]` — `checkDeliveryEligibility`
+resolves the tightest-fitting tier covering the order's actual distance (falling back to the flat
+fee when unset or no tier matches), so every existing restaurant that never configures tiers keeps
+behaving exactly as before. `createOrder` only ever applies the fee after `checkDeliveryEligibility`
+confirms the address is actually in range; the fee amount itself is always server-read, never
+client-supplied.
 
 ## Checkout changes
 

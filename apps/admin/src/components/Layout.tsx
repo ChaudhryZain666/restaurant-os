@@ -7,6 +7,7 @@ import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useAgency } from "../context/AgencyContext";
 import { useBusiness } from "../context/BusinessContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
+import { RestaurantSettingsProvider, useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import {
   IconBook,
   IconChart,
@@ -41,6 +42,10 @@ interface NavItem {
   permission?: Permission;
   /** Only for the rare item with no single natural backend permission (Dashboard, Kitchen). */
   roles?: readonly UserRole[];
+  /** Phase 28 — hidden when the active location's restaurant.settings[flag] is explicitly false.
+   *  Undefined (not yet loaded, or the field predates this phase) is treated as visible — this only
+   *  ever HIDES something a permission check already allowed, never grants extra access. */
+  settingsFlag?: "kitchenEnabled" | "staffEnabled";
   /** Phase 23 — hidden entirely at a single location, matching Locations/domain-switcher's own
    *  established gating: a single-location owner's one location already IS the business, so
    *  business-wide analytics/promotions would just be a confusing duplicate of the page they
@@ -76,7 +81,7 @@ const RESTAURANT_GROUPS: NavGroup[] = [
       // by design), and an ungated nav item would otherwise show a link that 403s on click — the
       // exact Phase 11 drift class itemVisible/RequireAuth deriving from one shared source exists
       // to prevent.
-      { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage" },
+      { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage", settingsFlag: "kitchenEnabled" },
       { to: "/tables", label: "Tables", icon: IconTable, permission: "restaurant.tables.manage" },
     ],
   },
@@ -89,7 +94,7 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       { to: "/delivery", label: "Delivery", icon: IconTruck, permission: "restaurant.settings.manage" },
-      { to: "/staff", label: "Staff", icon: IconIdBadge, permission: "restaurant.staff.manage" },
+      { to: "/staff", label: "Staff", icon: IconIdBadge, permission: "restaurant.staff.manage", settingsFlag: "staffEnabled" },
     ],
   },
   {
@@ -211,8 +216,15 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
   ].join(" ");
 }
 
-function itemVisible(item: NavItem, role: UserRole, isMultiLocation: boolean, agencyRole: AgencyMembershipRole | null): boolean {
+function itemVisible(
+  item: NavItem,
+  role: UserRole,
+  isMultiLocation: boolean,
+  agencyRole: AgencyMembershipRole | null,
+  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean }
+): boolean {
   if (item.multiLocationOnly && !isMultiLocation) return false;
+  if (item.settingsFlag && restaurantSettings?.[item.settingsFlag] === false) return false;
   if (item.permission) {
     return roleHasPermission(role, item.permission) || (agencyRole !== null && agencyRoleGrantsPermission(agencyRole, item.permission));
   }
@@ -225,6 +237,7 @@ function NavGroupList({
   role,
   isMultiLocation,
   agencyRole = null,
+  restaurantSettings,
   onNavigate,
 }: {
   groups: NavGroup[];
@@ -234,6 +247,8 @@ function NavGroupList({
    *  visibility for RESTAURANT_GROUPS matches exactly what that agency role can reach there (the
    *  same AGENCY_ROLE_GRANTS the server's requireBusinessPermission/requireTenantPermission check). */
   agencyRole?: AgencyMembershipRole | null;
+  /** Phase 28 — the active location's settings, for kitchenEnabled/staffEnabled-gated items. */
+  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean };
   onNavigate?: () => void;
 }) {
   // Filtering here (rather than trusting each NavGroup array to already be role-correct) is what
@@ -243,7 +258,10 @@ function NavGroupList({
   // `permission` App.tsx's RequireAuth checks (rather than a second hand-maintained role list) is
   // what makes that class of drift structurally impossible now, not just fixed once.
   const visibleGroups = groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => itemVisible(item, role, isMultiLocation, agencyRole)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => itemVisible(item, role, isMultiLocation, agencyRole, restaurantSettings)),
+    }))
     .filter((group) => group.items.length > 0);
 
   return (
@@ -280,6 +298,14 @@ function IconClose({ className }: { className?: string }) {
 }
 
 export function Layout() {
+  return (
+    <RestaurantSettingsProvider>
+      <LayoutContent />
+    </RestaurantSettingsProvider>
+  );
+}
+
+function LayoutContent() {
   const { user, logout } = useAuth();
   const { activeLocationId, locations, switchLocation } = useActiveLocation();
   const { activeAgencyId, agencies, switchAgency } = useAgency();
@@ -293,6 +319,10 @@ export function Layout() {
   // a real restaurant-role account is always their own user.businessId — zero behavior change there.
   const isAgencyScoped = (user?.role === "agency_member" || user?.role === "customer") && !isActingAsAgency;
   const isRestaurantScoped = Boolean(user) && !isPlatformAdmin && Boolean(activeBusinessId);
+  // Phase 28 — only fetched when actually restaurant-scoped (the hook itself no-ops without a
+  // resolved activeLocationId, but there's no reason to even attempt it for a platform_admin or an
+  // agency member who hasn't entered a business yet).
+  const { restaurant: activeRestaurant } = useRestaurantSettings();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -357,6 +387,7 @@ export function Layout() {
             role={user.role}
             isMultiLocation={locations.length > 1}
             agencyRole={agencyRoleForActiveBusiness}
+            restaurantSettings={activeRestaurant?.settings}
             onNavigate={() => setMobileOpen(false)}
           />
         )}

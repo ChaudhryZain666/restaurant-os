@@ -22,6 +22,9 @@ export class ApiError extends Error {
   static forbidden(message = "Forbidden") {
     return new ApiError(403, ErrorCode.FORBIDDEN, message);
   }
+  static passwordChangeRequired(message = "You must change your temporary password before continuing") {
+    return new ApiError(403, ErrorCode.PASSWORD_CHANGE_REQUIRED, message);
+  }
   static notFound(message = "Not found") {
     return new ApiError(404, ErrorCode.NOT_FOUND, message);
   }

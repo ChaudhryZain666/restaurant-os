@@ -183,6 +183,20 @@ export function CartPage() {
       });
   }, [user, restaurant]);
 
+  // Phase 28 — a reward picked on the Loyalty page (apps/web's LoyaltyPage.tsx "Redeem" button)
+  // arrives here as router state, same pattern as reorderNotice above. This is purely a UI
+  // pre-fill of the EXISTING redemption control below — it still resolves to the same plain
+  // redeemPoints number sent to order creation, nothing new server-side. Applied once, clamped to
+  // whatever's actually affordable, so it never claims more than the reward's real cost.
+  const rewardPointsRequested = (location.state as { redeemRewardPoints?: number } | null)?.redeemRewardPoints;
+  const rewardPrefillApplied = useRef(false);
+  useEffect(() => {
+    if (!rewardPointsRequested || rewardPrefillApplied.current || loyaltyBalance === null) return;
+    rewardPrefillApplied.current = true;
+    setRedeemPointsInput(Math.min(rewardPointsRequested, loyaltyBalance, Math.floor(subtotalAfterDiscount)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rewardPointsRequested, loyaltyBalance]);
+
   // Re-clamp if a promo applied afterward shrinks the subtotal below the points already selected —
   // the server would reject/re-cap this anyway, but the displayed total shouldn't drift from what
   // will actually be charged.

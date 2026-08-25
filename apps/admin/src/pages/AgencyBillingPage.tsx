@@ -58,29 +58,61 @@ export function AgencyBillingPage() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [pastDueDeadline, setPastDueDeadline] = useState<string | undefined>();
   const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
+  const [usage, setUsage] = useState<{ maxBusinesses: number; businessCount: number } | null>(null);
   const [history, setHistory] = useState<BillingHistoryEvent[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [selectedPlanCode, setSelectedPlanCode] = useState("");
   const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const HISTORY_PAGE_SIZE = 10;
+
   async function reload() {
     if (!activeAgencyId) return;
-    const [subRes, plansRes, historyRes] = await Promise.all([
+    const [subRes, plansRes, entitlementsRes, historyRes] = await Promise.all([
       apiClient.request<{ subscription: Subscription | null; plan: Plan | null; pastDueDeadline?: string }>(
         `/agencies/${activeAgencyId}/subscription`
       ),
       apiClient.request<{ plans: Plan[] }>("/plans"),
-      apiClient.request<Paginated<BillingHistoryEvent>>(`/agencies/${activeAgencyId}/subscription/billing-history?limit=10`),
+      apiClient.request<{ usage: { maxBusinesses: number; businessCount: number } }>(
+        `/agencies/${activeAgencyId}/subscription/entitlements`
+      ),
+      apiClient.request<Paginated<BillingHistoryEvent>>(
+        `/agencies/${activeAgencyId}/subscription/billing-history?limit=${HISTORY_PAGE_SIZE}`
+      ),
     ]);
     setSubscription(subRes.subscription);
     setPlan(subRes.plan);
     setPastDueDeadline(subRes.pastDueDeadline);
     const agencyPlans = plansRes.plans.filter((p) => p.type === "AGENCY");
     setAvailablePlans(agencyPlans);
+    setUsage(entitlementsRes.usage);
     setHistory(historyRes.items);
+    setHistoryPage(1);
+    setHistoryHasMore(historyRes.hasNextPage);
     if (!selectedPlanCode && agencyPlans[0]) setSelectedPlanCode(agencyPlans[0].code);
+  }
+
+  async function loadMoreHistory() {
+    if (!activeAgencyId) return;
+    setHistoryLoadingMore(true);
+    try {
+      const nextPage = historyPage + 1;
+      const res = await apiClient.request<Paginated<BillingHistoryEvent>>(
+        `/agencies/${activeAgencyId}/subscription/billing-history?limit=${HISTORY_PAGE_SIZE}&page=${nextPage}`
+      );
+      setHistory((prev) => [...prev, ...res.items]);
+      setHistoryPage(nextPage);
+      setHistoryHasMore(res.hasNextPage);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setHistoryLoadingMore(false);
+    }
   }
 
   useEffect(() => {
@@ -185,6 +217,24 @@ export function AgencyBillingPage() {
         <Alert tone="danger" role="alert">
           {error}
         </Alert>
+      )}
+
+      {usage && (
+        <Card className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-heading text-sm font-medium text-foreground">Business usage</p>
+            <p className="text-sm text-muted">
+              {usage.businessCount} of {usage.maxBusinesses} businesses used
+              {usage.businessCount >= usage.maxBusinesses && " — at limit"}
+            </p>
+          </div>
+          <div className="h-2 w-40 overflow-hidden rounded-full bg-border">
+            <div
+              className={`h-full ${usage.businessCount >= usage.maxBusinesses ? "bg-danger" : "bg-primary"}`}
+              style={{ width: `${Math.min(100, (usage.businessCount / Math.max(usage.maxBusinesses, 1)) * 100)}%` }}
+            />
+          </div>
+        </Card>
       )}
 
       {subscription && plan ? (
@@ -332,6 +382,11 @@ export function AgencyBillingPage() {
               </li>
             ))}
           </ul>
+        )}
+        {historyHasMore && (
+          <Button size="sm" variant="secondary" onClick={loadMoreHistory} disabled={historyLoadingMore} className="self-start">
+            {historyLoadingMore ? "Loading..." : "Load more"}
+          </Button>
         )}
       </Card>
     </div>

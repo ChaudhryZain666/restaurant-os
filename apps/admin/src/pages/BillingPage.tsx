@@ -295,7 +295,11 @@ export function BillingPage() {
         </Card>
       ) : (
         <Card className="flex flex-col gap-4">
-          <p className="text-sm text-muted">No subscription yet.</p>
+          <div>
+            <p className="text-sm text-muted">No subscription yet.</p>
+            <p className="font-heading text-lg font-medium text-foreground">Choose a plan</p>
+            <p className="text-sm text-muted">You won't be charged until your trial ends, and you can cancel anytime before then.</p>
+          </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
               Plan
@@ -323,6 +327,38 @@ export function BillingPage() {
                 <option value="yearly">Yearly</option>
               </select>
             </label>
+          </div>
+
+          {(() => {
+            const selected = availablePlans.find((p) => p.code === selectedPlanCode);
+            if (!selected) return null;
+            const maxLocations = selected.entitlements.find((e) => e.key === "max_locations")?.value;
+            const price = formatPrice(selected.pricing, billingInterval);
+            return (
+              <dl className="grid gap-x-6 gap-y-1.5 rounded-lg border border-border p-3 text-sm sm:grid-cols-2">
+                {selected.trialDays !== undefined && (
+                  <div>
+                    <dt className="text-muted">Trial length</dt>
+                    <dd className="text-foreground">{selected.trialDays} days, no card required</dd>
+                  </div>
+                )}
+                {typeof maxLocations === "number" && (
+                  <div>
+                    <dt className="text-muted">Included locations</dt>
+                    <dd className="text-foreground">{maxLocations}</dd>
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <dt className="text-muted">After your trial ends</dt>
+                  <dd className="text-foreground">
+                    You'll be billed {price ?? "the plan price"} ({billingInterval}) unless you cancel first.
+                  </dd>
+                </div>
+              </dl>
+            );
+          })()}
+
+          <div className="flex flex-wrap gap-3">
             <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
               {busy ? "Starting..." : "Start subscription"}
             </Button>

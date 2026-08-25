@@ -51,6 +51,17 @@ export interface RestaurantSettings {
    * hex pattern, so it can never carry CSS/JS injection.
    */
   brandColor?: string;
+  /** Phase 28 — restaurant-level feature toggles. Hide the corresponding nav/route and disable the
+   *  corresponding functionality; never delete any underlying data — re-enabling restores it. */
+  kitchenEnabled?: boolean;
+  staffEnabled?: boolean;
+  /**
+   * Phase 28 — optional distance-tiered delivery fee. The tier with the smallest maxDistanceKm
+   * that still covers the order's actual distance applies (entry order doesn't matter); if none
+   * match, or this array is unset/empty, `deliveryFee` above is used as a flat fallback — fully
+   * backward compatible with every restaurant that never configures tiers.
+   */
+  deliveryFeeTiers?: Array<{ maxDistanceKm: number; fee: number }>;
 }
 
 export type RestaurantAvailabilityStatus = "open" | "closed" | "paused";
@@ -69,6 +80,21 @@ export interface RestaurantReadinessCheck {
 export interface RestaurantReadiness {
   ready: boolean;
   checks: RestaurantReadinessCheck[];
+}
+
+/**
+ * Phase 28 — the broader "get fully set up" checklist SetupPage.tsx shows alongside (never instead
+ * of) the required readiness checks above. Never gates publish — only the 4 checks in
+ * RestaurantReadiness do that. "optional" means the section is genuinely optional for this
+ * restaurant (e.g. Kitchen when kitchenEnabled is false) — distinct from "not_started", which means
+ * the owner could set it up but hasn't yet.
+ */
+export type SetupItemStatus = "not_started" | "in_progress" | "complete" | "optional";
+
+export interface SetupChecklistItem {
+  key: string;
+  label: string;
+  status: SetupItemStatus;
 }
 
 export interface Restaurant {

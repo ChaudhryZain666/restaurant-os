@@ -5,6 +5,7 @@ import { usePageMeta } from "../hooks/usePageMeta";
 import { FeatureCard } from "../components/FeatureCard";
 import { ProductShowcase } from "../components/ProductShowcase";
 import { StepList } from "../components/StepList";
+import { PricingTeaser } from "../components/PricingTeaser";
 import { OFFER_FEATURES, BENEFITS, FAQS } from "../lib/content";
 import { STOREFRONT_URL } from "../lib/links";
 import {
@@ -160,6 +161,14 @@ export function HomePage() {
             </Button>
           </Link>
         </Reveal>
+      </Section>
+
+      {/* Pricing teaser */}
+      <Section tone="surface">
+        <SectionHeading eyebrow="Pricing" title="One plan for owners, one for agencies" />
+        <div className="mt-10">
+          <PricingTeaser />
+        </div>
       </Section>
 
       {/* Benefits */}

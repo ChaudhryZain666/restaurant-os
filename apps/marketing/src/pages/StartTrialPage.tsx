@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
-import { Reveal } from "@restaurant/ui";
+import { Button, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
 import { LeadForm } from "../components/LeadForm";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { ADMIN_START_URL } from "../lib/links";
 
 const INCLUDED = [
   "Your own branded restaurant storefront",
@@ -69,20 +70,15 @@ export function StartTrialPage() {
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
             <h3 className="font-heading text-sm font-semibold text-foreground">About pricing &amp; trial length</h3>
             <p className="text-sm text-muted">
-              No credit card required to start — there's no billing set up yet, so there's nothing to charge. We're
-              still finalizing formal plans and trial length; every restaurant we onboard today runs free, and we'll
-              talk to you directly, before anything ever changes. Cancelling is as simple as asking us to.
-            </p>
-            <p className="text-xs text-muted">
-              See{" "}
+              No credit card required to start a trial. Pricing below is proposed and not yet finalized — see{" "}
               <Link to="/pricing" className="font-medium text-primary hover:underline">
                 Pricing
               </Link>{" "}
-              for the plans we're designing toward, or the{" "}
+              for current plan details, or the{" "}
               <Link to="/faq" className="font-medium text-primary hover:underline">
                 FAQ
               </Link>{" "}
-              for more detail.
+              for more.
             </p>
           </div>
 
@@ -90,13 +86,30 @@ export function StartTrialPage() {
             Curious what it looks like first? <Link to="/demo" className="text-primary hover:underline">Try the live demo</Link>.
           </p>
         </Reveal>
-        <Reveal index={1}>
-          <LeadForm
-            submitLabel="Start Free Trial"
-            successTitle="Thanks"
-            successBody="Our team will be in touch shortly to finish setting up your restaurant's ordering page."
-            qualification
-          />
+        <Reveal index={1} className="flex flex-col gap-8">
+          <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-5">
+            <h3 className="font-heading text-lg font-semibold text-foreground">Running an agency?</h3>
+            <p className="text-sm text-muted">
+              Start your agency's trial directly — choose a plan, create your account, and you're in. No waiting on
+              our team.
+            </p>
+            <a href={ADMIN_START_URL}>
+              <Button className="w-full">Start agency trial</Button>
+            </a>
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="font-heading text-lg font-semibold text-foreground">Running a single restaurant?</h3>
+            <p className="text-sm text-muted">
+              Restaurant accounts are set up by our team or by the agency managing your account — tell us a bit
+              about your restaurant below and we'll follow up to get you set up.
+            </p>
+            <LeadForm
+              submitLabel="Request Setup"
+              successTitle="Thanks"
+              successBody="Our team will be in touch shortly to finish setting up your restaurant's ordering page."
+              qualification
+            />
+          </div>
         </Reveal>
       </div>
     </Section>

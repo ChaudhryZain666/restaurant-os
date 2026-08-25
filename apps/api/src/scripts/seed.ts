@@ -157,6 +157,12 @@ async function seed() {
     });
     owner.role = "restaurant_owner";
     owner.restaurantId = restaurant._id;
+    // Phase 18's Business/Location model needs this too — BusinessContext (apps/admin) resolves
+    // activeBusinessId from here, and every restaurant-scoped nav item depends on that being set.
+    // Missing on a genuinely fresh database (this line only ever ran against long-lived dev DBs
+    // where some later manual/migration step had already backfilled it) — a real, if previously
+    // invisible, gap; not present anywhere else in this script.
+    owner.businessId = business._id;
     await owner.save();
     console.log(`[seed] created restaurant "demo-restaurant" owned by ${ownerEmail} / Owner123!`);
   }

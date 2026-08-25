@@ -52,6 +52,7 @@ services:
       REFRESH_TOKEN_TTL: 30d
       CLIENT_ORIGIN: http://localhost:5173
       ADMIN_ORIGIN: http://localhost:5174
+      MARKETING_ORIGIN: http://localhost:5175
     ports:
       - "4000:4000"
     volumes:

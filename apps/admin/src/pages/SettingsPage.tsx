@@ -7,6 +7,8 @@ import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
 import { DomainSettingsPanel } from "../components/DomainSettingsPanel";
+import { MapPreview } from "../components/MapPreview";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { uploadRestaurantImage } from "../lib/uploads";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -53,6 +55,7 @@ function ComingSoon({ children }: { children: ReactNode }) {
 
 export function SettingsPage() {
   const restaurantId = useActiveLocationId();
+  const { refetch: refetchNavSettings } = useRestaurantSettings();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,6 +127,8 @@ export function SettingsPage() {
               temporarilyPaused: restaurant.settings.temporarilyPaused,
               pausedReason: restaurant.settings.pausedReason,
               brandColor: restaurant.settings.brandColor || undefined,
+              kitchenEnabled: restaurant.settings.kitchenEnabled,
+              staffEnabled: restaurant.settings.staffEnabled,
               businessHours:
                 restaurant.settings.businessHours.length > 0 ? restaurant.settings.businessHours : defaultHours(),
             },
@@ -132,6 +137,9 @@ export function SettingsPage() {
       );
       setRestaurant(updated);
       setSaved(true);
+      // Phase 28 — so a kitchenEnabled/staffEnabled change takes effect in the nav (and on the
+      // Kitchen/Staff pages themselves) immediately, without a full page reload.
+      await refetchNavSettings();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -168,8 +176,18 @@ export function SettingsPage() {
     <form onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-4">
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Settings</h1>
-        <p className="text-sm text-muted">Manage your restaurant's information, ordering rules, and storefront.</p>
+        <p className="text-sm text-muted">Ongoing configuration for a restaurant that's already up and running.</p>
       </div>
+      {restaurant.status !== "active" && (
+        <Alert tone="warning">
+          New here?{" "}
+          <Link to="/setup" className="font-medium underline">
+            Visit Setup
+          </Link>{" "}
+          for a guided checklist to get your restaurant ready to accept orders — Settings is for ongoing changes
+          after that.
+        </Alert>
+      )}
       {error && (
         <Alert tone="danger" role="alert">
           {error}
@@ -290,14 +308,7 @@ export function SettingsPage() {
               </p>
             )}
             {restaurant.latitude != null && restaurant.longitude != null && (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${restaurant.latitude},${restaurant.longitude}`}
-                target="_blank"
-                rel="noreferrer"
-                className="self-start text-sm font-medium text-primary hover:underline"
-              >
-                Preview on a map ↗
-              </a>
+              <MapPreview latitude={restaurant.latitude} longitude={restaurant.longitude} className="h-56 w-full rounded-lg" />
             )}
             <button
               type="button"
@@ -342,11 +353,6 @@ export function SettingsPage() {
             )}
           </fieldset>
 
-          <ComingSoon>
-            An embedded, pin-droppable map (and a visual delivery-radius preview) aren't built yet — see
-            docs/delivery-architecture.md for why this phase kept the existing "preview on a map ↗" link instead of
-            adding a map-rendering library. Address search and automatic coordinate lookup above are real, though.
-          </ComingSoon>
         </div>
       )}
 
@@ -433,6 +439,34 @@ export function SettingsPage() {
                 Tables page
               </Link>
               .
+            </p>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
+            <legend className="px-1 text-sm font-medium">Feature toggles</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={restaurant.settings.kitchenEnabled ?? true}
+                onChange={(e) =>
+                  setRestaurant({ ...restaurant, settings: { ...restaurant.settings, kitchenEnabled: e.target.checked } })
+                }
+              />
+              Kitchen operations (KDS, kitchen staff, kitchen workflow)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={restaurant.settings.staffEnabled ?? true}
+                onChange={(e) =>
+                  setRestaurant({ ...restaurant, settings: { ...restaurant.settings, staffEnabled: e.target.checked } })
+                }
+              />
+              Staff management (manager/staff accounts)
+            </label>
+            <p className="text-xs text-muted">
+              Turning either off hides the corresponding section from navigation — nothing is deleted, and turning it
+              back on restores it immediately. Regular ordering keeps working either way.
             </p>
           </fieldset>
 

@@ -34,12 +34,25 @@ interface SubscriptionSnapshot {
   currentPeriodEnd: string;
 }
 
+interface DomainRow {
+  id: string;
+  hostname: string;
+  status: "pending_verification" | "verified" | "active";
+}
+
 interface BusinessDetailResponse {
   business: BusinessDetail;
   owner: OwnerDetail | null;
   locations: LocationRow[];
   subscription: SubscriptionSnapshot | null;
+  domains: DomainRow[];
 }
+
+const DOMAIN_STATUS_TONE: Record<DomainRow["status"], "success" | "warning" | "neutral"> = {
+  active: "success",
+  verified: "warning",
+  pending_verification: "neutral",
+};
 
 /**
  * Phase 26 — the entry point for "Manage this business": fuller detail than
@@ -186,6 +199,24 @@ export function AgencyBusinessDetailPage() {
                     <span className="text-muted">/{l.slug}</span>
                     <Badge tone={l.status === "active" ? "success" : "neutral"}>{l.status}</Badge>
                     {l.settings?.timezone && <span className="text-xs text-muted">{l.settings.timezone}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
+            <h2 className="mb-2 font-heading text-lg font-medium text-foreground">Domains</h2>
+            {data.domains.length === 0 ? (
+              <p className="text-sm text-muted">
+                No custom domain configured yet — the owner can set one up from their Settings page.
+              </p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border">
+                {data.domains.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                    <span className="font-medium text-foreground">{d.hostname}</span>
+                    <Badge tone={DOMAIN_STATUS_TONE[d.status]}>{d.status.replace("_", " ")}</Badge>
                   </li>
                 ))}
               </ul>

@@ -496,3 +496,43 @@ describe("GET /platform/revenue (Phase 27) — currency-grouped MRR, never a ble
     await Plan.deleteMany({ _id: { $in: [usdPlan._id, eurPlan._id] } });
   }, 20_000); // several sequential DB writes + two HTTP round-trips
 });
+
+describe("GET /platform/config (Phase 28) — read-only diagnostics, never secrets", () => {
+  it("requires platform_admin", async () => {
+    const denied = await request(app).get("/api/v1/platform/config").set("Authorization", `Bearer ${ownerAToken}`);
+    expect(denied.status).toBe(403);
+  });
+
+  it("returns provider selections and non-final commercial defaults, never credentials", async () => {
+    const res = await request(app).get("/api/v1/platform/config").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(res.status).toBe(200);
+    const { config } = res.body.data;
+    expect(typeof config.billingProvider).toBe("string");
+    expect(typeof config.paymentProvider).toBe("string");
+    expect(typeof config.trialPeriodDays).toBe("number");
+    expect(typeof config.pastDueGracePeriodDays).toBe("number");
+    // The response must never carry anything that looks like a credential — this is the whole
+    // point of this endpoint being curated rather than a raw env dump.
+    const serialized = JSON.stringify(config).toLowerCase();
+    expect(serialized).not.toContain("secret");
+    expect(serialized).not.toContain("api_key");
+    expect(serialized).not.toContain("password");
+  });
+});
+
+describe("GET /platform/analytics (Phase 28) — new platform-wide aggregations", () => {
+  it("requires platform_admin", async () => {
+    const denied = await request(app).get("/api/v1/platform/analytics").set("Authorization", `Bearer ${ownerAToken}`);
+    expect(denied.status).toBe(403);
+  });
+
+  it("returns real, non-negative aggregate figures", async () => {
+    const res = await request(app).get("/api/v1/platform/analytics").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.subscriptionsByStatus)).toBe(true);
+    expect(res.body.data.totalLocations).toBeGreaterThanOrEqual(0);
+    expect(res.body.data.businessesByOwnership.agencyManaged).toBeGreaterThanOrEqual(0);
+    expect(res.body.data.businessesByOwnership.direct).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(res.body.data.signupsByDate)).toBe(true);
+  });
+});

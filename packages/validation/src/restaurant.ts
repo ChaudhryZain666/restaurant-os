@@ -82,6 +82,9 @@ export const restaurantSettingsSchema = z.object({
   // Straight-line radius from the restaurant's own coordinates — see
   // docs/delivery-architecture.md. Capped at 100km as a sanity bound, not a real product limit.
   deliveryRadiusKm: z.number().positive().max(100).optional(),
+  deliveryFeeTiers: z
+    .array(z.object({ maxDistanceKm: z.number().positive(), fee: z.number().nonnegative() }))
+    .optional(),
   businessHours: z.array(businessHoursDaySchema).optional(),
   temporarilyPaused: z.boolean().optional(),
   pausedReason: z.string().max(200).optional(),
@@ -89,6 +92,10 @@ export const restaurantSettingsSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Use a 6-digit hex color like #C2410C")
     .optional(),
+  // Phase 28 — feature toggles, same "hide the nav/route, never delete the data" contract as
+  // dineInEnabled above.
+  kitchenEnabled: z.boolean().optional(),
+  staffEnabled: z.boolean().optional(),
 });
 export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 

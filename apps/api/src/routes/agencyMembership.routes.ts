@@ -6,7 +6,13 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireAgencyMatch, requireAgencyPermission } from "../middleware/agency.js";
 import { jsonRateLimitHandler } from "../middleware/rateLimitHandler.js";
 import { validateBody } from "../middleware/validate.js";
-import { acceptAgencyInvite, inviteMember, listMembers, updateMember } from "../controllers/agencyMembership.controller.js";
+import {
+  acceptAgencyInvite,
+  inviteMember,
+  listMembers,
+  resendMemberInvite,
+  updateMember,
+} from "../controllers/agencyMembership.controller.js";
 
 /** Mounted at /agencies/:agencyId/members. */
 export const agencyMembershipRouter = Router({ mergeParams: true });
@@ -24,6 +30,11 @@ agencyMembershipRouter.patch(
   requireAgencyPermission("agency.members.manage"),
   validateBody(updateAgencyMembershipSchema),
   asyncHandler(updateMember)
+);
+agencyMembershipRouter.post(
+  "/:membershipId/resend-invite",
+  requireAgencyPermission("agency.members.manage"),
+  asyncHandler(resendMemberInvite)
 );
 
 /**

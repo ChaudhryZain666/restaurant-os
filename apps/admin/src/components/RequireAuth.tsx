@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { agencyRoleGrantsPermission, roleHasPermission, type Permission, type UserRole } from "@restaurant/types";
 import { useAuth } from "../context/AuthContext";
 import { useBusiness } from "../context/BusinessContext";
@@ -37,8 +37,17 @@ interface RequireAuthProps {
 export function RequireAuth({ permission, roles, allowPlatformAdmin, children }: RequireAuthProps) {
   const { user, loading } = useAuth();
   const { activeBusinessId, agencyRoleForActiveBusiness } = useBusiness();
+  const location = useLocation();
   if (loading) return <p>Loading...</p>;
   if (!user) return <Navigate to="/login" replace />;
+
+  // Phase 28 — an agency-provisioned "direct access" account can reach nothing but the forced
+  // change-password screen until it sets a real password (server enforces this independently too,
+  // see middleware/auth.ts). Checked before any permission/role logic below, and before the
+  // destination itself so this can't loop.
+  if (user.mustChangePassword && location.pathname !== "/force-password-change") {
+    return <Navigate to="/force-password-change" replace />;
+  }
 
   const allowed =
     (allowPlatformAdmin && user.role === "platform_admin") ||

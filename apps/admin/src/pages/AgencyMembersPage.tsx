@@ -84,6 +84,18 @@ export function AgencyMembersPage() {
     }
   }
 
+  async function resendInvite(member: AgencyMemberRow) {
+    setError(null);
+    setBusyId(member.id);
+    try {
+      await apiClient.request(`/agencies/${activeAgencyId}/members/${member.id}/resend-invite`, { method: "POST" });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function revoke(member: AgencyMemberRow) {
     if (!window.confirm(`Remove ${member.name ?? member.email} from this agency?`)) return;
     setError(null);
@@ -183,6 +195,15 @@ export function AgencyMembersPage() {
                   <option value="agency_admin">{ROLE_LABELS.agency_admin}</option>
                   <option value="agency_owner">{ROLE_LABELS.agency_owner}</option>
                 </select>
+                {m.status === "invited" && (
+                  <button
+                    onClick={() => resendInvite(m)}
+                    disabled={busyId === m.id}
+                    className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                  >
+                    Resend invite
+                  </button>
+                )}
                 <button
                   onClick={() => revoke(m)}
                   disabled={busyId === m.id}

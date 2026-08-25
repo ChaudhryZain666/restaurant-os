@@ -12,7 +12,7 @@ import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
-import { computeReadiness } from "../services/restaurantReadiness.service.js";
+import { computeReadiness, computeSetupChecklist } from "../services/restaurantReadiness.service.js";
 import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
@@ -200,6 +200,18 @@ export async function getRestaurantReadiness(req: Request, res: Response) {
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
   const readiness = await computeReadiness(restaurant);
   sendSuccess(res, readiness);
+}
+
+/**
+ * GET /restaurants/:restaurantId/setup-checklist — Phase 28, the broader "get fully set up" list
+ * SetupPage.tsx shows alongside (never instead of) readiness above. Purely informational, same as
+ * readiness — never gates anything.
+ */
+export async function getSetupChecklist(req: Request, res: Response) {
+  const restaurant = await Restaurant.findById(req.params.restaurantId);
+  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  const items = await computeSetupChecklist(restaurant);
+  sendSuccess(res, { items });
 }
 
 /**

@@ -74,7 +74,7 @@ export function LoginPage() {
           </Button>
           <p className="text-center text-xs text-muted">
             Starting an agency?{" "}
-            <Link to="/register" className="font-medium text-primary hover:underline">
+            <Link to="/start" className="font-medium text-primary hover:underline">
               Create an account
             </Link>
           </p>

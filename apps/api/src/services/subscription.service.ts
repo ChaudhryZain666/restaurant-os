@@ -43,7 +43,7 @@ async function resolveOwnerIdentity(
 /** A Plan's own trialDays (Phase 27) overrides env.TRIAL_PERIOD_DAYS when set, so a future plan can
  *  legitimately differ (e.g. a no-trial plan) without touching the global default every other plan
  *  still relies on. 0 (from either source) means no trial at all, never a value invented here. */
-function resolveTrialDays(plan: Pick<PlanDoc, "trialDays">): number | undefined {
+export function resolveTrialDays(plan: Pick<PlanDoc, "trialDays">): number | undefined {
   const days = plan.trialDays ?? env.TRIAL_PERIOD_DAYS;
   return days > 0 ? days : undefined;
 }

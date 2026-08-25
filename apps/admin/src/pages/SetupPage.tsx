@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { Restaurant, RestaurantReadiness } from "@restaurant/types";
+import type { Restaurant, RestaurantReadiness, SetupChecklistItem } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
@@ -11,6 +11,16 @@ const CHECK_LINKS: Record<string, { label: string; to: string }> = {
   menu: { label: "Menu", to: "/menu" },
   orderType: { label: "Ordering & delivery", to: "/delivery" },
   location: { label: "Location", to: "/settings" },
+};
+
+const EXTENDED_LINKS: Record<string, { label: string; to: string }> = {
+  branding: { label: "Storefront", to: "/settings" },
+  hours: { label: "Business hours", to: "/settings" },
+  tables: { label: "Tables", to: "/tables" },
+  kitchen: { label: "Kitchen", to: "/kitchen" },
+  staff: { label: "Staff", to: "/staff" },
+  loyalty: { label: "Loyalty", to: "/loyalty" },
+  domain: { label: "Domain", to: "/settings" },
 };
 
 function CheckIcon({ complete }: { complete: boolean }) {
@@ -26,6 +36,13 @@ function CheckIcon({ complete }: { complete: boolean }) {
   );
 }
 
+const EXTENDED_STATUS_BADGE: Record<SetupChecklistItem["status"], { tone: "success" | "neutral" | "warning"; label: string }> = {
+  complete: { tone: "success", label: "Complete" },
+  in_progress: { tone: "warning", label: "In progress" },
+  not_started: { tone: "neutral", label: "Not started" },
+  optional: { tone: "neutral", label: "Optional" },
+};
+
 /**
  * Owner-facing "what's left before I can go live" experience (Phase 14) — the practical answer to
  * that question, not a website builder. Readiness is always computed server-side (see
@@ -37,6 +54,7 @@ export function SetupPage() {
   const navigate = useNavigate();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [readiness, setReadiness] = useState<RestaurantReadiness | null>(null);
+  const [extended, setExtended] = useState<SetupChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -45,9 +63,11 @@ export function SetupPage() {
     return Promise.all([
       apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`),
       apiClient.request<RestaurantReadiness>(`/restaurants/${restaurantId}/readiness`),
-    ]).then(([restaurantData, readinessData]) => {
+      apiClient.request<{ items: SetupChecklistItem[] }>(`/restaurants/${restaurantId}/setup-checklist`),
+    ]).then(([restaurantData, readinessData, checklistData]) => {
       setRestaurant(restaurantData.restaurant);
       setReadiness(readinessData);
+      setExtended(checklistData.items);
     });
   }
 
@@ -129,49 +149,100 @@ export function SetupPage() {
             Contact platform support →
           </Link>
         </Card>
-      ) : isLive ? (
-        <Card className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Badge tone="success">Published</Badge>
-            <span className="text-sm text-foreground">Customers can find and order from your storefront.</span>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <a
-              href={storefrontUrl(restaurant.slug)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              View live storefront ↗
-            </a>
-            <button
-              type="button"
-              onClick={handleUnpublish}
-              disabled={publishing}
-              className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
-            >
-              {publishing ? "Working..." : "Unpublish"}
-            </button>
-          </div>
-        </Card>
       ) : (
         <>
+          {isLive ? (
+            // Phase 28 — a compact status line, not a full-page replacement: the checklist below
+            // stays visible after publishing, so there's still somewhere to go for the rest of
+            // setup instead of the page just ending here.
+            <Card className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Badge tone="success">Published</Badge>
+                <span className="text-sm text-foreground">Customers can find and order from your storefront.</span>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href={storefrontUrl(restaurant.slug)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  View live storefront ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={handleUnpublish}
+                  disabled={publishing}
+                  className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                >
+                  {publishing ? "Working..." : "Unpublish"}
+                </button>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <Card className="flex flex-col gap-1">
+                <Badge tone="neutral" className="self-start">
+                  Not published yet
+                </Badge>
+                <ul className="mt-2 flex flex-col divide-y divide-border">
+                  {readiness.checks.map((check) => {
+                    const link = CHECK_LINKS[check.key];
+                    return (
+                      <li key={check.key} className="flex items-center justify-between gap-3 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <CheckIcon complete={check.complete} />
+                          <span className={`text-sm ${check.complete ? "text-foreground" : "text-foreground/80"}`}>
+                            {check.label}
+                          </span>
+                        </div>
+                        {!check.complete && link && (
+                          <Link to={link.to} className="text-sm font-medium text-primary hover:underline">
+                            {link.label} →
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={previewUrl(restaurant.slug)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Preview storefront ↗
+                </a>
+                <Button onClick={handlePublish} disabled={!readiness.ready || publishing}>
+                  {publishing ? "Publishing..." : "Publish restaurant"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+                  Skip for now
+                </Button>
+              </div>
+              {!readiness.ready && <p className="text-xs text-muted">Finish the items above to enable publishing.</p>}
+            </>
+          )}
+
           <Card className="flex flex-col gap-1">
-            <Badge tone="neutral" className="self-start">
-              Not published yet
-            </Badge>
-            <ul className="mt-2 flex flex-col divide-y divide-border">
-              {readiness.checks.map((check) => {
-                const link = CHECK_LINKS[check.key];
+            <p className="mb-1 text-sm font-medium text-foreground">More setup</p>
+            <p className="mb-2 text-xs text-muted">
+              Optional — none of this blocks publishing, but it rounds out your restaurant's setup.
+            </p>
+            <ul className="flex flex-col divide-y divide-border">
+              {extended.map((item) => {
+                const link = EXTENDED_LINKS[item.key];
+                const badge = EXTENDED_STATUS_BADGE[item.status];
                 return (
-                  <li key={check.key} className="flex items-center justify-between gap-3 py-2.5">
+                  <li key={item.key} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="flex items-center gap-2.5">
-                      <CheckIcon complete={check.complete} />
-                      <span className={`text-sm ${check.complete ? "text-foreground" : "text-foreground/80"}`}>
-                        {check.label}
-                      </span>
+                      <Badge tone={badge.tone}>{badge.label}</Badge>
+                      <span className="text-sm text-foreground/80">{item.label}</span>
                     </div>
-                    {!check.complete && link && (
+                    {item.status !== "complete" && item.status !== "optional" && link && (
                       <Link to={link.to} className="text-sm font-medium text-primary hover:underline">
                         {link.label} →
                       </Link>
@@ -181,26 +252,6 @@ export function SetupPage() {
               })}
             </ul>
           </Card>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <a
-              href={previewUrl(restaurant.slug)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              Preview storefront ↗
-            </a>
-            <Button onClick={handlePublish} disabled={!readiness.ready || publishing}>
-              {publishing ? "Publishing..." : "Publish restaurant"}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-              Skip for now
-            </Button>
-          </div>
-          {!readiness.ready && (
-            <p className="text-xs text-muted">Finish the items above to enable publishing.</p>
-          )}
         </>
       )}
     </div>

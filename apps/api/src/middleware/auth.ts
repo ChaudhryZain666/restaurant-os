@@ -3,6 +3,11 @@ import type { AgencyMembershipRole, UserRole } from "@restaurant/types";
 import { verifyAccessToken } from "../services/token.service.js";
 import { ApiError } from "../utils/ApiError.js";
 
+// Phase 28 — the only routes a mustChangePassword:true session may reach. Exact, full paths
+// (req.originalUrl always starts with the app's fixed /api/v1 prefix — see app.ts), not prefixes,
+// so this can never accidentally widen to cover an unrelated route that happens to start the same.
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(["/api/v1/auth/me", "/api/v1/auth/change-password"]);
+
 declare global {
   namespace Express {
     interface Request {
@@ -17,6 +22,8 @@ declare global {
         // Phase 25, additive — mirrors locationIds' shape (an array claim, refreshed at
         // login/refresh only). See token.service.ts's AccessTokenPayload doc comment.
         agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
+        // Phase 28, additive — see token.service.ts's AccessTokenPayload doc comment.
+        mustChangePassword?: boolean;
       };
       // Phase 25 — set by middleware/businessLocation.ts's requireBusinessMatch ONLY when access
       // was granted via agency membership (not the direct businessId/platform_admin branches), so
@@ -42,7 +49,15 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
       businessId: payload.businessId,
       locationIds: payload.locationIds,
       agencyMemberships: payload.agencyMemberships,
+      mustChangePassword: payload.mustChangePassword,
     };
+    // Server-side enforcement, not just a client-side redirect: a temporary-password session can
+    // reach nothing except "who am I" and "change my password" until it does. /auth/refresh and
+    // /auth/logout deliberately don't go through requireAuth at all (see auth.routes.ts), so they
+    // stay reachable without needing an entry here.
+    if (payload.mustChangePassword && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.originalUrl.split("?")[0])) {
+      return next(ApiError.passwordChangeRequired());
+    }
     next();
   } catch {
     next(ApiError.unauthorized("Invalid or expired access token"));

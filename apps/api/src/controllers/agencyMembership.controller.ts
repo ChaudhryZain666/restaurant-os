@@ -133,6 +133,68 @@ export async function inviteMember(req: Request, res: Response) {
 }
 
 /**
+ * POST /agencies/:agencyId/members/:membershipId/resend-invite — Phase 28, mirrors
+ * agency.controller.ts's resendAgencyBusinessOwnerInvite exactly (fresh token invalidates the old
+ * one, refuses once already accepted). Closes the asymmetry that existed since Phase 25: a
+ * business-owner invite could already be resent, a member invite couldn't.
+ */
+export async function resendMemberInvite(req: Request, res: Response) {
+  const { agencyId, membershipId } = req.params;
+
+  const membership = await AgencyMembership.findOne({ _id: membershipId, agencyId });
+  if (!membership) throw ApiError.notFound("Membership not found");
+  if (membership.status !== "invited") {
+    throw ApiError.badRequest("This invitation has already been accepted (or is no longer pending).");
+  }
+
+  const user = await User.findById(membership.userId);
+  if (!user) throw ApiError.notFound("This member's account no longer exists");
+
+  const { raw, hash } = generateSecureToken();
+  const inviteExpiresAt = new Date(Date.now() + MEMBER_INVITE_TTL_MS);
+
+  membership.inviteTokenHash = hash;
+  membership.inviteExpiresAt = inviteExpiresAt;
+  await membership.save();
+
+  // A brand-new account (never accepted anything yet) still has its own User-level invite token
+  // from inviteMember — keep it in sync so accept-invite's isNewAccount branch still works.
+  if (user.inviteTokenHash) {
+    user.inviteTokenHash = hash;
+    user.inviteExpiresAt = inviteExpiresAt;
+    await user.save();
+  }
+
+  const agency = await Agency.findById(agencyId);
+  const inviter = await User.findById(req.user!.id).select("name");
+  const acceptUrl = `${env.ADMIN_ORIGIN}/accept-agency-invite?token=${raw}`;
+  try {
+    await getEmailService().send(
+      agencyMemberInviteEmail(user.email, acceptUrl, {
+        agencyName: agency?.name ?? "your agency",
+        inviterName: inviter?.name ?? "A team member",
+        roleLabel: AGENCY_ROLE_LABELS[membership.role] ?? membership.role,
+        isNewAccount: Boolean(user.inviteTokenHash),
+      })
+    );
+  } catch (err) {
+    logger.error("failed to send agency-member-invite resend email", { error: (err as Error).message });
+  }
+
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.member_invite_resent",
+    targetType: "agency_membership",
+    targetId: membership._id,
+    metadata: { email: user.email },
+  });
+
+  sendSuccess(res, { message: `Invitation resent to ${user.email}.` });
+}
+
+/**
  * POST /agencies/accept-invite — top-level (not nested under :agencyId), since the token alone
  * identifies everything. Mirrors auth.controller.ts's acceptInvite double-accept protection
  * exactly (atomic findOneAndUpdate, match+invalidate in one op) for BOTH documents it may touch.

@@ -4,6 +4,7 @@ import type { Restaurant } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
+import { MapPreview } from "../components/MapPreview";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -39,6 +40,7 @@ export function DeliveryPage() {
               deliveryEnabled: restaurant.settings.deliveryEnabled,
               deliveryFee: restaurant.settings.deliveryFee,
               deliveryRadiusKm: restaurant.settings.deliveryRadiusKm,
+              deliveryFeeTiers: restaurant.settings.deliveryFeeTiers,
             },
           },
         }
@@ -153,20 +155,100 @@ export function DeliveryPage() {
             className={`max-w-[10rem] ${inputClass}`}
           />
         </label>
+        {restaurant.latitude != null && restaurant.longitude != null && (
+          <MapPreview
+            latitude={restaurant.latitude}
+            longitude={restaurant.longitude}
+            radiusKm={restaurant.settings.deliveryRadiusKm}
+            className="h-64 w-full rounded-lg"
+          />
+        )}
         <Button onClick={save} disabled={saving} className="self-start">
           {saving ? "Saving..." : "Save delivery settings"}
         </Button>
       </Card>
 
+      {restaurant.settings.deliveryEnabled && (
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-heading font-medium text-foreground">Distance-based pricing</h2>
+          <p className="text-sm text-muted">
+            Optional: charge a different fee depending on how far the delivery is, instead of one flat rate for the
+            whole radius. The tightest-fitting bracket applies — e.g. a 3km order matches the first tier that covers
+            it. Leave empty to keep the flat fee above for every distance.
+          </p>
+          <div className="flex flex-col gap-2">
+            {(restaurant.settings.deliveryFeeTiers ?? []).map((tier, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-sm text-muted">
+                  Up to
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={tier.maxDistanceKm}
+                    onChange={(e) => {
+                      const tiers = [...(restaurant.settings.deliveryFeeTiers ?? [])];
+                      tiers[i] = { ...tiers[i], maxDistanceKm: Number(e.target.value) };
+                      setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryFeeTiers: tiers } });
+                    }}
+                    className={`w-20 ${inputClass}`}
+                  />
+                  km
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-muted">
+                  Fee
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tier.fee}
+                    onChange={(e) => {
+                      const tiers = [...(restaurant.settings.deliveryFeeTiers ?? [])];
+                      tiers[i] = { ...tiers[i], fee: Number(e.target.value) };
+                      setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryFeeTiers: tiers } });
+                    }}
+                    className={`w-24 ${inputClass}`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tiers = (restaurant.settings.deliveryFeeTiers ?? []).filter((_, idx) => idx !== i);
+                    setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryFeeTiers: tiers } });
+                  }}
+                  className="text-sm font-medium text-danger hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <Button
+              size="sm"
+              variant="secondary"
+              className="self-start"
+              onClick={() => {
+                const tiers = [...(restaurant.settings.deliveryFeeTiers ?? []), { maxDistanceKm: 1, fee: 0 }];
+                setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryFeeTiers: tiers } });
+              }}
+            >
+              Add tier
+            </Button>
+          </div>
+          <Button onClick={save} disabled={saving} className="self-start">
+            {saving ? "Saving..." : "Save delivery settings"}
+          </Button>
+        </Card>
+      )}
+
       <Card className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="font-heading font-medium text-foreground">Distance-based pricing & live ETA</h2>
+          <h2 className="font-heading font-medium text-foreground">Live ETA</h2>
           <Badge tone="neutral">Coming soon</Badge>
         </div>
         <p className="text-sm text-muted">
-          Delivery fee is currently a single flat rate applied to every eligible delivery order, regardless of exact
-          distance within the radius — tiered/distance-based pricing and a real estimated delivery time (which would
-          need a routing/traffic provider, not just straight-line distance) aren't built yet.
+          A real estimated delivery time needs a routing/traffic provider — straight-line distance (what eligibility
+          and pricing above use) is a reasonable approximation for "can we deliver here," but not for "how long will
+          it take." Not built yet.
         </p>
       </Card>
     </div>

@@ -1,10 +1,180 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import type { LoyaltySummary } from "@restaurant/types";
-import { Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
+import type { LoyaltyReward, LoyaltySummary } from "@restaurant/types";
+import { Alert, Badge, Button, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { IconStar } from "../components/icons";
+
+const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
+
+function emptyRewardDraft() {
+  return { name: "", description: "", pointCost: 50 };
+}
+
+/**
+ * Phase 28 — owner-facing reward catalog management (LoyaltyReward.ts). This is what turns
+ * "redeem an arbitrary number of points" into a real browsable catalog on the customer side
+ * (apps/web's LoyaltyPage.tsx) — the underlying points-as-discount mechanism is unchanged.
+ */
+function RewardsCard({ restaurantId }: { restaurantId: string }) {
+  const [rewards, setRewards] = useState<LoyaltyReward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [draft, setDraft] = useState(emptyRewardDraft());
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function reload() {
+    return apiClient.request<{ rewards: LoyaltyReward[] }>(`/restaurants/${restaurantId}/loyalty/rewards/admin`).then((res) => setRewards(res.rewards));
+  }
+
+  useEffect(() => {
+    reload()
+      .catch((err) => setError((err as Error).message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId]);
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiClient.request(`/restaurants/${restaurantId}/loyalty/rewards`, { method: "POST", body: draft });
+      setDraft(emptyRewardDraft());
+      setShowForm(false);
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleActive(reward: LoyaltyReward) {
+    setBusyId(reward.id);
+    setError(null);
+    try {
+      await apiClient.request(`/restaurants/${restaurantId}/loyalty/rewards/${reward.id}`, {
+        method: "PATCH",
+        body: { isActive: !reward.isActive },
+      });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(reward: LoyaltyReward) {
+    if (!window.confirm(`Delete "${reward.name}"?`)) return;
+    setBusyId(reward.id);
+    setError(null);
+    try {
+      await apiClient.request(`/restaurants/${restaurantId}/loyalty/rewards/${reward.id}`, { method: "DELETE" });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading font-medium text-foreground">Rewards</h2>
+        <Button size="sm" variant="secondary" onClick={() => setShowForm((v) => !v)}>
+          {showForm ? "Cancel" : "New reward"}
+        </Button>
+      </div>
+      <p className="text-sm text-muted">
+        Named, priced rewards customers can browse and redeem — e.g. "Free drink — 50 pts." Redemption still spends
+        real points 1:1 against the order total, exactly like before.
+      </p>
+
+      {error && (
+        <Alert tone="danger" role="alert">
+          {error}
+        </Alert>
+      )}
+
+      {showForm && (
+        <form onSubmit={handleCreate} className="grid gap-2 sm:grid-cols-3">
+          <input
+            required
+            placeholder="Name (e.g. Free drink)"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            className={inputClass}
+          />
+          <input
+            placeholder="Description (optional)"
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            className={inputClass}
+          />
+          <div className="flex gap-2">
+            <input
+              required
+              type="number"
+              min="1"
+              placeholder="Points"
+              value={draft.pointCost}
+              onChange={(e) => setDraft({ ...draft, pointCost: Number(e.target.value) })}
+              className={inputClass}
+            />
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? "Saving..." : "Add"}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted">Loading rewards...</p>
+      ) : rewards.length === 0 ? (
+        <p className="text-sm text-muted">No rewards yet — customers will only see the general points balance.</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-border text-sm">
+          {rewards.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div>
+                <span className="font-medium text-foreground">{r.name}</span>
+                <span className="ml-2 text-muted">{r.pointCost} pts</span>
+                {!r.isActive && (
+                  <Badge tone="neutral" className="ml-2">
+                    Inactive
+                  </Badge>
+                )}
+                {r.description && <p className="text-xs text-muted">{r.description}</p>}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => toggleActive(r)}
+                  disabled={busyId === r.id}
+                  className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  {r.isActive ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  onClick={() => remove(r)}
+                  disabled={busyId === r.id}
+                  className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 const TIER_TONE: Record<string, "neutral" | "info" | "warning"> = {
   bronze: "neutral",
@@ -64,6 +234,8 @@ export function LoyaltyPage() {
           {error}
         </p>
       )}
+
+      <RewardsCard restaurantId={restaurantId} />
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

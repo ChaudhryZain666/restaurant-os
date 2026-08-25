@@ -122,6 +122,23 @@
 # requireEntitlement middleware (entitlementLimit.service.ts) — same URLs, no new paths, but a
 # subscription whose plan explicitly lacks the entitlement now gets a real 403 where it previously
 # always passed. A business with NO subscription at all is never affected (generous default-allow).
+
+# Phase 28 — agency commercial flow, product completion
+/api/v1/agencies/:agencyId/dashboard                           GET   requireAgencyMatch — subscription/plan, business usage vs. limit, location totals, active/needing-setup counts, domains configured, pending invitations
+/api/v1/agencies/:agencyId/members/:membershipId/resend-invite POST  agency.members.manage — mirrors the business owner-invite resend
+/api/v1/agencies/:agencyId/businesses                          POST  agency.businesses.manage — gained provisioningMode:"invite"|"direct"; "direct" returns ownerTemporaryPassword once, never persisted in plaintext
+/api/v1/public/plans                                           GET   Public, unauthenticated — stripped Plan catalog (code/name/description/pricing/entitlements/trialDays only) for the marketing site; distinct from the auth-gated /plans
+/api/v1/platform/analytics                                     GET   platform.restaurants.manage — subscription-status breakdown, total locations, agency-vs-direct split, 30-day signups trend
+/api/v1/platform/config                                        GET   platform.restaurants.manage — read-only, curated non-secret env subset (provider selections, trial/grace-period defaults); never credentials
+/api/v1/restaurants/:restaurantId/setup-checklist               GET   restaurant.settings.manage — extended, non-gating "more setup" checklist alongside /readiness
+/api/v1/restaurants/:restaurantId/loyalty/rewards               GET   Public (authenticated customer) — active LoyaltyReward catalog for this restaurant
+/api/v1/restaurants/:restaurantId/loyalty/rewards/admin         GET   restaurant.loyalty.manage — every reward including inactive
+/api/v1/restaurants/:restaurantId/loyalty/rewards                POST  restaurant.loyalty.manage — create a reward
+/api/v1/restaurants/:restaurantId/loyalty/rewards/:rewardId      PATCH restaurant.loyalty.manage — edit/toggle a reward
+/api/v1/restaurants/:restaurantId/loyalty/rewards/:rewardId      DELETE restaurant.loyalty.manage
+# /auth/me and /auth/change-password remain the only two routes a mustChangePassword:true session
+# (an agency-provisioned "direct access" owner who hasn't set a real password yet) can reach —
+# enforced in middleware/auth.ts, independent of the client-side RequireAuth redirect.
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never

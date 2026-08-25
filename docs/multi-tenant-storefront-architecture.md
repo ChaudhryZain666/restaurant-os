@@ -2437,3 +2437,170 @@ price is proposed, not approved; no self-serve add-on purchasing; no refund mech
 registration. The next highest-value work is resolving the commercial decisions in
 `docs/commercial-decisions.md` (pricing sign-off first) and then actually standing up a real Paddle
 sandbox account to exercise `PaddleBillingProvider.ts` for the first time against something real.
+
+## Phase 28 — Product Completion, Agency Commercial Flow & Restaurant Setup
+
+Not an architectural rewrite — Phase 27 made billing real; this phase closes the visible product
+gaps a real walkthrough surfaced across the agency, platform, and restaurant-owner portals. Six
+parallel reconnaissance passes preceded implementation and confirmed a recurring pattern: several
+gaps were UI-only (real backend already existed, unused), a few were genuinely new.
+
+### Agency commercial flow
+
+- **Owner provisioning, two modes** (`agency.controller.ts`'s `createAgencyBusiness`,
+  `provisioningMode: "invite" | "direct"`): the existing email-invite path is unchanged; a new
+  `"direct"` mode is a deliberate, audited exception to the platform's "agency never knows an owner
+  credential" principle — a real, system-generated one-time password (`secureToken.service.ts`'s
+  `generateTemporaryPassword`, never agency-typed) is returned once in the API response, the owner's
+  `User.mustChangePassword` is set, and both `middleware/auth.ts` (server-side, blocks every route
+  except `/auth/me`/`/auth/change-password` while true) and `RequireAuth.tsx` (client-side redirect
+  to `/force-password-change`) enforce a real password change before anything else is reachable. No
+  new endpoint for completing the change — the existing self-service `changePassword` already
+  re-authenticates with whatever "current password" is presented, temporary or not.
+- **Agency Billing UI completion**: business-usage-vs-limit now surfaced (`getAgencyEntitlements`
+  from `agencyEntitlement.service.ts` was computed since Phase 25 but never exposed by a route until
+  now), billing-history pagination fixed (the endpoint was always paginated; the UI discarded
+  everything past page 1).
+- **Agency Dashboard rebuild** (`GET /agencies/:agencyId/dashboard`): replaced a two-stat-card
+  placeholder with subscription/plan/status, business usage vs. limit, summed location count,
+  active-business count, businesses still needing setup, domains configured, and pending
+  owner/member invitations — every figure a real query, several reusing per-row data
+  `listAgencyBusinesses` already computed.
+- **White-label**: agency-facing domain visibility added (`domainCount` on the businesses list, a
+  read-only domain-status card on the business detail page) reusing the Phase 22 `DomainMapping`
+  model unchanged. The one real bug found and fixed: `apps/web/src/components/Layout.tsx`'s "Powered
+  by..." footer never checked `RestaurantContext`'s `resolvedVia` field (tracked since Phase 22 for
+  exactly this) — now suppressed on a custom-domain visit.
+- **Agency signup wizard** (`AgencySignupWizardPage.tsx`, `/start` in `apps/admin`): a genuine
+  Choose Plan → Create Account → Agency Info → Review → Start Trial sequence, built ONLY for agency
+  self-serve signup — the only account-creation path that structurally starts with "create account"
+  (owners are always invited; see `RegisterPage.tsx`'s own doc comment). Sequences existing,
+  unmodified endpoints (`/auth/register`, `POST /agencies`, `POST /agencies/:id/subscription`) —
+  no new subscription logic. `RegisterPage.tsx`/`/register` is untouched (still exercised directly
+  by `e2e/agency-management.spec.ts`). The Owner's first `BillingPage.tsx` visit was separately
+  redesigned to the same clarity bar (trial length, interval, included limits, post-trial charge)
+  without becoming a multi-step flow, since an owner already has an account and business.
+
+### Landing page pricing
+
+`apps/marketing` was a fully separate, backend-blind app with hardcoded, disconnected "pricing." A
+new genuinely public `GET /public/plans` (`publicPlan.controller.ts`, distinct from the
+auth-gated `/plans`) strips a Plan document to only what a pricing page needs and is the single
+source both `PricingPage.tsx` and a new homepage `PricingTeaser.tsx` read from — no duplicated
+pricing constants. `apps/marketing/vite.config.ts` gained the same dev-time `/api` proxy
+`apps/web`/`apps/admin` already had; `env.MARKETING_ORIGIN` was added to the API's CORS allowlist
+for any deployment where marketing is served as a genuinely separate origin.
+
+### Platform portal
+
+- **Platform Analytics** (`PlatformAnalyticsPage.tsx`): replaces a `PlaceholderPage` stub, composing
+  the already-real `/platform/overview` and `/platform/revenue` (unchanged, currency-grouped MRR)
+  with a new `/platform/analytics` for the genuinely missing aggregations — subscription-status
+  breakdown, total locations, agency-vs-direct business split, a 30-day signups trend.
+- **Support ticket status**: the backend state machine was already correct
+  (`ticketStateMachine.ts`); the bug was in the UI — `SupportTicketDetailPage.tsx`'s status dropdown
+  offered every status unconditionally and relied on the server's 400 to reject an invalid
+  transition, which read as "status can't be changed." Fixed by sharing
+  `TICKET_STATUS_TRANSITIONS` (moved to `@restaurant/types`, both sides import the same map) and
+  filtering the dropdown to it.
+- **System Configuration** (`SystemConfigPage.tsx`, `GET /platform/config`): read-only by design —
+  env vars are boot-time constants (`config/env.ts`), so nothing here can actually be saved without
+  new DB-backed config infrastructure that doesn't exist (a real architectural addition, out of
+  scope). Only a curated, explicitly non-secret subset is returned (provider selections, never
+  credentials).
+
+### Restaurant Setup, Settings, and toggles
+
+- **Setup** (`SetupPage.tsx` + new `computeSetupChecklist`/`GET .../setup-checklist`): the required
+  4-check readiness gate is unchanged (still the only thing that gates publish), but the page no
+  longer collapses into a single "Published" sentence once live — an extended, optional checklist
+  (branding, business hours, tables, kitchen, staff, loyalty rewards, domain, SEO) stays visible
+  before and after publish, each item a real signal from an existing collection.
+- **Settings** re-scoped in copy as ongoing configuration (vs. Setup's first-time onboarding), with
+  a banner pointing an incomplete restaurant back to Setup. No tabs removed or restructured.
+- **Embedded map** (`MapPreview.tsx`): Leaflet + OpenStreetMap tiles (no API key, no billing
+  account), replacing the external "Preview on a map ↗" Google Maps link in Settings and added to
+  Delivery's radius config with a live radius circle. The existing geocoding/`AddressAutocomplete`
+  flow remains the only way to change a location's coordinates — this is a read-only visualization
+  layer.
+- **Kitchen/Staff toggles** (`Restaurant.settings.kitchenEnabled`/`staffEnabled`, default `true`):
+  exact precedent of `dineInEnabled` — a Settings checkbox, nav-item and page-level gating
+  (`Layout.tsx`'s `itemVisible`, plus a friendly disabled state on `KitchenPage.tsx`/`StaffPage.tsx`
+  themselves for direct URL access), never deletes data. `orderStateMachine.ts` has no kitchen
+  dependency, so disabling Kitchen doesn't strand orders — owners/managers manage them from the
+  regular Orders page either way.
+- **Delivery honesty + real tiered pricing**: the single "Coming Soon" card bundled two different
+  truths. Distance-based *eligibility* (Haversine radius check) was already real; distance-based
+  *fee tiering* was not (flat fee only, despite `distanceKm` already being computed) — now built
+  (`Restaurant.settings.deliveryFeeTiers`, resolved in `delivery.service.ts` by picking the
+  tightest-fitting bracket) with a tier editor on `DeliveryPage.tsx`. "Live ETA" is correctly still
+  Coming Soon, now described accurately as needing an external routing/traffic provider rather than
+  bundled with pricing.
+
+### Settings scope — Platform / Agency / Restaurant
+
+Recon confirmed these three are already cleanly separated structurally (no page reads/writes across
+a boundary it shouldn't); this section documents the boundary explicitly so it isn't blurred by
+accident in a later phase.
+
+- **Platform** (`platform_admin` only): `SystemConfigPage.tsx` (`GET /platform/config`) — provider
+  selections and commercial defaults, read-only, no per-tenant data. `PlatformAnalyticsPage.tsx`,
+  `PlatformSubscriptionsPage.tsx`, `PlatformRestaurantsPage.tsx`, `PlatformUsersPage.tsx` — cross-tenant
+  visibility and moderation (suspend/reactivate), never a single tenant's operational settings.
+- **Agency** (`agency_owner`/`agency_admin`/`agency_staff`, scoped to their own agency):
+  `AgencyBillingPage.tsx` — the agency's own subscription/entitlements, never a managed business's.
+  `AgencyMembersPage.tsx` — agency membership roles, distinct from `AgencyBusinessesPage.tsx`'s
+  business-owner provisioning. An agency has no page that edits a managed restaurant's
+  `Restaurant.settings` directly — that stays the restaurant's own Settings, reachable only via the
+  same `requireBusinessMatch`/`requireTenantMatch` paths an agency member's role would grant on any
+  other route.
+- **Restaurant** (owner/manager, `restaurant.settings.manage`): `SettingsPage.tsx`,
+  `DeliveryPage.tsx`, `TablesPage.tsx`, `LoyaltyPage.tsx` (CRUD side) — this business's own
+  `Restaurant.settings` (or business-wide equivalents), never another business's, even one under the
+  same agency. `SetupPage.tsx` is the onboarding-time subset of the same data, not a separate scope.
+
+### Loyalty redemption
+
+A new `LoyaltyReward` catalog (name, description, `pointCost`) sits on top of the existing, unchanged
+points-as-discount mechanism (`loyalty.service.ts`'s `redeemPoints`) — redemption still resolves to
+the exact same `redeemPoints: number` sent to order creation, no change to that endpoint. Owner CRUD
+lives on `LoyaltyPage.tsx` (admin, gated by a new `restaurant.loyalty.manage` permission mirroring
+`restaurant.promotions.manage`); the customer-facing `LoyaltyPage.tsx` (`apps/web`) now browses real
+rewards and a "Redeem" button carries the chosen reward's `pointCost` into `CartPage.tsx`'s existing,
+already-working redemption control via router state (the same pattern `reorderNotice` already used).
+
+### Real regression caught during this phase
+
+`e2e/agency-management.spec.ts`'s "agency plan limits" test seeded a `provider:"internal"`
+subscription with `max_businesses:1` and asserted a second business was rejected — this contradicted
+Phase 27's own grandfathering fix (`internal`-provider subscriptions are deliberately excluded from
+all limit enforcement). Fixed by changing the fixture to `provider:"mock"`, matching
+`agency.controller.test.ts`'s already-correct pattern — the test now actually exercises real limit
+enforcement instead of asserting behavior Phase 27 deliberately removed.
+
+Two more, both pre-existing and only surfaced because this session's local MongoDB had to be rebuilt
+from scratch mid-phase: `scripts/seed.ts` never set the seeded owner's `businessId`, and
+`scripts/seed-demo-data.ts`'s `ensureStaffMember()` never set `businessId` OR `locationIds` for the
+demo manager/staff/kitchen_staff accounts. The missing `businessId` broke `BusinessContext`-driven nav
+for every non-owner demo role; the missing `locationIds` was more subtle — `restaurant_staff`/
+`kitchen_staff` are deliberately scoped by explicit `locationIds`, not implicit business-wide access
+(`business.controller.ts`'s `listBusinessLocations`), so an empty array made that endpoint correctly
+return zero locations, which made `LocationContext` correctly resolve `activeLocationId` to `null`,
+which made `DashboardPage.tsx`'s unconditional restaurant fetch request `/restaurants/null` and get a
+real 403 ("You do not have access to this restaurant") — a working-as-designed authorization stack
+faithfully surfacing a data gap in the seed fixtures. Fixed in both seed scripts (new accounts) and
+patched directly on the running dev DB (existing ones, since both functions early-return without
+updating a user that already exists). Separately, `DashboardPage.tsx`'s own data-fetch effect never
+reset `error`/`loading` at the top of each run and never skipped firing when `restaurantId` was still
+unresolved — meaning a single transient bad request (this one, or any other cause of a momentarily
+unresolved location) could permanently strand the page in its error state even after a later, valid
+fetch succeeded. Fixed defensively (guard + reset) independent of the seed-data fix, since the
+`LocationContext` resolution race it depends on is inherent to that context's async design, not just
+this one seed gap.
+
+### Explicitly deferred
+
+Full visual/branding redesign, deep platform analytics beyond this foundation, genuinely editable
+(DB-backed) system configuration, live ETA/routing-provider integration, self-serve Owner signup,
+marketplace/app ecosystem, secondary/accent color and typography controls, multi-period business
+hours, timezone-aware order scheduling — all pre-existing deferred items, unchanged by this phase.

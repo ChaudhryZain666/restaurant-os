@@ -10,6 +10,7 @@ import {
   getAgency,
   getAgencyAuditLog,
   getAgencyBusiness,
+  getAgencyDashboard,
   getMyAgencies,
   listAgencyBusinesses,
   resendAgencyBusinessOwnerInvite,
@@ -23,6 +24,7 @@ agencyRouter.post("/", validateBody(createAgencySchema), asyncHandler(createAgen
 agencyRouter.get("/me", asyncHandler(getMyAgencies));
 
 agencyRouter.get("/:agencyId", requireAgencyMatch(), asyncHandler(getAgency));
+agencyRouter.get("/:agencyId/dashboard", requireAgencyMatch(), asyncHandler(getAgencyDashboard));
 agencyRouter.get(
   "/:agencyId/businesses",
   requireAgencyMatch(),

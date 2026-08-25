@@ -23,6 +23,11 @@ export interface PublicUser {
   agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
   phone?: string;
   createdAt: string;
+  /** Phase 28 — true only for an agency-provisioned "direct access" account (a real temporary
+   *  password) that hasn't set its own password yet. The frontend (RequireAuth) redirects to a
+   *  forced change-password screen whenever this is true; the server enforces the same restriction
+   *  independently (see middleware/auth.ts) so this is defense-in-depth, not the only guard. */
+  mustChangePassword?: boolean;
 }
 
 export interface AuthTokens {

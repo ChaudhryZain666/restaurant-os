@@ -53,6 +53,12 @@ export interface UserDoc {
   /** Set when a staff account is created via invite but hasn't set its own password yet. */
   inviteTokenHash?: string;
   inviteExpiresAt?: Date;
+  /** Phase 28 — set true only when an agency provisions this owner's login directly (a real,
+   *  system-generated temporary password) instead of the normal email-invite flow. Forces the
+   *  account through the change-password screen (see middleware/auth.ts) before anything else is
+   *  reachable; cleared by auth.controller.ts's changePassword the moment a new password is set.
+   *  Never true for an invite-created or self-registered account. */
+  mustChangePassword?: boolean;
   /** Self-service email change (Phase 12): the new address hasn't taken effect until its
    *  verification link is used — `email` above stays the CURRENT, real login identifier the whole
    *  time. Mirrors the passwordReset/inviteToken token-hash-only pattern above. */
@@ -96,6 +102,7 @@ const userSchema = new Schema<UserDoc>(
     passwordResetExpiresAt: { type: Date },
     inviteTokenHash: { type: String, index: { sparse: true } },
     inviteExpiresAt: { type: Date },
+    mustChangePassword: { type: Boolean, default: false },
     pendingEmail: { type: String, lowercase: true, trim: true },
     emailChangeTokenHash: { type: String, index: { sparse: true } },
     emailChangeExpiresAt: { type: Date },

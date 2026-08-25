@@ -17,3 +17,15 @@ export function generateSecureToken(): { raw: string; hash: string } {
 export function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
+
+/**
+ * Phase 28 — a real, system-generated one-time password for the "create owner access directly"
+ * provisioning path (agency.controller.ts's createAgencyBusiness). Deliberately NOT agency-typed:
+ * generating it here (rather than accepting an agency-chosen string) means it's never weak,
+ * reused, or guessable, and the agency only ever sees it once, exactly like a raw invite token —
+ * hashed with bcrypt (like every other password) before it touches the database. base64url keeps
+ * it copy-paste-safe (no characters that need escaping/encoding).
+ */
+export function generateTemporaryPassword(): string {
+  return randomBytes(12).toString("base64url");
+}

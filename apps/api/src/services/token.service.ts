@@ -19,6 +19,13 @@ export interface AccessTokenPayload {
    *  a user can hold independent roles across multiple agencies — a singular claim can't express
    *  that the way businessId can for the (always-singular) business case. */
   agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
+  /** Phase 28, additive — re-derived from the current User document at every sign/refresh, same
+   *  staleness contract as the claims above. True only for an agency-provisioned temporary-
+   *  password account that hasn't set its own password yet; enforced by middleware/auth.ts. Not
+   *  billing/subscription state, so this doesn't conflict with the "never put subscription status
+   *  in a JWT" rule — it's short-lived account security state, same category as the isActive check
+   *  already gates at login/refresh time. */
+  mustChangePassword?: boolean;
 }
 
 export interface RefreshTokenPayload {

@@ -4,12 +4,12 @@ import type { ChangeSubscriptionPlanInput, CreateSubscriptionInput, PaginationQu
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import type { SubscriptionDoc } from "../models/Subscription.js";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
-import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { paginateQuery } from "../utils/pagination.js";
 import { env } from "../config/env.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
 import { getEntitlements } from "../services/entitlement.service.js";
+import { getAgencyEntitlements as getAgencyBusinessUsage } from "../services/agencyEntitlement.service.js";
 import {
   cancelAgencySubscription,
   changeAgencySubscriptionPlan,
@@ -108,13 +108,22 @@ export async function changeAgencyPlanHandler(req: Request, res: Response) {
   sendSuccess(res, await toResponseShape(subscription));
 }
 
+/**
+ * Phase 28 — extended to also return business-usage-vs-limit (agencyEntitlement.service.ts's
+ * getAgencyEntitlements, confusingly same-named as this handler — aliased on import), not just
+ * plan feature flags. The usage figure is meaningful even with no live subscription (the
+ * no-subscription-default fallback applies), so this no longer 404s in that case — only the
+ * feature-entitlements half is omitted when there's no plan to read them from.
+ */
 export async function getAgencyEntitlementsHandler(req: Request, res: Response) {
   const { agencyId } = req.params;
-  const subscription = await getSubscriptionForAgency(agencyId);
-  if (!subscription) throw ApiError.notFound("This agency has no subscription");
+  const [subscription, usage] = await Promise.all([getSubscriptionForAgency(agencyId), getAgencyBusinessUsage(agencyId)]);
+  if (!subscription) {
+    sendSuccess(res, { entitlements: null, usage });
+    return;
+  }
   const plan = await Plan.findById(subscription.planId);
-  if (!plan) throw ApiError.notFound("Subscription plan not found");
-  sendSuccess(res, { entitlements: getEntitlements(plan as PlanDoc) });
+  sendSuccess(res, { entitlements: plan ? getEntitlements(plan as PlanDoc) : null, usage });
 }
 
 export async function createAgencyCheckoutHandler(req: Request, res: Response) {

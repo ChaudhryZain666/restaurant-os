@@ -57,6 +57,13 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // LocationContext resolves activeLocationId asynchronously — this can run once with it still
+    // unset before the real value lands. Skipping (rather than requesting `/restaurants/undefined`)
+    // avoids permanently poisoning `error` with a stale 403/404 that a later, valid run would
+    // otherwise never clear (this effect never resets error/loading at the top on its own).
+    if (!restaurantId) return;
+    setLoading(true);
+    setError(null);
     const restaurantReq = apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`);
     const analyticsReq = canViewAnalytics
       ? apiClient.request<{ analytics: RestaurantAnalytics }>(`/restaurants/${restaurantId}/analytics`)

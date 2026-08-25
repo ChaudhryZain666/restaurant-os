@@ -3,6 +3,7 @@ import type { StaffMember, UserRole } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId, useLocation as useActiveLocation } from "../context/LocationContext";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { IconIdBadge } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -43,6 +44,7 @@ export function StaffPage() {
   const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
+  const { restaurant: restaurantSettings, loading: settingsLoading } = useRestaurantSettings();
 
   async function reload() {
     const { staff } = await apiClient.request<{ staff: StaffMember[] }>(`/restaurants/${restaurantId}/staff`);
@@ -143,7 +145,23 @@ export function StaffPage() {
     }
   }
 
-  if (loading) return <p className="text-muted">Loading staff...</p>;
+  if (loading || settingsLoading) return <p className="text-muted">Loading staff...</p>;
+
+  if (restaurantSettings?.settings.staffEnabled === false) {
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="font-heading text-2xl font-semibold text-foreground">Staff</h1>
+        <p className="text-sm text-muted">
+          Staff management is turned off for this restaurant. Your own owner access is unaffected — this only hides
+          inviting/managing manager and staff accounts. Re-enable it from{" "}
+          <a href="/settings" className="font-medium text-primary hover:underline">
+            Settings → Ordering
+          </a>
+          .
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

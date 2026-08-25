@@ -29,6 +29,12 @@ interface AuthContextValue {
    *  password is optional here (only required server-side for a brand-new account — an invite to
    *  an existing platform user needs none, see agencyMembership.controller.ts's acceptAgencyInvite). */
   acceptAgencyInvite: (token: string, password?: string) => Promise<PublicUser>;
+  /** Phase 28 — completes the forced password-change flow for an agency-provisioned "direct
+   *  access" account (see ForcePasswordChangePage): re-authenticates with the temporary password
+   *  and sets a real one via the same /auth/change-password endpoint the ordinary self-service
+   *  change already uses. Updates `user` from the response so RequireAuth stops redirecting the
+   *  moment `mustChangePassword` comes back false. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<PublicUser>;
   logout: () => Promise<void>;
   /** Phase 25 — re-derives the access token AND `user` fresh from the server, without a full
    *  login round-trip. Needed after any action that changes claims mid-session (creating an
@@ -122,6 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user;
   }
 
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const data = await apiClient.request<AuthResponse>("/auth/change-password", {
+      method: "POST",
+      body: { currentPassword, newPassword },
+    });
+    apiClient.setAccessToken(data.accessToken);
+    setUser(data.user);
+    return data.user;
+  }
+
   async function logout() {
     await apiClient.request("/auth/logout", { method: "POST", skipRefresh: true });
     apiClient.setAccessToken(null);
@@ -136,7 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, acceptInvite, acceptAgencyInvite, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, acceptInvite, acceptAgencyInvite, changePassword, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

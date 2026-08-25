@@ -36,6 +36,7 @@ import { businessSubscriptionRouter } from "./businessSubscription.routes.js";
 import { billingWebhookRouter } from "./billingWebhook.routes.js";
 import { billingMockCheckoutRouter } from "./billingMockCheckout.routes.js";
 import { planRouter } from "./plan.routes.js";
+import { publicPlanRouter } from "./publicPlan.routes.js";
 import { agencyRouter } from "./agency.routes.js";
 import { agencyMembershipRouter, agencyAcceptInviteRouter } from "./agencyMembership.routes.js";
 import { agencySubscriptionRouter } from "./agencySubscription.routes.js";
@@ -61,6 +62,7 @@ if (env.BILLING_PROVIDER === "mock") {
   apiRouter.use("/billing/mock-checkout", billingMockCheckoutRouter);
 }
 apiRouter.use("/plans", planRouter);
+apiRouter.use("/public/plans", publicPlanRouter);
 // Phase 25 — agencies/accept-invite mounted BEFORE /agencies itself so the literal "accept-invite"
 // segment can never be swallowed by /agencies/:agencyId's param matching.
 apiRouter.use("/agencies/accept-invite", agencyAcceptInviteRouter);

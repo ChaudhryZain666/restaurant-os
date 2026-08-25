@@ -61,7 +61,13 @@ function daysAgo(n: number, hour = 18): Date {
 /** A real, permanent demo fixture (not test-run debris) — lets anyone log in as a restaurant_staff
  *  user to see the deliberately-narrower admin experience that role gets (see Layout.tsx/App.tsx's
  *  role-filtered nav and routes), without an owner having to manually invite one first. */
-async function ensureStaffMember(restaurantId: mongoose.Types.ObjectId, name: string, email: string, role: string) {
+async function ensureStaffMember(
+  restaurantId: mongoose.Types.ObjectId,
+  name: string,
+  email: string,
+  role: string,
+  businessId?: mongoose.Types.ObjectId
+) {
   let user = await User.findOne({ email });
   if (!user) {
     user = await User.create({
@@ -70,6 +76,15 @@ async function ensureStaffMember(restaurantId: mongoose.Types.ObjectId, name: st
       passwordHash: await bcrypt.hash("Staff123!", 12),
       role,
       restaurantId,
+      // Phase 18's Business/Location model needs this too — BusinessContext (apps/admin) resolves
+      // activeBusinessId from here for every restaurant-scoped role, same gap seed.ts's owner
+      // creation had (see that file's own fix comment) — this was never previously set here.
+      businessId,
+      // restaurant_staff/kitchen_staff are scoped by explicit locationIds, not implicit
+      // business-wide access (see business.controller.ts's listBusinessLocations) — without this,
+      // that endpoint returns zero locations for them, LocationContext resolves activeLocationId to
+      // null, and every restaurantId-scoped page request 404s/403s. Never previously set here.
+      locationIds: [restaurantId],
       isActive: true,
     });
     console.log(`[backfill] created ${role}: ${email}`);
@@ -202,9 +217,9 @@ async function main() {
   // --- 1e. Demo staff accounts — one per non-owner role, so the role-restricted admin
   // experience (Layout.tsx/App.tsx's role-filtered nav/routes) is directly demoable/testable
   // without an owner having to invite one first. ---
-  await ensureStaffMember(restaurantId, "Sam Rivera", "manager@demo-restaurant.local", "restaurant_manager");
-  await ensureStaffMember(restaurantId, "Alex Chen", "staff@demo-restaurant.local", "restaurant_staff");
-  await ensureStaffMember(restaurantId, "Jamie Park", "kitchen@demo-restaurant.local", "kitchen_staff");
+  await ensureStaffMember(restaurantId, "Sam Rivera", "manager@demo-restaurant.local", "restaurant_manager", restaurant.businessId);
+  await ensureStaffMember(restaurantId, "Alex Chen", "staff@demo-restaurant.local", "restaurant_staff", restaurant.businessId);
+  await ensureStaffMember(restaurantId, "Jamie Park", "kitchen@demo-restaurant.local", "kitchen_staff", restaurant.businessId);
 
   // --- 2. Demo customers ---
   const jordan = await ensureCustomer("Jordan Lee", "jordan.lee@example.com");

@@ -16,9 +16,12 @@ interface AgencyBusinessSummary {
   ownerName?: string;
   ownerEmail?: string;
   ownerInvitePending: boolean;
+  domainCount: number;
 }
 
 const PAGE_SIZE = 20;
+
+type ProvisioningMode = "invite" | "direct";
 
 function emptyDraft() {
   return { businessName: "", businessSlug: "", ownerName: "", ownerEmail: "", locationName: "", locationSlug: "" };
@@ -37,7 +40,11 @@ export function AgencyBusinessesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(emptyDraft());
+  const [provisioningMode, setProvisioningMode] = useState<ProvisioningMode>("invite");
   const [creating, setCreating] = useState(false);
+  // Shown exactly once, right after a "direct access" creation succeeds — never persisted beyond
+  // this component's state, cleared the moment the agency dismisses it.
+  const [revealedPassword, setRevealedPassword] = useState<{ ownerEmail: string; password: string } | null>(null);
 
   async function reload() {
     if (!activeAgencyId) return;
@@ -60,8 +67,15 @@ export function AgencyBusinessesPage() {
     setError(null);
     setCreating(true);
     try {
-      await apiClient.request(`/agencies/${activeAgencyId}/businesses`, { method: "POST", body: draft });
+      const result = await apiClient.request<{ ownerTemporaryPassword?: string }>(
+        `/agencies/${activeAgencyId}/businesses`,
+        { method: "POST", body: { ...draft, provisioningMode } }
+      );
+      if (provisioningMode === "direct" && result.ownerTemporaryPassword) {
+        setRevealedPassword({ ownerEmail: draft.ownerEmail, password: result.ownerTemporaryPassword });
+      }
       setDraft(emptyDraft());
+      setProvisioningMode("invite");
       setShowForm(false);
       setPage(1);
       await reload();
@@ -92,12 +106,76 @@ export function AgencyBusinessesPage() {
         </Alert>
       )}
 
+      {revealedPassword && (
+        <Alert tone="warning" role="alert">
+          <div className="flex flex-col gap-2">
+            <p className="font-medium">
+              Owner access created for {revealedPassword.ownerEmail}. Share this temporary password with them now — it
+              will not be shown again, and they'll be required to set their own password the first time they sign in.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="rounded bg-background px-2 py-1 font-mono text-sm text-foreground">
+                {revealedPassword.password}
+              </code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(revealedPassword.password)}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevealedPassword(null)}
+                className="ml-auto text-sm font-medium text-muted hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </Alert>
+      )}
+
       {showForm && (
         <Card>
           <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Create a business</h2>
           <p className="mb-3 text-sm text-muted">
-            Creates the business, its first location, and sends the owner an invitation to set up and run it.
+            Creates the business and its first location. Choose how the owner gets access below.
           </p>
+          <fieldset className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-3 text-sm sm:flex-row sm:gap-4">
+            <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Owner access</legend>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="provisioningMode"
+                checked={provisioningMode === "invite"}
+                onChange={() => setProvisioningMode("invite")}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium text-foreground">Send invitation</span>
+                <br />
+                <span className="text-muted">Email the owner a secure link to set their own password.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="provisioningMode"
+                checked={provisioningMode === "direct"}
+                onChange={() => setProvisioningMode("direct")}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium text-foreground">Create owner access now</span>
+                <br />
+                <span className="text-muted">
+                  Get a one-time temporary password to relay to the owner directly. They must set their own password
+                  before using the account.
+                </span>
+              </span>
+            </label>
+          </fieldset>
           <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               Business name
@@ -155,7 +233,11 @@ export function AgencyBusinessesPage() {
               />
             </label>
             <Button type="submit" size="sm" disabled={creating} className="self-start sm:col-span-2">
-              {creating ? "Creating..." : "Create business & invite owner"}
+              {creating
+                ? "Creating..."
+                : provisioningMode === "direct"
+                  ? "Create business & owner access"
+                  : "Create business & invite owner"}
             </Button>
           </form>
         </Card>
@@ -175,6 +257,7 @@ export function AgencyBusinessesPage() {
                 <th className="py-2 pr-3 font-medium">Locations</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Subscription</th>
+                <th className="py-2 pr-3 font-medium">Domain</th>
                 <th className="py-2 pr-3 font-medium" />
               </tr>
             </thead>
@@ -195,6 +278,7 @@ export function AgencyBusinessesPage() {
                     <Badge tone={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge>
                   </td>
                   <td className="py-2.5 pr-3 text-muted">{b.subscriptionStatus ?? "—"}</td>
+                  <td className="py-2.5 pr-3 text-muted">{b.domainCount > 0 ? "Configured" : "—"}</td>
                   <td className="py-2.5 pr-3 text-right">
                     <Link to={`/agency/businesses/${b.id}`} className="text-sm font-medium text-primary hover:underline">
                       Manage

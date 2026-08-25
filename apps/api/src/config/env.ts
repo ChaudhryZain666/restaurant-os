@@ -12,6 +12,12 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL: z.string().default("30d"),
   CLIENT_ORIGIN: z.string().default("http://localhost:5173"),
   ADMIN_ORIGIN: z.string().default("http://localhost:5174"),
+  // Phase 28 — the marketing site (apps/marketing) is a separate, unauthenticated frontend. It only
+  // ever calls the new public/* routes (no cookies, no bearer token), but still needs its own CORS
+  // origin like CLIENT_ORIGIN/ADMIN_ORIGIN — the dev proxy (apps/marketing/vite.config.ts) already
+  // makes local dev same-origin, but a production deployment that serves marketing as a genuinely
+  // separate origin (e.g. a static host) needs this.
+  MARKETING_ORIGIN: z.string().default("http://localhost:5175"),
 
   // File storage (optional — StorageService throws only when actually used unconfigured)
   STORAGE_ENDPOINT: z.string().optional(),

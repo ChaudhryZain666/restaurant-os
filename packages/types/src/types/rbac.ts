@@ -30,6 +30,7 @@ export type Permission =
   | "restaurant.categories.write"
   | "restaurant.modifiers.write"
   | "restaurant.promotions.manage"
+  | "restaurant.loyalty.manage"
   | "restaurant.orders.read"
   | "restaurant.orders.manage"
   | "restaurant.payments.manage"
@@ -74,6 +75,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.categories.write",
     "restaurant.modifiers.write",
     "restaurant.promotions.manage",
+    "restaurant.loyalty.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
     "restaurant.payments.manage",
@@ -90,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.categories.write",
     "restaurant.modifiers.write",
     "restaurant.promotions.manage",
+    "restaurant.loyalty.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
     "restaurant.payments.manage",

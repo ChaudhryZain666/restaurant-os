@@ -12,6 +12,7 @@ import {
   getRestaurantByDomain,
   getRestaurantBySlug,
   getRestaurantReadiness,
+  getSetupChecklist,
   previewRestaurantBySlug,
   publishRestaurant,
   unpublishRestaurant,
@@ -56,6 +57,13 @@ restaurantRouter.get(
   requireTenantMatch(),
   requirePermission("restaurant.settings.manage"),
   asyncHandler(getRestaurantReadiness)
+);
+restaurantRouter.get(
+  "/:restaurantId/setup-checklist",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.settings.manage"),
+  asyncHandler(getSetupChecklist)
 );
 restaurantRouter.patch(
   "/:restaurantId/publish",

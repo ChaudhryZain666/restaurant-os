@@ -1,6 +1,22 @@
 export const TICKET_STATUSES = ["open", "in_progress", "waiting_customer", "resolved", "closed"] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
+/**
+ * Phase 28 — the single source of truth for valid status transitions, shared by the backend
+ * (apps/api/src/services/ticketStateMachine.ts re-exports this unchanged) and the admin frontend
+ * (SupportTicketDetailPage.tsx filters its status dropdown to these). Before this, the UI offered
+ * every status unconditionally and the backend silently rejected disallowed ones with a 400 — this
+ * is what fixes that: one map, read by both sides, so they can't drift apart again. "closed" is
+ * terminal for staff-driven transitions.
+ */
+export const TICKET_STATUS_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
+  open: ["in_progress", "resolved", "closed"],
+  in_progress: ["waiting_customer", "resolved", "closed"],
+  waiting_customer: ["in_progress", "open", "resolved", "closed"],
+  resolved: ["closed", "open", "in_progress"],
+  closed: [],
+};
+
 export const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 

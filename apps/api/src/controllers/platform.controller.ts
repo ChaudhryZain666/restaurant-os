@@ -416,6 +416,80 @@ export async function getPlatformRevenue(_req: Request, res: Response) {
 }
 
 /**
+ * Phase 28 — GET /platform/analytics: the small set of genuinely NEW aggregations the platform
+ * analytics page needs, on top of the overview/revenue endpoints that already existed
+ * (getPlatformOverview, getPlatformRevenue — the frontend calls those directly, this doesn't
+ * duplicate them). Every figure is a real query; currency-denominated ones would follow
+ * sumAmountsByCurrency's grouping convention, but nothing here is currency-denominated — MRR
+ * already has its own endpoint for that.
+ */
+export async function getPlatformAnalytics(_req: Request, res: Response) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [subscriptionsByStatus, locationsTotalAgg, agencyManagedBusinessCount, directBusinessCount, restaurantSignups, agencySignups] =
+    await Promise.all([
+      Subscription.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Business.aggregate([{ $group: { _id: null, total: { $sum: "$locationCount" } } }]),
+      Business.countDocuments({ agencyId: { $ne: null } }),
+      Business.countDocuments({ agencyId: null }),
+      Restaurant.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      Agency.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+
+  const restaurantSignupsByDate = new Map(restaurantSignups.map((r) => [r._id as string, r.count as number]));
+  const agencySignupsByDate = new Map(agencySignups.map((a) => [a._id as string, a.count as number]));
+  const allDates = [...new Set([...restaurantSignupsByDate.keys(), ...agencySignupsByDate.keys()])].sort();
+
+  sendSuccess(res, {
+    subscriptionsByStatus: subscriptionsByStatus.map((s) => ({ status: s._id as string, count: s.count as number })),
+    totalLocations: (locationsTotalAgg[0]?.total as number) ?? 0,
+    businessesByOwnership: { agencyManaged: agencyManagedBusinessCount, direct: directBusinessCount },
+    newRestaurantsLast30Days: restaurantSignups.reduce((sum, r) => sum + (r.count as number), 0),
+    newAgenciesLast30Days: agencySignups.reduce((sum, a) => sum + (a.count as number), 0),
+    signupsByDate: allDates.map((date) => ({
+      date,
+      restaurants: restaurantSignupsByDate.get(date) ?? 0,
+      agencies: agencySignupsByDate.get(date) ?? 0,
+    })),
+  });
+}
+
+/**
+ * Phase 28 — GET /platform/config: a read-only diagnostics view of platform-level configuration.
+ * Deliberately NOT an editable settings page — env vars are boot-time constants (parsed once by
+ * Zod, see config/env.ts), so nothing here could be saved back without new DB-backed config
+ * infrastructure that doesn't exist (a genuine architectural addition, out of scope this phase —
+ * see docs/commercial-decisions.md). Only a curated, explicitly non-secret subset is returned:
+ * provider SELECTIONS (which one is active, never its credentials) and numeric defaults that are
+ * already documented elsewhere as non-final (TRIAL_PERIOD_DAYS, PAST_DUE_GRACE_PERIOD_DAYS). API
+ * keys/webhook secrets are never included, by construction — this function doesn't even read them.
+ */
+export async function getPlatformConfig(_req: Request, res: Response) {
+  sendSuccess(res, {
+    config: {
+      environment: env.NODE_ENV,
+      billingProvider: env.BILLING_PROVIDER,
+      billingProviderEnv: env.BILLING_PROVIDER === "paddle" ? env.PADDLE_ENV : null,
+      paymentProvider: env.PAYMENT_PROVIDER,
+      paymentProviderEnv: env.PAYMENT_PROVIDER === "safepay" ? env.SAFEPAY_ENV : null,
+      geocodingProvider: env.GEOCODING_PROVIDER ?? "not configured",
+      dnsVerifier: env.DNS_VERIFIER,
+      emailProvider: env.EMAIL_PROVIDER,
+      trialPeriodDays: env.TRIAL_PERIOD_DAYS,
+      pastDueGracePeriodDays: env.PAST_DUE_GRACE_PERIOD_DAYS,
+    },
+  });
+}
+
+/**
  * Phase 25 — GET /platform/agencies: read-only platform-wide overview, mirroring
  * listPlatformSubscriptions above exactly. No write access to any agency's members/businesses/
  * billing through this surface — platform_admin visibility only, matching the existing boundary

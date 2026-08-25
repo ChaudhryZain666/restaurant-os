@@ -30,7 +30,7 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN], credentials: true }));
+  app.use(cors({ origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN, env.MARKETING_ORIGIN], credentials: true }));
   // Captures the raw pre-parse body bytes onto req.rawBody — payment webhook signature
   // verification (controllers/paymentWebhook.controller.ts) must check the exact bytes a
   // provider signed; a re-serialized copy of the parsed JSON can differ in whitespace/key order

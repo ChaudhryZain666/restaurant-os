@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { TICKET_PRIORITIES, TICKET_STATUSES, type SupportMessage, type SupportTicket, type TicketPriority, type TicketStatus } from "@restaurant/types";
+import {
+  TICKET_PRIORITIES,
+  TICKET_STATUS_TRANSITIONS,
+  type SupportMessage,
+  type SupportTicket,
+  type TicketPriority,
+  type TicketStatus,
+} from "@restaurant/types";
 import { Badge, Button, Card, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -162,12 +169,19 @@ export function SupportTicketDetailPage() {
           <h2 className="font-medium text-foreground">Controls</h2>
           <label className="flex flex-col gap-1 text-xs text-muted">
             Status
+            {/* Phase 28 — only the current status plus its actually-valid transitions are offered
+                (TICKET_STATUS_TRANSITIONS, shared with the backend's ticketStateMachine.ts) — this
+                used to list every status unconditionally and rely on the server's 400 to reject an
+                invalid one, which read as "status can't be changed." "closed" is terminal: disabled
+                once reached. */}
             <select
               value={ticket.status}
               onChange={(e) => setStatus(e.target.value as TicketStatus)}
-              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+              disabled={TICKET_STATUS_TRANSITIONS[ticket.status].length === 0}
+              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground disabled:opacity-50"
             >
-              {TICKET_STATUSES.map((s) => (
+              <option value={ticket.status}>{TICKET_STATUS_LABELS[ticket.status]}</option>
+              {TICKET_STATUS_TRANSITIONS[ticket.status].map((s) => (
                 <option key={s} value={s}>
                   {TICKET_STATUS_LABELS[s]}
                 </option>

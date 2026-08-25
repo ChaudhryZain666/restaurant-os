@@ -30,6 +30,20 @@ export interface DeliveryEligibility {
 }
 
 /**
+ * Phase 28 — resolves the actual fee for a given distance: the configured tier with the SMALLEST
+ * maxDistanceKm that still covers the distance (the tightest-fitting bracket, not just any match),
+ * falling back to the flat `deliveryFee` when no tiers are configured or none cover the distance
+ * (the latter shouldn't happen in practice since eligibility already caps distance at
+ * deliveryRadiusKm, but a fallback keeps this total rather than throwing on a misconfiguration).
+ */
+function resolveDeliveryFee(settings: Pick<RestaurantDoc["settings"], "deliveryFee" | "deliveryFeeTiers">, distanceKm: number): number {
+  const tiers = settings.deliveryFeeTiers ?? [];
+  const covering = tiers.filter((t) => distanceKm <= t.maxDistanceKm);
+  if (covering.length === 0) return settings.deliveryFee;
+  return covering.reduce((tightest, t) => (t.maxDistanceKm < tightest.maxDistanceKm ? t : tightest)).fee;
+}
+
+/**
  * The single source of truth for "can this restaurant deliver to this point, and for how much" —
  * used by both the customer-facing preview (delivery.controller.ts's checkDeliveryEligibility)
  * and createOrder itself, so a location can never be shown as deliverable at preview time and
@@ -61,5 +75,5 @@ export function checkDeliveryEligibility(
     return { eligible: false, distanceKm: roundedDistanceKm, reason: "This address is outside the delivery area" };
   }
 
-  return { eligible: true, distanceKm: roundedDistanceKm, deliveryFee: restaurant.settings.deliveryFee };
+  return { eligible: true, distanceKm: roundedDistanceKm, deliveryFee: resolveDeliveryFee(restaurant.settings, roundedDistanceKm) };
 }

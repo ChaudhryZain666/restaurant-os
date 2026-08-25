@@ -54,5 +54,10 @@ export const createAgencyBusinessSchema = z.object({
   locationSlug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
   timezone: z.string().min(1).optional(),
   currency: z.string().length(3).optional(),
+  // Phase 28 — "invite" (default, unchanged Phase 25 behavior): owner gets an unusable random
+  // password + an email invite token. "direct": agency gets a real, system-generated one-time
+  // password to relay to the owner out of band, no email token — see agency.controller.ts's
+  // createAgencyBusiness doc comment for why this is a deliberate, audited exception.
+  provisioningMode: z.enum(["invite", "direct"]).default("invite"),
 });
 export type CreateAgencyBusinessInput = z.infer<typeof createAgencyBusinessSchema>;
