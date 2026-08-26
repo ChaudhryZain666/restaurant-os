@@ -60,11 +60,14 @@ const STATUS_LABEL: Record<Payment["status"], string> = {
 
 /**
  * Drives the entire online-payment lifecycle for one order: create/reuse a payment intent, then
- * — since no real provider is connected yet (see docs/payment-provider-decision.md) — let the
- * customer simulate the provider's hosted-checkout outcome via the mock-only /mock-complete
- * endpoint. Every button here is clearly labelled as a simulation; nothing pretends money moved.
- * A real provider adapter would replace the "Simulate..." buttons with that provider's actual
- * client-side SDK/redirect, without changing anything else about this panel's states.
+ * hand off to whichever provider is actually configured server-side (Payment.provider, echoed back
+ * on the created payment — never assumed client-side). For a real provider (anything but "mock"),
+ * `clientSecret` is that provider's real hosted-checkout URL (see SafepayProvider.createIntent) and
+ * the customer's browser is redirected there immediately — payment confirmation itself still comes
+ * back through the existing webhook path (payment.service.ts's processProviderEvent), same as
+ * before; this redirect only gets the customer TO the provider's page. Only when
+ * `PAYMENT_PROVIDER=mock` (dev/test only — the /mock-complete route doesn't even exist otherwise,
+ * see routes/payment.routes.ts) do the "Simulate..." buttons appear instead of a real redirect.
  */
 export function OrderPaymentPanel({ order, onOrderUpdated }: { order: Order; onOrderUpdated: () => Promise<void> }) {
   const [state, setState] = useState<PanelState>({ status: "idle" });
@@ -79,6 +82,13 @@ export function OrderPaymentPanel({ order, onOrderUpdated }: { order: Order; onO
         `/restaurants/${order.restaurantId}/orders/${order.id}/payments`,
         { method: "POST", body: { idempotencyKey: idempotencyKey.current } }
       );
+      if (payment.provider !== "mock" && clientSecret) {
+        // Real provider: clientSecret IS the hosted-checkout URL — there's nothing left for this
+        // panel to render, the customer is leaving the site until the provider redirects them back
+        // to returnUrl/cancelUrl (payment.service.ts's createPaymentForOrder).
+        window.location.href = clientSecret;
+        return;
+      }
       setState({ status: "ready", payment, clientSecret });
     } catch (err) {
       setState({ status: "error", message: (err as Error).message });
@@ -132,31 +142,31 @@ export function OrderPaymentPanel({ order, onOrderUpdated }: { order: Order; onO
               {STATUS_LABEL[state.payment.status]}
             </Badge>
           </div>
-          <div className="rounded-lg border border-dashed border-border bg-background p-3 text-sm text-muted">
-            <p className="mb-2 font-medium text-foreground">No real payment provider is connected yet.</p>
-            <p className="mb-3">
-              This platform's real provider decision (Safepay) is documented but not implemented — these buttons
-              simulate what a provider's hosted checkout would report back, through the same signed-webhook path a
-              real integration would use.
-            </p>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => simulate("paid")}
-                disabled={state.status === "processing"}
-              >
-                {state.status === "processing" ? "Processing..." : "Simulate successful payment"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => simulate("failed")}
-                disabled={state.status === "processing"}
-              >
-                Simulate failed payment
-              </Button>
+          {state.payment.provider === "mock" ? (
+            <div className="rounded-lg border border-dashed border-border bg-background p-3 text-sm text-muted">
+              <p className="mb-2 font-medium text-foreground">Running against the mock payment provider (dev/test only).</p>
+              <p className="mb-3">
+                These buttons simulate what a real provider's hosted checkout would report back, through the same
+                signed-webhook path a real integration uses.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => simulate("paid")} disabled={state.status === "processing"}>
+                  {state.status === "processing" ? "Processing..." : "Simulate successful payment"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => simulate("failed")} disabled={state.status === "processing"}>
+                  Simulate failed payment
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            // Reachable only if a real provider's createIntent unexpectedly returned no checkout
+            // URL — startPayment() redirects immediately for every other real-provider case, so
+            // this state should never normally render.
+            <Alert tone="danger" role="alert">
+              This payment couldn't be started — the payment provider didn't return a checkout page. Please try again
+              or contact the restaurant.
+            </Alert>
+          )}
         </div>
       )}
 

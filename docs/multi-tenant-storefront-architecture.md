@@ -2604,3 +2604,104 @@ Full visual/branding redesign, deep platform analytics beyond this foundation, g
 (DB-backed) system configuration, live ETA/routing-provider integration, self-serve Owner signup,
 marketplace/app ecosystem, secondary/accent color and typography controls, multi-period business
 hours, timezone-aware order scheduling — all pre-existing deferred items, unchanged by this phase.
+
+## Phase 29 — Production & Commercial Completion Audit
+
+A full repository-wide audit (9 parallel investigation passes, 6 completed by subagents, 3 finished
+directly after this session's account hit a subagent-spawn limit mid-run) tracing the real journey
+of a brand-new restaurant from "created" to "operating, taking real orders, getting paid" — matching
+the standard "would a real, non-technical restaurant owner get stuck without a developer" rather
+than "do the tests pass." Full findings, evidence, and severity classification (P0/P1/P2/deferred)
+were presented to the user before any implementation; two decisions were confirmed explicitly:
+defer per-restaurant payment accounts (Stripe-Connect-equivalent) as a separate, future, and
+substantially larger project rather than scoping it into this phase, and target the existing
+Safepay/SMTP adapters for the real-integration work rather than staying provider-agnostic.
+
+### What the audit confirmed already works, end to end, with zero developer intervention
+Setup's required-checklist gating (server-authoritative, re-checked on publish, not client-trusted);
+every price-affecting value in checkout (menu, modifiers, delivery fee, promo, loyalty, tax, total)
+recomputed server-side, never trusting a client-submitted amount; order tracking, reorder, and
+history, all correctly tenant-isolated; receipts/kitchen tickets (a genuinely built Phase 14
+feature, not a gap as originally assumed); agency cross-tenant isolation (traced
+`agencyGrantsBusinessAccess`/`resolveTenantAccess` fully — no gap found); every authorization
+primitive's malformed/null-ID handling (fails closed everywhere, confirming the Phase 28 incident's
+authorization layer was correct throughout — only the frontend had the bug).
+
+### P0 fixed this phase
+- **Real checkout redirect** — `OrderPaymentPanel.tsx` used to show mock-only "Simulate..." buttons
+  regardless of which payment provider was actually configured; a real Safepay account today still
+  couldn't take a real payment. Fixed by branching on the created `Payment.provider` field (already
+  returned, no new field needed): for `"mock"`, unchanged; for any real provider, the browser
+  redirects immediately to `clientSecret` (the provider's real hosted-checkout URL). Required adding
+  `returnUrl`/`cancelUrl` to `CreateIntentInput`, corrected `SafepayProvider`'s tracker-creation path
+  (`/order/v1/init`, not the originally-guessed `/order/v1/payments`) against newly-found (still
+  unofficial) evidence — see `docs/payment-provider-decision.md`'s Phase 29 update for the full
+  confidence breakdown on what's now verified vs. still assumed.
+- **Order notifications now actually dispatch email** — `notification.queue.ts`'s BullMQ worker
+  used to only log every order event. Now sends a real email (via the existing `EmailService`
+  abstraction — console in dev, SMTP when configured) to the restaurant on `order.created` (closing
+  the "browser tab closed = order silently missed" gap) and to the customer on `order.created`/
+  `order.cancelled`. Looked up fresh from the DB each time, not carried in the job payload, so it
+  always reflects current restaurant/customer email. Failures are logged, never thrown or retried —
+  a missed notification email must never be mistaken for the order/payment pipeline itself failing.
+- **Owner-invite resend for platform-admin-created restaurants** — turned out to already exist
+  end to end (`resendOwnerInvite` + a real UI button on `PlatformRestaurantDetailPage.tsx`); the
+  audit's initial finding here was corrected on direct verification. What remains here is purely
+  external (a real SMTP account) — the console-provider default (Phase 15) already logs every
+  invite link so nothing is silently lost in dev/test.
+
+### P1 fixed this phase
+- **Public menu leak** — `GET /restaurants/:id/menu` had no auth and no restaurant-status check at
+  all, unlike every other public read; a pending/suspended restaurant's full menu+prices were
+  readable by anyone with the ID. Fixed with a status gate that still allows the restaurant's own
+  owner/platform_admin to preview it (mirrors `previewRestaurantBySlug`'s exact allowance, via a new
+  `callerCanPreview` soft-auth check — a missing/invalid token just means "not a previewer," never
+  a 401, since the route must stay reachable by anonymous customers).
+- **Invite-resend rate limiting** — the four authenticated resend endpoints (agency business owner,
+  agency member, restaurant staff, platform-created restaurant owner) had no throttling; a
+  compromised/careless admin account could spam one invitee's inbox unthrottled. Added a shared
+  `inviteResendLimiter` (10/15min, IP-keyed, same pattern as every other limiter in this codebase).
+- **`EMAIL_FROM` now required when `EMAIL_PROVIDER=smtp`** — used to silently default to a
+  placeholder address (`no-reply@tablecloth.local`) that could ship to production if an operator
+  forgot to override it. `getEmailService()` now throws the same clear config error it already does
+  for missing `SMTP_HOST`/`PORT`.
+- **Receipt/kitchen-ticket logo** — `Restaurant.logo` existed on the model but `getOrder`'s
+  projection never selected it, so the print views had no way to render one despite the data being
+  there. Fixed (receipt mode only — kitchen tickets deliberately stay logo-free, no reason to spend
+  ink/paper on branding kitchen staff never look at).
+- **Multi-location order access** — `getOrder`'s staff-access check compared only the JWT's flat,
+  original `restaurantId`, never the businessId/agency-aware `resolveTenantAccess` every other
+  multi-location route already uses. A manager viewing/printing an order at their business's
+  *second* location got a false 403 even with genuine access — over-restrictive, not a security
+  hole, but broken for any real multi-location business. Fixed to reuse `resolveTenantAccess`.
+- Also fixed along the way: a latent `tsc` type error in `seed-demo-data.ts` (from the Phase 28
+  `businessId` fix — `ObjectId | null | undefined` not narrowed to `ObjectId | undefined`) that
+  Jest's ts-jest config hadn't been catching; confirmed via a direct `tsc --noEmit` pass this phase
+  added to the verification routine going forward.
+
+### Explicitly deferred (named, not silently dropped)
+- **Per-restaurant payment accounts** (Stripe-Connect-equivalent split payments) — confirmed by the
+  user as out of scope for this phase; Safepay has no marketplace/connected-account API per the
+  existing Phase 15 research, so the current single-platform-account model isn't a shortcut, it's
+  the only evidence-based option available today. A real per-restaurant payout project is
+  substantial enough to warrant its own dedicated phase.
+- **Refund webhook confirmation** (a provider refund settling asynchronously as "pending" is
+  currently treated as failed/rolled back locally) and **Safepay's exact refund endpoint** — both
+  need real sandbox verification before they can be built correctly; building either against zero
+  confirmed evidence risks shipping something wrong once a real account is eventually connected.
+- **Tipping** — genuinely unmodeled anywhere (no field on Order or Restaurant.settings). Not built
+  this phase: a real tipping flow is a product-decision-laden feature (percentage vs. custom amount,
+  whether it interacts with the same single-platform-account question above), not a one-field fix,
+  and a restaurant can fully operate and get paid without one (tips handled in person/cash, as is
+  already common in this platform's target market).
+- **Self-serve Owner signup** — re-confirmed still absent by design (Phase 28's own deliberate
+  decision); noted again here given this phase's broader "global commerce platform" framing, but
+  not reopened without an explicit product decision to do so.
+
+### Tests
+New: `notification.queue.test.ts` (order-created/cancelled email dispatch, including "restaurant has
+no email configured" and "order no longer exists" edge cases), new cases in `menu.controller.test.ts`
+(non-active 404, owner preview allowance, cross-restaurant preview denial) and `order.controller.test.ts`
+(multi-location `getOrder` access). `SafepayProvider.test.ts` updated for the new required
+`returnUrl`/`cancelUrl` params and corrected endpoint path. Full Jest suite and a targeted Playwright
+sweep (`online-payment`, `payment-settings-and-loyalty`, `order-notification-toast`) re-run clean.

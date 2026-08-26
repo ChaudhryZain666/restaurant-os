@@ -21,6 +21,9 @@ export function getEmailService(): EmailService {
     if (!env.SMTP_HOST || !env.SMTP_PORT) {
       throw new Error("EMAIL_PROVIDER=smtp requires SMTP_HOST and SMTP_PORT to be set.");
     }
+    if (!env.EMAIL_FROM) {
+      throw new Error("EMAIL_PROVIDER=smtp requires EMAIL_FROM to be set.");
+    }
     instance = new SmtpEmailService({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,

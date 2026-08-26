@@ -76,6 +76,59 @@ export function agencyMemberInviteEmail(
   };
 }
 
+export function newOrderRestaurantEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; total: string; orderType: string; ordersUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `New order ${details.orderNumber} — ${details.total}`,
+    html: layout(
+      "You've got a new order",
+      `<p><strong>${details.restaurantName}</strong> just received order <strong>${details.orderNumber}</strong>
+       (${details.orderType}, ${details.total}).</p>
+       <p><a href="${details.ordersUrl}" style="color:#c2410c;">View and accept it</a></p>
+       <p style="color:#78716c; font-size: 13px;">You're getting this because no one was watching the live orders
+       page when it came in — it's already waiting there too.</p>`
+    ),
+    text: `${details.restaurantName} just received order ${details.orderNumber} (${details.orderType}, ${details.total}).\n\nView and accept it: ${details.ordersUrl}`,
+  };
+}
+
+export function orderConfirmationEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; total: string; orderType: string; trackingUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `Your order from ${details.restaurantName} — ${details.orderNumber}`,
+    html: layout(
+      "Order confirmed",
+      `<p>Thanks for your order from <strong>${details.restaurantName}</strong>. We've sent it to the restaurant.</p>
+       <p>Order <strong>${details.orderNumber}</strong> · ${details.orderType} · ${details.total}</p>
+       <p><a href="${details.trackingUrl}" style="color:#c2410c;">Track your order</a></p>`
+    ),
+    text: `Thanks for your order from ${details.restaurantName}.\n\nOrder ${details.orderNumber} · ${details.orderType} · ${details.total}\n\nTrack your order: ${details.trackingUrl}`,
+  };
+}
+
+export function orderCancelledEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; trackingUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `Your order from ${details.restaurantName} was cancelled — ${details.orderNumber}`,
+    html: layout(
+      "Order cancelled",
+      `<p>Order <strong>${details.orderNumber}</strong> from <strong>${details.restaurantName}</strong> has been
+       cancelled. If you paid online, any refund will follow the restaurant's usual process.</p>
+       <p><a href="${details.trackingUrl}" style="color:#c2410c;">View order details</a></p>`
+    ),
+    text: `Order ${details.orderNumber} from ${details.restaurantName} has been cancelled.\n\nView order details: ${details.trackingUrl}`,
+  };
+}
+
 export function staffInviteEmail(
   to: string,
   acceptUrl: string,

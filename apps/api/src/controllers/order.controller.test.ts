@@ -9,6 +9,7 @@ import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { Business } from "../models/Business.js";
 import { Table } from "../models/Table.js";
 import { User } from "../models/User.js";
 import { LoyaltyAccount, LoyaltyTransaction } from "../models/LoyaltyAccount.js";
@@ -518,6 +519,38 @@ describe("cross-tenant order access", () => {
     expect(res.status).toBe(403);
 
     await User.deleteOne({ _id: otherCustomer._id });
+  });
+
+  it("a manager can view an order at their business's SECOND location, not just the one restaurantId their JWT was issued for (Phase 29 audit finding P1-8)", async () => {
+    const business = await createTestBusiness();
+    const locationA = await createTestRestaurant({ businessId: business._id });
+    const locationB = await createTestRestaurant({ businessId: business._id });
+    const manager = await createTestUser("restaurant_manager", locationA._id, { businessId: business._id });
+    const managerToken = tokenFor(manager);
+    const customer = await createTestUser("customer");
+
+    const order = await Order.create({
+      restaurantId: locationB._id,
+      customerId: customer._id,
+      orderNumber: `P1-8-${Date.now()}`,
+      items: [{ menuItemId: menuItemA._id, name: "Item", unitPrice: 10, quantity: 1, lineTotal: 10 }],
+      orderType: "pickup",
+      paymentMethod: "cash",
+      subtotal: 10,
+      total: 10,
+      statusHistory: [{ status: "pending", at: new Date() }],
+    });
+
+    const res = await request(app).get(`/api/v1/orders/${order.id}`).set("Authorization", `Bearer ${managerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.order.id).toBe(order.id);
+
+    await Promise.all([
+      Order.deleteOne({ _id: order._id }),
+      User.deleteMany({ _id: { $in: [manager._id, customer._id] } }),
+      Restaurant.deleteMany({ _id: { $in: [locationA._id, locationB._id] } }),
+      Business.deleteOne({ _id: business._id }),
+    ]);
   });
 });
 

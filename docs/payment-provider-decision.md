@@ -1,5 +1,30 @@
 # Payment Provider Decision
 
+## Update — Phase 29
+
+Closed the one real code gap the Phase 29 commercial-readiness audit found in this domain: even
+with `PAYMENT_PROVIDER=safepay` and real credentials configured, `OrderPaymentPanel.tsx`
+(`apps/web`) never actually sent the customer anywhere — it only ever offered the mock-only
+"Simulate..." buttons, regardless of which provider was active. Fixed by branching on the created
+`Payment.provider` field (already returned on every `createPayment` response, no new field
+needed): for `"mock"`, the simulate buttons still render exactly as before (dev/test only, and the
+underlying `/mock-complete` route still doesn't exist unless `PAYMENT_PROVIDER=mock`); for any real
+provider, the browser is redirected immediately to `clientSecret` (the provider's real hosted
+checkout URL). Payment confirmation itself is unchanged — still comes back through the existing
+webhook path, this only fixes how the customer physically gets to the provider's page.
+
+This required `CreateIntentInput` to gain `returnUrl`/`cancelUrl` (both required now — every real
+provider needs to know where to send the customer back), supplied by `payment.service.ts` as
+`${CLIENT_ORIGIN}/orders/:id` — the same order-detail page the customer already lands on after
+checkout, so "Paid"/"Unpaid" just resolves correctly once they're back, no new page needed.
+
+Also found (via a third-party integration writeup, not Safepay's own reference docs) that
+`SafepayProvider`'s tracker-creation path was `/order/v1/payments` — should be `/order/v1/init` —
+and that `redirectUrl`/`cancelUrl` are real, required `checkout.create()` params, now wired through.
+Both fixed. This is still one notch below "verified against a live account" (see `SafepayProvider.ts`'s
+own header comment for the current confidence level on every remaining assumption) — the refund
+endpoint and exact webhook field names remain unconfirmed, same as before.
+
 ## Update — Phase 15
 
 `SafepayProvider` (`apps/api/src/payments/SafepayProvider.ts`) now exists and is real,
@@ -114,6 +139,8 @@ current requirement for it and doing so would be speculative complexity.
 | Webhook signature verification | Real HMAC verification for both providers — against the mock's own secret for `mock`, against `SAFEPAY_WEBHOOK_SECRET` for `safepay` (header name unverified — see `SafepayProvider.ts`) |
 | Idempotency (checkout, webhooks, refunds) | Real, enforced at the database level via unique indexes, not just application logic |
 | Restaurant payment-method toggles (`cashEnabled`/`onlinePaymentEnabled`) | Real, Phase 15 — server-enforced at order creation, not just hidden client-side |
+| Customer checkout redirect (Phase 29) | Real — `OrderPaymentPanel.tsx` redirects to the active provider's real `clientSecret` checkout URL for any non-mock provider; simulate buttons only ever render for `mock` |
+| Per-restaurant payment accounts | **Not built, deliberately deferred** (Phase 29 audit) — this platform uses one platform-owned account (see Multi-tenancy model above); restaurant-level payout/split-payment is a separate, future, and substantially larger project, not scoped here |
 
 No code path in this repository reports a mock or unverified payment as confirmed-working, and no
 code path claims Safepay integration has been validated against a real account. `PAYMENT_PROVIDER`

@@ -217,9 +217,9 @@ async function main() {
   // --- 1e. Demo staff accounts — one per non-owner role, so the role-restricted admin
   // experience (Layout.tsx/App.tsx's role-filtered nav/routes) is directly demoable/testable
   // without an owner having to invite one first. ---
-  await ensureStaffMember(restaurantId, "Sam Rivera", "manager@demo-restaurant.local", "restaurant_manager", restaurant.businessId);
-  await ensureStaffMember(restaurantId, "Alex Chen", "staff@demo-restaurant.local", "restaurant_staff", restaurant.businessId);
-  await ensureStaffMember(restaurantId, "Jamie Park", "kitchen@demo-restaurant.local", "kitchen_staff", restaurant.businessId);
+  await ensureStaffMember(restaurantId, "Sam Rivera", "manager@demo-restaurant.local", "restaurant_manager", restaurant.businessId ?? undefined);
+  await ensureStaffMember(restaurantId, "Alex Chen", "staff@demo-restaurant.local", "restaurant_staff", restaurant.businessId ?? undefined);
+  await ensureStaffMember(restaurantId, "Jamie Park", "kitchen@demo-restaurant.local", "kitchen_staff", restaurant.businessId ?? undefined);
 
   // --- 2. Demo customers ---
   const jordan = await ensureCustomer("Jordan Lee", "jordan.lee@example.com");

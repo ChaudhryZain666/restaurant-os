@@ -10,6 +10,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
+import { inviteResendLimiter } from "../middleware/inviteResendLimiter.js";
 import {
   getPlatformAnalytics,
   getPlatformConfig,
@@ -49,6 +50,7 @@ platformRouter.patch(
 );
 platformRouter.post(
   "/restaurants/:id/resend-owner-invite",
+  inviteResendLimiter,
   requirePermission("platform.restaurants.manage"),
   asyncHandler(resendOwnerInvite)
 );

@@ -67,6 +67,55 @@ describe("public menu bundle — cross-tenant isolation (Phase 8)", () => {
   });
 });
 
+describe("GET /restaurants/:restaurantId/menu — non-active restaurants (Phase 29 audit finding P1-1)", () => {
+  it("404s for an anonymous caller when the restaurant isn't active", async () => {
+    const pending = await createTestRestaurant({ status: "pending" });
+    const category = await createTestCategory(pending._id);
+    await createTestMenuItem(pending._id, category._id, { name: "Secret Item", price: 99 });
+
+    const res = await request(app).get(`/api/v1/restaurants/${pending.id}/menu`);
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain("Secret Item");
+
+    await Promise.all([
+      MenuItem.deleteMany({ restaurantId: pending._id }),
+      Category.deleteMany({ restaurantId: pending._id }),
+      Restaurant.deleteMany({ _id: pending._id }),
+    ]);
+  });
+
+  it("still lets the restaurant's own owner preview its menu (Setup's preview step) while pending", async () => {
+    const pending = await createTestRestaurant({ status: "pending" });
+    const category = await createTestCategory(pending._id);
+    await createTestMenuItem(pending._id, category._id, { name: "Preview Item", price: 12 });
+    const owner = await createTestUser("restaurant_owner", pending._id);
+
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pending.id}/menu`)
+      .set("Authorization", `Bearer ${tokenFor(owner)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.some((i: { name: string }) => i.name === "Preview Item")).toBe(true);
+
+    await Promise.all([
+      MenuItem.deleteMany({ restaurantId: pending._id }),
+      Category.deleteMany({ restaurantId: pending._id }),
+      User.deleteMany({ restaurantId: pending._id }),
+      Restaurant.deleteMany({ _id: pending._id }),
+    ]);
+  });
+
+  it("does not let a DIFFERENT restaurant's owner preview it", async () => {
+    const pending = await createTestRestaurant({ status: "pending" });
+
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pending.id}/menu`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(res.status).toBe(404);
+
+    await Restaurant.deleteMany({ _id: pending._id });
+  });
+});
+
 describe("PATCH /restaurants/:restaurantId/menu/:id tenant boundary (Phase 0 audit finding #1)", () => {
   it("cannot reassign a menu item to another restaurant via a restaurantId in the body", async () => {
     const res = await request(app)

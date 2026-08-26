@@ -4,6 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAgencyMatch, requireAgencyPermission } from "../middleware/agency.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
+import { inviteResendLimiter } from "../middleware/inviteResendLimiter.js";
 import {
   createAgency,
   createAgencyBusiness,
@@ -41,6 +42,7 @@ agencyRouter.post(
 agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
 agencyRouter.post(
   "/:agencyId/businesses/:businessId/resend-owner-invite",
+  inviteResendLimiter,
   requireAgencyMatch(),
   requireAgencyPermission("agency.businesses.manage"),
   asyncHandler(resendAgencyBusinessOwnerInvite)

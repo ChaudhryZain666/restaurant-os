@@ -11,6 +11,7 @@ import type { ProviderWebhookEvent } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
 import { reverseLoyaltyForOrderIfNeeded } from "./loyalty.service.js";
+import { env } from "../config/env.js";
 
 interface CreatePaymentInput {
   restaurantId: string;
@@ -66,12 +67,19 @@ export async function createPaymentForOrder(
   }
 
   const provider = getPaymentProvider();
+  // Same order-detail page the customer already lands on after checkout (CartPage.tsx) — a real
+  // provider's hosted checkout sends them right back to it, success or cancel alike, where the
+  // existing "Unpaid"/"Paid" panel state (driven by the webhook-confirmed order, not this redirect)
+  // takes over. The mock provider never reads these at all.
+  const returnUrl = `${env.CLIENT_ORIGIN}/orders/${order.id}`;
   const intent = await provider.createIntent({
     amount: order.total,
     currency: restaurant.settings.currency,
     orderId: order.id,
     restaurantId,
     metadata: { orderNumber: order.orderNumber },
+    returnUrl,
+    cancelUrl: returnUrl,
   });
 
   try {

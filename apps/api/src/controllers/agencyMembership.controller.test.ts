@@ -115,6 +115,49 @@ describe("POST /agencies/:agencyId/members — invite", () => {
   });
 });
 
+describe("POST /agencies/:agencyId/members/:membershipId/resend-invite", () => {
+  it("issues a fresh token for a still-pending invite, invalidating the old one", async () => {
+    const email = `resend-target-${Date.now()}@test.local`;
+    await request(app)
+      .post(`/api/v1/agencies/${agency.id}/members`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ name: "Resend Target", email, role: "agency_staff" });
+    const user = await User.findOne({ email });
+    userIds.push(user!.id as string);
+    const original = await AgencyMembership.findOne({ agencyId: agency._id, userId: user!._id });
+    const membershipId = original!.id as string;
+    const originalHash = original!.inviteTokenHash;
+
+    const res = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/members/${membershipId}/resend-invite`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+
+    const refreshed = await AgencyMembership.findById(membershipId);
+    expect(refreshed!.status).toBe("invited");
+    expect(refreshed!.inviteTokenHash).toEqual(expect.any(String));
+    expect(refreshed!.inviteTokenHash).not.toBe(originalHash);
+  });
+
+  it("refuses to resend once the membership has already been accepted", async () => {
+    const email = `already-accepted-${Date.now()}@test.local`;
+    await request(app)
+      .post(`/api/v1/agencies/${agency.id}/members`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ name: "Already Accepted", email, role: "agency_staff" });
+    const user = await User.findOne({ email });
+    userIds.push(user!.id as string);
+    const membership = await AgencyMembership.findOne({ agencyId: agency._id, userId: user!._id });
+    const membershipId = membership!.id as string;
+    await AgencyMembership.findByIdAndUpdate(membershipId, { status: "active" });
+
+    const res = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/members/${membershipId}/resend-invite`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("POST /agencies/accept-invite", () => {
   it("rejects an invalid/expired token", async () => {
     const res = await request(app)

@@ -24,6 +24,7 @@ import { computeAvailability } from "../services/restaurantAvailability.service.
 import { emitOrderEvent, statusToEventType } from "../events/orderEvents.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { checkDeliveryEligibility } from "../services/delivery.service.js";
+import { resolveTenantAccess } from "../middleware/tenant.js";
 
 /** Never sent to a customer — staff-only field. Applied right before every customer-facing
  *  response (listMyOrders, getOrder-as-owner, cancelMyOrder) rather than relying on callers to
@@ -253,10 +254,16 @@ export async function getOrder(req: Request, res: Response) {
   if (!order) throw ApiError.notFound("Order not found");
 
   const isOwner = order.customerId.toString() === req.user!.id;
+  // Phase 29 audit finding P1-8 — this used to compare only the JWT's flat, original restaurantId,
+  // never resolveTenantAccess's businessId/agency-aware resolution every other multi-location route
+  // already uses (middleware/tenant.ts). An owner/manager viewing/printing an order at their
+  // SECOND location (not the one restaurantId was originally issued for) got a false 403 here even
+  // though they genuinely have access — over-restrictive, not a security hole, but broken for any
+  // multi-location business.
   const isStaffForThisRestaurant =
     req.user!.role === "platform_admin" ||
     (roleHasPermission(req.user!.role, "restaurant.orders.read") &&
-      req.user!.restaurantId === order.restaurantId.toString());
+      (await resolveTenantAccess(req.user!, order.restaurantId.toString())).allowed);
   if (!isOwner && !isStaffForThisRestaurant) throw ApiError.forbidden();
 
   // Not sensitive to either audience — attached the same way customerName/customerPhone already
@@ -264,7 +271,7 @@ export async function getOrder(req: Request, res: Response) {
   // without a second round trip from either frontend.
   const [[withInfo], restaurant] = await Promise.all([
     withCustomerInfo([order]),
-    Restaurant.findById(order.restaurantId).select("name phone address city state postalCode"),
+    Restaurant.findById(order.restaurantId).select("name phone address city state postalCode logo"),
   ]);
   const withRestaurantInfo = {
     ...withInfo,
@@ -273,6 +280,9 @@ export async function getOrder(req: Request, res: Response) {
     restaurantAddress: restaurant
       ? [restaurant.address, restaurant.city, restaurant.state, restaurant.postalCode].filter(Boolean).join(", ")
       : undefined,
+    // Phase 29 audit finding P1-7 — the model always had this, the receipt/kitchen-ticket print
+    // views (Phase 14) just never received it in this projection to render one.
+    restaurantLogo: restaurant?.logo,
   };
   sendSuccess(res, { order: isOwner ? stripInternalFields(withRestaurantInfo) : withRestaurantInfo });
 }

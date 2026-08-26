@@ -35,6 +35,7 @@ export function PrintReceiptPage() {
   return (
     <div className="mx-auto max-w-sm p-6 font-mono text-sm text-black">
       <div className="mb-3 text-center">
+        {order.restaurantLogo && <img src={order.restaurantLogo} alt="" className="mx-auto mb-2 h-12 w-12 object-contain" />}
         <p className="text-base font-bold">{order.restaurantName ?? "Restaurant"}</p>
         {order.restaurantAddress && <p className="text-xs">{order.restaurantAddress}</p>}
         {order.restaurantPhone && <p className="text-xs">{order.restaurantPhone}</p>}

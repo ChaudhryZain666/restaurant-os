@@ -101,6 +101,7 @@ export interface Order {
   restaurantName?: string;
   restaurantPhone?: string;
   restaurantAddress?: string;
+  restaurantLogo?: string;
 }
 
 /** Preview returned by POST /orders/:id/reorder — not an order, a cart-population template. */

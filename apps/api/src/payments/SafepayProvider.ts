@@ -29,16 +29,27 @@ const REQUEST_TIMEOUT_MS = 10_000;
  *  - Webhooks are HMAC-signed and Safepay's own SDK ships a `verify.signature()`/`verify.webhook()`
  *    helper, confirming signature verification is real and expected of integrators.
  *
- * ASSUMED / NOT VERIFIED (Safepay's full API reference is a JS app that couldn't be read without
- * an authenticated account, and no refund endpoint surfaced anywhere in public docs or the SDK
- * README):
- *  - The exact REST paths below (`/order/v1/payments`, `/order/v1/refunds`), the exact webhook
- *    signature header name and JSON field names, and the exact status vocabulary Safepay returns.
- *    `mapSafepayStatus` is defensive (unknown values fail closed to "pending", never silently
- *    "paid") for exactly this reason.
+ * UPDATED (Phase 29 — found via a third-party community integration writeup, NOT Safepay's own
+ * reference docs, so still one notch below "verified" — but more specific than what Phase 15 had):
+ *  - Tracker creation path is `/order/v1/init`, not `/order/v1/payments` as originally guessed —
+ *    corrected below. Response carries `data.token` and `data.state` (e.g. `"TRACKER_STARTED"`,
+ *    already covered by `mapSafepayStatus`'s fail-closed-to-"pending" default).
+ *  - The hosted checkout page itself may live at a `/components` path on a *different* host
+ *    (`www.getsafepay.com` in production per that writeup, not `api.getsafepay.com`) — left
+ *    unchanged below pending real verification, since acting on a single unofficial source for a
+ *    URL customers are actually redirected to is riskier than for a server-to-server POST path.
+ *  - redirectUrl/cancelUrl are real, required params for checkout.create() (now wired through from
+ *    CreateIntentInput below) — confirmed by two independent sources.
+ *
+ * STILL ASSUMED / NOT VERIFIED (Safepay's full API reference is a JS app that couldn't be read
+ * without an authenticated account, and no refund endpoint surfaced anywhere reachable):
+ *  - The refund REST path (`/order/v1/refunds`), the exact webhook signature header name and JSON
+ *    field names, and the exact status vocabulary beyond what's noted above. `mapSafepayStatus` is
+ *    defensive (unknown values fail closed to "pending", never silently "paid") for exactly this
+ *    reason.
  *  - Refunds specifically: no evidence of a refund endpoint was found anywhere in the reachable
- *    documentation. The call below follows this adapter's own conventions for consistency, but
- *    should be treated as the least-trustworthy piece of this file.
+ *    documentation, official or otherwise. The call below follows this adapter's own conventions
+ *    for consistency, but remains the least-trustworthy piece of this file.
  *
  * None of this may be trusted for real money movement until it has been run against a real
  * Safepay sandbox account and reconciled with their actual API reference/Postman collection.
@@ -105,7 +116,7 @@ export class SafepayProvider implements PaymentProvider {
   async createIntent(input: CreateIntentInput): Promise<ProviderIntent> {
     const response = await this.request<{ data?: { token?: string; tracker?: string } }>(
       "POST",
-      "/order/v1/payments",
+      "/order/v1/init",
       {
         merchant_api_key: this.apiKey,
         amount: Math.round(input.amount * 100),
@@ -122,6 +133,8 @@ export class SafepayProvider implements PaymentProvider {
     checkoutUrl.searchParams.set("orderId", input.orderId);
     checkoutUrl.searchParams.set("source", "custom");
     checkoutUrl.searchParams.set("webhooks", "true");
+    checkoutUrl.searchParams.set("redirectUrl", input.returnUrl);
+    checkoutUrl.searchParams.set("cancelUrl", input.cancelUrl);
 
     return { providerRef: token, status: "pending", clientSecret: checkoutUrl.toString() };
   }

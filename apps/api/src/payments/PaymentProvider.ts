@@ -4,6 +4,10 @@ export interface CreateIntentInput {
   orderId: string;
   restaurantId: string;
   metadata?: Record<string, string>;
+  /** Where the customer's browser returns after completing/cancelling a real hosted-checkout
+   *  flow (never used by the mock provider, which never navigates the browser away at all). */
+  returnUrl: string;
+  cancelUrl: string;
 }
 
 export type ProviderPaymentStatus = "pending" | "requires_action" | "authorized" | "paid" | "failed" | "cancelled";

@@ -8,6 +8,7 @@ import { CategoryLocationOverride } from "../models/CategoryLocationOverride.js"
 import { MenuItemLocationOverride } from "../models/MenuItemLocationOverride.js";
 import { ModifierGroupLocationOverride } from "../models/ModifierGroupLocationOverride.js";
 import { redis } from "../config/redis.js";
+import { verifyAccessToken } from "../services/token.service.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { menuCacheKey, invalidateMenuCache, invalidateMenuCacheForBusiness, MENU_CACHE_TTL_SECONDS } from "../services/menuCache.service.js";
@@ -53,8 +54,40 @@ async function loadLegacyPublicMenu(restaurantId: string) {
   };
 }
 
+/**
+ * Same "owner/platform_admin previewing their own not-yet-published storefront" allowance as
+ * restaurant.controller.ts's previewRestaurantBySlug, replicated here because this route (unlike
+ * that one) has no requireAuth — it must stay reachable by anonymous customers. A missing/invalid/
+ * expired token is never an error here, just "not a previewer" — this function only ever WIDENS
+ * access for an already-trusted caller, never narrows it.
+ */
+function callerCanPreview(req: Request, restaurantId: string): boolean {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return false;
+  try {
+    const payload = verifyAccessToken(header.slice("Bearer ".length));
+    return payload.role === "platform_admin" || payload.restaurantId === restaurantId;
+  } catch {
+    return false;
+  }
+}
+
 export async function listMenu(req: Request, res: Response) {
   const { restaurantId } = req.params;
+
+  // Public, unauthenticated route by design (anonymous storefront visitors) — but every other
+  // public read (getRestaurantBySlug, getRestaurantByDomain) correctly 404s a non-active
+  // restaurant, and this one didn't (Phase 29 audit finding P1-1): a pending/suspended
+  // restaurant's full menu + prices was readable by anyone who had the ID. Checked on every
+  // request, not just cache misses, so a restaurant suspended mid-TTL stops being served
+  // immediately rather than waiting out a stale cache entry. The restaurant's own owner/manager
+  // previewing their unpublished storefront (MenuPage.tsx in preview mode) is exempted — mirrors
+  // previewRestaurantBySlug's allowance, otherwise this would break Setup's "preview" step.
+  const restaurant = await Restaurant.findById(restaurantId).select("status");
+  if (!restaurant || (restaurant.status !== "active" && !callerCanPreview(req, restaurantId))) {
+    throw ApiError.notFound("Restaurant not found");
+  }
+
   const cacheKey = menuCacheKey(restaurantId);
 
   const cached = await redis.get(cacheKey);

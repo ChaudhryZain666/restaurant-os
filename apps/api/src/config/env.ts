@@ -30,7 +30,12 @@ const envSchema = z.object({
   // Email (optional — unset or "console" logs the rendered email instead of sending it; see
   // apps/api/src/email/index.ts. No real provider is wired up yet — this is the extension point).
   EMAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
-  EMAIL_FROM: z.string().default("Tablecloth <no-reply@tablecloth.local>"),
+  // No default (Phase 29 — was a placeholder "Tablecloth <no-reply@tablecloth.local>" address that
+  // could silently ship to production if an operator forgot to override it): getEmailService()
+  // requires this explicitly whenever EMAIL_PROVIDER=smtp, same fail-loud pattern as SMTP_HOST/PORT.
+  // The console provider (dev/test default) never sends anything, so it has no real need for a
+  // from-address at all.
+  EMAIL_FROM: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),

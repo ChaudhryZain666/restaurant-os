@@ -27,14 +27,17 @@ describe("SafepayProvider.createIntent", () => {
       currency: "PKR",
       orderId: "order-1",
       restaurantId: "rest-1",
+      returnUrl: "https://example.com/orders/order-1",
+      cancelUrl: "https://example.com/orders/order-1",
     });
 
     expect(intent.providerRef).toBe("tok_123");
     expect(intent.status).toBe("pending");
     expect(intent.clientSecret).toContain("tok_123");
+    expect(intent.clientSecret).toContain(encodeURIComponent("https://example.com/orders/order-1"));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://sandbox.api.getsafepay.com/order/v1/payments");
+    expect(url).toBe("https://sandbox.api.getsafepay.com/order/v1/init");
     const body = JSON.parse(init.body as string);
     // Amount must be sent in the smallest currency unit (cents/paisa) — never the raw decimal.
     expect(body.amount).toBe(1250);
@@ -45,14 +48,28 @@ describe("SafepayProvider.createIntent", () => {
   it("throws when Safepay's response has no token", async () => {
     mockFetchOnce(200, { data: {} });
     await expect(
-      provider().createIntent({ amount: 10, currency: "PKR", orderId: "o1", restaurantId: "r1" })
+      provider().createIntent({
+        amount: 10,
+        currency: "PKR",
+        orderId: "o1",
+        restaurantId: "r1",
+        returnUrl: "https://example.com/orders/o1",
+        cancelUrl: "https://example.com/orders/o1",
+      })
     ).rejects.toThrow("did not return a payment token");
   });
 
   it("throws a clear error on a non-2xx response", async () => {
     mockFetchOnce(402, { message: "insufficient funds" }, false);
     await expect(
-      provider().createIntent({ amount: 10, currency: "PKR", orderId: "o1", restaurantId: "r1" })
+      provider().createIntent({
+        amount: 10,
+        currency: "PKR",
+        orderId: "o1",
+        restaurantId: "r1",
+        returnUrl: "https://example.com/orders/o1",
+        cancelUrl: "https://example.com/orders/o1",
+      })
     ).rejects.toThrow(/HTTP 402/);
   });
 
@@ -63,7 +80,14 @@ describe("SafepayProvider.createIntent", () => {
       return Promise.reject(err);
     });
     await expect(
-      provider().createIntent({ amount: 10, currency: "PKR", orderId: "o1", restaurantId: "r1" })
+      provider().createIntent({
+        amount: 10,
+        currency: "PKR",
+        orderId: "o1",
+        restaurantId: "r1",
+        returnUrl: "https://example.com/orders/o1",
+        cancelUrl: "https://example.com/orders/o1",
+      })
     ).rejects.toThrow("timed out");
   });
 });

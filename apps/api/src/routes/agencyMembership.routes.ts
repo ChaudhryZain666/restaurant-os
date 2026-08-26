@@ -5,6 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAgencyMatch, requireAgencyPermission } from "../middleware/agency.js";
 import { jsonRateLimitHandler } from "../middleware/rateLimitHandler.js";
+import { inviteResendLimiter } from "../middleware/inviteResendLimiter.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   acceptAgencyInvite,
@@ -33,6 +34,7 @@ agencyMembershipRouter.patch(
 );
 agencyMembershipRouter.post(
   "/:membershipId/resend-invite",
+  inviteResendLimiter,
   requireAgencyPermission("agency.members.manage"),
   asyncHandler(resendMemberInvite)
 );
