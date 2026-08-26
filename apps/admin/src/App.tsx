@@ -7,6 +7,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { MenuManagementPage } from "./pages/MenuManagementPage";
+import { MenuImportPage } from "./pages/MenuImportPage";
 import { DeliveryPage } from "./pages/DeliveryPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { LoyaltyPage } from "./pages/LoyaltyPage";
@@ -131,6 +132,14 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.menu.read">
               <MenuManagementPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/menu/import"
+          element={
+            <RequireAuth permission="restaurant.menu.write">
+              <MenuImportPage />
             </RequireAuth>
           }
         />

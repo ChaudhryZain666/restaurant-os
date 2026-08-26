@@ -3,7 +3,7 @@ import { menuItemOverrideSchema, menuItemSchema, updateMenuItemSchema } from "@r
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
-import { requireTenantMatch } from "../middleware/tenant.js";
+import { requireTenantMatch, requireTenantPermission } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createMenuItem,
@@ -15,6 +15,7 @@ import {
   putMenuItemOverride,
   updateMenuItem,
 } from "../controllers/menu.controller.js";
+import { commitMenuImport, getMenuImportReport, previewMenuImport } from "../controllers/menuImport.controller.js";
 
 /** Mounted at /restaurants/:restaurantId/menu — mergeParams is required to see :restaurantId. */
 export const menuRouter = Router({ mergeParams: true });
@@ -74,4 +75,32 @@ menuRouter.delete(
   requireTenantMatch(),
   requirePermission("restaurant.menu.write"),
   asyncHandler(deleteMenuItemOverride)
+);
+
+// Phase 30 — menu importer. Uses requireTenantPermission (agency-aware), not the plain
+// requirePermission every other route on this router uses, so an agency member with genuine
+// access to this location (agency_owner/admin implicitly, agency_staff via explicit businessIds —
+// see middleware/tenant.ts's resolveTenantAccess) can run an import, matching the brief's explicit
+// agency requirement — deliberately scoped to ONLY these new routes, not a silent widening of the
+// existing menu CRUD routes' narrower (Phase 26) agency boundary.
+menuRouter.post(
+  "/import/preview",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.menu.write"),
+  asyncHandler(previewMenuImport)
+);
+menuRouter.post(
+  "/import/commit",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.menu.write"),
+  asyncHandler(commitMenuImport)
+);
+menuRouter.get(
+  "/import/:importId",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.menu.read"),
+  asyncHandler(getMenuImportReport)
 );

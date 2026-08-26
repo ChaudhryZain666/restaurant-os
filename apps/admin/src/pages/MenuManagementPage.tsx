@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import {
   roleHasPermission,
   type Category,
@@ -527,11 +528,22 @@ export function MenuManagementPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="font-heading text-2xl font-semibold text-foreground">Menu</h1>
-      <p className="text-sm text-muted">
-        This is your business's shared menu. Changes here apply to every location, unless a location has its own
-        override.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Menu</h1>
+          <p className="text-sm text-muted">
+            This is your business's shared menu. Changes here apply to every location, unless a location has its own
+            override.
+          </p>
+        </div>
+        {canWrite && (
+          <Link to="/menu/import">
+            <Button variant="secondary" size="sm">
+              Import menu
+            </Button>
+          </Link>
+        )}
+      </div>
       {error && (
         <p role="alert" className="text-danger">
           {error}

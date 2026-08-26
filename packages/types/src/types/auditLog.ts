@@ -36,9 +36,13 @@ export const AUDIT_ACTIONS = [
   "subscription.payment_succeeded",
   "subscription.payment_failed",
   "subscription.past_due",
+  // Phase 30 — one entry per completed menu import (never per row); targetId is a generated
+  // import id (see menuImport.controller.ts), not any single Category/MenuItem, since one import
+  // touches many of both. Doubles as import history — see docs/menu-import-architecture.md.
+  "menu.imported",
 ] as const;
 
-export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion", "subscription"] as const;
+export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion", "subscription", "menu_import"] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];

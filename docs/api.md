@@ -139,6 +139,15 @@
 # /auth/me and /auth/change-password remain the only two routes a mustChangePassword:true session
 # (an agency-provisioned "direct access" owner who hasn't set a real password yet) can reach —
 # enforced in middleware/auth.ts, independent of the client-side RequireAuth redirect.
+
+# Phase 30 — menu importer (see docs/menu-import-architecture.md for the full contract)
+/api/v1/restaurants/:restaurantId/menu/import/preview  POST  requireTenantPermission("restaurant.menu.write") — multipart file + optional mapping JSON; never writes, returns row-level preview
+/api/v1/restaurants/:restaurantId/menu/import/commit   POST  requireTenantPermission("restaurant.menu.write") — multipart file (re-uploaded, not a session reference) + required mapping JSON; transactional write, returns the import report
+/api/v1/restaurants/:restaurantId/menu/import/:importId GET  requireTenantPermission("restaurant.menu.read") — fetches a past import's report from AuditLog (action:"menu.imported")
+# Both write routes use requireTenantPermission (agency-aware), not the plain requirePermission the
+# rest of this router's existing menu CRUD routes still use — a deliberate, narrow widening so
+# agency_owner/agency_admin (who already hold restaurant.menu.write) can import, without touching
+# the existing routes' own separately-decided (Phase 26) agency boundary.
 ```
 
 Also present but not fully mapped here (this route map predates Phases 3–11 and was never

@@ -29,4 +29,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "subscription.payment_succeeded": "Payment succeeded",
   "subscription.payment_failed": "Payment failed",
   "subscription.past_due": "Marked past due",
+  "menu.imported": "Menu imported",
 };

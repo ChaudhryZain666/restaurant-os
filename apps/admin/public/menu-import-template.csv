@@ -1,0 +1,8 @@
+category,item_name,description,price,available,sort_order,modifier_group,modifier_option,modifier_price,modifier_min,modifier_max
+Burgers,Classic Burger,Beef patty with lettuce and tomato,12.99,true,1,Size,Regular,0,1,1
+,,,,,,Size,Large,2.00,,
+,,,,,,Extras,Cheese,1.00,0,2
+,,,,,,Extras,Bacon,2.00,,
+Burgers,Chicken Burger,Crispy fried chicken burger,11.99,true,2,,,,,
+Sides,French Fries,Crispy golden fries,4.99,true,1,,,,,
+Drinks,Iced Tea,Fresh brewed unsweetened,2.50,true,1,,,,,
