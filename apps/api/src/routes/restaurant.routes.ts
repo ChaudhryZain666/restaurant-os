@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { createRestaurantSchema, updateRestaurantSchema } from "@restaurant/validation";
+import { createRestaurantSchema, updateRestaurantSchema, updateThemeDraftSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
-import { requireTenantMatch } from "../middleware/tenant.js";
+import { requireTenantMatch, requireTenantPermission } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createRestaurant,
@@ -18,6 +18,7 @@ import {
   unpublishRestaurant,
   updateRestaurant,
 } from "../controllers/restaurant.controller.js";
+import { discardThemeDraft, getThemeConfig, publishTheme, updateThemeDraft } from "../controllers/theme.controller.js";
 
 export const restaurantRouter = Router();
 
@@ -78,4 +79,38 @@ restaurantRouter.patch(
   requireTenantMatch(),
   requirePermission("restaurant.settings.manage"),
   asyncHandler(unpublishRestaurant)
+);
+
+// Phase 31 — theme/appearance. Uses requireTenantPermission (agency-aware), same deliberate,
+// narrow widening pattern Phase 30's menu importer established: agency_owner/agency_admin already
+// hold restaurant.settings.manage in AGENCY_ROLE_GRANTS, so this gives them Theme Studio access
+// without touching this file's other, existing routes' plain requirePermission gate.
+restaurantRouter.get(
+  "/:restaurantId/theme",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.settings.manage"),
+  asyncHandler(getThemeConfig)
+);
+restaurantRouter.patch(
+  "/:restaurantId/theme/draft",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.settings.manage"),
+  validateBody(updateThemeDraftSchema),
+  asyncHandler(updateThemeDraft)
+);
+restaurantRouter.post(
+  "/:restaurantId/theme/publish",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.settings.manage"),
+  asyncHandler(publishTheme)
+);
+restaurantRouter.post(
+  "/:restaurantId/theme/discard-draft",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.settings.manage"),
+  asyncHandler(discardThemeDraft)
 );

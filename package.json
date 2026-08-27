@@ -18,6 +18,7 @@
     "build:marketing": "npm run build -w apps/marketing",
     "build": "npm run build:packages && npm run build:api && npm run build:web && npm run build:admin && npm run build:marketing",
     "test:api": "npm run test -w apps/api",
+    "test:web": "npm run test -w apps/web",
     "test:e2e": "playwright test",
     "lint": "npm run lint -w apps/api && npm run lint -w apps/web && npm run lint -w apps/admin && npm run lint -w apps/marketing",
     "seed": "npm run seed -w apps/api",

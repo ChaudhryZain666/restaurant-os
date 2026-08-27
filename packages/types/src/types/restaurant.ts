@@ -1,3 +1,5 @@
+import type { RestaurantThemeConfig } from "./theme.js";
+
 export type RestaurantStatus = "pending" | "active" | "suspended";
 
 export const WEEKDAYS = [
@@ -62,6 +64,10 @@ export interface RestaurantSettings {
    * backward compatible with every restaurant that never configures tiers.
    */
   deliveryFeeTiers?: Array<{ maxDistanceKm: number; fee: number }>;
+  /** Phase 31 — the PUBLISHED theme configuration, always present (defaults to the "classic" theme
+   *  with no overrides), returned on every restaurant response including the public/anonymous
+   *  storefront one. See docs/theme-architecture.md's "Draft vs published" section. */
+  theme: RestaurantThemeConfig;
 }
 
 export type RestaurantAvailabilityStatus = "open" | "closed" | "paused";
@@ -121,5 +127,10 @@ export interface Restaurant {
   businessId?: string;
   status: RestaurantStatus;
   settings: RestaurantSettings;
+  /** Phase 31 — unpublished theme edits, staff-only (owner/manager/platform_admin), never present
+   *  on the public storefront response — see restaurant.controller.ts's toPublicRestaurant. The
+   *  authenticated preview response (GET .../by-slug/:slug/preview) substitutes this IN PLACE of
+   *  `theme` for rendering, so "Preview" always shows the draft, never leaking it publicly. */
+  themeDraft?: RestaurantThemeConfig;
   createdAt: string;
 }

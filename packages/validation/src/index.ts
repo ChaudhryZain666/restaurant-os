@@ -23,3 +23,4 @@ export * from "./subscription.js";
 export * from "./agency.js";
 export * from "./loyaltyReward.js";
 export * from "./menuImport.js";
+export * from "./theme.js";

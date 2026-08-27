@@ -20,6 +20,7 @@ import { TablesPage } from "./pages/TablesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ThemeStudioPage } from "./pages/ThemeStudioPage";
 import { RestaurantSupportPage } from "./pages/RestaurantSupportPage";
 import { RestaurantTicketDetailPage } from "./pages/RestaurantTicketDetailPage";
 import { SupportDashboardPage } from "./pages/SupportDashboardPage";
@@ -236,6 +237,14 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.settings.manage">
               <SettingsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/theme-studio"
+          element={
+            <RequireAuth permission="restaurant.settings.manage">
+              <ThemeStudioPage />
             </RequireAuth>
           }
         />

@@ -156,6 +156,15 @@ export const IconQrCode = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const IconPalette = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M12 21a9 9 0 1 1 0-18c4.5 0 8 3 8 6.5 0 2-1.5 3.5-3.5 3.5H15a1.5 1.5 0 0 0-1 2.6c.4.4.6.9.6 1.4 0 1.1-1.1 2-2.6 2Z" />
+    <circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="10.5" cy="7" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+  </Icon>
+);
+
 export const IconLogout = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

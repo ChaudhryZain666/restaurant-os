@@ -1,42 +1,43 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { tokensToCssVars } from "@restaurant/ui";
+import { defaultRestaurantThemeConfig } from "@restaurant/types";
 import { useRestaurant } from "../context/RestaurantContext";
-
-const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-/** WCAG relative luminance — used only to pick a readable foreground (near-white or near-black)
- * against a restaurant's custom brand color. Never used for any business decision. */
-function isDark(hex: string): boolean {
-  const [r, g, b] = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((h) => parseInt(h, 16) / 255);
-  const [rl, gl, bl] = [r, g, b].map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl < 0.5;
-}
+import { getThemeDefinition } from "../theme/registry";
+import { resolveThemeTokens } from "../theme/resolveTokens";
+import { ActiveThemeContext, type ActiveTheme } from "../theme/useActiveTheme";
 
 /**
- * Applies a restaurant's optional `settings.brandColor` as a CSS-variable override, cascading to
- * every Tailwind class that resolves through --color-primary (bg-primary, text-primary,
- * border-primary, ...) — see the design-token notes in index.css. This is the ONLY thing theme
- * configuration is allowed to touch: colors. It cannot reach pricing, permissions, availability,
- * ownership, or any other business logic, because it only ever sets two CSS custom properties.
+ * Phase 31 — resolves the active ThemeDefinition (registry.tsx — code, never persisted) against
+ * the restaurant's own RestaurantThemeConfig (settings.theme — small, structured, DB-persisted),
+ * applies the merged token set as CSS custom properties, and provides both the resolved tokens and
+ * the theme's component set via context so Layout/MenuPage can render the right Header/Hero/
+ * CategoryNav/MenuSection/Footer without ever branching on `themeKey` themselves.
  *
- * Uses `display: contents` on the wrapper so it never participates in layout — the app's
- * flex/height structure is completely unaffected, only descendants' computed CSS variables
- * change. A missing or malformed color (regex-validated server-side, but re-checked here too —
- * never trust a value without checking it locally as well) falls back to the default theme
- * rather than breaking anything.
+ * Before Phase 31 this component only ever set two variables from `settings.brandColor`. It now
+ * sets the FULL token set (colors/radius/density) plus each theme's own font stacks — every other
+ * behavior (display:contents so it never affects layout, a safe fallback while the restaurant is
+ * still loading) is preserved from that original implementation.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { restaurant } = useRestaurant();
-  const brandColor = restaurant?.settings.brandColor;
 
-  if (!brandColor || !HEX_PATTERN.test(brandColor)) {
-    return <>{children}</>;
-  }
+  const active: ActiveTheme = useMemo(() => {
+    const config = restaurant?.settings.theme ?? defaultRestaurantThemeConfig();
+    const definition = getThemeDefinition(config.themeKey);
+    const tokens = resolveThemeTokens(definition, config);
+    return { definition, tokens, sections: config.sections };
+  }, [restaurant]);
 
   const style: CSSProperties = {
     display: "contents",
-    ["--color-primary" as string]: brandColor,
-    ["--color-primary-foreground" as string]: isDark(brandColor) ? "#fffaf5" : "#1c1917",
+    ...tokensToCssVars(active.tokens),
+    ["--font-heading" as string]: active.definition.fonts.heading,
+    ["--font-body" as string]: active.definition.fonts.body,
   };
 
-  return <div style={style}>{children}</div>;
+  return (
+    <ActiveThemeContext.Provider value={active}>
+      <div style={style}>{children}</div>
+    </ActiveThemeContext.Provider>
+  );
 }

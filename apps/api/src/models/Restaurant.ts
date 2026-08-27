@@ -28,6 +28,53 @@ const businessHoursDaySchema = new Schema(
   { _id: false }
 );
 
+// Phase 31 — see packages/types/src/types/theme.ts for the full doc comment on why this is
+// deliberately small/closed (never a free-form style blob). Same inline-enum convention as
+// WEEKDAYS above. `sections` is modeled as explicit optional booleans (not Schema.Types.Mixed) so
+// an unrecognized key can never silently persist — Zod (packages/validation/src/theme.ts) is the
+// primary gate, but the schema itself stays strict too.
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const THEME_KEYS = ["classic", "modern", "editorial"] as const;
+const THEME_RADIUS_SCALES = ["sharp", "soft", "rounded"] as const;
+const THEME_DENSITIES = ["compact", "comfortable", "spacious"] as const;
+
+const themeColorOverridesSchema = new Schema(
+  {
+    primary: { type: String, match: HEX_COLOR },
+    secondary: { type: String, match: HEX_COLOR },
+    accent: { type: String, match: HEX_COLOR },
+    background: { type: String, match: HEX_COLOR },
+  },
+  { _id: false }
+);
+
+const themeSectionVisibilitySchema = new Schema(
+  {
+    hero: { type: Boolean },
+    featured: { type: Boolean },
+    about: { type: Boolean },
+    gallery: { type: Boolean },
+    cta: { type: Boolean },
+  },
+  { _id: false }
+);
+
+const themeConfigSchema = new Schema(
+  {
+    themeKey: { type: String, enum: THEME_KEYS, required: true, default: "classic" },
+    themeVersion: { type: Number, required: true, default: 1 },
+    // Explicit sub-schemas with their own default (not a plain nested object literal) — without
+    // this, an "empty" colors/sections with no fields actually set serializes as `undefined` and
+    // vanishes from the JSON response entirely, rather than the `{}` the TS contract
+    // (RestaurantThemeConfig) and every client-side consumer expects to always be there.
+    colors: { type: themeColorOverridesSchema, default: () => ({}) },
+    radius: { type: String, enum: THEME_RADIUS_SCALES },
+    density: { type: String, enum: THEME_DENSITIES },
+    sections: { type: themeSectionVisibilitySchema, default: () => ({}) },
+  },
+  { _id: false }
+);
+
 const restaurantSettingsSchema = new Schema(
   {
     currency: { type: String, default: "USD" },
@@ -66,6 +113,9 @@ const restaurantSettingsSchema = new Schema(
     // either back on restores full functionality immediately — nothing is destroyed when disabled.
     kitchenEnabled: { type: Boolean, default: true },
     staffEnabled: { type: Boolean, default: true },
+    // Phase 31 — the PUBLISHED theme configuration; always present (defaults to plain "classic",
+    // no overrides) so every existing restaurant gets a real, valid theme with zero migration.
+    theme: { type: themeConfigSchema, default: () => ({}) },
   },
   { _id: false }
 );
@@ -98,6 +148,11 @@ const restaurantSchema = new Schema(
     // practice — but NOT `required: true` at the schema level, so a not-yet-migrated document
     // (mid-rollout) can still be read/written without a validation error.
     businessId: { type: Schema.Types.ObjectId, ref: "Business", index: true },
+    // Phase 31 — unpublished theme edits. No default (undefined = "no draft yet, published config
+    // is current") so a restaurant that's never touched the Theme Studio carries zero extra state.
+    // Never included on the public (unauthenticated) storefront response — see
+    // restaurant.controller.ts's toPublicRestaurant/previewRestaurantBySlug.
+    themeDraft: { type: themeConfigSchema },
   },
   { timestamps: true, toJSON: idTransform }
 );

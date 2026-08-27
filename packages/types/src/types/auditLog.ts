@@ -40,6 +40,9 @@ export const AUDIT_ACTIONS = [
   // import id (see menuImport.controller.ts), not any single Category/MenuItem, since one import
   // touches many of both. Doubles as import history — see docs/menu-import-architecture.md.
   "menu.imported",
+  // Phase 31 — fired only on an actual publish (draft -> live), never on every autosaved draft
+  // edit; the audit log stays a record of real, customer-visible changes, not a live edit log.
+  "restaurant.theme_published",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion", "subscription", "menu_import"] as const;

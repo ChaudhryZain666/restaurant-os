@@ -606,6 +606,13 @@ export function SettingsPage() {
 
       {tab === "Storefront" && (
         <div className="flex flex-col gap-4">
+          <Alert tone="info">
+            Looking for full theme customization — layout, typography, page sections? Visit{" "}
+            <Link to="/theme-studio" className="font-medium underline">
+              Theme Studio
+            </Link>
+            . The brand color below is a simpler, quick override that applies regardless of theme.
+          </Alert>
           <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
             <legend className="px-1 text-sm font-medium">Brand color</legend>
             <p className="text-xs text-muted">

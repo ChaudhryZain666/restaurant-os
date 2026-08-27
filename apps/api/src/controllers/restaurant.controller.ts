@@ -5,6 +5,8 @@ import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { CreateRestaurantInput, UpdateRestaurantInput } from "@restaurant/validation";
 import { normalizeHostname } from "@restaurant/validation";
+import type { RestaurantThemeConfig } from "@restaurant/types";
+import { normalizeThemeConfig } from "@restaurant/types";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
 import { DomainMapping } from "../models/DomainMapping.js";
 import { Business, type BusinessDoc } from "../models/Business.js";
@@ -287,9 +289,26 @@ export async function unpublishRestaurant(req: Request, res: Response) {
  * and is stripped; everything else here is already information a customer needs to browse and
  * order (name, branding, location, ordering-channel availability, tax/fee display, hours).
  */
+/** True public/anonymous responses (getRestaurantBySlug, getRestaurantByDomain) — never exposes
+ *  unpublished theme edits, only the published `settings.theme`. */
 function toPublicRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
-  const { ownerId: _ownerId, ...publicFields } = restaurant.toJSON();
-  return publicFields;
+  const { ownerId: _ownerId, themeDraft: _themeDraft, ...publicFields } = restaurant.toJSON() as Record<string, unknown> & {
+    settings: Record<string, unknown>;
+  };
+  return { ...publicFields, settings: { ...publicFields.settings, theme: normalizeThemeConfig(publicFields.settings.theme as Partial<RestaurantThemeConfig>) } };
+}
+
+/** Phase 31 — the authenticated preview response (previewRestaurantBySlug): same public shape,
+ *  but with any unpublished theme draft substituted IN PLACE of the published theme, so the
+ *  storefront renderer — which only ever reads `settings.theme` — shows the draft automatically,
+ *  with no separate "preview mode" branch needed anywhere in apps/web's rendering code. The raw
+ *  `themeDraft` field itself is still never included in this response; it's merged in, not exposed
+ *  alongside. */
+function toPreviewRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
+  const json = restaurant.toJSON() as Record<string, unknown> & { settings: Record<string, unknown> };
+  const { ownerId: _ownerId, themeDraft, ...publicFields } = json;
+  const theme = normalizeThemeConfig((themeDraft ?? publicFields.settings.theme) as Partial<RestaurantThemeConfig>);
+  return { ...publicFields, settings: { ...publicFields.settings, theme } };
 }
 
 export async function getRestaurantBySlug(req: Request, res: Response) {
@@ -320,7 +339,7 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
   if (!isOwnTenant) throw ApiError.forbidden("You do not have access to this restaurant");
 
   sendSuccess(res, {
-    restaurant: toPublicRestaurant(restaurant),
+    restaurant: toPreviewRestaurant(restaurant),
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
   });

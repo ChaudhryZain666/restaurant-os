@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMatch } from "react-router-dom";
 import type { Category, MenuItem, ModifierGroup, SelectedModifier } from "@restaurant/types";
-import { Alert, Button, EmptyState, Reveal, Skeleton } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { Alert, Button, EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useRestaurant } from "../context/RestaurantContext";
+import { useActiveTheme } from "../theme/useActiveTheme";
+import { PlateIcon } from "../theme/icons";
 
 interface MenuResponse {
   items: MenuItem[];
@@ -13,36 +14,14 @@ interface MenuResponse {
   modifierGroups: ModifierGroup[];
 }
 
-function PlateIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className} aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="4.5" />
-    </svg>
-  );
-}
-
-function ItemThumb({ item }: { item: MenuItem }) {
-  if (item.imageUrl) {
-    return (
-      <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-border">
-        <img
-          src={item.imageUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-full w-full object-cover transition-transform duration-slow ease-premium group-hover:scale-105"
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="flex aspect-[4/3] w-full items-center justify-center rounded-lg bg-gradient-to-br from-primary/10 to-accent/10 text-primary/40">
-      <PlateIcon className="h-10 w-10" />
-    </div>
-  );
-}
-
+/**
+ * Phase 31 — this component owns EVERY piece of business logic the storefront needs (menu fetch,
+ * SEO/structured-data injection, modifier selection state, cart-conflict handling, scroll-spy) and
+ * hands fully-computed data + plain callbacks down to the active theme's Hero/CategoryNav/
+ * MenuSection/section components (see theme/types.ts). A theme component never calls the API,
+ * never touches CartContext, and never makes an ordering decision — swapping themes can only ever
+ * change what this page LOOKS like, never what it DOES. See docs/theme-architecture.md.
+ */
 export function MenuPage() {
   const {
     restaurant,
@@ -52,6 +31,8 @@ export function MenuPage() {
     isPreview,
     resolvedVia,
   } = useRestaurant();
+  const { definition, sections } = useActiveTheme();
+  const { Hero, CategoryNav, MenuSection, Featured, About, Gallery, Cta } = definition.components;
   const orderingOpen = availability?.status === "open";
   // Prefers coordinates when the owner has set them (Settings → Location); otherwise falls back
   // to the formatted street address. A plain Google Maps search URL needs no API key — this is
@@ -93,6 +74,7 @@ export function MenuPage() {
   // — the indexable surface this platform actually wants crawled/rich-result-eligible. No head
   // library exists in this app (see the noindex tag above for the same pattern); a handful of
   // tags/one script element is simplest done directly rather than pulling in a dependency for it.
+  // Entirely independent of which theme is active — presentation never affects SEO output.
   useEffect(() => {
     if (!restaurant || isTableRoute) return;
     const prevTitle = document.title;
@@ -248,6 +230,8 @@ export function MenuPage() {
     ].filter((id) => byCategory[id]?.length);
   }, [menu, byCategory]);
 
+  const featuredItems = useMemo(() => (menu?.items ?? []).slice(0, 4), [menu]);
+
   // Scroll-spy: highlight whichever category section is currently nearest the top, so the sticky
   // nav stays honest without the user needing to scroll-hunt for where they are.
   useEffect(() => {
@@ -268,6 +252,10 @@ export function MenuPage() {
 
   function scrollToCategory(id: string) {
     sectionRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function registerSectionRef(id: string, el: HTMLElement | null) {
+    if (el) sectionRefs.current.set(id, el);
   }
 
   function toggleOption(group: ModifierGroup, optionId: string) {
@@ -370,92 +358,25 @@ export function MenuPage() {
   if (error && !menu) return <Alert tone="danger" role="alert">Failed to load menu: {error}</Alert>;
   if (!menu) return null;
 
+  const currency = restaurant?.settings.currency ?? "USD";
+
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex max-w-5xl flex-col gap-10">
       {isPreview && (
         <Alert tone="warning">
           Preview mode — you're viewing this exactly as a customer eventually will, but this restaurant isn't
           published yet and no customer can see this page.
         </Alert>
       )}
-      {/* Hero — short and functional: identity + availability, then straight to the menu. */}
-      <section
-        className="relative overflow-hidden rounded-2xl border border-border shadow-md"
-        style={
-          restaurant?.coverImage
-            ? { backgroundImage: `linear-gradient(0deg, rgba(28,25,23,0.72), rgba(28,25,23,0.35)), url(${restaurant.coverImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-            : undefined
-        }
-      >
-        <div className={restaurant?.coverImage ? "px-6 py-10 sm:px-10 sm:py-14" : "bg-gradient-to-br from-secondary to-secondary/80 px-6 py-10 sm:px-10 sm:py-14"}>
-          <div className="flex items-center gap-3">
-            {restaurant?.logo && (
-              <img
-                src={restaurant.logo}
-                alt=""
-                className={`h-12 w-12 shrink-0 rounded-full object-cover ring-2 ${restaurant?.coverImage ? "ring-white/70" : "ring-secondary-foreground/20"}`}
-              />
-            )}
-            <h1 className={`animate-fade-up font-heading text-3xl font-semibold sm:text-4xl ${restaurant?.coverImage ? "text-white" : "text-secondary-foreground"}`}>
-              {restaurant?.name}
-            </h1>
-          </div>
-          {restaurant?.description && (
-            <p className={`mt-2 max-w-xl animate-fade-up text-sm sm:text-base ${restaurant?.coverImage ? "text-white/85" : "text-secondary-foreground/80"}`} style={{ animationDelay: "60ms" }}>
-              {restaurant.description}
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap items-center gap-2 animate-fade-up" style={{ animationDelay: "120ms" }}>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-semibold ${
-                orderingOpen ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
-              } ${restaurant?.coverImage ? "backdrop-blur" : ""}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
-              {orderingOpen
-                ? "Open for orders"
-                : availability?.status === "paused"
-                  ? availability.reason || "Temporarily paused"
-                  : "Closed right now"}
-            </span>
-            {restaurant?.settings.pickupEnabled && (
-              <span className={`rounded-pill px-3 py-1 text-xs font-medium ${restaurant?.coverImage ? "bg-white/15 text-white backdrop-blur" : "bg-black/[0.06] text-foreground"}`}>
-                Pickup available
-              </span>
-            )}
-            {restaurant?.settings.deliveryEnabled && (
-              <span className={`rounded-pill px-3 py-1 text-xs font-medium ${restaurant?.coverImage ? "bg-white/15 text-white backdrop-blur" : "bg-black/[0.06] text-foreground"}`}>
-                Delivery available
-              </span>
-            )}
-            {!!restaurant?.settings.minOrderAmount && (
-              <span className={`rounded-pill px-3 py-1 text-xs font-medium ${restaurant?.coverImage ? "bg-white/15 text-white backdrop-blur" : "bg-black/[0.06] text-foreground"}`}>
-                {formatCurrency(restaurant.settings.minOrderAmount, restaurant.settings.currency)} minimum order
-              </span>
-            )}
-            {directionsQuery && (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(directionsQuery)}`}
-                target="_blank"
-                rel="noreferrer"
-                className={`rounded-pill px-3 py-1 text-xs font-medium underline-offset-2 hover:underline ${restaurant?.coverImage ? "bg-white/15 text-white backdrop-blur" : "bg-black/[0.06] text-foreground"}`}
-              >
-                Get directions ↗
-              </a>
-            )}
-          </div>
-          {orderingOpen && orderedCategoryIds.length > 0 && (
-            <Button
-              size="sm"
-              className="mt-5 animate-fade-up"
-              style={{ animationDelay: "160ms" }}
-              onClick={() => scrollToCategory(orderedCategoryIds[0])}
-            >
-              Start your order
-            </Button>
-          )}
-        </div>
-      </section>
+
+      <Hero
+        restaurant={restaurant}
+        availability={availability}
+        orderingOpen={orderingOpen}
+        directionsQuery={directionsQuery}
+        hasCategories={orderedCategoryIds.length > 0}
+        onStartOrder={() => orderedCategoryIds[0] && scrollToCategory(orderedCategoryIds[0])}
+      />
 
       {error && (
         <Alert tone="danger" role="alert">
@@ -477,25 +398,19 @@ export function MenuPage() {
         </Alert>
       )}
 
-      {/* Category navigation — sticky, scroll-spy highlighted. */}
-      {orderedCategoryIds.length > 1 && (
-        <nav
-          aria-label="Menu categories"
-          className="sticky top-[65px] z-30 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6"
-        >
-          {orderedCategoryIds.map((categoryId) => (
-            <button
-              key={categoryId}
-              onClick={() => scrollToCategory(categoryId)}
-              className={`shrink-0 rounded-pill px-3.5 py-1.5 text-sm font-medium transition-colors duration-fast ${
-                activeCategoryId === categoryId ? "bg-primary text-primary-foreground" : "bg-black/[0.04] text-foreground hover:bg-black/[0.08]"
-              }`}
-            >
-              {categoriesById.get(categoryId)?.name ?? "Other"}
-            </button>
-          ))}
-        </nav>
-      )}
+      {/* Every optional section defaults to HIDDEN (opt-in, not opt-out): these are all new
+          additions the pre-Phase-31 storefront never had, and a restaurant that's never touched
+          Theme Studio (defaultRestaurantThemeConfig()'s `sections: {}`) must keep rendering
+          byte-for-byte what it always has — no new section can silently appear on an
+          already-live storefront the owner never asked to change. "hero" is deliberately not one
+          of these switches even though the backend schema reserves the key for
+          forward-compatibility (@restaurant/types' THEME_SECTION_KEYS): it carries the open/closed
+          status a customer needs to see, so v1 never lets it be hidden either way. */}
+      {sections.featured === true && <Featured restaurant={restaurant} items={featuredItems} currency={currency} />}
+      {sections.about === true && <About restaurant={restaurant} />}
+      {sections.gallery === true && <Gallery restaurant={restaurant} />}
+
+      <CategoryNav categories={orderedCategoryIds.map((id) => ({ id, name: categoriesById.get(id)?.name ?? "Other" }))} activeCategoryId={activeCategoryId} onSelect={scrollToCategory} />
 
       {orderedCategoryIds.length === 0 && (
         <EmptyState
@@ -506,110 +421,34 @@ export function MenuPage() {
       )}
 
       {orderedCategoryIds.map((categoryId) => (
-        <section
+        <MenuSection
           key={categoryId}
-          id={`category-${categoryId}`}
-          ref={(el) => {
-            if (el) sectionRefs.current.set(categoryId, el);
-          }}
-          className="scroll-mt-32"
-        >
-          <h2 className="mb-3 text-xl font-semibold text-foreground">{categoriesById.get(categoryId)?.name ?? "Other"}</h2>
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {byCategory[categoryId].map((item, i) => {
-              const groups = groupsByItem.get(item.id) ?? [];
-              const expanded = expandedItemId === item.id;
-              return (
-                <Reveal
-                  as="li"
-                  index={i % 3}
-                  key={item.id}
-                  className="group flex h-full flex-col gap-2 rounded-xl border border-border bg-surface p-3 shadow-sm transition-shadow duration-normal hover:shadow-md"
-                >
-                  <ItemThumb item={item} />
-                    <div className="flex flex-1 flex-col gap-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <strong className="font-heading text-base font-semibold leading-tight text-foreground">{item.name}</strong>
-                        <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
-                          {formatCurrency(item.price, restaurant?.settings.currency)}
-                        </span>
-                      </div>
-                      {item.description && <p className="line-clamp-2 text-sm text-muted">{item.description}</p>}
-                    </div>
-
-                    {expanded ? (
-                      <div className="mt-1 flex flex-col gap-3 border-t border-border pt-3">
-                        {groups.map((group) => (
-                          <fieldset key={group.id} className="flex flex-col gap-1.5">
-                            <legend className="mb-0.5 text-sm font-medium text-foreground">
-                              {group.name}{" "}
-                              <span className="font-normal text-muted">
-                                ({group.minSelect === group.maxSelect ? `choose ${group.minSelect}` : `choose ${group.minSelect}-${group.maxSelect}`})
-                              </span>
-                            </legend>
-                            {group.options.map((option) => {
-                              const checked = (selections[group.id] ?? []).includes(option.id);
-                              return (
-                                <label
-                                  key={option.id}
-                                  className={`flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors duration-fast ${
-                                    checked ? "border-primary bg-primary/5" : "border-border hover:bg-black/[0.02]"
-                                  }`}
-                                >
-                                  <span className="flex items-center gap-2">
-                                    <input
-                                      type={group.maxSelect === 1 ? "radio" : "checkbox"}
-                                      name={group.id}
-                                      checked={checked}
-                                      onChange={() => toggleOption(group, option.id)}
-                                      className="h-4 w-4 accent-[var(--color-primary)]"
-                                    />
-                                    {option.name}
-                                  </span>
-                                  {option.priceAdjustment > 0 && (
-                                    <span className="text-muted">+{formatCurrency(option.priceAdjustment, restaurant?.settings.currency)}</span>
-                                  )}
-                                </label>
-                              );
-                            })}
-                          </fieldset>
-                        ))}
-                        <label className="flex flex-col gap-1 text-sm">
-                          <span className="text-foreground">Special instructions (optional)</span>
-                          <input
-                            value={instructionsDraft}
-                            onChange={(e) => setInstructionsDraft(e.target.value)}
-                            placeholder="e.g. no onions"
-                            maxLength={300}
-                            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
-                          />
-                        </label>
-                        <div className="flex gap-2">
-                          <Button size="sm" className="flex-1" onClick={() => confirmAdd(item)} disabled={!orderingOpen}>
-                            Confirm add to cart
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setExpandedItemId(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button
-                        onClick={() => startAdding(item)}
-                        disabled={!orderingOpen}
-                        size="sm"
-                        variant={justAddedId === item.id ? "secondary" : "primary"}
-                        className="mt-1"
-                      >
-                        {justAddedId === item.id ? "Added ✓" : "Add to cart"}
-                      </Button>
-                    )}
-                </Reveal>
-              );
-            })}
-          </ul>
-        </section>
+          category={{ id: categoryId, name: categoriesById.get(categoryId)?.name ?? "Other" }}
+          items={byCategory[categoryId]}
+          currency={currency}
+          orderingOpen={orderingOpen}
+          expandedItemId={expandedItemId}
+          justAddedId={justAddedId}
+          groupsByItem={groupsByItem}
+          selections={selections}
+          instructionsDraft={instructionsDraft}
+          onStartAdding={startAdding}
+          onToggleOption={toggleOption}
+          onInstructionsChange={setInstructionsDraft}
+          onConfirmAdd={confirmAdd}
+          onCancelAdd={() => setExpandedItemId(null)}
+          registerSectionRef={registerSectionRef}
+        />
       ))}
+
+      {sections.cta === true && (
+        <Cta
+          restaurant={restaurant}
+          orderingOpen={orderingOpen}
+          hasCategories={orderedCategoryIds.length > 0}
+          onStartOrder={() => orderedCategoryIds[0] && scrollToCategory(orderedCategoryIds[0])}
+        />
+      )}
     </div>
   );
 }

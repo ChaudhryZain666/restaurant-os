@@ -4,18 +4,31 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: { DEFAULT: "var(--color-primary)", foreground: "var(--color-primary-foreground)" },
-        secondary: { DEFAULT: "var(--color-secondary)", foreground: "var(--color-secondary-foreground)" },
-        accent: { DEFAULT: "var(--color-accent)", foreground: "var(--color-accent-foreground)" },
-        background: "var(--color-background)",
-        surface: "var(--color-surface)",
-        "surface-elevated": "var(--color-surface-elevated)",
-        foreground: "var(--color-foreground)",
-        muted: "var(--color-muted)",
-        border: "var(--color-border)",
-        success: "var(--color-success)",
-        warning: "var(--color-warning)",
-        danger: "var(--color-danger)",
+        // Phase 31 — `rgb(var(--color-x-rgb) / <alpha-value>)` (Tailwind's documented pattern for
+        // opacity-modifier support on CSS-variable colors) rather than a bare `var(--color-x)`
+        // hex string, so bg-primary/10, text-foreground/70, etc. actually work — see index.css's
+        // own note on the -rgb variables this reads.
+        primary: {
+          DEFAULT: "rgb(var(--color-primary-rgb) / <alpha-value>)",
+          foreground: "rgb(var(--color-primary-foreground-rgb) / <alpha-value>)",
+        },
+        secondary: {
+          DEFAULT: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
+          foreground: "rgb(var(--color-secondary-foreground-rgb) / <alpha-value>)",
+        },
+        accent: {
+          DEFAULT: "rgb(var(--color-accent-rgb) / <alpha-value>)",
+          foreground: "rgb(var(--color-accent-foreground-rgb) / <alpha-value>)",
+        },
+        background: "rgb(var(--color-background-rgb) / <alpha-value>)",
+        surface: "rgb(var(--color-surface-rgb) / <alpha-value>)",
+        "surface-elevated": "rgb(var(--color-surface-elevated-rgb) / <alpha-value>)",
+        foreground: "rgb(var(--color-foreground-rgb) / <alpha-value>)",
+        muted: "rgb(var(--color-muted-rgb) / <alpha-value>)",
+        border: "rgb(var(--color-border-rgb) / <alpha-value>)",
+        success: "rgb(var(--color-success-rgb) / <alpha-value>)",
+        warning: "rgb(var(--color-warning-rgb) / <alpha-value>)",
+        danger: "rgb(var(--color-danger-rgb) / <alpha-value>)",
       },
       fontFamily: {
         heading: ["var(--font-heading)"],

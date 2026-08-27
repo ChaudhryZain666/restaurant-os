@@ -29,6 +29,32 @@
   --color-warning: #b45309;
   --color-danger: #dc2626;
 
+  /* Phase 31 — the same colors above, as space-separated RGB channels. tailwind.config.js's
+     colors use `rgb(var(--color-x-rgb) / <alpha-value>)`, Tailwind's documented pattern for
+     making a CSS-variable-backed color support its own opacity modifiers (bg-primary/10,
+     text-foreground/70, ...). A bare `var(--color-x)` hex string can't be given an alpha channel
+     at build time, so without this Tailwind silently drops those utilities — see
+     docs/theme-architecture.md's "Opacity modifiers" note. ThemeProvider (apps/web) sets both the
+     hex and -rgb variables together for a restaurant's active theme (see tokensToCssVars in
+     packages/ui); a handful of call sites read the plain hex variable directly (e.g. the modifier
+     radio/checkbox's `accent-[var(--color-primary)]`), so both forms are kept in sync rather than
+     replacing one with the other. */
+  --color-primary-rgb: 194 65 12;
+  --color-primary-foreground-rgb: 255 250 245;
+  --color-secondary-rgb: 41 37 36;
+  --color-secondary-foreground-rgb: 250 250 249;
+  --color-accent-rgb: 180 83 9;
+  --color-accent-foreground-rgb: 255 250 245;
+  --color-background-rgb: 251 249 247;
+  --color-surface-rgb: 255 255 255;
+  --color-surface-elevated-rgb: 255 255 255;
+  --color-foreground-rgb: 28 25 23;
+  --color-muted-rgb: 120 113 108;
+  --color-border-rgb: 231 226 220;
+  --color-success-rgb: 21 128 61;
+  --color-warning-rgb: 180 83 9;
+  --color-danger-rgb: 220 38 38;
+
   /* Typography — serif headings + clean sans body, the classic restaurant-menu pairing.
      System font stacks only: no external font requests, no FOUT/network dependency. */
   --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
