@@ -34,7 +34,14 @@ const businessHoursDaySchema = new Schema(
 // an unrecognized key can never silently persist — Zod (packages/validation/src/theme.ts) is the
 // primary gate, but the schema itself stays strict too.
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
-const THEME_KEYS = ["classic", "modern", "editorial"] as const;
+// Phase 33 — widened to add the five current theme keys (cinematic/luxury/contemporary/urban/
+// minimal) while keeping the three legacy keys permanently valid: this array is the Mongoose enum
+// gate, so removing a legacy value here would fail ANY save (even an unrelated color-only draft
+// edit) on a restaurant that still has that value persisted — never rewritten, only resolved to a
+// current theme for rendering via apps/web/src/theme/registry.tsx's LEGACY_THEME_KEY_ALIASES.
+// Deliberately NOT importing @restaurant/types' THEME_KEYS here — matches this file's pre-existing
+// duplication of that list, kept manually in sync rather than refactored in this phase.
+const THEME_KEYS = ["classic", "modern", "editorial", "cinematic", "luxury", "contemporary", "urban", "minimal"] as const;
 const THEME_RADIUS_SCALES = ["sharp", "soft", "rounded"] as const;
 const THEME_DENSITIES = ["compact", "comfortable", "spacious"] as const;
 

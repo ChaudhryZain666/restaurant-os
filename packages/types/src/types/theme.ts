@@ -11,7 +11,21 @@
  *  3. STOREFRONT RUNTIME (apps/web) — merges 1 + 2 and renders. Never touches ordering logic.
  */
 
-export const THEME_KEYS = ["classic", "modern", "editorial"] as const;
+/** Phase 33 — the first three are legacy keys, kept permanently valid (never removed) so a restaurant
+ *  that persisted one before this phase never fails validation on an unrelated save; the storefront
+ *  registry (apps/web/src/theme/registry.tsx) resolves them to one of the five current themes via
+ *  LEGACY_THEME_KEY_ALIASES for rendering. Theme Studio only ever writes one of the five current
+ *  keys going forward. */
+export const THEME_KEYS = [
+  "classic",
+  "modern",
+  "editorial",
+  "cinematic",
+  "luxury",
+  "contemporary",
+  "urban",
+  "minimal",
+] as const;
 export type ThemeKey = (typeof THEME_KEYS)[number];
 
 /** Every color a theme or restaurant override can set. Hex-only (#rrggbb), validated server-side
@@ -44,6 +58,11 @@ export interface ThemeTokens {
   colors: ThemeColorTokens;
   radius: ThemeRadiusScale;
   density: ThemeDensity;
+  /** Phase 33 — how strong a dark overlay a theme lays over full-bleed photography (0-1), e.g. for
+   *  legible hero typography sitting directly on an image. Not restaurant-overridable — it's part of
+   *  a theme's own visual identity, the same category as its font stacks. Themes that don't compose
+   *  imagery this way simply never read it. */
+  overlayOpacity?: number;
 }
 
 /** A restaurant's own color choices — every field optional (unset = inherit the theme's default

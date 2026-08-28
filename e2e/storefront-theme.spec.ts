@@ -6,6 +6,15 @@ import { test, expect } from "@playwright/test";
  * one), publishing makes it live on the real customer-facing storefront, and a completely
  * different restaurant is never affected by another restaurant's theme change.
  *
+ * Phase 33 — switches to Cinematic (not Editorial): Theme Studio's picker now only offers the five
+ * current directions (Cinematic/Luxury/Contemporary/Urban/Minimal — see apps/admin's
+ * themeCatalog.ts), even though the Classic/Modern/Editorial registry entries themselves are still
+ * kept and still render correctly for any restaurant with one already persisted (see
+ * apps/web/src/theme/registry.tsx's own doc comment on why they were deliberately NOT deleted).
+ * "Reserve the menu" (Cinematic's Hero CTA) and "View the menu" (Cinematic's closing Cta link) are
+ * two different, Cinematic-specific strings used as the structural fingerprint here, replacing the
+ * old Editorial-specific "View the menu"-appears-twice trick.
+ *
  * Runs as ONE serial test (not several independent ones) because it deliberately mutates
  * demo-restaurant's PUBLISHED theme mid-run — the one piece of shared state other e2e specs also
  * render against — and explicitly reverts it to Classic (with no overrides, every section on) in a
@@ -47,9 +56,9 @@ test.describe("storefront theme engine", () => {
       await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
       await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
 
-      const editorialCard = page.getByRole("button", { name: "Select Editorial theme" });
-      await editorialCard.click();
-      await expect(editorialCard).toHaveAttribute("aria-pressed", "true");
+      const cinematicCard = page.getByRole("button", { name: "Select Cinematic theme" });
+      await cinematicCard.click();
+      await expect(cinematicCard).toHaveAttribute("aria-pressed", "true");
 
       const primaryHexInput = page.locator('input[placeholder="Theme default"]').first();
       await primaryHexInput.fill("#0ea5e9");
@@ -66,10 +75,9 @@ test.describe("storefront theme engine", () => {
       await expect(page.getByText("Draft saved")).toBeVisible();
       await expect(page.getByText("Unpublished changes")).toBeVisible();
 
-      // "View the menu" appears twice on a published Editorial page (the Hero's CTA button and the
-      // closing Cta section's text link) — .first() (the Hero's) is enough to prove which theme
-      // rendered; both instances existing at all is itself proof Editorial rendered, since no
-      // other theme uses this copy.
+      // "Reserve the menu" is Cinematic's own Hero CTA copy — no other theme uses it, so its
+      // presence alone is proof Cinematic actually rendered (replacing the old Editorial-specific
+      // "View the menu"-appears-twice fingerprint).
       async function primaryColorRgb(target: typeof publicPage): Promise<string> {
         return target.evaluate(() => getComputedStyle(document.querySelector("main")!).getPropertyValue("--color-primary").trim());
       }
@@ -78,7 +86,7 @@ test.describe("storefront theme engine", () => {
       await publicPage.reload();
       await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
       await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
-      await expect(publicPage.getByText("View the menu").first()).not.toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).not.toBeVisible();
       expect(await primaryColorRgb(publicPage)).not.toBe("#0ea5e9");
 
       // --- Preview (same authenticated browser context as the admin login) DOES show the draft —
@@ -86,26 +94,26 @@ test.describe("storefront theme engine", () => {
       const previewPage = await page.context().newPage();
       await previewPage.goto("http://localhost:5173/r/demo-restaurant/preview");
       await expect(previewPage.getByText("Preview mode")).toBeVisible();
-      await expect(previewPage.getByRole("button", { name: "View the menu" }).first()).toBeVisible();
+      await expect(previewPage.getByRole("button", { name: "Reserve the menu" })).toBeVisible();
       await expect(previewPage.getByLabel("Featured items")).toBeVisible();
       expect(await primaryColorRgb(previewPage)).toBe("#0ea5e9");
       await previewPage.close();
 
-      // --- Publish: the real storefront now shows Editorial, with the custom color and the
+      // --- Publish: the real storefront now shows Cinematic, with the custom color and the
       //     newly-enabled section, for a genuinely anonymous visitor. ---
       await page.getByRole("button", { name: "Publish" }).click();
       await expect(page.getByText("Theme published")).toBeVisible();
       await expect(page.getByText("Unpublished changes")).not.toBeVisible();
 
       await publicPage.reload();
-      await expect(publicPage.getByRole("button", { name: "View the menu" }).first()).toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).toBeVisible();
       await expect(publicPage.getByLabel("Featured items")).toBeVisible();
       expect(await primaryColorRgb(publicPage)).toBe("#0ea5e9");
 
       // --- Tenant isolation: a completely different restaurant is untouched by the above. ---
       await publicPage.goto("http://localhost:5173/r/spice-route");
       await expect(publicPage.getByRole("heading", { name: "Spice Route" })).toBeVisible();
-      await expect(publicPage.getByText("View the menu")).not.toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).not.toBeVisible();
       await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
       await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
       expect(await primaryColorRgb(publicPage)).not.toBe("#0ea5e9");

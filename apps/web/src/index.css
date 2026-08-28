@@ -154,6 +154,39 @@ h3 {
   transform: translateY(0);
 }
 
+/* Phase 33 — additional reveal styles for the premium theme collection's motion language, selected
+   via Reveal's `variant` prop (packages/ui/src/theme/Reveal.tsx). Same transform/opacity/clip-path-
+   only, GPU-cheap discipline as .reveal above, and neutralized the same way under reduced motion. */
+.reveal-fade {
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--motion-easing);
+}
+.reveal-fade-visible {
+  opacity: 1;
+}
+.reveal-mask {
+  opacity: 0;
+  clip-path: inset(0 0 100% 0);
+  transition:
+    opacity var(--motion-slow) var(--motion-easing),
+    clip-path var(--motion-slow) var(--motion-easing);
+}
+.reveal-mask-visible {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+}
+.reveal-scale {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity var(--motion-slow) var(--motion-easing),
+    transform var(--motion-slow) var(--motion-easing);
+}
+.reveal-scale-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
 /* Branded loading shimmer, used by Skeleton in packages/ui — subtler and more "premium" than a
    flat pulse, still just background-position + opacity (cheap to animate). */
 .skeleton-shimmer {
@@ -185,8 +218,12 @@ h3 {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .reveal {
+  .reveal,
+  .reveal-fade,
+  .reveal-mask,
+  .reveal-scale {
     opacity: 1;
     transform: none;
+    clip-path: none;
   }
 }

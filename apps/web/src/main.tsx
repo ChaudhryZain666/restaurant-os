@@ -10,6 +10,7 @@ import { CartProvider } from "./context/CartContext";
 import { RestaurantProvider } from "./context/RestaurantContext";
 import { TableProvider } from "./context/TableContext";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { ThemeOverrideProvider } from "./theme/ThemeOverrideContext";
 
 const queryClient = new QueryClient();
 
@@ -20,13 +21,15 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <RestaurantProvider>
             <TableProvider>
-              <ThemeProvider>
-                <AuthProvider>
-                  <CartProvider>
-                    <App />
-                  </CartProvider>
-                </AuthProvider>
-              </ThemeProvider>
+              <ThemeOverrideProvider>
+                <ThemeProvider>
+                  <AuthProvider>
+                    <CartProvider>
+                      <App />
+                    </CartProvider>
+                  </AuthProvider>
+                </ThemeProvider>
+              </ThemeOverrideProvider>
             </TableProvider>
           </RestaurantProvider>
         </BrowserRouter>

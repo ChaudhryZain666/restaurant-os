@@ -112,11 +112,19 @@ export interface ThemeDefinition {
   /** Plain-language name/description — surfaced in the admin Theme Studio's picker. */
   name: string;
   description: string;
+  /** Phase 33 — short style-tag chips for the Theme Studio/demo-playground picker cards (e.g.
+   *  ["Immersive", "Dramatic", "Image-led"]). Display metadata only — never read by the storefront
+   *  renderer itself. */
+  styleTags: string[];
   /** Defaults for every restaurant-overridable token (colors/radius/density) — see
    *  resolveThemeTokens. */
   defaultTokens: ThemeTokens;
   /** System font stacks only — no network font loading (see index.css's own note). Not
    *  restaurant-customizable in v1: each theme's typographic personality is part of its identity. */
   fonts: { heading: string; body: string };
+  /** Phase 33 — how much movement this theme's reveals/interactions use (see Reveal's `variant`
+   *  prop and packages/ui's motion primitives). Not restaurant-overridable — part of the theme's own
+   *  identity, same category as fonts/overlayOpacity. */
+  motion: { intensity: "subtle" | "standard" | "expressive" };
   components: ThemeComponents;
 }

@@ -196,6 +196,7 @@ export function ThemeStudioPage() {
                   <strong className="text-sm font-semibold text-foreground">{entry.name}</strong>
                   {selected && <Badge tone="success">Selected</Badge>}
                 </div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-primary">{entry.styleTags.join(" · ")}</p>
                 <p className="text-xs text-muted">{entry.description}</p>
               </button>
             );

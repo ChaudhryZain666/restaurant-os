@@ -1,4 +1,4 @@
-# Storefront Theme Architecture (Phase 31)
+# Storefront Theme Architecture (Phase 31, extended Phase 33)
 
 A restaurant's storefront needed to look like more than one restaurant. Before this phase, every
 restaurant got the exact same layout, differing only in a single `brandColor` swap. This phase adds
@@ -31,7 +31,11 @@ inheritance (a default theme new locations start from) is a reasonable future ad
 built here — it would need a real product decision about whether a location can still deviate from
 it, which didn't have a clear answer yet.
 
-## The three themes
+## The three original themes (Phase 31)
+
+> Superseded as the *promoted* collection by Phase 33's five new directions below, but still fully
+> present in `THEME_REGISTRY` and still exactly what they always were — see "Phase 33" for why they
+> were deliberately kept rather than replaced.
 
 Defined in `apps/web/src/theme/registry.tsx`, one directory each under `apps/web/src/theme/`
 (`classic/`, `modern/`, `editorial/`), each with its own `Header`, `Footer`, `Hero`, `CategoryNav`,
@@ -248,12 +252,196 @@ risk and, eventually, an injection-surface question not worth taking on for a fe
   session's own token out from under it, a narrow cross-origin local-dev interaction worth avoiding
   rather than fighting), reverting the shared `demo-restaurant` fixture to a clean Classic baseline
   regardless of pass/fail, since other existing specs render against that same fixture.
+- **Jest** (`apps/api/src/controllers/demoPlayground.test.ts`, Phase 32): `POST /auth/demo-session`'s
+  response shape, that a placed order is server-flagged `isDemo` regardless of client input, and that
+  `listRestaurantOrders`/`getRestaurantAnalytics` both exclude demo orders while leaving real ones
+  untouched. **Jest** (`apps/web/src/theme/resolveActiveConfig.test.ts`, Phase 32): the slug-matching
+  guard behind `ThemeOverrideContext` — the override applies only when captured for the restaurant
+  currently being rendered.
+- **Playwright** (`e2e/experience-playground.spec.ts`, Phase 32, updated Phase 33): live theme/color/
+  section customization and device-width switching on `/r/:slug/experience`, a real add-to-cart-and-
+  checkout through an ephemeral demo session, that the resulting order is invisible on the real
+  owner's Orders Management page, and that a separate browser context never inherits another
+  visitor's customization. Needs no shared-state cleanup (the override never touches the database,
+  and the order it places is real but correctly excluded from every staff-facing view by `isDemo`).
+  Updated for Phase 33 to add-to-cart on Cinematic (the playground's default seed theme) and switch
+  to Minimal, replacing the retired Editorial-specific fingerprint.
+- **Jest** (`apps/web/src/theme/registry.test.ts`, extended Phase 33): all eight registry entries
+  (three legacy + five current) have real, distinct components/fonts/`styleTags`/motion intensities;
+  the five current directions specifically each have a unique heading font (the assertion that would
+  have caught, and did catch during development, the Contemporary/Urban duplicate-font bug above).
+- **Playwright** (`e2e/storefront-theme.spec.ts`, updated Phase 33): switches to Cinematic instead of
+  the now-unlisted Editorial when driving Theme Studio's picker UI, using Cinematic's own
+  `"Reserve the menu"`/`"View the menu"` copy as the structural fingerprint in place of the old
+  "View the menu appears twice" trick — the underlying draft/preview/publish/tenant-isolation
+  behavior under test is unchanged.
+
+## Phase 32 — the public demo playground
+
+`/r/:restaurantSlug/experience` (new, additive route alongside the existing `/r/:slug/preview`) lets
+an anonymous visitor live-switch and customize a theme against the seeded `demo-restaurant`, using
+this exact engine — not a fork of it. Two small, deliberately narrow additions make this possible
+without touching anything above:
+
+- **`ThemeOverrideContext`** (`apps/web/src/theme/ThemeOverrideContext.tsx`) — a client-only,
+  `sessionStorage`-backed `{slug, config: RestaurantThemeConfig}` pair. `ThemeProvider` prefers it
+  over `restaurant.settings.theme` (via the pure, unit-tested `resolveActiveThemeConfig` in
+  `resolveActiveConfig.ts`) **only when its `slug` matches the restaurant currently being rendered**
+  — without that guard, a same-tab client-side navigation to an unrelated restaurant would inherit a
+  stale override, since React context state survives a route change that isn't a full reload. Nothing
+  in this path ever calls the draft/publish/discard endpoints above — a playground visitor can never
+  mutate the real restaurant's persisted theme, and `sessionStorage`'s native per-tab scoping is the
+  entire mechanism behind one visitor's customization never leaking to another's.
+- **A client-only QR code** (`apps/web/src/pages/experience/QrPanel.tsx`) generated with the same
+  `qrcode` package `qr.service.ts` already uses server-side for real table QR codes — run here in the
+  browser instead, encoding only the current page's own URL, needing no new backend endpoint.
+
+Everything else on the experience page (the menu, modifiers, cart, checkout) is the literal,
+unmodified `MenuPage`/`CartContext`/`CartPage` — the plain `/r/:slug` route these normally live on is
+completely untouched by any of this.
+
+**Safe demo ordering**: placing a real order from the playground needs a real authenticated session
+(`createOrder` hard-requires `requireAuth`), so `POST /auth/demo-session` mints a throwaway,
+`isDemoAccount:true` customer — no credentials, same `{user, accessToken}` response shape
+`login`/`register` return, so nothing downstream (`CartPage.placeOrder`) needs to special-case it.
+`createOrder` re-derives `Order.isDemo` from that session flag server-side (never trusts the client),
+and `listRestaurantOrders` (backing both Kitchen Display and Orders Management),
+`analytics.service.ts`'s aggregates, and `platform.controller.ts`'s restaurant/platform-wide order
+counts all exclude `isDemo:true` by default — a public playground visitor's order is real (goes
+through the same server-authoritative pricing/tax/loyalty pipeline, via whichever `PAYMENT_PROVIDER`
+is configured — `mock` by default, so no real money ever moves) but invisible to the restaurant's real
+staff. `apps/api/src/scripts/cleanupDemoData.ts` (run externally, like every other maintenance script
+here — this repo has no in-process cron) deletes expired demo accounts and their orders/payments.
+
+## Phase 33 — the premium theme collection
+
+Phase 31's three themes were architecturally correct but visually generic — closer to a React
+template than a premium restaurant website. Phase 33 is a visual-design phase, not an architecture
+change: five new, genuinely distinct art-directed systems (**Cinematic, Luxury, Contemporary, Urban,
+Minimal**), each with its own composition, typography, navigation behavior, menu presentation, image
+treatment, and motion language — built entirely inside Phase 31's existing component contract. See
+`docs/premium-storefront-design-research.md` for the design research behind the five directions.
+
+### Why Classic/Modern/Editorial were kept, not deleted or aliased
+
+The first implementation of this phase deleted the three original theme folders and added a
+`LEGACY_THEME_KEY_ALIASES` map so a restaurant's persisted `themeKey:"classic"` would resolve, for
+rendering, to Luxury (Modern→Urban, Editorial→Minimal). This was reverted after tracing the actual
+blast radius: 18+ existing Playwright specs assert on Classic's *exact* structural fingerprint —
+`"Add to cart"`/`"Start your order"` button text, the presence/absence of specific sections, DOM
+shape — none of which the new themes reproduce, deliberately, since being genuinely different is the
+entire point of Phase 33. Aliasing `themeKey` to a differently-worded theme would have silently
+broken those specs' assumptions about what the shared `demo-restaurant`/`spice-route`/`bella-vista`
+fixtures render as.
+
+The correct fix, and the one actually shipped: **`THEME_REGISTRY` keeps all eight entries** —
+Classic/Modern/Editorial exactly as they were, plus the five new ones. An existing restaurant's
+persisted `themeKey` renders *exactly* what it always has — true zero-regression safety, not a
+hopeful alias mapping to a theme with different copy. Going forward, Theme Studio's picker
+(`apps/admin/src/lib/themeCatalog.ts`) and the demo playground's picker (`PlaygroundPanel.tsx`'s
+`PLAYGROUND_THEME_KEYS`) both intentionally list **only the five current directions** — Classic/
+Modern/Editorial are legacy-safety entries in the registry, not part of the collection being
+promoted or sold. Nothing changes for a restaurant that never opens Theme Studio; nothing new is
+ever silently assigned to it.
+
+### The five new directions
+
+| | **Cinematic** | **Luxury** | **Contemporary** | **Urban** | **Minimal** |
+|---|---|---|---|---|---|
+| Signature | A restaurant-film website, not an app | Quality through restraint | Designed by a digital art director | Energetic street-food/modern-casual | The absence of visual noise is the design |
+| Hero | Viewport-height full-bleed photo, type sitting directly on the image, transparent nav that solidifies on scroll | Asymmetric editorial two-column: large image, restrained serif text block | Genuine split-viewport, oversized type off-grid-staggered top/bottom | Bold dark panel + layered offset photo collage, real-data corner tags | Enormous whitespace, small precise type, restrained/no imagery |
+| Menu | Full-width horizontal photo rows, no card grid | Elegant hairline-ruled typography rows, no photos at all, price in its own right column | Asymmetric rows with oversized ghost index numbers, offset images | Dense numbered rows, real-data "N options to customize" tags, bold color blocks | Text-first rows with a dotted price leader, small sparing imagery |
+| Motion | `expressive` — slow mask reveals | `subtle` — quiet opacity-only fades | `expressive` — scale/offset transitions | `expressive` — punchy, staggered | `subtle` — near-silent opacity fades |
+| Mobile anchor | Still full-bleed and dramatic, compact floating nav | Image-leading stack, spacing preserved not compressed | Off-grid relationships preserved at narrow widths | Persistent bottom-sticky order bar (its headline mobile feature) | Whitespace scales proportionally, no dense stacking |
+
+Token additions supporting these (`packages/types/src/types/theme.ts`, `apps/web/src/theme/types.ts`)
+— deliberately small, since the brief explicitly warns against an over-engineered token system;
+everything else that makes a theme distinct is expressed directly in that theme's own component
+Tailwind classes, exactly how Phase 31's three themes already differed:
+- `ThemeTokens.overlayOpacity?: number` — Cinematic's consistent dark-overlay-over-imagery value;
+  other themes simply never read it.
+- `ThemeDefinition.motion: { intensity: "subtle" | "standard" | "expressive" }` — read by `Reveal`'s
+  callers to pick a variant matching the theme's own motion register.
+- `ThemeDefinition.styleTags: string[]` — display-only chips for the Theme Studio/demo-playground
+  picker cards (e.g. `["Immersive", "Dramatic", "Image-led"]`); never read by the storefront renderer.
+
+`RestaurantThemeConfig` (the persisted, owner-editable surface) is completely unchanged — no backend
+schema restructuring. The one real backend touch: `apps/api/src/models/Restaurant.ts` hardcodes its
+own local `THEME_KEYS` array as the Mongoose enum gate on `settings.theme.themeKey` (a pre-existing
+duplication of `packages/types`' own `THEME_KEYS`, not refactored away here) — both were widened from
+3 to 8 values so Theme Studio can persist the five new keys.
+
+### Motion: `Reveal`'s `variant` prop, and a real IntersectionObserver bug found and fixed
+
+`packages/ui/src/theme/Reveal.tsx` gained a `variant?: "fade-up" | "fade" | "mask" | "scale"` prop
+(default `"fade-up"`, Phase 31's original behavior unchanged) with matching CSS in
+`apps/web/src/index.css`. All four are transform/opacity/clip-path-only CSS transitions — no new
+animation dependency — and all are neutralized under `prefers-reduced-motion`.
+
+Building Cinematic's mask-revealed Featured image surfaced a genuine, non-obvious browser bug:
+**an element clipped to zero visible area via `clip-path` (`inset(0 0 100% 0)`, the "hidden" state
+before a reveal) is reported by Chromium's `IntersectionObserver` as having a 0% intersection ratio,
+even though the element's actual layout geometry (`getBoundingClientRect`) is completely unaffected.**
+A `variant="mask"` `Reveal` that puts `clip-path` directly on the *observed* element therefore
+deadlocks — it can never observe itself as "visible" while still fully clipped, since the very
+property meant to visually reveal it makes the browser think it isn't on screen at all. Confirmed by
+scrolling a real element through generous, centered, multi-second-dwell viewport positions and
+watching it stay permanently unrevealed; fixed by removing `clip-path` and confirming the same
+element became visible immediately.
+
+The fix: `variant="mask"` now renders an **inner wrapper** that carries the clip-path animation,
+while the *outer*, `ref`-observed element never has `clip-path` applied to it at all — the observer
+sees a normal, always-fully-visible-geometry element, and the visual wipe happens on a child it has
+no opinion about. This is a shared-infrastructure fix (`packages/ui`), so every current and future
+`variant="mask"` usage across every theme benefits from it, not just Cinematic's.
+
+### Real bugs found during the visual review (Design Director Review gate)
+
+Automated tests passing was treated as a floor, not the gate — every theme was screenshotted at
+desktop (1280/1440) and mobile (390) widths and inspected in a real browser before being considered
+done. This surfaced several real, now-fixed bugs beyond the IntersectionObserver one above:
+
+- **A stale Tailwind config, session-wide.** The running `apps/web` Vite dev server had been serving
+  a cached/stale compiled Tailwind bundle where every opacity-modifier utility (`bg-primary/10`,
+  `text-secondary-foreground/70`, ...) fell back to a flat, non-opacity color — silently breaking any
+  translucent text/background across *every* theme, not just the new ones, for the lifetime of that
+  dev server process. Diagnosed by inspecting `document.styleSheets` directly for the generated
+  `.text-secondary-foreground` rule and finding `color: var(--color-secondary-foreground)` instead
+  of the expected `rgb(var(--color-secondary-foreground-rgb) / <alpha-value>)` pattern; fixed by
+  restarting the dev server. Not a code bug — a reminder that `tailwind.config.js` changes need a dev
+  server restart to take effect, unlike ordinary source-file HMR.
+- **A cover image with text baked directly into the SVG artwork** (from Phase 32's demo-restaurant
+  seed backfill) visually collided with Cinematic's hero, which — unlike the three original themes —
+  puts real typography directly on top of the full-bleed photo. Fixed by removing the baked `<text>`
+  elements from the SVG; images must only ever be images, with all real content coming from
+  components, never assumed "safe" text-free background art.
+- **Two themes (Contemporary and Urban) were accidentally given the identical heading font stack** —
+  caught by `registry.test.ts`'s own "every theme has its own font stack" assertion, which is exactly
+  the kind of distinctness regression that test exists to catch.
+- **Urban's hero headline could overflow its grid column and render clipped** for a longer restaurant
+  name at an oversized display size — fixed with `min-w-0` on the grid item (a real CSS Grid
+  gotcha: a flex/grid item's content can overflow its own track unless explicitly allowed to shrink)
+  plus a `break-words` safety net and a slightly smaller type scale.
+
+### Theme Studio and demo playground
+
+`apps/admin/src/lib/themeCatalog.ts` now lists only the five current directions (key/name/
+description/`styleTags`/swatch), and `ThemeStudioPage.tsx`'s picker cards show each theme's
+style-tag row (e.g. `CINEMATIC — Immersive · Dramatic · Image-led`). The Phase 32 demo playground
+(`PlaygroundPanel.tsx`) similarly restricts its cards to the same five keys (`PLAYGROUND_THEME_KEYS`)
+rather than showing all eight registry entries — the playground exists to sell the premium
+collection, not to also surface the legacy-safety entries. Its "seed from the restaurant's real
+theme" logic falls back to Cinematic when the real theme is a legacy key not in that five-key list,
+so the playground always opens with a real, current card highlighted.
 
 ## What this phase did not build
 
 - Business-level theme inheritance (see "Ownership" above).
 - A restaurant-facing way to reorder sections or add new section types beyond the four exposed.
 - Restaurant-customizable fonts.
-- Any Phase-32-specific demo infrastructure.
 - A DB-backed, generically-editable system configuration surface — unrelated to this phase, noted
   here only because it's the kind of scope this phase deliberately did not expand into either.
+- Product/event-tracking analytics (demo_started, theme_changed, etc.) for the Phase 32 playground —
+  no event-tracking SDK or generic event-log pattern exists anywhere in this codebase to extend.
+- A sixth theme direction (Phase 33) — the brief explicitly asked not to add one merely to hit a
+  round number; five genuine directions was the target, not a count.
