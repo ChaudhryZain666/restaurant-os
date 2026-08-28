@@ -27,11 +27,20 @@ function planFeatures(plan: PublicPlan): string[] {
   return features;
 }
 
+function planMonthlyCents(plan: PublicPlan): number {
+  return plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? Number.POSITIVE_INFINITY;
+}
+
 /**
  * Phase 28 — real pricing, read from the platform's own Plan catalog (GET /public/plans, a new
  * unauthenticated endpoint — see publicPlan.controller.ts) instead of a hardcoded, disconnected
  * array. Every number here is the SAME data BillingPage.tsx/AgencyBillingPage.tsx read — one
  * source of truth, never duplicated pricing constants.
+ *
+ * Phase 34 — the OWNER/AGENCY tiers are no longer 1-per-type (Basic+Pro, Agency Starter+Growth), so
+ * this renders every active plan of each type, sorted cheapest-first, instead of picking a single
+ * plan with .find(). No plan-code assumptions here — a plan disappearing (isActive:false) or a new
+ * tier being added both just change how many cards render.
  */
 export function PricingPage() {
   usePageMeta({
@@ -41,8 +50,9 @@ export function PricingPage() {
 
   const { plans, error } = usePublicPlans();
 
-  const ownerPlan = plans?.find((p) => p.type === "OWNER");
-  const agencyPlan = plans?.find((p) => p.type === "AGENCY");
+  const ownerPlans = plans?.filter((p) => p.type === "OWNER").sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)) ?? [];
+  const agencyPlans = plans?.filter((p) => p.type === "AGENCY").sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)) ?? [];
+  const allPlans = [...ownerPlans, ...agencyPlans];
 
   return (
     <>
@@ -50,7 +60,7 @@ export function PricingPage() {
         <SectionHeading
           eyebrow="Pricing"
           title="Simple pricing, built to grow with you"
-          description="Pricing below is proposed and not yet finalized — final numbers are confirmed before you're ever charged."
+          description="No credit card required to start your 14-day trial — cancel anytime before it ends."
         />
       </Section>
 
@@ -63,8 +73,8 @@ export function PricingPage() {
         {!plans && !error ? (
           <p className="text-center text-sm text-muted">Loading pricing...</p>
         ) : (
-          <div className="mx-auto grid max-w-4xl gap-6 lg:grid-cols-2">
-            {[ownerPlan, agencyPlan].filter((p): p is PublicPlan => Boolean(p)).map((plan) => (
+          <div className="mx-auto grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {allPlans.map((plan) => (
               <Reveal key={plan.code}>
                 <Card className="flex h-full flex-col gap-5">
                   <div>
@@ -97,14 +107,14 @@ export function PricingPage() {
           </div>
         )}
         <p className="mt-8 text-center text-xs text-muted">
-          <Badge tone="warning" className="mr-1.5">
-            Proposed pricing
+          <Badge tone="success" className="mr-1.5">
+            Live pricing
           </Badge>
-          Read live from the platform's plan catalog — not yet a final commercial sign-off. See{" "}
+          Read directly from the platform's plan catalog. See{" "}
           <Link to="/contact" className="underline">
             contact us
           </Link>{" "}
-          for volume/multi-location needs.
+          for larger multi-location or agency needs.
         </p>
       </Section>
 

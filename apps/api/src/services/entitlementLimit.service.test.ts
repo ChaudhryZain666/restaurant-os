@@ -94,6 +94,98 @@ describe("requireEntitlement middleware — real HTTP, business_analytics gated 
   });
 });
 
+describe("Phase 34 — the real owner_basic/owner_pro catalog plans gate the same way the generic mechanism above already proves", () => {
+  // Upserted with $setOnInsert against the REAL catalog codes (never deleted in afterAll — these
+  // are permanent catalog entries other code/tests/production seed data depend on, exactly like
+  // subscriptionBackfill.service.test.ts's own upsert-not-delete precedent for "owner"). This
+  // proves the actual seeded Basic/Pro rows are wired correctly, distinct from the tests above,
+  // which prove the entitlement MECHANISM works in the abstract with ad-hoc fixture plans.
+  async function ensureCatalogPlan(code: "owner_basic" | "owner_pro") {
+    const entitlements =
+      code === "owner_basic"
+        ? [
+            { key: "custom_domains", value: false },
+            { key: "business_analytics", value: false },
+            { key: "business_promotions", value: false },
+            { key: "max_locations", value: 1 },
+          ]
+        : [
+            { key: "custom_domains", value: true },
+            { key: "business_analytics", value: true },
+            { key: "business_promotions", value: true },
+            { key: "max_locations", value: 3 },
+          ];
+    await Plan.findOneAndUpdate(
+      { code },
+      { $setOnInsert: { code, name: code, type: "OWNER", pricing: [], entitlements, isActive: true } },
+      { upsert: true }
+    );
+    return Plan.findOne({ code });
+  }
+
+  it("Basic denies business_analytics; Pro allows it", async () => {
+    const basicPlan = await ensureCatalogPlan("owner_basic");
+    const proPlan = await ensureCatalogPlan("owner_pro");
+
+    const basicBiz = await createTestBusiness();
+    const proBiz = await createTestBusiness();
+    businessIds.push(basicBiz.id, proBiz.id);
+    await createTestSubscription("business", basicBiz._id, basicPlan!._id);
+    await createTestSubscription("business", proBiz._id, proPlan!._id);
+
+    expect(await hasFeatureEntitlement("business", basicBiz.id as string, "business_analytics")).toBe(false);
+    expect(await hasFeatureEntitlement("business", proBiz.id as string, "business_analytics")).toBe(true);
+  });
+
+  it("Basic caps at 1 location; Pro caps at 3", async () => {
+    const basicPlan = await ensureCatalogPlan("owner_basic");
+    const proPlan = await ensureCatalogPlan("owner_pro");
+
+    const basicBiz = await createTestBusiness();
+    const proBiz = await createTestBusiness();
+    businessIds.push(basicBiz.id, proBiz.id);
+    await createTestSubscription("business", basicBiz._id, basicPlan!._id);
+    await createTestSubscription("business", proBiz._id, proPlan!._id);
+
+    await reserveLocationSlot(basicBiz.id as string);
+    expect(await canCreateLocation(basicBiz.id as string)).toBe(false);
+
+    await reserveLocationSlot(proBiz.id as string);
+    await reserveLocationSlot(proBiz.id as string);
+    expect(await canCreateLocation(proBiz.id as string)).toBe(true);
+    await reserveLocationSlot(proBiz.id as string);
+    expect(await canCreateLocation(proBiz.id as string)).toBe(false);
+  });
+});
+
+describe("Phase 34 — the real agency_starter/agency_growth catalog plans express genuine volume economics", () => {
+  async function ensureAgencyPlan(code: "agency_starter" | "agency_growth") {
+    const maxBusinesses = code === "agency_starter" ? 5 : 15;
+    await Plan.findOneAndUpdate(
+      { code },
+      {
+        $setOnInsert: {
+          code,
+          name: code,
+          type: "AGENCY",
+          pricing: [],
+          entitlements: [{ key: "max_businesses", value: maxBusinesses }],
+          isActive: true,
+        },
+      },
+      { upsert: true }
+    );
+    return Plan.findOne({ code });
+  }
+
+  it("Starter includes 5 businesses, Growth includes 15", async () => {
+    const starterPlan = await ensureAgencyPlan("agency_starter");
+    const growthPlan = await ensureAgencyPlan("agency_growth");
+    expect(starterPlan!.entitlements.find((e) => e.key === "max_businesses")!.value).toBe(5);
+    expect(growthPlan!.entitlements.find((e) => e.key === "max_businesses")!.value).toBe(15);
+  });
+});
+
 describe("location limits — canCreateLocation / reserveLocationSlot", () => {
   it("reserveLocationSlot throws 409 once the limit is reached, and never increments past it", async () => {
     const business = await createTestBusiness();

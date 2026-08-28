@@ -12,12 +12,20 @@ import { Plan } from "../models/Plan.js";
 async function seed() {
   await connectDB();
 
-  // Phase 24 established the Plan catalog structurally, with pricing deliberately left empty.
-  // Phase 27 populates PROPOSED (not commercially final — see docs/commercial-decisions.md)
-  // pricing derived from competitor research, upserted by code so re-running seed never creates
-  // duplicates or clobbers isActive/pricing if it's been changed by hand ($setOnInsert only ever
-  // applies on the FIRST insert — an already-seeded catalog is never silently overwritten by a
-  // later code change, exactly like Phase 25's own precedent for this same upsert shape).
+  // Phase 24 established the Plan catalog structurally. Phase 27 populated PROPOSED pricing on
+  // "owner"/"agency". Phase 34 supersedes that pricing with a real commercial decision
+  // (docs/commercial-decisions.md) — Basic/Pro/Agency-tier plans below — WITHOUT deleting or
+  // price-mutating the original two documents: `Subscription.planId` is a live, non-snapshotted FK
+  // (resolveOwnerPlan/getPlanForSubscription dereference Plan fresh on every check), so any
+  // existing subscriber still pointed at "owner"/"agency" must keep seeing exactly the terms they
+  // signed up under, forever. "owner"/"agency" are instead flipped isActive:false below — new
+  // signups can never select them (createSubscriptionCore/createCheckoutSessionCore both filter
+  // `Plan.findOne({code, isActive:true})`), but they remain valid FK targets for existing
+  // subscriptions AND for subscriptionBackfill.service.ts's grandfather logic, which resolves
+  // `Plan.findOne({code:"owner"})` with no isActive filter at all.
+  //
+  // All upserts use $setOnInsert (never $set) so re-running seed never clobbers a catalog that's
+  // since been hand-edited — the same precedent Phase 25/27 established for this exact shape.
   await Plan.findOneAndUpdate(
     { code: "owner" },
     {
@@ -26,10 +34,6 @@ async function seed() {
         name: "Owner",
         type: "OWNER",
         description: "For a single restaurant or a small multi-location group you run yourself.",
-        // providerPriceId here is a placeholder identifier the MOCK provider accepts as-is (it
-        // never validates authenticity) — NOT a real Paddle price id. A real deployment would
-        // replace these with the actual ids Paddle's dashboard assigns once that product/price
-        // pair is created there (see docs/commercial-decisions.md's "Provider choice" section).
         pricing: [
           { interval: "monthly", amountCents: 7900, currency: "USD", providerPriceId: "mock_price_owner_monthly" },
           { interval: "yearly", amountCents: 79000, currency: "USD", providerPriceId: "mock_price_owner_yearly" },
@@ -38,11 +42,6 @@ async function seed() {
           { key: "custom_domains", value: true },
           { key: "business_analytics", value: true },
           { key: "business_promotions", value: true },
-          // Phase 27 — PROPOSED, not a commercial decision: 1 location included on the base plan.
-          // The no-subscription default (entitlementLimit.service.ts) stays generous regardless,
-          // so this only ever applies once a business actually has this live subscription — never
-          // retroactively to an existing grandfathered business. Purchasing additional locations
-          // beyond this count is NOT built this phase (see docs/commercial-decisions.md).
           { key: "max_locations", value: 1 },
         ],
         isActive: true,
@@ -66,11 +65,6 @@ async function seed() {
           { key: "custom_domains", value: true },
           { key: "business_analytics", value: true },
           { key: "business_promotions", value: true },
-          // Phase 25/27 — PROPOSED, not a commercial decision (see docs/commercial-decisions.md);
-          // this seeded value (5, matching the "included businesses" pricing proposal) is
-          // intentionally different from agencyEntitlement.service.ts's own
-          // NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES=3 fallback — one is what a REAL subscription
-          // includes, the other is the generous default for an agency with none at all.
           { key: "max_businesses", value: 5 },
         ],
         isActive: true,
@@ -78,7 +72,111 @@ async function seed() {
     },
     { upsert: true }
   );
-  console.log("[seed] ensured plan catalog (owner, agency)");
+  // Retired from new signups the moment Phase 34's replacement tiers exist — never deleted, never
+  // price-mutated (see the block comment above). A no-op $set on a doc that's already isActive:false
+  // (e.g. a second seed run) — Mongoose update, not $setOnInsert, since this one genuinely needs to
+  // apply to an already-existing document, not only a freshly-inserted one.
+  await Plan.updateMany({ code: { $in: ["owner", "agency"] } }, { $set: { isActive: false } });
+
+  // Phase 34 — the real Basic/Pro/Agency-tier catalog (docs/commercial-decisions.md's updated
+  // pricing table). Included-location/business counts and per-tier feature gating are a defaulted,
+  // reasonable starting point flagged in the final report as a product-numbers decision, not a
+  // hidden assumption — same PROPOSED-until-confirmed honesty convention as the plans above.
+  await Plan.findOneAndUpdate(
+    { code: "owner_basic" },
+    {
+      $setOnInsert: {
+        code: "owner_basic",
+        name: "Basic",
+        type: "OWNER",
+        description: "Core online ordering for a single restaurant location.",
+        pricing: [
+          { interval: "monthly", amountCents: 1500, currency: "USD", providerPriceId: "mock_price_owner_basic_monthly" },
+          { interval: "yearly", amountCents: 15000, currency: "USD", providerPriceId: "mock_price_owner_basic_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: false },
+          { key: "business_analytics", value: false },
+          { key: "business_promotions", value: false },
+          { key: "max_locations", value: 1 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "owner_pro" },
+    {
+      $setOnInsert: {
+        code: "owner_pro",
+        name: "Pro",
+        type: "OWNER",
+        description: "Multi-location ordering with custom domains, analytics, and promotions.",
+        pricing: [
+          { interval: "monthly", amountCents: 2900, currency: "USD", providerPriceId: "mock_price_owner_pro_monthly" },
+          { interval: "yearly", amountCents: 29000, currency: "USD", providerPriceId: "mock_price_owner_pro_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+          { key: "max_locations", value: 3 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "agency_starter" },
+    {
+      $setOnInsert: {
+        code: "agency_starter",
+        name: "Agency Starter",
+        type: "AGENCY",
+        description: "For an agency managing up to 5 client businesses.",
+        pricing: [
+          { interval: "monthly", amountCents: 9900, currency: "USD", providerPriceId: "mock_price_agency_starter_monthly" },
+          { interval: "yearly", amountCents: 99000, currency: "USD", providerPriceId: "mock_price_agency_starter_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+          { key: "max_businesses", value: 5 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "agency_growth" },
+    {
+      $setOnInsert: {
+        code: "agency_growth",
+        name: "Agency Growth",
+        type: "AGENCY",
+        // Real volume economics: $99/5 businesses (Starter) vs. $249/15 (Growth) — a genuinely
+        // lower per-business rate at higher volume, not just a bigger flat number.
+        description: "For a larger agency managing up to 15 client businesses, at a lower per-business rate.",
+        pricing: [
+          { interval: "monthly", amountCents: 24900, currency: "USD", providerPriceId: "mock_price_agency_growth_monthly" },
+          { interval: "yearly", amountCents: 249000, currency: "USD", providerPriceId: "mock_price_agency_growth_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+          { key: "max_businesses", value: 15 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  console.log("[seed] ensured plan catalog (owner_basic, owner_pro, agency_starter, agency_growth; legacy owner/agency retained inactive)");
 
   const platformAdminEmail = "platform-admin@restaurant.local";
   let platformAdmin = await User.findOne({ email: platformAdminEmail });

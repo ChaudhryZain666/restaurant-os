@@ -129,6 +129,99 @@ export function orderCancelledEmail(
   };
 }
 
+export function paymentReceiptEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; total: string; trackingUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `Payment received — ${details.orderNumber}`,
+    html: layout(
+      "Payment received",
+      `<p>We've received your payment of <strong>${details.total}</strong> for order <strong>${details.orderNumber}</strong>
+       from <strong>${details.restaurantName}</strong>.</p>
+       <p><a href="${details.trackingUrl}" style="color:#c2410c;">View your order</a></p>`
+    ),
+    text: `We've received your payment of ${details.total} for order ${details.orderNumber} from ${details.restaurantName}.\n\nView your order: ${details.trackingUrl}`,
+  };
+}
+
+export function paymentFailedEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; trackingUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `Payment failed — ${details.orderNumber}`,
+    html: layout(
+      "Payment failed",
+      `<p>Your payment for order <strong>${details.orderNumber}</strong> from <strong>${details.restaurantName}</strong>
+       didn't go through. No charge was made.</p>
+       <p><a href="${details.trackingUrl}" style="color:#c2410c;">Try again</a></p>`
+    ),
+    text: `Your payment for order ${details.orderNumber} from ${details.restaurantName} didn't go through. No charge was made.\n\nTry again: ${details.trackingUrl}`,
+  };
+}
+
+export function refundConfirmationEmail(
+  to: string,
+  details: { restaurantName: string; orderNumber: string; amount: string; trackingUrl: string }
+): EmailMessage {
+  return {
+    to,
+    subject: `Refund issued — ${details.orderNumber}`,
+    html: layout(
+      "Refund issued",
+      `<p>A refund of <strong>${details.amount}</strong> has been issued for order <strong>${details.orderNumber}</strong>
+       from <strong>${details.restaurantName}</strong>. It may take a few business days to appear on your original
+       payment method.</p>
+       <p><a href="${details.trackingUrl}" style="color:#c2410c;">View your order</a></p>`
+    ),
+    text: `A refund of ${details.amount} has been issued for order ${details.orderNumber} from ${details.restaurantName}. It may take a few business days to appear on your original payment method.\n\nView your order: ${details.trackingUrl}`,
+  };
+}
+
+export function trialEndingEmail(to: string, details: { planName: string; trialEndsAt: string; billingUrl: string }): EmailMessage {
+  return {
+    to,
+    subject: `Your Tablecloth trial ends ${details.trialEndsAt}`,
+    html: layout(
+      "Your trial is ending soon",
+      `<p>Your <strong>${details.planName}</strong> trial ends on <strong>${details.trialEndsAt}</strong>. After that,
+       billing begins automatically unless you cancel first.</p>
+       <p><a href="${details.billingUrl}" style="color:#c2410c;">Review your plan</a></p>`
+    ),
+    text: `Your ${details.planName} trial ends on ${details.trialEndsAt}. After that, billing begins automatically unless you cancel first.\n\nReview your plan: ${details.billingUrl}`,
+  };
+}
+
+export function subscriptionPastDueEmail(to: string, details: { planName: string; billingUrl: string }): EmailMessage {
+  return {
+    to,
+    subject: "Your last payment didn't go through",
+    html: layout(
+      "Payment failed",
+      `<p>Your last payment for the <strong>${details.planName}</strong> plan didn't go through. Your account keeps
+       full access for now — please update your payment method to avoid losing access.</p>
+       <p><a href="${details.billingUrl}" style="color:#c2410c;">Update payment method</a></p>`
+    ),
+    text: `Your last payment for the ${details.planName} plan didn't go through. Your account keeps full access for now — please update your payment method to avoid losing access.\n\nUpdate payment method: ${details.billingUrl}`,
+  };
+}
+
+export function subscriptionCancelledEmail(to: string, details: { planName: string; billingUrl: string }): EmailMessage {
+  return {
+    to,
+    subject: "Your Tablecloth subscription was cancelled",
+    html: layout(
+      "Subscription cancelled",
+      `<p>Your <strong>${details.planName}</strong> subscription has been cancelled. You're welcome back any time.</p>
+       <p><a href="${details.billingUrl}" style="color:#c2410c;">Resubscribe</a></p>`
+    ),
+    text: `Your ${details.planName} subscription has been cancelled. You're welcome back any time.\n\nResubscribe: ${details.billingUrl}`,
+  };
+}
+
 export function staffInviteEmail(
   to: string,
   acceptUrl: string,

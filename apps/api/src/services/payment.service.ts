@@ -7,6 +7,7 @@ import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { getPaymentProvider } from "../payments/index.js";
+import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
 import type { ProviderWebhookEvent } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
@@ -66,7 +67,20 @@ export async function createPaymentForOrder(
     throw ApiError.badRequest("This restaurant is temporarily unable to accept payments — please contact the restaurant.");
   }
 
-  const provider = getPaymentProvider();
+  // Phase 34 — country/currency eligibility routing is opt-in (env.PAYMENT_ELIGIBILITY_ROUTING,
+  // default false): every existing deployment/test/dev environment keeps today's exact behavior
+  // (the single PAYMENT_PROVIDER-configured default, regardless of restaurant country) unless a
+  // deployment deliberately turns this on. When enabled, a restaurant whose country has no eligible
+  // configured provider gets a clear error rather than silently falling back to a provider that
+  // doesn't actually serve that market — see payments/eligibility.ts.
+  let provider = getPaymentProvider();
+  if (env.PAYMENT_ELIGIBILITY_ROUTING) {
+    const eligible = resolveEligiblePaymentProvider(restaurant);
+    if (!eligible) {
+      throw ApiError.badRequest("Online payment isn't available for this restaurant's country yet — please pay with cash.");
+    }
+    provider = getPaymentProvider(eligible.providerName);
+  }
   // Same order-detail page the customer already lands on after checkout (CartPage.tsx) — a real
   // provider's hosted checkout sends them right back to it, success or cancel alike, where the
   // existing "Unpaid"/"Paid" panel state (driven by the webhook-confirmed order, not this redirect)
@@ -208,6 +222,7 @@ export async function processProviderEvent(providerName: string, event: Provider
         restaurantId: order.restaurantId.toString(),
         customerId: order.customerId.toString(),
         status: order.status,
+        paymentOutcome: event.status,
       });
     }
   } finally {
@@ -318,13 +333,26 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     const nextStatus = reserved.totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
     await Payment.updateOne({ _id: payment._id }, { $set: { status: nextStatus } });
 
-    // A FULL refund reverses this order's loyalty impact — a partial refund does not, since we
-    // can't know which portion of a part-refunded order the earned/redeemed points corresponded
-    // to without a much finer-grained accounting than this system has. See loyalty.service.ts's
-    // reverseLoyaltyForOrderIfNeeded doc comment for the cancellation case this shares logic with.
-    if (nextStatus === "refunded") {
-      const order = await Order.findById(payment.orderId);
-      if (order) await reverseLoyaltyForOrderIfNeeded(order);
+    const order = await Order.findById(payment.orderId);
+    if (order) {
+      // A FULL refund reverses this order's loyalty impact — a partial refund does not, since we
+      // can't know which portion of a part-refunded order the earned/redeemed points corresponded
+      // to without a much finer-grained accounting than this system has. See loyalty.service.ts's
+      // reverseLoyaltyForOrderIfNeeded doc comment for the cancellation case this shares logic with.
+      if (nextStatus === "refunded") await reverseLoyaltyForOrderIfNeeded(order);
+
+      // Refund confirmation reuses the same order-event/notification pipeline as a payment
+      // succeeding/failing (see processProviderEvent above) rather than a bespoke one — fires for
+      // both partial and full refunds, since the customer paid real money back either way.
+      emitOrderEvent("order.payment_updated", {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        restaurantId: order.restaurantId.toString(),
+        customerId: order.customerId.toString(),
+        status: order.status,
+        paymentOutcome: "refunded",
+        amount,
+      });
     }
   }
 

@@ -77,9 +77,14 @@ export function BillingPage() {
     setSubscription(subRes.subscription);
     setPlan(subRes.plan);
     setPastDueDeadline(subRes.pastDueDeadline);
-    setAvailablePlans(plansRes.plans.filter((p) => p.type === "OWNER"));
+    const ownerPlans = plansRes.plans.filter((p) => p.type === "OWNER");
+    setAvailablePlans(ownerPlans);
     setHistory(historyRes.items);
-    if (!selectedPlanCode && plansRes.plans[0]) setSelectedPlanCode(plansRes.plans[0].code);
+    // Phase 34 fix: was defaulting from the unfiltered plansRes.plans[0] (any type, sorted by
+    // code) — with more than one OWNER-type plan code now existing, that could silently default
+    // an owner's picker to an AGENCY-type plan whose code happened to sort first alphabetically.
+    // The dropdown below only ever renders ownerPlans, so the default must come from there too.
+    if (!selectedPlanCode && ownerPlans[0]) setSelectedPlanCode(ownerPlans[0].code);
   }
 
   useEffect(() => {

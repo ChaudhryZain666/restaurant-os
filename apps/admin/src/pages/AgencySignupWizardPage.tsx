@@ -317,8 +317,8 @@ export function AgencySignupWizardPage() {
                 </dd>
               </div>
             </dl>
-            <Badge tone="warning" className="w-fit">
-              Pricing shown is proposed, not yet finalized
+            <Badge tone="success" className="w-fit">
+              No card required until your trial ends
             </Badge>
             <Button onClick={handleStartTrial} disabled={busy} className="w-full">
               {busy ? "Starting trial..." : selectedPlan.trialDays ? `Start ${selectedPlan.trialDays}-day trial` : "Start subscription"}

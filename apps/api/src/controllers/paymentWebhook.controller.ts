@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError.js";
-import { getPaymentProvider } from "../payments/index.js";
+import { getPaymentProvider, KNOWN_PAYMENT_PROVIDER_NAMES, type PaymentProviderName } from "../payments/index.js";
 import { processProviderEvent } from "../services/payment.service.js";
 
 /**
@@ -9,13 +9,26 @@ import { processProviderEvent } from "../services/payment.service.js";
  * express.json({verify}) hook — verification must run against the exact bytes the provider
  * signed, not a re-serialized copy of the parsed body (which can differ in whitespace/key order
  * and would make every real signature fail).
+ *
+ * Phase 34 — looks up the provider the URL itself names (getPaymentProvider(name), the registry
+ * keyed lookup) rather than comparing against a single configured default's `.name`: a deployment
+ * can now have more than one provider actually configured (payments/eligibility.ts routes
+ * different restaurants to different providers), so "safepay" and "stripe" webhooks must both be
+ * routable at once, not just whichever one PAYMENT_PROVIDER happens to name.
  */
 export async function handleProviderWebhook(req: Request, res: Response) {
-  const provider = getPaymentProvider();
-  if (provider.name !== req.params.provider) {
-    // Deliberately 400, not 404: this is a request that arrived at a real endpoint but claims to
-    // be from a provider this deployment isn't configured for — worth distinguishing from a
-    // plain wrong-URL 404 in logs/monitoring.
+  if (!KNOWN_PAYMENT_PROVIDER_NAMES.includes(req.params.provider as PaymentProviderName)) {
+    throw ApiError.badRequest(`"${req.params.provider}" is not a recognized payment provider`);
+  }
+
+  let provider;
+  try {
+    provider = getPaymentProvider(req.params.provider as PaymentProviderName);
+  } catch {
+    // Deliberately 400, not 404 or 500: this is a request that arrived at a real endpoint but
+    // names a provider this deployment isn't configured (missing credentials) for — worth
+    // distinguishing from a plain wrong-URL 404, and from an unrelated server error, in
+    // logs/monitoring.
     throw ApiError.badRequest(`This deployment is not configured for provider "${req.params.provider}"`);
   }
 

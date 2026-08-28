@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { OrderStatus } from "@restaurant/types";
+import type { ProviderPaymentStatus } from "../payments/PaymentProvider.js";
 
 /**
  * Conceptual lifecycle events (ORDER_CREATED / ORDER_ACCEPTED / ORDER_PREPARING / ORDER_READY /
@@ -26,6 +27,15 @@ export interface OrderEventPayload {
   restaurantId: string;
   customerId: string;
   status: OrderStatus;
+  // Phase 34, additive — only ever set on "order.payment_updated". Order.paymentStatus is a binary
+  // unpaid/paid flag (see Order.ts), not enough on its own to tell a receipt email from a
+  // payment-failed notice, or a refund confirmation from either — this carries the Payment's own
+  // outcome (or "refunded", which has no ProviderPaymentStatus equivalent) for that one event type.
+  paymentOutcome?: ProviderPaymentStatus | "refunded";
+  // Phase 34, additive — only ever set alongside paymentOutcome:"refunded", the actual refunded
+  // amount (which may be less than the order's own total for a partial refund — Order.total alone
+  // would overstate a partial refund's confirmation email).
+  amount?: number;
 }
 
 /**

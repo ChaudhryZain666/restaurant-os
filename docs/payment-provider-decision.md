@@ -1,5 +1,52 @@
 # Payment Provider Decision
 
+## Update — Phase 34: the international-expansion adapter, plus a real eligibility engine
+
+Phase 29's "International expansion" section below anticipated this exactly: `StripeProvider`
+(`apps/api/src/payments/StripeProvider.ts`) is now real, network-capable code implementing the same
+`PaymentProvider` interface Safepay does, added as a second adapter with **zero changes to
+`PaymentService` or any controller's business logic** — only the provider-lookup call sites
+themselves changed (see below). Built against Stripe's real, entirely-public API reference (no
+authenticated-account wall, unlike Safepay/Paddle — see that file's header comment for the full
+verified-vs-assumed breakdown), deliberately using Stripe's **Checkout Sessions** API rather than
+raw PaymentIntents: a Checkout Session returns a real hosted-checkout `url`, matching this
+codebase's existing redirect-based `ProviderIntent.clientSecret` contract exactly (the same one
+`OrderPaymentPanel.tsx` already redirects to for any non-mock provider) — raw PaymentIntent
+`client_secret` values are not URLs and would need Stripe.js/Elements on the frontend, which nothing
+in this codebase integrates. Like Safepay, **`StripeProvider` has never been run against a live
+(even test-mode) Stripe account** — no credentials were available when it was written. Unlike
+Safepay/Paddle, Stripe test-mode API keys are genuinely self-serve with no business verification
+required, so this is the one adapter in this platform that's realistically exercisable without a
+long external approval process once `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (test mode) are
+supplied.
+
+**Provider registry, not a single singleton.** `getPaymentProvider()`
+(`apps/api/src/payments/index.ts`) was a process-wide singleton selected once by `PAYMENT_PROVIDER`
+— structurally unable to route two different restaurants to two different providers, even though
+the webhook route (`/webhooks/payments/:provider`) was already provider-parameterized. It's now a
+small keyed registry (`getPaymentProvider(name?)`), each concrete adapter still built lazily/once
+and cached; calling with no argument keeps the exact single-default behavior every existing
+deployment/test relies on. `paymentWebhook.controller.ts` now resolves the provider the URL itself
+names, rather than comparing against a fixed default's `.name`.
+
+**Country/currency eligibility engine** (`apps/api/src/payments/eligibility.ts`) — plain table-driven
+TS config (not a new Mongo model or an admin-editable rules UI, deliberately out of scope this
+pass), routing a restaurant to a provider by its stored (free-text, unvalidated — no ISO-3166 enum
+exists or was added) `country` field: Pakistan aliases → `safepay`, a short explicit list of
+Stripe-unsupported countries → `null` (no eligible provider), everything else → `stripe`. Routing is
+**opt-in** via `PAYMENT_ELIGIBILITY_ROUTING` (default `false`): every existing deployment, and every
+existing test, keeps today's exact single-default-provider behavior unless a deployment
+deliberately turns this on — flipping it on is a real production decision (it means a restaurant
+whose country has no eligible configured provider gets a clear "online payment isn't available"
+error, correctly, rather than silently misrouting to a provider that doesn't serve that market), not
+something that should change behavior merely by adding `STRIPE_*` credentials to the environment.
+
+**Known gap, not addressed this phase**: `payment.service.ts`'s `returnUrl`/`cancelUrl` are built
+from `env.CLIENT_ORIGIN` (the platform's own origin), not a restaurant's resolved custom domain
+(`DomainMapping`) — a restaurant using white-label checkout would still redirect back through the
+platform's own domain after a Stripe/Safepay hosted checkout completes. Flagged, not fixed, since it
+touches custom-domain resolution logic outside this phase's scope.
+
 ## Update — Phase 29
 
 Closed the one real code gap the Phase 29 commercial-readiness audit found in this domain: even
@@ -136,11 +183,14 @@ current requirement for it and doing so would be speculative complexity.
 | `PaymentProvider` interface | Real, fully implemented |
 | `MockPaymentProvider` | Real code, fake money — deterministic, in-process only, never reachable unless `PAYMENT_PROVIDER=mock` |
 | `SafepayProvider` (Phase 15) | Real, network-capable code against Safepay's real hosts — **never run against a live Safepay account**. Treat as unverified until tested against a real sandbox (see the checklist above) |
-| Webhook signature verification | Real HMAC verification for both providers — against the mock's own secret for `mock`, against `SAFEPAY_WEBHOOK_SECRET` for `safepay` (header name unverified — see `SafepayProvider.ts`) |
-| Idempotency (checkout, webhooks, refunds) | Real, enforced at the database level via unique indexes, not just application logic |
+| `StripeProvider` (Phase 34) | Real, network-capable code against Stripe's real (entirely public) API, using Checkout Sessions — **never run against a live, even test-mode, Stripe account**. Genuinely low-friction to verify (self-serve test keys) once supplied |
+| Provider registry (Phase 34) | Real — `getPaymentProvider(name?)` supports more than one concrete provider being configured/cached at once; single-default behavior unchanged when called with no argument |
+| Country/currency eligibility engine (Phase 34) | Real routing logic, opt-in via `PAYMENT_ELIGIBILITY_ROUTING` (default off) — static TS config, not yet admin-editable |
+| Webhook signature verification | Real HMAC verification for all three providers — against the mock's own secret for `mock`, against `SAFEPAY_WEBHOOK_SECRET` for `safepay` (header name unverified — see `SafepayProvider.ts`), against `STRIPE_WEBHOOK_SECRET` for `stripe` (Stripe's documented `t=...,v1=...` scheme, including the replay-window check) |
+| Idempotency (checkout, webhooks, refunds) | Real, enforced at the database level via unique indexes, not just application logic — `provider` is a free-text field on every relevant model, so a third provider name needed no schema change |
 | Restaurant payment-method toggles (`cashEnabled`/`onlinePaymentEnabled`) | Real, Phase 15 — server-enforced at order creation, not just hidden client-side |
 | Customer checkout redirect (Phase 29) | Real — `OrderPaymentPanel.tsx` redirects to the active provider's real `clientSecret` checkout URL for any non-mock provider; simulate buttons only ever render for `mock` |
-| Per-restaurant payment accounts | **Not built, deliberately deferred** (Phase 29 audit) — this platform uses one platform-owned account (see Multi-tenancy model above); restaurant-level payout/split-payment is a separate, future, and substantially larger project, not scoped here |
+| Per-restaurant payment accounts | **Not built, deliberately deferred** (Phase 29 audit, reconfirmed Phase 34) — this platform uses one platform-owned account per provider (see Multi-tenancy model above); restaurant-level payout/split-payment is a separate, future, and substantially larger project, not scoped here |
 
 No code path in this repository reports a mock or unverified payment as confirmed-working, and no
 code path claims Safepay integration has been validated against a real account. `PAYMENT_PROVIDER`

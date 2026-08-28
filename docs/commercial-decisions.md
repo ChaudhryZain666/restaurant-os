@@ -32,35 +32,43 @@ providerProductId`/`pricing[].providerPriceId`), register the production webhook
 `PADDLE_API_KEY`/`PADDLE_WEBHOOK_SECRET`, and test end-to-end against Paddle's sandbox before ever
 setting `BILLING_PROVIDER=paddle` in a real deployment.
 
-## 2. Owner plan pricing — PROPOSED, not final
+## 2. Owner plan pricing — DECIDED (Phase 34), supersedes the original single-tier "owner" plan
 
-| | Monthly | Yearly (≈2 months free) |
-|---|---|---|
-| Price | $79.00 USD | $790.00 USD |
-| Included locations | 1 | 1 |
-| Additional location | not yet purchasable (see §7) | — |
-| Trial | 14 days | 14 days |
+| | Basic — Monthly | Basic — Yearly | Pro — Monthly | Pro — Yearly |
+|---|---|---|---|---|
+| Price | $15.00 USD | $150.00 USD | $29.00 USD | $290.00 USD |
+| Included locations | 1 | 1 | 3 | 3 |
+| Custom domains / analytics / promotions | Not included | Not included | Included | Included |
+| Additional location | not yet purchasable (see §7) | — | not yet purchasable (see §7) | — |
+| Trial | 14 days | 14 days | 14 days | 14 days |
 
-Derived from competitor research (ChowNow $119/$229/$328, Popmenu $179/$299/$499, Owner.com up to
-$499/mo or a 5%-per-order model) — positioned as an accessible entry price for a newer entrant, not
-a copy of any one competitor. **DECISION REQUIRED**: final sign-off, whether to add a mid/high tier,
-and whether a per-order fee (like several competitors) makes more sense than a flat monthly price.
+Two tiers (`Plan.code` `owner_basic`/`owner_pro`), not one — Basic covers core single-location
+ordering, Pro unlocks multi-location + the growth features (custom domains, analytics, promotions)
+that Phase 27's original single "owner" plan bundled unconditionally. The original `code:"owner"`
+Plan document ($79/$790, 1 location, all features) is **retained, never deleted or price-mutated,
+but flipped `isActive:false`** — it can no longer be selected by a new subscription, but stays the
+correct FK target for any subscriber who signed up under it (`Subscription.planId` is a live,
+non-snapshotted reference — see `apps/api/src/scripts/seed.ts`'s Phase 34 comment for the exact
+mechanism). **Still open, not this phase's decision**: whether a per-order fee ever replaces or
+supplements the flat monthly price, and the exact included-location counts above are a defaulted
+starting point, not a final commercial sign-off independent of the dollar amounts.
 
-## 3. Agency plan pricing — PROPOSED, not final
+## 3. Agency plan pricing — DECIDED (Phase 34), first real volume-tiered structure
 
-| | Monthly | Yearly (≈2 months free) |
-|---|---|---|
-| Price | $199.00 USD | $1,990.00 USD |
-| Included businesses | 5 | 5 |
-| Additional business | not yet purchasable (see §7) | — |
-| Trial | 14 days | 14 days |
+| | Starter — Monthly | Starter — Yearly | Growth — Monthly | Growth — Yearly |
+|---|---|---|---|---|
+| Price | $99.00 USD | $990.00 USD | $249.00 USD | $2,490.00 USD |
+| Included businesses | 5 | 5 | 15 | 15 |
+| Per-business rate | ~$19.80 | ~$19.80 | ~$16.60 | ~$16.60 |
+| Trial | 14 days | 14 days | 14 days | 14 days |
 
-Derived from wholesale white-label reseller benchmarks (~$75/location/mo wholesale, commonly
-resold at $100–$150+) — an agency managing 5 businesses at this price implies a per-business cost
-below typical wholesale-per-location rates, intentionally aggressive to make the agency tier
-attractive relative to running 5 separate Owner subscriptions. **DECISION REQUIRED**: final
-sign-off; whether pricing should instead scale by total location count across all managed
-businesses, not just business count.
+Two tiers (`Plan.code` `agency_starter`/`agency_growth`) give a genuine volume discount at higher
+included-business counts, rather than a single flat number — this is the "volume economics" the
+original single "agency" plan ($199/mo flat, 5 businesses) didn't express. The original
+`code:"agency"` Plan document is retained inactive, same mechanism as §2. **Still open**: whether
+pricing should ultimately scale by total location count across all managed businesses rather than
+business count alone (unchanged from the original open question); self-serve purchase of additional
+business slots beyond a tier's included count remains explicitly not built (see §7).
 
 ## 4. Currency strategy
 
@@ -90,8 +98,8 @@ categories, never confused:
   business that existed before Phase 27, and any brand-new one that hasn't subscribed yet): a
   generous, explicitly non-commercial fallback (20 locations, 3 businesses) that exists purely so
   the platform never retroactively breaks a grandfathered account.
-- **Seeded plan entitlement** (what an ACTUAL paid subscription includes): 1 location / 5
-  businesses, per §2/§3 above — a real commercial number, still marked PROPOSED.
+- **Seeded plan entitlement** (what an ACTUAL paid subscription includes): 1 location (Basic) or 3
+  (Pro) / 5 businesses (Agency Starter) or 15 (Agency Growth), per §2/§3 above.
 
 ## 7. Additional location / additional business pricing
 
@@ -207,3 +215,27 @@ is written to `AgencyAuditLog` (`agency.business_owner_access_created`).
 **DECISION REQUIRED**: whether this mode should ever be available to `agency_staff` (currently
 gated the same as the invite path, `agency.businesses.manage`) or restricted further to
 `agency_owner`/`agency_admin` only, given the trust it extends.
+
+## 18. Phase 34 — global commercial, billing & payments completion
+
+**DECISION**: §2/§3's Basic/Pro/Agency-Starter/Agency-Growth pricing table is the platform's
+current real commercial decision, replacing the original single-tier "owner"/"agency" plans (kept
+inactive, never deleted — see §2). Trial length stays 14 days, no-card, unchanged from §5.
+Cancellation/past-due/tax/invoice/payout policy (§8–§13) are unchanged. Additional-location/business
+purchasing remains explicitly not built (§7) — buying more slots without a plan change is still out
+of scope.
+
+**Real Paddle integration status**: `PaddleBillingProvider.ts` remains real code against Paddle's
+documented Billing API v2, still never exercised against a live account — this phase re-verified the
+adapter against current public docs and extended test coverage for the new plan codes, but did not
+and could not change its live-verification status without a Paddle sandbox account and real
+Product/Price ids for `owner_basic`/`owner_pro`/`agency_starter`/`agency_growth` (the seeded
+`Plan.pricing[].providerPriceId`/`Plan.providerProductId` values remain `mock_price_*` placeholders
+until those are supplied). See `docs/payment-provider-decision.md` for the equivalent status on the
+restaurant-payment side (Safepay + a new Stripe adapter).
+
+**Country/currency payment eligibility**: a new `apps/api/src/payments/eligibility.ts` module routes
+a restaurant to a payment provider by `Restaurant.country` — see `docs/payment-provider-decision.md`
+for the full design and the second-provider (Stripe) decision. This is unrelated to SaaS billing
+(Paddle handles buyer localization itself, per §4) — restaurant-payment eligibility governs how a
+restaurant's *customers* pay for food orders, not how restaurant owners/agencies pay the platform.

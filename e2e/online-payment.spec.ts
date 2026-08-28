@@ -12,6 +12,10 @@ import { test, expect } from "@playwright/test";
  * Reuses the seeded demo-restaurant/owner and an existing demo menu item (Margherita Pizza)
  * rather than creating one — keeps this spec focused on the payment flow itself, not menu setup
  * (already covered by full-order-flow.spec.ts).
+ *
+ * Phase 34 — the successful-payment test also drives a real refund through OrderPaymentAdmin
+ * (apps/admin), the "Refund" commercial journey: a real POST .../payments/:id/refund, not a
+ * database shortcut.
  */
 
 /** Margherita Pizza has a required "Size" modifier group in seed data — "Add to cart" expands an
@@ -102,6 +106,14 @@ test.describe("online payment", () => {
       await expect(orderGroupAfter.getByRole("button", { name: "Accept" })).toBeVisible({ timeout: 10_000 });
       await orderGroupAfter.getByRole("button", { name: "Accept" }).click();
       await expect(orderGroupAfter.getByRole("button", { name: "Start preparing" })).toBeVisible();
+
+      // --- Phase 34: staff issues a real refund through the same OrderPaymentAdmin control
+      // rendered inline in this order group — a real POST .../payments/:id/refund, not a database
+      // shortcut, driving the same refund pipeline payment.controller.test.ts exercises via
+      // supertest, now also proven through the real UI. ---
+      await orderGroupAfter.getByRole("button", { name: "Issue refund" }).click();
+      await orderGroupAfter.getByRole("button", { name: "Confirm refund" }).click();
+      await expect(orderGroupAfter.getByText("Paid · Refunded")).toBeVisible({ timeout: 10_000 });
     } finally {
       await ownerContext.close();
       await customerContext.close();

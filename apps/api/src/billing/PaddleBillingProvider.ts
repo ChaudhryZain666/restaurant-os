@@ -15,9 +15,12 @@ import type {
 const SANDBOX_BASE_URL = "https://sandbox-api.paddle.com";
 const PRODUCTION_BASE_URL = "https://api.paddle.com";
 const REQUEST_TIMEOUT_MS = 10_000;
-// Paddle's own documented recommendation — reject a webhook whose timestamp is older than this,
-// even if the HMAC itself checks out, to close a replay window.
-const WEBHOOK_MAX_AGE_SECONDS = 300;
+// Phase 34 — corrected from an assumed 300s to Paddle's actual documented default (re-verified
+// against developer.paddle.com/webhooks/signature-verification): "The SDK helper methods enforce a
+// five-second timestamp tolerance by default to protect against replay attacks; manual
+// implementations should apply the same check." Reject a webhook whose timestamp is older than
+// this, even if the HMAC itself checks out, to close a replay window.
+const WEBHOOK_MAX_AGE_SECONDS = 5;
 
 /**
  * Everything below the request-shaping helpers is genuinely wired against Paddle's real
@@ -33,8 +36,9 @@ const WEBHOOK_MAX_AGE_SECONDS = 300;
  *  - Webhook signing: the `Paddle-Signature` header arrives as `ts=<unix_seconds>;h1=<hex_hmac>`,
  *    and the HMAC-SHA256 is computed over the STRING `${ts}:${rawBody}` — NOT the raw body alone
  *    (a documented gotcha; getting this wrong is the most common real-world integration bug).
- *    Paddle's own guidance is to also reject anything older than ~5 minutes even if the signature
- *    matches, closing a replay window — implemented below as WEBHOOK_MAX_AGE_SECONDS.
+ *    Paddle's own guidance (re-verified Phase 34 against developer.paddle.com) is a 5-SECOND replay
+ *    tolerance by default — tighter than this file originally assumed (300s) — implemented below as
+ *    WEBHOOK_MAX_AGE_SECONDS.
  *  - Subscriptions are primarily born from a CHECKOUT completing (Paddle's own client-side
  *    Paddle.js overlay, given a Price id + customer), not a direct "create subscription" API call —
  *    this is WHY createCheckoutSession exists as its own BillingProvider method rather than treating

@@ -53,12 +53,14 @@ const envSchema = z.object({
   GEOCODING_BASE_URL: z.string().optional(),
 
   // Payments. "mock" is the only provider that actually runs — deterministic, no real money ever
-  // moves, see apps/api/src/payments/MockPaymentProvider.ts. "safepay" names the real provider
-  // decision documented in docs/payment-provider-decision.md; selecting it without an
-  // implementation throws clearly (getPaymentProvider in payments/index.ts) rather than silently
-  // falling back to the mock. SAFEPAY_* are accepted but unused today — the configuration
-  // boundary a real adapter would read from, not a working credential path.
-  PAYMENT_PROVIDER: z.enum(["mock", "safepay"]).default("mock"),
+  // moves, see apps/api/src/payments/MockPaymentProvider.ts. "safepay"/"stripe" name real provider
+  // decisions (docs/payment-provider-decision.md); selecting either without its credentials throws
+  // clearly (getPaymentProvider in payments/index.ts) rather than silently falling back to the
+  // mock. This is now the DEFAULT provider only — Phase 34's payments/eligibility.ts can request a
+  // specific provider by name per-restaurant (getPaymentProvider(name)), independent of this env
+  // var, which still governs the single default used when no name is given (e.g. the mock driver,
+  // and any restaurant the eligibility engine can't confidently route).
+  PAYMENT_PROVIDER: z.enum(["mock", "safepay", "stripe"]).default("mock"),
   MOCK_PAYMENT_WEBHOOK_SECRET: z.string().default("mock-payment-webhook-secret-dev-only"),
   // Safepay: real network-capable adapter as of Phase 15 (apps/api/src/payments/SafepayProvider.ts),
   // but never exercised against a live account — see that file's header comment and
@@ -69,6 +71,23 @@ const envSchema = z.object({
   SAFEPAY_SECRET_KEY: z.string().optional(),
   SAFEPAY_WEBHOOK_SECRET: z.string().optional(),
   SAFEPAY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  // Stripe: Phase 34's second restaurant-payment adapter (apps/api/src/payments/StripeProvider.ts)
+  // — real code against Stripe's own documented public API, but still unverified against a live
+  // (even test-mode) account in this environment, same status class as Safepay above. Unlike
+  // Safepay/Paddle, Stripe test-mode keys are genuinely self-serve with no business verification —
+  // see docs/payment-provider-decision.md's Phase 34 addendum.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Phase 34 — opt-in country/currency payment routing (payments/eligibility.ts). Defaults to
+  // "false" so every existing deployment/test/dev environment keeps today's exact behavior (every
+  // restaurant routed to the single PAYMENT_PROVIDER-configured default, regardless of country) —
+  // flipping this on is a deliberate deployment decision for a multi-provider setup, not something
+  // that should change behavior merely by adding STRIPE_* credentials. z.enum(["true","false"]),
+  // not z.coerce.boolean(), since the latter treats the literal string "false" as truthy.
+  PAYMENT_ELIGIBILITY_ROUTING: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 
   // DNS verification (Phase 22 custom domains). "mock" (default outside production, mirroring
   // PAYMENT_PROVIDER's default-mock precedent) reads from the MockDnsRecord collection, seeded

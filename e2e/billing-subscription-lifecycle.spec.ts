@@ -146,8 +146,12 @@ test.describe.serial("owner checkout — payment-method-up-front path (Phase 27)
     await page.getByRole("link", { name: "Billing" }).click();
     await expect(page.getByText("No subscription yet.")).toBeVisible({ timeout: 10_000 });
 
-    // --- The seeded Owner plan's real (proposed) pricing renders in the plan picker. ---
-    await expect(page.locator("option", { hasText: "$79.00" })).toHaveCount(1);
+    // --- Phase 34: the real Basic/Pro catalog pricing renders in the plan picker (superseding
+    // the original single "owner" $79.00 plan, retained inactive — see docs/commercial-decisions.md
+    // §2). Both tiers are real, selectable options; this test proceeds on whichever the picker
+    // defaults to (BillingPage.tsx seeds it from the first OWNER-type plan). ---
+    await expect(page.locator("option", { hasText: "$15.00" })).toHaveCount(1);
+    await expect(page.locator("option", { hasText: "$29.00" })).toHaveCount(1);
 
     // --- Launch checkout: a real navigation to the mock provider's stub page, not a shortcut. ---
     await page.getByRole("button", { name: "Subscribe now" }).click();
@@ -166,5 +170,76 @@ test.describe.serial("owner checkout — payment-method-up-front path (Phase 27)
     // --- Billing history reflects the real webhook-driven events, not a client-side fabrication. ---
     await expect(page.getByText("Subscription started")).toBeVisible();
     await expect(page.getByText("Payment succeeded")).toBeVisible();
+  });
+});
+
+/**
+ * Phase 34 — proves the Basic/Pro tier picker and the change-plan action work against the real
+ * seeded catalog, and that a Basic subscriber's UI reflects Basic's own lower included-location
+ * count (not a shared, untiered number) — the "Owner Basic" and "Owner Pro" commercial journeys.
+ */
+test.describe.serial("owner Basic/Pro tier selection and upgrade (Phase 34)", () => {
+  let db: mongoose.Connection;
+
+  test.beforeAll(async () => {
+    const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
+    db = conn;
+  });
+
+  test.afterAll(async () => {
+    await db.close();
+  });
+
+  test("starts on Basic (1 included location), upgrades to Pro, sees Pro's higher included-location count", async ({ page }) => {
+    test.setTimeout(90_000);
+    const stamp = Date.now();
+    const slug = `e2e-tier-${stamp}`;
+    const restaurantName = `E2E Tier ${stamp}`;
+    const ownerEmail = `e2e-tier-owner-${stamp}@test.local`;
+
+    await page.goto("http://localhost:5174/login");
+    await page.locator('input[type="email"]').fill("platform-admin@restaurant.local");
+    await page.locator('input[type="password"]').fill("Admin123!");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/platform$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Restaurants" }).click();
+    await page.getByRole("button", { name: "Create restaurant" }).click();
+    await expect(page).toHaveURL(/\/platform\/restaurants\/new$/);
+    await page.getByLabel("Name", { exact: true }).fill(restaurantName);
+    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Full name").fill("Tier Owner");
+    await page.getByLabel("Email", { exact: true }).fill(ownerEmail);
+    await page.getByRole("button", { name: "Create restaurant & send invite" }).click();
+    await expect(page.getByText("Restaurant created")).toBeVisible({ timeout: 10_000 });
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await db.collection("users").updateOne(
+      { email: ownerEmail },
+      { $set: { inviteTokenHash: tokenHash, inviteExpiresAt: new Date(Date.now() + 60 * 60 * 1000) } }
+    );
+
+    await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
+    await page.locator('input[type="password"]').fill("TierOwner123!");
+    await page.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Billing" }).click();
+    await expect(page.getByText("No subscription yet.")).toBeVisible({ timeout: 10_000 });
+
+    // --- Explicitly select Basic (plan code "owner_basic") rather than relying on whichever the
+    // picker defaults to, then start the no-card trial. ---
+    await page.getByLabel("Plan").selectOption({ value: "owner_basic" });
+    const includedLocationsRow = page.locator("dt", { hasText: "Included locations" }).locator("xpath=following-sibling::dd");
+    await expect(includedLocationsRow).toHaveText("1");
+    await page.getByRole("button", { name: "Start subscription" }).click();
+    await expect(page.getByText("Basic", { exact: false })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Trial", { exact: true })).toBeVisible();
+
+    // --- Change plan to Pro (plan code "owner_pro") — a real changeSubscriptionPlan call, not a
+    // re-subscribe. ---
+    await page.getByLabel("Change plan:").selectOption({ value: "owner_pro" });
+    await expect(page.getByText("Pro", { exact: false })).toBeVisible({ timeout: 10_000 });
   });
 });

@@ -4,7 +4,7 @@ import { env } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { redis } from "./config/redis.js";
 import { queueConnection } from "./queues/connection.js";
-import { startNotificationWorker } from "./queues/notification.queue.js";
+import { startNotificationWorker, registerTrialReminderJob } from "./queues/notification.queue.js";
 import { createSocketServer } from "./realtime/socket.js";
 import { registerOrderEventListeners } from "./events/orderEventListeners.js";
 import { registerTicketEventListeners } from "./events/ticketEventListeners.js";
@@ -19,6 +19,7 @@ async function main() {
   registerOrderEventListeners();
   registerTicketEventListeners();
   const notificationWorker = startNotificationWorker();
+  await registerTrialReminderJob();
 
   httpServer.listen(env.PORT, () => {
     logger.info("server listening", { port: env.PORT });

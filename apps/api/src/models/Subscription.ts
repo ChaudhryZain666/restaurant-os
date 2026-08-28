@@ -30,6 +30,11 @@ const subscriptionSchema = new Schema(
     provider: { type: String, enum: ["mock", "internal", "paddle"], required: true },
     providerCustomerId: { type: String },
     providerSubscriptionId: { type: String },
+    // Phase 34, additive — dedup marker for the daily trial-ending-reminder sweep
+    // (queues/notification.queue.ts's registerTrialReminderJob). Absence means "not sent yet" —
+    // never overloaded onto BillingHistoryEvent, which exists for financial history, not
+    // notification bookkeeping.
+    trialEndingReminderSentAt: { type: Date },
   },
   { timestamps: true, toJSON: idTransform }
 );

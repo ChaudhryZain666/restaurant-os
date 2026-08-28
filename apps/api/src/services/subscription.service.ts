@@ -2,9 +2,6 @@ import type { HydratedDocument } from "mongoose";
 import type { BillingHistoryEventType, BillingInterval, SubscriptionOwnerType, SubscriptionStatus } from "@restaurant/types";
 import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
-import { Business } from "../models/Business.js";
-import { Agency } from "../models/Agency.js";
-import { User } from "../models/User.js";
 import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
@@ -13,32 +10,11 @@ import { getBillingProvider } from "../billing/index.js";
 import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
 import { recordBillingHistoryEvent } from "./billingHistory.service.js";
+import { resolveOwnerIdentity } from "./ownerIdentity.service.js";
 
 const LIVE_STATUSES: SubscriptionStatus[] = ["trialing", "active", "past_due", "cancelling"];
 
 const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
-
-/**
- * Phase 25 — resolves the {name, email} a billing provider customer record needs, for either owner
- * type. `Business`'s owner-plan path (createSubscriptionForBusiness) was the only reachable one
- * through Phase 24; this is the shared core both it and the new agency path
- * (createSubscriptionForAgency) now go through, so Phase 24's business behavior/tests are
- * byte-for-byte unchanged — only the lookup itself was extracted.
- */
-async function resolveOwnerIdentity(
-  ownerType: SubscriptionOwnerType,
-  ownerId: string
-): Promise<{ name: string; email: string } | null> {
-  if (ownerType === "business") {
-    const business = await Business.findById(ownerId);
-    if (!business) return null;
-    const owner = await User.findById(business.ownerId).select("email name");
-    return { name: business.name, email: owner?.email ?? "" };
-  }
-  const agency = await Agency.findById(ownerId);
-  if (!agency) return null;
-  return { name: agency.name, email: agency.contactEmail };
-}
 
 /** A Plan's own trialDays (Phase 27) overrides env.TRIAL_PERIOD_DAYS when set, so a future plan can
  *  legitimately differ (e.g. a no-trial plan) without touching the global default every other plan

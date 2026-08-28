@@ -2,6 +2,18 @@ import type { Types } from "mongoose";
 import type { BillingHistoryEventType, SubscriptionOwnerType, SubscriptionProvider } from "@restaurant/types";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { logger } from "../common/logger.js";
+import { notificationQueue, type BillingLifecycleKind } from "../queues/notification.queue.js";
+
+// Only these event types are worth a platform email — deliberately excludes payment_succeeded/
+// subscription_created/plan_changed/reactivated: Paddle, as Merchant of Record, already sends its
+// own compliant receipt for a successful charge (docs/commercial-decisions.md §13), so a second
+// "payment succeeded" platform email would be redundant. "expired" (a trial that never converted)
+// reuses the "cancelled" email copy — both mean "you no longer have an active subscription."
+const LIFECYCLE_EMAIL_KIND: Partial<Record<BillingHistoryEventType, BillingLifecycleKind>> = {
+  payment_failed: "past_due",
+  cancelled: "cancelled",
+  expired: "cancelled",
+};
 
 interface RecordBillingHistoryEventInput {
   ownerType: SubscriptionOwnerType;
@@ -41,5 +53,19 @@ export async function recordBillingHistoryEvent(input: RecordBillingHistoryEvent
     });
   } catch (err) {
     logger.error("failed to record billing history event", { error: (err as Error).message, type: input.type });
+    return;
+  }
+
+  // Phase 34 — a billing-history-worthy transition that's also lifecycle-email-worthy gets one
+  // enqueued here, reusing this as the single choke point every such transition already passes
+  // through rather than adding a parallel event bus. Enqueue failures are logged, never thrown —
+  // matching this function's own "log and swallow, never fail the real operation" philosophy.
+  const kind = LIFECYCLE_EMAIL_KIND[input.type];
+  if (kind) {
+    notificationQueue
+      .add("billing.lifecycle", { ownerType: input.ownerType, ownerId: input.ownerId.toString(), subscriptionId: input.subscriptionId.toString(), kind })
+      .catch((err: unknown) => {
+        logger.error("failed to enqueue billing lifecycle notification", { error: (err as Error).message, type: input.type });
+      });
   }
 }
