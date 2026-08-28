@@ -29,6 +29,7 @@ import {
   requestEmailChange,
   requestPasswordReset,
   resetPassword,
+  startDemoSession,
   updateMe,
 } from "../controllers/auth.controller.js";
 
@@ -45,8 +46,20 @@ const authLimiter = rateLimit({
   handler: jsonRateLimitHandler,
 });
 
+// Public storefront playground (Phase 32) — tighter than authLimiter since each call mints a
+// permanent-until-cleanup DB row rather than just checking credentials; 20/15min/IP is generous
+// for a single visitor genuinely trying the demo while still bounding junk-account creation.
+const demoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler,
+});
+
 authRouter.post("/register", authLimiter, validateBody(registerSchema), asyncHandler(register));
 authRouter.post("/login", authLimiter, validateBody(loginSchema), asyncHandler(login));
+authRouter.post("/demo-session", demoLimiter, asyncHandler(startDemoSession));
 authRouter.post("/refresh", asyncHandler(refresh));
 authRouter.post("/logout", asyncHandler(logout));
 authRouter.post(

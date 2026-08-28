@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
@@ -19,6 +20,11 @@ import { MyTicketsPage } from "./pages/MyTicketsPage";
 import { CreateTicketPage } from "./pages/CreateTicketPage";
 import { TicketDetailPage } from "./pages/TicketDetailPage";
 import { PrintReceiptPage } from "./pages/PrintReceiptPage";
+
+// Phase 32 — lazy-loaded so the qrcode dependency and the playground UI never ship in the bundle
+// real restaurants' normal /r/:slug traffic downloads; only a visitor who actually opens the
+// public storefront-demo playground route pays for this chunk.
+const ExperiencePage = lazy(() => import("./pages/experience/ExperiencePage").then((m) => ({ default: m.ExperiencePage })));
 
 /**
  * Handles every bare storefront-shaped route (`/`, `/cart`, `/t/:tableToken`, `/loyalty`) — which
@@ -101,6 +107,19 @@ export function App() {
             while the restaurant is still "pending"; RestaurantContext detects this route and
             fetches from the preview endpoint instead of the public one. */}
         <Route path="/r/:restaurantSlug/preview" element={<MenuPage />} />
+        {/* Phase 32 — the public storefront-playground demo. Resolves via the same PUBLIC by-slug
+            endpoint as the plain /r/:restaurantSlug route above (RestaurantContext's wildcard
+            match already covers this path); the extra playground chrome is additive, and every
+            customization it makes lives in a client-only ThemeOverrideContext, never the real
+            settings.theme/themeDraft. */}
+        <Route
+          path="/r/:restaurantSlug/experience"
+          element={
+            <Suspense fallback={null}>
+              <ExperiencePage />
+            </Suspense>
+          }
+        />
         <Route path="/r/:restaurantSlug/cart" element={<CartPage />} />
         <Route
           path="/r/:restaurantSlug/loyalty"

@@ -26,6 +26,11 @@ export interface AccessTokenPayload {
    *  in a JWT" rule — it's short-lived account security state, same category as the isActive check
    *  already gates at login/refresh time. */
   mustChangePassword?: boolean;
+  /** Phase 32, additive — re-derived from the current User document at every sign/refresh, same
+   *  staleness contract as the claims above. True only for a throwaway account minted by
+   *  POST /auth/demo-session; read by order.controller.ts's createOrder to flag Order.isDemo
+   *  server-side. Never true for a real registered or invited account. */
+  isDemoAccount?: boolean;
 }
 
 export interface RefreshTokenPayload {

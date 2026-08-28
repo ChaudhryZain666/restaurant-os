@@ -72,7 +72,7 @@ export async function getRestaurantAnalytics(restaurantId: string): Promise<Rest
   const restaurantObjectId = new Types.ObjectId(restaurantId);
 
   const [result] = await Order.aggregate<FacetResult>([
-    { $match: { restaurantId: restaurantObjectId, createdAt: { $gte: weekStart } } },
+    { $match: { restaurantId: restaurantObjectId, createdAt: { $gte: weekStart }, isDemo: { $ne: true } } },
     {
       $facet: {
         ordersToday: [{ $match: { createdAt: { $gte: todayStart } } }, { $count: "count" }],
@@ -149,6 +149,7 @@ export async function getDailyTimeSeries(restaurantId: string, from: Date, to: D
         restaurantId: restaurantObjectId,
         createdAt: { $gte: rangeStart, $lte: to },
         status: { $ne: "cancelled" },
+        isDemo: { $ne: true },
       },
     },
     {
@@ -220,7 +221,7 @@ export async function getRestaurantAnalyticsForRange(
   const rangeEndExclusive = await timezoneAwareDayStart(dayAfterTo, timezone);
 
   const [result] = await Order.aggregate<RangeFacetResult>([
-    { $match: { restaurantId: restaurantObjectId, createdAt: { $gte: rangeStart, $lt: rangeEndExclusive } } },
+    { $match: { restaurantId: restaurantObjectId, createdAt: { $gte: rangeStart, $lt: rangeEndExclusive }, isDemo: { $ne: true } } },
     {
       $facet: {
         orders: [{ $count: "count" }],
@@ -291,6 +292,7 @@ export async function getTopSellingItemsForRange(
         restaurantId: restaurantObjectId,
         createdAt: { $gte: rangeStart, $lt: rangeEndExclusive },
         status: { $ne: "cancelled" },
+        isDemo: { $ne: true },
       },
     },
     { $unwind: "$items" },

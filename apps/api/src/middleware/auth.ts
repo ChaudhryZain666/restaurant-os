@@ -24,6 +24,8 @@ declare global {
         agencyMemberships?: Array<{ agencyId: string; role: AgencyMembershipRole }>;
         // Phase 28, additive — see token.service.ts's AccessTokenPayload doc comment.
         mustChangePassword?: boolean;
+        // Phase 32, additive — see token.service.ts's AccessTokenPayload doc comment.
+        isDemoAccount?: boolean;
       };
       // Phase 25 — set by middleware/businessLocation.ts's requireBusinessMatch ONLY when access
       // was granted via agency membership (not the direct businessId/platform_admin branches), so
@@ -50,6 +52,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
       locationIds: payload.locationIds,
       agencyMemberships: payload.agencyMemberships,
       mustChangePassword: payload.mustChangePassword,
+      isDemoAccount: payload.isDemoAccount,
     };
     // Server-side enforcement, not just a client-side redirect: a temporary-password session can
     // reach nothing except "who am I" and "change my password" until it does. /auth/refresh and

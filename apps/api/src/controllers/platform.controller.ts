@@ -60,7 +60,12 @@ export async function listPlatformRestaurants(req: Request, res: Response) {
   const restaurantIds = restaurants.map((r) => r._id);
   const [owners, orderCounts] = await Promise.all([
     User.find({ _id: { $in: ownerIds } }).select("name email inviteTokenHash"),
-    Order.aggregate([{ $match: { restaurantId: { $in: restaurantIds } } }, { $group: { _id: "$restaurantId", count: { $sum: 1 } } }]),
+    // Phase 32 — excludes public storefront-playground demo orders so they don't inflate a
+    // restaurant's order count as shown to platform admins.
+    Order.aggregate([
+      { $match: { restaurantId: { $in: restaurantIds }, isDemo: { $ne: true } } },
+      { $group: { _id: "$restaurantId", count: { $sum: 1 } } },
+    ]),
   ]);
   const ownerById = new Map(owners.map((o) => [o.id as string, o]));
   const orderCountByRestaurant = new Map(orderCounts.map((c) => [c._id.toString(), c.count as number]));
@@ -122,7 +127,8 @@ export async function getPlatformOverview(_req: Request, res: Response) {
     Restaurant.countDocuments(),
     Restaurant.countDocuments({ status: "active" }),
     User.countDocuments(),
-    Order.countDocuments(),
+    // Phase 32 — excludes public storefront-playground demo orders from the platform-wide total.
+    Order.countDocuments({ isDemo: { $ne: true } }),
     SupportTicket.countDocuments({ status: { $in: ["open", "in_progress", "waiting_customer"] } }),
     Restaurant.find().sort({ createdAt: -1 }).limit(5).select("name status createdAt"),
   ]);
@@ -166,7 +172,8 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     User.findById(restaurant.ownerId).select("name email phone inviteTokenHash inviteExpiresAt isActive"),
     computeReadiness(restaurant),
     getRestaurantAnalytics(id),
-    Order.countDocuments({ restaurantId: restaurant._id }),
+    // Phase 32 — excludes public storefront-playground demo orders from this restaurant's detail count.
+    Order.countDocuments({ restaurantId: restaurant._id, isDemo: { $ne: true } }),
     AuditLog.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 }).limit(10),
     // Phase 19 — a light-touch fact only (not a new business/location hierarchy view): lets a
     // platform admin see at a glance that this restaurant is one of several locations under the

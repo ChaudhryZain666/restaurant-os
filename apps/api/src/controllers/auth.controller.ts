@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type {
@@ -69,6 +70,7 @@ export function toPublicUser(user: HydratedDocument<UserDoc>, agencyMemberships:
     agencyMemberships,
     phone: user.phone,
     mustChangePassword: user.mustChangePassword ?? false,
+    isDemoAccount: user.isDemoAccount ?? false,
   };
 }
 
@@ -92,6 +94,7 @@ export async function issueSession(
     // time a session is issued, never carried forward.
     agencyMemberships,
     mustChangePassword: user.mustChangePassword ?? false,
+    isDemoAccount: user.isDemoAccount ?? false,
   });
   const refreshToken = await issueRefreshToken(user.id);
   setRefreshCookie(res, refreshToken);
@@ -108,6 +111,27 @@ export async function register(req: Request, res: Response) {
   const user = await User.create({ name, email, passwordHash, phone });
 
   // A brand-new account can't have any agency memberships yet — skip the query.
+  const accessToken = await issueSession(res, user, []);
+  sendSuccess(res, { user: toPublicUser(user), accessToken }, 201);
+}
+
+/** Phase 32 — mints a throwaway, isDemoAccount:true customer session for the public storefront
+ *  playground (POST /auth/demo-session, demoLimiter-gated in auth.routes.ts). No credentials are
+ *  ever involved — the visitor never sees or sets a password. Returns the exact same
+ *  {user, accessToken} shape as register()/login(), so apps/web's AuthContext/CartPage need no
+ *  special-casing to place a real order once this fires. The account is cleaned up later by
+ *  scripts/cleanupDemoData.ts once demoExpiresAt passes. */
+export async function startDemoSession(_req: Request, res: Response) {
+  const suffix = randomBytes(8).toString("hex");
+  const passwordHash = await bcrypt.hash(randomBytes(16).toString("hex"), 12);
+  const user = await User.create({
+    name: "Demo Guest",
+    email: `demo-${suffix}@playground.demo.local`,
+    passwordHash,
+    role: "customer",
+    isDemoAccount: true,
+    demoExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
   const accessToken = await issueSession(res, user, []);
   sendSuccess(res, { user: toPublicUser(user), accessToken }, 201);
 }

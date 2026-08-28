@@ -126,6 +126,11 @@ const orderSchema = new Schema(
     // customer-facing response (see order.controller.ts's stripInternalFields). Set via a
     // dedicated PATCH, not part of order creation — customers can never write to this field.
     internalNote: { type: String, maxlength: 1000 },
+    // Phase 32 — set server-side only (order.controller.ts's createOrder), true only when the
+    // placing customer is a throwaway isDemoAccount:true User from the public storefront
+    // playground. Excluded by default from listRestaurantOrders/analytics/platform aggregates so
+    // public demo traffic never pollutes a real restaurant's live dashboards.
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true, toJSON: idTransform }
 );

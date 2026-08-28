@@ -14,6 +14,7 @@
     "migrate:menu-canonical": "tsx src/scripts/migrateMenuToCanonical.ts",
     "migrate:backfill-subscriptions": "tsx src/scripts/backfillSubscriptions.ts",
     "migrate:backfill-location-counts": "tsx src/scripts/backfillLocationCounts.ts",
+    "cleanup:demo-data": "tsx src/scripts/cleanupDemoData.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

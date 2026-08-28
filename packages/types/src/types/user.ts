@@ -28,6 +28,9 @@ export interface PublicUser {
    *  forced change-password screen whenever this is true; the server enforces the same restriction
    *  independently (see middleware/auth.ts) so this is defense-in-depth, not the only guard. */
   mustChangePassword?: boolean;
+  /** Phase 32 — true only for a throwaway account created by POST /auth/demo-session (the public
+   *  storefront playground). Never true for a real registered or invited account. */
+  isDemoAccount?: boolean;
 }
 
 export interface AuthTokens {

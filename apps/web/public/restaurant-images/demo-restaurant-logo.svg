@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="96" fill="#c2410c"/>
+  <circle cx="100" cy="100" r="96" fill="none" stroke="#fed7aa" stroke-width="4"/>
+  <path d="M100 46c-22 20-34 40-34 58a34 34 0 0 0 68 0c0-18-12-38-34-58z" fill="#fed7aa"/>
+  <path d="M100 74c-11 12-17 23-17 32a17 17 0 0 0 34 0c0-9-6-20-17-32z" fill="#c2410c"/>
+  <text x="100" y="168" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#fff7ed" font-style="italic">Demo</text>
+</svg>

@@ -173,6 +173,9 @@ export async function createOrder(req: Request, res: Response) {
             tableName: table?.name,
             customerNotes,
             statusHistory: [{ status: "pending", at: new Date() }],
+            // Phase 32 — re-derived from the authenticated session, never trusted from the
+            // request body (which has no isDemo field at all — see createOrderSchema).
+            isDemo: req.user!.isDemoAccount === true,
           },
         ],
         { session }
@@ -238,7 +241,10 @@ export async function listRestaurantOrders(req: Request, res: Response) {
     tableId?: string;
   };
 
-  const filter: Record<string, unknown> = { restaurantId };
+  // Phase 32 — excludes public storefront-playground demo orders by default so KDS/Orders
+  // Management (both call this same function) never show a real restaurant's staff fake traffic
+  // from an anonymous visitor's demo checkout.
+  const filter: Record<string, unknown> = { restaurantId, isDemo: { $ne: true } };
   if (active === "true") filter.status = { $in: ACTIVE_STATUSES };
   if (orderType) filter.orderType = orderType;
   if (tableId) filter.tableId = tableId;

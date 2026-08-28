@@ -1,56 +1,54 @@
 import { Card, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
 import { LeadForm } from "../components/LeadForm";
-import { ADMIN_LOGIN_URL, STOREFRONT_URL } from "../lib/links";
-import { IconArrowRight, IconHeadset, IconStore } from "../components/icons";
+import { STOREFRONT_URL } from "../lib/links";
+import { IconArrowRight, IconHeadset, IconPalette, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
+
+// Phase 32 — the real, dedicated sales playground: theme switching, live customization, and a real
+// (zero-money) checkout, all against the actual production storefront. This page no longer embeds
+// the storefront in a raw iframe here (that pattern stays only where it's honest — a small
+// preview screenshot-in-a-browser-chrome, not the primary demo experience) and no longer displays
+// the real owner's login credentials in plaintext on a public page.
+const EXPERIENCE_URL = `${STOREFRONT_URL}/r/demo-restaurant/experience`;
 
 export function DemoPage() {
   usePageMeta({
     title: "Live Demo — Tablecloth",
-    description: "Browse categories, open an item, pick modifiers, add to cart and check out — try the real Tablecloth ordering experience.",
+    description: "Switch themes, customize the brand, and place a real order — try the actual Tablecloth product on a real restaurant.",
   });
   return (
     <>
       <Section className="pt-14 sm:pt-20">
         <SectionHeading
           eyebrow="Live demo"
-          title="This is the real product, not a mockup"
-          description="Browse categories, open an item, pick modifiers, add to cart, and check out — exactly what your customers would do."
+          title="Play with a real restaurant, not a mockup"
+          description="Switch its theme, change its colors, browse its real menu, and place a real (zero-cost) order — everything below is the actual product."
         />
       </Section>
 
       <Section tone="surface">
-        <Reveal className="overflow-hidden rounded-2xl border border-border bg-surface shadow-elevated">
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-danger/60" />
-              <span className="h-2.5 w-2.5 rounded-full bg-warning/60" />
-              <span className="h-2.5 w-2.5 rounded-full bg-success/60" />
-            </div>
-            <span className="truncate text-xs text-muted">{STOREFRONT_URL.replace("http://", "")}</span>
-            <a
-              href={STOREFRONT_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              Open in new tab <IconArrowRight className="h-3 w-3" />
-            </a>
-          </div>
-          <iframe
-            src={STOREFRONT_URL}
-            title="Live demo restaurant"
-            className="h-[720px] w-full border-0"
-            loading="lazy"
-          />
+        <Reveal className="flex flex-col items-center gap-4 overflow-hidden rounded-2xl border border-border bg-surface p-8 text-center shadow-elevated sm:p-12">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <IconPalette className="h-6 w-6" />
+          </span>
+          <h3 className="font-heading text-2xl font-semibold text-foreground">Open the interactive playground</h3>
+          <p className="max-w-lg text-sm text-muted">
+            Classic, Modern, or Editorial — pick a theme, adjust the brand colors, preview it on desktop and
+            mobile, then order from it yourself.
+          </p>
+          <a
+            href={EXPERIENCE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Open the demo <IconArrowRight className="h-4 w-4" />
+          </a>
+          <span className="truncate text-xs text-muted">{EXPERIENCE_URL.replace("http://", "")}</span>
         </Reveal>
         <p className="mt-4 text-center text-xs text-muted">
-          If this doesn't load, the demo storefront isn't running locally right now —{" "}
-          <a href={STOREFRONT_URL} className="text-primary hover:underline">
-            open it directly
-          </a>{" "}
-          instead.
+          If this doesn't load, the demo storefront isn't running locally right now.
         </p>
       </Section>
 
@@ -61,21 +59,18 @@ export function DemoPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <IconStore className="h-5 w-5" />
               </span>
-              <h3 className="font-heading text-lg font-semibold text-foreground">Want to see the owner's side?</h3>
+              <h3 className="font-heading text-lg font-semibold text-foreground">Curious what the menu is really running on?</h3>
               <p className="text-sm text-muted">
-                Log into the restaurant dashboard with the demo owner account and see the menu, orders and settings the
-                storefront above is actually reading from.
+                Every item, modifier, and price in the playground comes straight from the same menu system real
+                restaurants manage from their dashboard — nothing about it is hand-built for the demo.
               </p>
-              <div className="mt-auto rounded-lg border border-border bg-background p-3 text-xs text-muted">
-                <p>
-                  <span className="font-medium text-foreground">Email:</span> owner@demo-restaurant.local
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">Password:</span> Owner123!
-                </p>
-              </div>
-              <a href={ADMIN_LOGIN_URL} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                Open owner dashboard <IconArrowRight className="h-3.5 w-3.5" />
+              <a
+                href={EXPERIENCE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-auto flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                Browse the menu <IconArrowRight className="h-3.5 w-3.5" />
               </a>
             </Card>
           </Reveal>

@@ -123,6 +123,17 @@ async function main() {
   }
   console.log(`[backfill] set images on ${items.filter((i) => IMAGE_BY_NAME[i.name]).length} menu items`);
 
+  // --- 1a. Backfill logo/cover/brand color on the primary demo-restaurant (Phase 32 — needed for
+  // the public storefront-playground demo to look like a real, branded business; the two
+  // secondary demo restaurants below already get a brandColor, this one never did). ---
+  if (!restaurant.logo || !restaurant.coverImage || !restaurant.settings.brandColor) {
+    restaurant.logo = restaurant.logo || "/restaurant-images/demo-restaurant-logo.svg";
+    restaurant.coverImage = restaurant.coverImage || "/restaurant-images/demo-restaurant-cover.svg";
+    restaurant.settings.brandColor = restaurant.settings.brandColor || "#c2410c";
+    await restaurant.save();
+    console.log("[backfill] set demo-restaurant's logo/coverImage/brandColor");
+  }
+
   // --- 1b. Backfill add-on/size modifier groups on items that don't have any yet ---
   // (seed.ts only creates the Size/toppings groups on the two pizzas; this backfills the burger
   // and drink examples referenced in the product spec without touching restaurants that already

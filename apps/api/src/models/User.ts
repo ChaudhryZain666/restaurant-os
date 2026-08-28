@@ -70,6 +70,14 @@ export interface UserDoc {
    *  references must stay valid for order and audit-trail integrity. isActive is also set false
    *  so login() rejects it the same way a staff-deactivated account already does. */
   deletedAt?: Date;
+  /** Phase 32 — set true only for a throwaway account created by POST /auth/demo-session (the
+   *  public storefront playground). Gates isDemo on orders it places (order.controller.ts) and
+   *  is excluded from every admin-facing order/customer list by default. Never true for a real
+   *  registered or invited account. */
+  isDemoAccount?: boolean;
+  /** Phase 32 — set only alongside isDemoAccount; cleanupDemoData.ts deletes the account (and its
+   *  demo orders) once this passes, so public playground traffic can't accumulate unbounded. */
+  demoExpiresAt?: Date;
 }
 
 const addressSchema = new Schema<AddressDoc>({
@@ -107,6 +115,8 @@ const userSchema = new Schema<UserDoc>(
     emailChangeTokenHash: { type: String, index: { sparse: true } },
     emailChangeExpiresAt: { type: Date },
     deletedAt: { type: Date },
+    isDemoAccount: { type: Boolean, default: false },
+    demoExpiresAt: { type: Date },
   },
   {
     timestamps: true,

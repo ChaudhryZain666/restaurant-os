@@ -15,6 +15,11 @@ interface AuthContextValue {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (updates: { name?: string; phone?: string }) => Promise<void>;
+  /** Phase 32 — mints a throwaway isDemoAccount:true customer session for the public storefront
+   *  playground (POST /auth/demo-session). No credentials involved; returns the same
+   *  {user, accessToken} shape login()/register() do, so placeOrder() etc. need no special-casing
+   *  once this resolves. A no-op if a session (demo or real) already exists. */
+  startDemoSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -78,6 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   }
 
+  async function startDemoSession() {
+    if (user) return;
+    const data = await apiClient.request<AuthResponse>("/auth/demo-session", { method: "POST", skipRefresh: true });
+    apiClient.setAccessToken(data.accessToken);
+    setUser(data.user);
+  }
+
   async function logout() {
     await apiClient.request("/auth/logout", { method: "POST", skipRefresh: true });
     apiClient.setAccessToken(null);
@@ -90,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile, startDemoSession }}>
       {children}
     </AuthContext.Provider>
   );
