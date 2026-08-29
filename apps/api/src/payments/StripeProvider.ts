@@ -65,10 +65,21 @@ export class StripeProvider implements PaymentProvider {
   // Verified — see this file's top comment.
   readonly signatureHeaderName = "stripe-signature";
 
+  /**
+   * Phase 37 — `connectedAccountId`, when set, makes every request below a Direct Charge acting
+   * "as" that Stripe Connect connected account (the `Stripe-Account` header — Stripe's own
+   * documented mechanism for a platform to act on a connected account's behalf using ONLY the
+   * platform's own secret key). This is precisely what makes it possible to never collect or store
+   * a restaurant's own Stripe secret key: `secretKey` here is always the PLATFORM's key, never the
+   * restaurant's. `webhookSecret` is unused/irrelevant when `connectedAccountId` is set — Connect
+   * webhook verification is centralized (see stripeConnect.ts's verifyStripeSignature, used
+   * directly by paymentWebhook.controller.ts's handleStripeConnectWebhook) rather than per-instance.
+   */
   constructor(
     private readonly secretKey: string,
     private readonly webhookSecret: string,
-    private readonly baseUrl: string = BASE_URL
+    private readonly baseUrl: string = BASE_URL,
+    private readonly connectedAccountId?: string
   ) {}
 
   private async request<T>(method: "GET" | "POST", path: string, form?: Record<string, unknown>): Promise<T> {
@@ -82,6 +93,7 @@ export class StripeProvider implements PaymentProvider {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: `Bearer ${this.secretKey}`,
+          ...(this.connectedAccountId ? { "Stripe-Account": this.connectedAccountId } : {}),
         },
         body: form ? encodeForm(form) : undefined,
         signal: controller.signal,
@@ -142,53 +154,7 @@ export class StripeProvider implements PaymentProvider {
   }
 
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderWebhookEvent | null {
-    if (!signatureHeader) return null;
-
-    const parts = Object.fromEntries(
-      signatureHeader.split(",").map((part) => {
-        const [key, value] = part.split("=");
-        return [key, value] as [string, string];
-      })
-    );
-    const t = parts.t;
-    const v1 = parts.v1;
-    if (!t || !v1) return null;
-
-    const ageSeconds = Math.abs(Date.now() / 1000 - Number(t));
-    if (!Number.isFinite(ageSeconds) || ageSeconds > WEBHOOK_MAX_AGE_SECONDS) return null;
-
-    const signedPayload = `${t}.${rawBody.toString("utf-8")}`;
-    const expected = createHmac("sha256", this.webhookSecret).update(signedPayload).digest("hex");
-
-    let expectedBuf: Buffer;
-    let providedBuf: Buffer;
-    try {
-      expectedBuf = Buffer.from(expected, "hex");
-      providedBuf = Buffer.from(v1, "hex");
-    } catch {
-      return null;
-    }
-    if (expectedBuf.length !== providedBuf.length || !timingSafeEqual(expectedBuf, providedBuf)) return null;
-
-    let parsed: StripeWebhookPayload;
-    try {
-      parsed = JSON.parse(rawBody.toString("utf-8"));
-    } catch {
-      return null;
-    }
-
-    const eventId = parsed.id;
-    const eventType = parsed.type;
-    const session = parsed.data?.object;
-    if (!eventId || !eventType || !session?.id) return null;
-
-    return {
-      eventId,
-      eventType,
-      providerRef: session.id,
-      status: mapCheckoutSessionStatus(eventType === "checkout.session.expired" ? "expired" : session.status, session.payment_status),
-      raw: parsed,
-    };
+    return verifyStripeSignature(rawBody, signatureHeader, this.webhookSecret);
   }
 
   async refund(providerRef: string, amount: number, _reason?: string): Promise<ProviderRefundResult> {
@@ -243,13 +209,85 @@ interface StripeWebhookPayload {
 }
 
 /**
+ * Phase 37 — the pure cryptographic half of verifyWebhookSignature, extracted so
+ * stripeConnect.ts's centralized Connect webhook handler can verify a signature without needing a
+ * whole StripeProvider instance (which would otherwise require a meaningless placeholder secretKey
+ * just to satisfy the constructor). Returns the ALREADY-JSON-PARSED body on success — every caller
+ * needs that anyway, and parsing twice would be wasted work — or null if the signature/timestamp
+ * don't check out, exactly mirroring verifyWebhookSignature's own failure semantics below.
+ */
+export function verifyStripeSignatureRaw(
+  rawBody: Buffer,
+  signatureHeader: string | undefined,
+  webhookSecret: string
+): Record<string, unknown> | null {
+  if (!signatureHeader) return null;
+
+  const parts = Object.fromEntries(
+    signatureHeader.split(",").map((part) => {
+      const [key, value] = part.split("=");
+      return [key, value] as [string, string];
+    })
+  );
+  const t = parts.t;
+  const v1 = parts.v1;
+  if (!t || !v1) return null;
+
+  const ageSeconds = Math.abs(Date.now() / 1000 - Number(t));
+  if (!Number.isFinite(ageSeconds) || ageSeconds > WEBHOOK_MAX_AGE_SECONDS) return null;
+
+  const signedPayload = `${t}.${rawBody.toString("utf-8")}`;
+  const expected = createHmac("sha256", webhookSecret).update(signedPayload).digest("hex");
+
+  let expectedBuf: Buffer;
+  let providedBuf: Buffer;
+  try {
+    expectedBuf = Buffer.from(expected, "hex");
+    providedBuf = Buffer.from(v1, "hex");
+  } catch {
+    return null;
+  }
+  if (expectedBuf.length !== providedBuf.length || !timingSafeEqual(expectedBuf, providedBuf)) return null;
+
+  try {
+    return JSON.parse(rawBody.toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+/** The pooled/BYOC checkout-session-shaped mapping on top of verifyStripeSignatureRaw — unchanged
+ *  behavior from before this function existed, just no longer duplicating the HMAC logic inline. */
+export function verifyStripeSignature(
+  rawBody: Buffer,
+  signatureHeader: string | undefined,
+  webhookSecret: string
+): ProviderWebhookEvent | null {
+  const parsed = verifyStripeSignatureRaw(rawBody, signatureHeader, webhookSecret) as StripeWebhookPayload | null;
+  if (!parsed) return null;
+
+  const eventId = parsed.id;
+  const eventType = parsed.type;
+  const session = parsed.data?.object;
+  if (!eventId || !eventType || !session?.id) return null;
+
+  return {
+    eventId,
+    eventType,
+    providerRef: session.id,
+    status: mapCheckoutSessionStatus(eventType === "checkout.session.expired" ? "expired" : session.status, session.payment_status),
+    raw: parsed,
+  };
+}
+
+/**
  * Fails closed by design: any status this adapter doesn't specifically recognize maps to "pending"
  * rather than "paid"/"failed" — mirrors SafepayProvider.ts's mapSafepayStatus philosophy exactly.
  * A Checkout Session's `payment_status` ("paid"/"unpaid"/"no_payment_required") is the actual
  * signal for whether money moved; `status` ("open"/"complete"/"expired") only says whether the
  * session itself is still usable.
  */
-function mapCheckoutSessionStatus(status: string | undefined, paymentStatus: string | undefined): ProviderPaymentStatus {
+export function mapCheckoutSessionStatus(status: string | undefined, paymentStatus: string | undefined): ProviderPaymentStatus {
   if (status === "expired") return "cancelled";
   if (paymentStatus === "paid" || paymentStatus === "no_payment_required") return "paid";
   if (status === "complete") return "paid";

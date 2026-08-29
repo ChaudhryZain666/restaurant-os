@@ -1,5 +1,6 @@
 import { RestaurantPaymentAccount, type RestaurantPaymentAccountDoc } from "../models/RestaurantPaymentAccount.js";
 import { decryptCredentials, type EncryptedBlob } from "../utils/credentialEncryption.js";
+import { env } from "../config/env.js";
 import { SafepayProvider } from "./SafepayProvider.js";
 import { StripeProvider } from "./StripeProvider.js";
 import type { PaymentProvider } from "./PaymentProvider.js";
@@ -26,6 +27,18 @@ interface SafepayCredentials {
  * ever needing to invalidate a stale cache after a restaurant reconnects/disconnects.
  */
 export function buildProviderFromAccount(account: RestaurantPaymentAccountDoc): PaymentProvider {
+  // Phase 37 — platform_connect (Stripe Connect) never has encryptedCredentials at all: the
+  // platform's OWN STRIPE_SECRET_KEY plus this account's stored connectedAccountId (via the
+  // Stripe-Account header — StripeProvider.ts) is everything a Direct Charge needs. This is the
+  // whole point of the redesign — nothing restaurant-specific is ever decrypted here for Stripe.
+  if (account.provider === "stripe" && account.connectionMode === "platform_connect") {
+    if (!env.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is not configured on this deployment");
+    if (!account.connectedAccountId) throw new Error("This account has no connectedAccountId — onboarding was never completed");
+    // `as string` — InferSchemaType's known quirk with this optional top-level field; real and
+    // string-typed at runtime, guaranteed set by the check just above.
+    return new StripeProvider(env.STRIPE_SECRET_KEY, "", undefined, account.connectedAccountId as string);
+  }
+
   // The nested subdocument's leaf fields are all explicitly typed strings/numbers in the schema
   // (RestaurantPaymentAccount.ts), so this shape is guaranteed at runtime — Mongoose's
   // InferSchemaType just doesn't carry that through for a plain nested-object path the way it does

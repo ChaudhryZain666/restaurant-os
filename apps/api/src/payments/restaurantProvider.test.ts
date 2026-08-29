@@ -20,6 +20,22 @@ afterAll(async () => {
 });
 
 describe("buildProviderFromAccount", () => {
+  it("Phase 37 — builds a platform_connect StripeProvider from the PLATFORM's own key, never a decrypted restaurant secret", () => {
+    const account = {
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      connectedAccountId: "acct_unit_test_123",
+    } as never;
+    const provider = buildProviderFromAccount(account);
+    expect(provider).toBeInstanceOf(StripeProvider);
+    expect(provider.name).toBe("stripe");
+  });
+
+  it("Phase 37 — throws a clear error for a platform_connect account with no connectedAccountId", () => {
+    const account = { provider: "stripe", connectionMode: "platform_connect" } as never;
+    expect(() => buildProviderFromAccount(account)).toThrow(/connectedAccountId/);
+  });
+
   it("builds a real StripeProvider from a decrypted stripe account", () => {
     const account = {
       provider: "stripe",
