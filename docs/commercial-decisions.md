@@ -239,3 +239,22 @@ a restaurant to a payment provider by `Restaurant.country` — see `docs/payment
 for the full design and the second-provider (Stripe) decision. This is unrelated to SaaS billing
 (Paddle handles buyer localization itself, per §4) — restaurant-payment eligibility governs how a
 restaurant's *customers* pay for food orders, not how restaurant owners/agencies pay the platform.
+
+**Phase 34 closure (live verification pass)**: real sandbox/test-mode credentials were supplied and
+exercised directly against Paddle and Stripe. Paddle's customer endpoints verified live; live
+verification also surfaced a real bug — `createSubscriptionCore`'s no-card-trial path called
+`POST /subscriptions`, which doesn't exist on Paddle (their own docs: "You can't create a
+subscription directly"), meaning every real-Paddle trial signup was structurally broken. Fixed by
+having trial creation contact no billing provider at all; a real Paddle subscription is now only
+ever born once the owner completes checkout to add a card (see `subscription.service.ts`). Stripe
+was run fully end-to-end (create → real Playwright-driven checkout completion with a test card →
+paid → real refund) with its webhook HMAC confirmed byte-for-byte correct against a real captured
+payload; full webhook *delivery* into the running app is the one thing this sandbox environment
+couldn't confirm, purely because its system clock runs several minutes behind true UTC and trips
+the (correct) replay-window check — not a code issue. Safepay had no sandbox account available;
+re-verified against the official SDK's published docs only, which corrected a wrong webhook
+signature header name (see `docs/payment-provider-decision.md`). SMTP had no live mailbox available;
+re-verified `SmtpEmailService.ts`'s TLS handling against Nodemailer's docs, which found and fixed a
+real gap — STARTTLS was attempted opportunistically but not required, so a misconfigured/non-TLS
+relay would silently fall back to sending password-reset/invite links unencrypted; now fails loudly
+instead via `requireTLS`.

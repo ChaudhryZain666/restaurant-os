@@ -47,6 +47,35 @@ from `env.CLIENT_ORIGIN` (the platform's own origin), not a restaurant's resolve
 platform's own domain after a Stripe/Safepay hosted checkout completes. Flagged, not fixed, since it
 touches custom-domain resolution logic outside this phase's scope.
 
+## Update — Phase 34 closure: Stripe and Paddle verified live, Safepay re-verified against docs only
+
+`StripeProvider` and `PaddleBillingProvider` were both run against real sandbox/test-mode accounts
+this pass (real credentials supplied): Stripe's `createIntent`/`retrieve`/`refund` were exercised
+end-to-end, including a real checkout completion driven by Playwright with Stripe's test card and a
+byte-for-byte HMAC verification of a real, live-captured `checkout.session.completed` webhook
+payload — the signature algorithm is confirmed correct; the one remaining gap (full webhook
+*delivery* into the running app) is blocked by this sandbox's system clock running ~5-6 minutes
+behind true UTC, which trips the replay-window check on every real webhook. That check is correct
+and stays as-is — a normally-clocked environment won't hit this. See `StripeProvider.ts`. Paddle's
+customer endpoints were verified live; verification also found that `PaddleBillingProvider`'s
+direct subscription-creation call used a Paddle endpoint that doesn't exist (`POST /subscriptions`
+returns HTTP 405 — Paddle's own docs: "You can't create a subscription directly") — this was a real
+bug affecting the no-card-trial flow for every owner/agency signup against real Paddle, now fixed by
+making trial creation contact no billing provider at all (see `subscription.service.ts`).
+
+No Safepay sandbox account was available this pass. Re-verified `SafepayProvider.ts` against the
+official `getsafepay/sfpy-php` SDK's published README (WebSearch/WebFetch, no live account) and
+found the webhook signature header was simply wrong: assumed `x-safepay-signature`, actually
+`X-SFPY-SIGNATURE` — corrected. A single community integration writeup (a public gist, explicitly
+self-described as possibly outdated) suggested the checkout-URL shape and webhook HMAC scheme
+(hashing the tracker token alone, not the raw body) might both differ further from what's
+implemented — left unchanged pending a real sandbox account, since acting on one uncorroborated,
+self-flagged-stale source for either would be a worse bet than the current best-documented guess.
+See `SafepayProvider.ts`'s header comment for the full confidence breakdown. **Credential ask**:
+`SAFEPAY_API_KEY`/`SAFEPAY_SECRET_KEY`/`SAFEPAY_WEBHOOK_SECRET` (sandbox) — this is the one payment
+provider that still cannot be verified further without a real account, since Safepay's full API
+reference sits behind an authenticated dashboard with no public Postman collection found.
+
 ## Update — Phase 29
 
 Closed the one real code gap the Phase 29 commercial-readiness audit found in this domain: even
@@ -182,11 +211,11 @@ current requirement for it and doing so would be speculative complexity.
 | Payment domain model, status lifecycle, indexes | Real, fully implemented |
 | `PaymentProvider` interface | Real, fully implemented |
 | `MockPaymentProvider` | Real code, fake money — deterministic, in-process only, never reachable unless `PAYMENT_PROVIDER=mock` |
-| `SafepayProvider` (Phase 15) | Real, network-capable code against Safepay's real hosts — **never run against a live Safepay account**. Treat as unverified until tested against a real sandbox (see the checklist above) |
-| `StripeProvider` (Phase 34) | Real, network-capable code against Stripe's real (entirely public) API, using Checkout Sessions — **never run against a live, even test-mode, Stripe account**. Genuinely low-friction to verify (self-serve test keys) once supplied |
+| `SafepayProvider` (Phase 15, doc re-verified Phase 34 closure) | Real, network-capable code against Safepay's real hosts — **never run against a live Safepay account**. Webhook header name corrected against the official SDK's README this pass; everything else still unverified until tested against a real sandbox (see the checklist above) |
+| `StripeProvider` (Phase 34, verified live Phase 34 closure) | Real, network-capable code against Stripe's real (entirely public) API, using Checkout Sessions — **run end-to-end against a real test-mode account**: create → real Playwright-driven checkout completion with a test card → paid → real refund, all confirmed. Webhook HMAC verified byte-for-byte correct against a real captured payload; full webhook *delivery* into the running app remains unverified in this sandbox specifically because of clock drift, not a code issue |
 | Provider registry (Phase 34) | Real — `getPaymentProvider(name?)` supports more than one concrete provider being configured/cached at once; single-default behavior unchanged when called with no argument |
 | Country/currency eligibility engine (Phase 34) | Real routing logic, opt-in via `PAYMENT_ELIGIBILITY_ROUTING` (default off) — static TS config, not yet admin-editable |
-| Webhook signature verification | Real HMAC verification for all three providers — against the mock's own secret for `mock`, against `SAFEPAY_WEBHOOK_SECRET` for `safepay` (header name unverified — see `SafepayProvider.ts`), against `STRIPE_WEBHOOK_SECRET` for `stripe` (Stripe's documented `t=...,v1=...` scheme, including the replay-window check) |
+| Webhook signature verification | Real HMAC verification for all three providers — against the mock's own secret for `mock`; against `SAFEPAY_WEBHOOK_SECRET` for `safepay` (header name now corrected to `X-SFPY-SIGNATURE` against the official SDK's docs — the HMAC scheme itself still unverified against a live account); against `STRIPE_WEBHOOK_SECRET` for `stripe` (Stripe's documented `t=...,v1=...` scheme, including the replay-window check — HMAC confirmed byte-for-byte correct against a real live-captured webhook payload) |
 | Idempotency (checkout, webhooks, refunds) | Real, enforced at the database level via unique indexes, not just application logic — `provider` is a free-text field on every relevant model, so a third provider name needed no schema change |
 | Restaurant payment-method toggles (`cashEnabled`/`onlinePaymentEnabled`) | Real, Phase 15 — server-enforced at order creation, not just hidden client-side |
 | Customer checkout redirect (Phase 29) | Real — `OrderPaymentPanel.tsx` redirects to the active provider's real `clientSecret` checkout URL for any non-mock provider; simulate buttons only ever render for `mock` |

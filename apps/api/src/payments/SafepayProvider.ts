@@ -41,15 +41,43 @@ const REQUEST_TIMEOUT_MS = 10_000;
  *  - redirectUrl/cancelUrl are real, required params for checkout.create() (now wired through from
  *    CreateIntentInput below) — confirmed by two independent sources.
  *
+ * UPDATED (Phase 34 closure — re-verified with WebSearch/WebFetch against the official
+ * `getsafepay/sfpy-php` SDK's published README, without live credentials to test against; no
+ * sandbox account was available this pass — see the credential request in
+ * docs/payment-provider-decision.md):
+ *  - The webhook signature header is `X-SFPY-SIGNATURE` — CORRECTED below from the previously
+ *    assumed `x-safepay-signature`, which was simply wrong (confirmed directly from the official
+ *    SDK's own documented usage, not a community source). Under the old name, a real Safepay
+ *    webhook would have arrived and been silently read as "no signature header present" — a safe
+ *    failure (verifyWebhookSignature returning null), but a failure nonetheless, on every single
+ *    real webhook.
+ *  - The official SDK's README also documents `intent`/`mode` as fields on order/tracker setup and
+ *    `merchant_api_key` as a real field name matching what's already sent below — but does NOT
+ *    expose the raw REST field names or checkout-URL query-parameter shape (the PHP/`.NET` SDKs
+ *    both abstract the transport layer, so their source doesn't show it).
+ *  - A separate, single, self-described-as-possibly-outdated community integration guide (a public
+ *    gist, not Safepay's own material) describes a MATERIALLY different checkout-URL shape
+ *    (`/components` with `beacon`/`env` query params, snake_case field names) and a webhook
+ *    signature scheme that HMACs the tracker token alone rather than the raw body — both
+ *    plausible, neither corroborated by a second source, and the source itself flags its own
+ *    docs as stale. Exactly the same judgment call this file already made about the `/components`
+ *    host above: acting on one unconfirmed, self-flagged-outdated source for the customer-facing
+ *    checkout URL or the webhook HMAC scheme is riskier than leaving it as the best-documented
+ *    (official-SDK-derived) guess until a real sandbox account can confirm it directly.
+ *
  * STILL ASSUMED / NOT VERIFIED (Safepay's full API reference is a JS app that couldn't be read
  * without an authenticated account, and no refund endpoint surfaced anywhere reachable):
- *  - The refund REST path (`/order/v1/refunds`), the exact webhook signature header name and JSON
- *    field names, and the exact status vocabulary beyond what's noted above. `mapSafepayStatus` is
- *    defensive (unknown values fail closed to "pending", never silently "paid") for exactly this
- *    reason.
+ *  - The refund REST path (`/order/v1/refunds`) and the exact status vocabulary beyond what's
+ *    noted above. `mapSafepayStatus` is defensive (unknown values fail closed to "pending", never
+ *    silently "paid") for exactly this reason.
  *  - Refunds specifically: no evidence of a refund endpoint was found anywhere in the reachable
- *    documentation, official or otherwise. The call below follows this adapter's own conventions
+ *    documentation, official or otherwise — Safepay's own docs categorize refunds under
+ *    "Chargebacks, Disputes & Refunds" in merchant-dashboard help content, which is at least
+ *    consistent with a refund being dashboard-initiated rather than API-initiated on some
+ *    accounts; not confirmed either way. The call below follows this adapter's own conventions
  *    for consistency, but remains the least-trustworthy piece of this file.
+ *  - The checkout-URL construction and exact request/response field names beyond what's listed
+ *    above as UPDATED.
  *
  * None of this may be trusted for real money movement until it has been run against a real
  * Safepay sandbox account and reconciled with their actual API reference/Postman collection.
@@ -57,11 +85,13 @@ const REQUEST_TIMEOUT_MS = 10_000;
  */
 export class SafepayProvider implements PaymentProvider {
   readonly name = "safepay";
-  // Assumed, not confirmed against real documentation — see this file's top comment. If this is
-  // wrong, real Safepay webhooks will arrive at /webhooks/payments/safepay but read back as
-  // "missing signature header" (verifyWebhookSignature returns null, a safe failure) rather than
-  // being silently misprocessed.
-  readonly signatureHeaderName = "x-safepay-signature";
+  // Phase 34 closure — corrected from an assumed "x-safepay-signature" to the real header name,
+  // confirmed against the official getsafepay/sfpy-php SDK's documented usage ("X-SFPY-SIGNATURE").
+  // Header names are case-insensitive over HTTP and Express's req.header() lookup reflects that, so
+  // only the actual name (not casing) mattered here — but the old name was a different string
+  // entirely, not just a casing mismatch, and would have made every real Safepay webhook read back
+  // as "missing signature header" (a safe failure, never a misprocessed one, but still a failure).
+  readonly signatureHeaderName = "x-sfpy-signature";
 
   constructor(
     private readonly apiKey: string,

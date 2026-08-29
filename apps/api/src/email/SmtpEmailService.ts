@@ -19,6 +19,14 @@ export interface SmtpConfig {
  * in real SMTP_HOST/USER/PASSWORD yet" (see docs/commercial-decisions.md's Phase 15 update).
  * ConsoleEmailProvider remains the default in every environment unless EMAIL_PROVIDER=smtp is set
  * explicitly (see email/index.ts).
+ *
+ * Phase 34 closure — re-verified port/TLS handling against Nodemailer's own docs (WebFetch, no
+ * live mailbox available to test against). `secure:false` (every port but 465) does NOT mean
+ * plaintext — Nodemailer opportunistically upgrades via STARTTLS when the server advertises it —
+ * but without `requireTLS`, a server that fails to (or doesn't) offer STARTTLS silently falls back
+ * to an UNENCRYPTED connection rather than erroring. This transport carries password-reset/invite
+ * links (see this class's send() comment), so a silent plaintext fallback is a real exposure, not
+ * a cosmetic one — added requireTLS below so a misconfigured/non-TLS relay fails loudly instead.
  */
 export class SmtpEmailService implements EmailService {
   private readonly transporter: Transporter;
@@ -26,12 +34,16 @@ export class SmtpEmailService implements EmailService {
 
   constructor(config: SmtpConfig) {
     this.from = config.from;
+    const isImplicitTls = config.port === 465;
     this.transporter = nodemailer.createTransport({
       host: config.host,
       port: config.port,
       // 465 is SMTP-over-TLS from the start of the connection; every other port (587, 25, ...)
       // upgrades via STARTTLS instead — nodemailer's `secure` flag controls exactly this.
-      secure: config.port === 465,
+      secure: isImplicitTls,
+      // Only meaningful (and only set) for the STARTTLS path — 465 is already encrypted from
+      // connection start, so requiring an upgrade on top of that would be a no-op at best.
+      requireTLS: isImplicitTls ? undefined : true,
       auth: config.user && config.password ? { user: config.user, pass: config.password } : undefined,
     });
   }
