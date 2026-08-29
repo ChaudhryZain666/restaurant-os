@@ -7,8 +7,10 @@ import { requirePermission } from "../middleware/rbac.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   connectRestaurantPaymentAccount,
+  connectStripeConnect,
   disconnectRestaurantPaymentAccount,
   getRestaurantPaymentAccount,
+  syncStripeConnectStatus,
 } from "../controllers/restaurantPaymentAccount.controller.js";
 
 /**
@@ -29,3 +31,8 @@ restaurantPaymentAccountRouter.post(
   asyncHandler(connectRestaurantPaymentAccount)
 );
 restaurantPaymentAccountRouter.post("/disconnect", asyncHandler(disconnectRestaurantPaymentAccount));
+// Phase 37 — Stripe Connect. connect/stripe starts (or resumes) hosted onboarding; sync-stripe-status
+// is called once the owner lands back on return_url, re-verifying real capability server-side
+// rather than trusting that the redirect itself means onboarding fully completed.
+restaurantPaymentAccountRouter.post("/connect/stripe", asyncHandler(connectStripeConnect));
+restaurantPaymentAccountRouter.post("/sync-stripe-status", asyncHandler(syncStripeConnectStatus));
