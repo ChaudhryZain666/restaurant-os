@@ -258,3 +258,11 @@ re-verified `SmtpEmailService.ts`'s TLS handling against Nodemailer's docs, whic
 real gap — STARTTLS was attempted opportunistically but not required, so a misconfigured/non-TLS
 relay would silently fall back to sending password-reset/invite links unencrypted; now fails loudly
 instead via `requireTLS`.
+
+**Local environment gap found along the way (not a product decision, noted for anyone else setting
+up local dev)**: the locally installed Redis was version 3.0.504 — too old for BullMQ (which
+requires 5.0.0+), meaning `npm run dev:api`'s normal entrypoint couldn't start at all (it registers
+a BullMQ worker/queue on boot). A second, current Redis (8.10.1) was installed and run on port 6380
+alongside the old one, since the old one is a protected Windows service this session had no admin
+rights to stop or replace; `REDIS_URL` now points at 6380. Whoever owns this machine may want to
+either retire the old service properly (needs an elevated session) or leave both running.
