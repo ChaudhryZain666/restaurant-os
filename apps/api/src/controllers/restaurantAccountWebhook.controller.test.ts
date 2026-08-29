@@ -116,4 +116,31 @@ describe("POST /webhooks/payments/:provider/:restaurantPaymentAccountId — BYOC
     const stillUnset = await RestaurantPaymentAccount.findById(account._id);
     expect(stillUnset!.firstWebhookReceivedAt).toBeUndefined();
   });
+
+  it("Phase 37 — rejects a platform_connect account at this per-account URL (no per-account secret exists to check against)", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", restaurant._id, { businessId: business._id });
+    businessIds.push(business.id);
+    restaurantIds.push(restaurant.id);
+    userIds.push(owner.id as string);
+
+    const account = await RestaurantPaymentAccount.create({
+      restaurantId: restaurant._id,
+      businessId: business._id,
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      status: "active",
+      connectedAccountId: "acct_should_not_be_reachable_here",
+      connectedByUserId: owner._id,
+    });
+    accountIds.push(account.id as string);
+
+    const res = await request(app)
+      .post(`/api/v1/webhooks/payments/stripe/${account.id}`)
+      .set("Content-Type", "application/json")
+      .set("Stripe-Signature", "t=1,v1=00")
+      .send(JSON.stringify({ id: "evt_x", type: "checkout.session.completed", data: { object: { id: "cs_x" } } }));
+    expect(res.status).toBe(400);
+  });
 });

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { handleProviderWebhook, handleRestaurantAccountWebhook } from "../controllers/paymentWebhook.controller.js";
+import { handleProviderWebhook, handleRestaurantAccountWebhook, handleStripeConnectWebhook } from "../controllers/paymentWebhook.controller.js";
 
 /**
  * Mounted at /webhooks/payments/:provider — top-level, not under /restaurants: a webhook
@@ -11,6 +11,15 @@ import { handleProviderWebhook, handleRestaurantAccountWebhook } from "../contro
  * everything of substance happens after signature verification, not before it.
  */
 export const paymentWebhookRouter = Router();
+
+// Phase 37 — Stripe Connect's ONE centralized webhook endpoint, receiving events for every
+// connected restaurant's account (distinguished by each event's own `account` field), so a
+// restaurant never configures anything in their own Stripe dashboard. MUST be registered before
+// the two routes below: "/stripe-connect" is a literal single-segment path that "/:provider"
+// (also single-segment, registered next) would otherwise swallow first — unlike the two routes
+// below, which genuinely don't collide with each other (different segment counts), this one does
+// collide unless it's registered first.
+paymentWebhookRouter.post("/stripe-connect", asyncHandler(handleStripeConnectWebhook));
 
 paymentWebhookRouter.post("/:provider", asyncHandler(handleProviderWebhook));
 // Restaurant-owned payment accounts (BYOC — see restaurantProvider.ts): a shared per-provider-name
