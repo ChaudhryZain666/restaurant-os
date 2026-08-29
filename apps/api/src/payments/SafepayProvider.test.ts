@@ -110,7 +110,7 @@ describe("SafepayProvider.retrieve", () => {
 describe("SafepayProvider.verifyWebhookSignature", () => {
   function sign(payload: object, secret = "webhook-secret") {
     const rawBody = Buffer.from(JSON.stringify(payload), "utf-8");
-    const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
+    const signature = createHmac("sha512", secret).update(rawBody).digest("hex");
     return { rawBody, signatureHeader: `sha256=${signature}` };
   }
 

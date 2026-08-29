@@ -51,19 +51,26 @@ const REQUEST_TIMEOUT_MS = 10_000;
  *    webhook would have arrived and been silently read as "no signature header present" — a safe
  *    failure (verifyWebhookSignature returning null), but a failure nonetheless, on every single
  *    real webhook.
+ *  - The HMAC algorithm is `sha512`, not `sha256` — CORRECTED below, found on a second pass against
+ *    Safepay's current, complete official docs site (`safepay-docs.netlify.app`, specifically its
+ *    `webhooks/verify-hmac-signatures` page, which shows the exact `crypto.createHmac("sha512",
+ *    secret)` call and re-confirms the `X-SFPY-SIGNATURE` header name independently). This is a
+ *    materially stronger source than the SDK README above — a live, current, official reference
+ *    page with a code sample, not an abstracted SDK surface — so this fact is treated as verified,
+ *    not merely updated.
  *  - The official SDK's README also documents `intent`/`mode` as fields on order/tracker setup and
  *    `merchant_api_key` as a real field name matching what's already sent below — but does NOT
  *    expose the raw REST field names or checkout-URL query-parameter shape (the PHP/`.NET` SDKs
  *    both abstract the transport layer, so their source doesn't show it).
  *  - A separate, single, self-described-as-possibly-outdated community integration guide (a public
  *    gist, not Safepay's own material) describes a MATERIALLY different checkout-URL shape
- *    (`/components` with `beacon`/`env` query params, snake_case field names) and a webhook
- *    signature scheme that HMACs the tracker token alone rather than the raw body — both
- *    plausible, neither corroborated by a second source, and the source itself flags its own
- *    docs as stale. Exactly the same judgment call this file already made about the `/components`
+ *    (`/components` with `beacon`/`env` query params, snake_case field names) — plausible, not
+ *    corroborated by a second source, and the source itself flags its own docs as stale (its claim
+ *    about the HMAC input has since been superseded by the official docs page above, which settles
+ *    that one specific point). Exactly the same judgment call this file already made about the `/components`
  *    host above: acting on one unconfirmed, self-flagged-outdated source for the customer-facing
- *    checkout URL or the webhook HMAC scheme is riskier than leaving it as the best-documented
- *    (official-SDK-derived) guess until a real sandbox account can confirm it directly.
+ *    checkout URL is riskier than leaving it as the best-documented (official-SDK-derived) guess
+ *    until a real sandbox account can confirm it directly.
  *
  * STILL ASSUMED / NOT VERIFIED (Safepay's full API reference is a JS app that couldn't be read
  * without an authenticated account, and no refund endpoint surfaced anywhere reachable):
@@ -186,7 +193,7 @@ export class SafepayProvider implements PaymentProvider {
 
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderWebhookEvent | null {
     if (!signatureHeader) return null;
-    const expected = createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex");
+    const expected = createHmac("sha512", this.webhookSecret).update(rawBody).digest("hex");
     const provided = signatureHeader.startsWith("sha256=") ? signatureHeader.slice(7) : signatureHeader;
 
     const expectedBuf = Buffer.from(expected, "hex");
