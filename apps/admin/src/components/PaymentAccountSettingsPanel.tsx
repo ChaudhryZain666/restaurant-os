@@ -23,6 +23,20 @@ const STATUS_LABEL: Record<RestaurantPaymentAccountStatus, string> = {
   disconnected: "Disconnected",
 };
 
+/**
+ * Phase 35 audit fix — `status: "active"` alone only proves the API key authenticated, never that
+ * a webhook was actually configured (see RestaurantPaymentAccount.ts's firstWebhookReceivedAt doc
+ * comment). Without a real webhook, a customer can pay successfully on the provider's own hosted
+ * checkout and this platform will never learn about it. Surfacing that distinction here, rather
+ * than a single reassuring green "Active" badge, is the whole point of this fix.
+ */
+function accountStatusBadge(account: RestaurantPaymentAccount): { tone: "warning" | "info" | "success" | "danger"; label: string } {
+  if (account.status === "active" && !account.firstWebhookReceivedAt) {
+    return { tone: "warning", label: "Active — awaiting webhook" };
+  }
+  return { tone: STATUS_TONE[account.status], label: STATUS_LABEL[account.status] };
+}
+
 interface StripeDraft {
   provider: "stripe";
   secretKey: string;
@@ -141,24 +155,46 @@ export function PaymentAccountSettingsPanel() {
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium capitalize">{account.provider}</span>
-            <Badge tone={STATUS_TONE[account.status]}>{STATUS_LABEL[account.status]}</Badge>
+            <Badge tone={accountStatusBadge(account).tone}>{accountStatusBadge(account).label}</Badge>
           </div>
           <p className="text-xs text-muted">Key: {account.credentialFingerprint}</p>
           {account.status === "invalid" && account.lastVerificationError && (
             <p className="text-xs text-danger">{account.lastVerificationError}</p>
           )}
-          {account.status === "active" && webhookUrl && (
-            <div className="flex flex-col gap-1 text-xs">
-              <span className="text-muted">
-                Paste this into your {account.provider === "stripe" ? "Stripe" : "Safepay"} dashboard's webhook config:
-              </span>
+          {account.status === "active" && webhookUrl && !account.firstWebhookReceivedAt && (
+            <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background p-3 text-xs">
+              <p className="font-medium text-foreground">One step left — payments won't be confirmed until this is done</p>
+              <p className="text-muted">
+                Your key is valid, but this platform only learns a customer actually paid once{" "}
+                {account.provider === "stripe" ? "Stripe" : "Safepay"} sends it a webhook. Until then, paid orders may
+                appear unpaid here.
+              </p>
+              <ol className="list-decimal space-y-1 pl-4 text-muted">
+                <li>
+                  Open your {account.provider === "stripe" ? "Stripe" : "Safepay"} dashboard's webhook settings and add
+                  an endpoint using the URL below.
+                </li>
+                <li>
+                  {account.provider === "stripe"
+                    ? 'Select the "checkout.session.completed" event.'
+                    : "Enable payment status events."}
+                </li>
+                <li>Copy the signing secret it gives you back into the "Webhook signing secret" field above when connecting.</li>
+              </ol>
               <span className="flex flex-wrap items-center gap-2">
-                <code className="max-w-full truncate rounded bg-background px-1.5 py-0.5">{webhookUrl}</code>
+                <code className="max-w-full truncate rounded bg-surface px-1.5 py-0.5">{webhookUrl}</code>
                 <button type="button" onClick={handleCopyWebhookUrl} className="font-medium text-primary hover:underline">
-                  {copied ? "Copied!" : "Copy"}
+                  {copied ? "Copied!" : "Copy URL"}
                 </button>
               </span>
+              <p className="text-muted">
+                This badge will change to a plain "Active" automatically the first time a real webhook arrives — no
+                need to check back manually.
+              </p>
             </div>
+          )}
+          {account.status === "active" && account.firstWebhookReceivedAt && (
+            <p className="text-xs text-muted">Webhook confirmed — payments will be tracked automatically.</p>
           )}
           {account.status === "active" && (
             <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={handleDisconnect} className="self-start">

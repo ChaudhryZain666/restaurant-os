@@ -6,7 +6,7 @@ import { PaymentWebhookEvent } from "../models/PaymentWebhookEvent.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
-import { getPaymentProvider } from "../payments/index.js";
+import { getPaymentProvider, type PaymentProviderName } from "../payments/index.js";
 import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
 import { buildProviderFromAccount, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
@@ -206,6 +206,27 @@ export async function processProviderEvent(
     return;
   }
 
+  await applyPaymentStatusTransition(payment, event.status);
+
+  await PaymentWebhookEvent.updateOne(
+    { provider: providerName, eventId: event.eventId },
+    { $set: { processedAt: new Date() } }
+  );
+}
+
+/**
+ * The actual state-transition writer, extracted (Phase 35 audit fix) so both a real webhook
+ * delivery (processProviderEvent above) and the polling reconciliation fallback
+ * (reconcileStalePayments below) apply a status change through the exact same atomic path,
+ * instead of that logic existing only inline inside the webhook handler. Callers are responsible
+ * for their own idempotency/validity gating first (webhook: PaymentWebhookEvent insert +
+ * isValidPaymentTransition; reconciliation: its own isValidPaymentTransition check) — this
+ * function only ever applies a single, already-decided transition.
+ */
+async function applyPaymentStatusTransition(
+  payment: HydratedDocument<PaymentDoc>,
+  newStatus: ProviderWebhookEvent["status"]
+): Promise<void> {
   const session = await mongoose.startSession();
   try {
     // Untyped, not `OrderDoc | null`: TypeScript can't carry a useful narrowed type for a `let`
@@ -214,32 +235,27 @@ export async function processProviderEvent(
     // usage site below instead of fighting the checker here.
     let orderAfter;
     await session.withTransaction(async () => {
-      // Guarded by status: {$ne: to} so a race between two deliveries of the same real-world
-      // transition can't apply it twice — combined with Payment's partial unique index on
-      // {orderId: unique where status:"paid"}, this makes double-marking-paid effectively
-      // impossible even under concurrent webhook delivery.
+      // Guarded by status: {$ne: to} so a race between two deliveries/checks of the same
+      // real-world transition can't apply it twice — combined with Payment's partial unique index
+      // on {orderId: unique where status:"paid"}, this makes double-marking-paid effectively
+      // impossible even under concurrent webhook delivery or a reconciliation-vs-webhook race.
       const updated = await Payment.findOneAndUpdate(
-        { _id: payment._id, status: { $ne: event.status } },
-        { $set: { status: event.status } },
+        { _id: payment._id, status: { $ne: newStatus } },
+        { $set: { status: newStatus } },
         { new: true, session }
       );
       if (!updated) return; // lost the race to an identical concurrent update — nothing left to do
 
-      if (event.status === "paid") {
+      if (newStatus === "paid") {
         orderAfter = await Order.findOneAndUpdate(
           { _id: payment.orderId, restaurantId: payment.restaurantId },
           { $set: { paymentStatus: "paid" } },
           { new: true, session }
         );
-      } else if (event.status === "failed" || event.status === "cancelled") {
+      } else if (newStatus === "failed" || newStatus === "cancelled") {
         orderAfter = await Order.findOne({ _id: payment.orderId, restaurantId: payment.restaurantId }).session(session);
       }
     });
-
-    await PaymentWebhookEvent.updateOne(
-      { provider: providerName, eventId: event.eventId },
-      { $set: { processedAt: new Date() } }
-    );
 
     const order = orderAfter as unknown as HydratedDocument<OrderDoc> | null;
     if (order) {
@@ -249,11 +265,71 @@ export async function processProviderEvent(
         restaurantId: order.restaurantId.toString(),
         customerId: order.customerId.toString(),
         status: order.status,
-        paymentOutcome: event.status,
+        paymentOutcome: newStatus,
       });
     }
   } finally {
     await session.endSession();
+  }
+}
+
+const RECONCILIATION_STALE_AFTER_MS = 15 * 60 * 1000;
+
+/**
+ * Phase 35 audit fix — LAUNCH BLOCKER closed: this codebase's entire "a payment succeeded" signal
+ * previously depended 100% on a webhook actually arriving (provider.retrieve() was called only
+ * from test files, never from any controller/service/job). If a restaurant's webhook was never
+ * configured, misconfigured, or a delivery was dropped, a customer could pay real money and the
+ * Payment/Order would sit "pending" forever with no error raised anywhere — silent to the
+ * platform, the restaurant, AND the customer. This is a bounded polling fallback, not a
+ * replacement for webhooks (which stay the fast path): runs on a repeatable job
+ * (registerPaymentReconciliationJob, notification.queue.ts), finds every online payment still
+ * pending/requires_action after RECONCILIATION_STALE_AFTER_MS, resolves the SAME provider
+ * credentials the original attempt used (pooled by provider name, or the exact BYOC account —
+ * never today's current default, which could differ), and calls the provider's own retrieve() to
+ * check the real current status. A mismatch is applied through the identical atomic transition
+ * path a webhook uses. One payment's reconciliation failing (provider timeout, deleted BYOC
+ * account, etc.) is logged and never blocks the rest of the sweep.
+ */
+export async function reconcileStalePayments(): Promise<void> {
+  const staleBefore = new Date(Date.now() - RECONCILIATION_STALE_AFTER_MS);
+  const stale = await Payment.find({
+    status: { $in: ["pending", "requires_action"] },
+    method: "online",
+    providerRef: { $type: "string" },
+    createdAt: { $lt: staleBefore },
+  });
+
+  for (const payment of stale) {
+    try {
+      let provider;
+      if (payment.restaurantPaymentAccountId) {
+        const account = await RestaurantPaymentAccount.findById(payment.restaurantPaymentAccountId);
+        if (!account) {
+          logger.warn("reconciliation skipped — restaurant payment account no longer exists", {
+            paymentId: payment.id,
+            restaurantPaymentAccountId: payment.restaurantPaymentAccountId,
+          });
+          continue;
+        }
+        provider = buildProviderFromAccount(account);
+      } else {
+        provider = getPaymentProvider(payment.provider as PaymentProviderName);
+      }
+
+      const snapshot = await provider.retrieve(payment.providerRef!);
+      if (snapshot.status === payment.status) continue;
+      if (!isValidPaymentTransition(payment.status, snapshot.status)) continue;
+
+      await applyPaymentStatusTransition(payment, snapshot.status);
+      logger.info("payment reconciled via polling fallback — a webhook likely never arrived", {
+        paymentId: payment.id,
+        from: payment.status,
+        to: snapshot.status,
+      });
+    } catch (err) {
+      logger.error("payment reconciliation check failed", { paymentId: payment.id, error: (err as Error).message });
+    }
   }
 }
 

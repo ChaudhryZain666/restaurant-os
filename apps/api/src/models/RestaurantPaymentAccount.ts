@@ -51,6 +51,16 @@ const restaurantPaymentAccountSchema = new Schema(
     // fragments of the submitted key in some providers' validation error responses.
     lastVerificationError: { type: String },
     connectedByUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    // Phase 35 audit fix — `status: "active"` is set the moment verifyCredentials() succeeds
+    // (restaurantPaymentAccount.controller.ts), which only proves the API key authenticates, never
+    // that the owner actually finished configuring a webhook in their own provider dashboard. This
+    // field is set once, the first time handleRestaurantAccountWebhook (paymentWebhook.controller.ts)
+    // successfully verifies a REAL signed event for this account — never on connect, never faked.
+    // Until it's set, the settings UI shows "awaiting webhook confirmation" rather than a bare
+    // "Active" badge that would overstate readiness. See payment.service.ts's
+    // reconcileStalePayments for the other half of closing this gap (a payment doesn't stay
+    // silently unpaid forever even if a webhook is never configured at all).
+    firstWebhookReceivedAt: { type: Date },
   },
   {
     timestamps: true,

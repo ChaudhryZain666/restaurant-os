@@ -21,6 +21,7 @@ import {
   trialEndingEmail,
 } from "../email/templates.js";
 import { resolveOwnerIdentity } from "../services/ownerIdentity.service.js";
+import { reconcileStalePayments } from "../services/payment.service.js";
 import type { OrderEventPayload, OrderEventType } from "../events/orderEvents.js";
 import type { TicketEventPayload, TicketEventType } from "../events/ticketEvents.js";
 
@@ -40,7 +41,13 @@ export interface BillingLifecycleNotificationPayload {
   kind: BillingLifecycleKind;
 }
 
-export type NotificationJobName = "demo.ping" | OrderEventType | TicketEventType | "billing.lifecycle" | "billing.trial_reminder_tick";
+export type NotificationJobName =
+  | "demo.ping"
+  | OrderEventType
+  | TicketEventType
+  | "billing.lifecycle"
+  | "billing.trial_reminder_tick"
+  | "payment.reconciliation_tick";
 
 export interface DemoPingPayload {
   message: string;
@@ -229,6 +236,19 @@ export async function registerTrialReminderJob(): Promise<void> {
   );
 }
 
+/** Phase 35 audit fix — registers the payment-reconciliation polling fallback (see
+ *  payment.service.ts's reconcileStalePayments doc comment for why this exists at all) as a
+ *  repeatable job, same idempotent-registration pattern as registerTrialReminderJob above. Runs
+ *  every 10 minutes — frequent enough that a payment stuck on a missing/broken webhook gets caught
+ *  and corrected within roughly RECONCILIATION_STALE_AFTER_MS (15 min) + one tick, not hours. */
+export async function registerPaymentReconciliationJob(): Promise<void> {
+  await notificationQueue.add(
+    "payment.reconciliation_tick",
+    {},
+    { repeat: { pattern: "*/10 * * * *" }, jobId: "payment-reconciliation-every-10-min" }
+  );
+}
+
 export function startNotificationWorker(): Worker<NotificationJobPayload> {
   const worker = new Worker<NotificationJobPayload>(
     "notifications",
@@ -251,6 +271,12 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
           await runTrialEndingReminderSweep();
         } catch (err) {
           logger.error("trial-ending reminder sweep failed", { jobId: job.id, error: (err as Error).message });
+        }
+      } else if (job.name === "payment.reconciliation_tick") {
+        try {
+          await reconcileStalePayments();
+        } catch (err) {
+          logger.error("payment reconciliation sweep failed", { jobId: job.id, error: (err as Error).message });
         }
       }
     },

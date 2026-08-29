@@ -75,6 +75,13 @@ export async function handleRestaurantAccountWebhook(req: Request, res: Response
   const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
   if (!event) throw ApiError.badRequest("Invalid webhook signature");
 
+  // Phase 35 audit fix — the first successfully-verified real event for this account is the only
+  // genuine proof the owner actually finished configuring their provider dashboard's webhook, as
+  // opposed to just entering a valid API key. Never set on connect, never faked.
+  if (!account.firstWebhookReceivedAt) {
+    await RestaurantPaymentAccount.updateOne({ _id: account._id }, { $set: { firstWebhookReceivedAt: new Date() } });
+  }
+
   await processProviderEvent(provider.name, event, account._id.toString());
 
   res.status(200).json({ received: true });
