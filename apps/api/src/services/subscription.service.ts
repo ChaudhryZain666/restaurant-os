@@ -31,10 +31,21 @@ function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: Billing
 }
 
 /**
- * Shared core for both `createSubscriptionForBusiness` and `createSubscriptionForAgency`. The
- * partial unique index on {ownerType, ownerId} is the real concurrency guard: two simultaneous
- * create attempts for the same owner race the insert, and the loser gets a clean 409, not a silent
- * duplicate — the pre-check below only narrows the common case.
+ * Shared core for both `createSubscriptionForBusiness` and `createSubscriptionForAgency` — the
+ * no-card-required trial entry point. The partial unique index on {ownerType, ownerId} is the real
+ * concurrency guard: two simultaneous create attempts for the same owner race the insert, and the
+ * loser gets a clean 409, not a silent duplicate — the pre-check below only narrows the common case.
+ *
+ * Phase 34 closure — deliberately contacts NO billing provider at all (verified against a real
+ * Paddle sandbox account: Paddle's own docs state "you can't create a subscription directly" —
+ * subscriptions are only ever born from a completed checkout or a manually-collected transaction,
+ * so the direct-create call this function used to make here was structurally impossible against a
+ * real provider, even though it "worked" against MockBillingProvider). The Subscription lives
+ * purely locally — provider recorded as whichever one is configured, but providerCustomerId/
+ * providerSubscriptionId left unset — until the owner goes through createCheckoutSessionCore to add
+ * a payment method, either during the trial or to convert at its end.
+ * `handleCheckoutCompletionEvent` below is the counterpart: it updates THIS document in place with
+ * real provider identifiers rather than creating a second one.
  */
 async function createSubscriptionCore(
   ownerType: SubscriptionOwnerType,
@@ -51,16 +62,13 @@ async function createSubscriptionCore(
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
 
-  const provider = getBillingProvider();
-  const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
-  const providerSub = await provider.createSubscription({
-    providerCustomerId: customer.providerCustomerId,
-    planCode: plan.code,
-    billingInterval,
-    trialDays: resolveTrialDays(plan),
-  });
+  const trialDays = resolveTrialDays(plan);
+  if (!trialDays) {
+    throw ApiError.badRequest("This plan requires a payment method up front — start checkout to subscribe");
+  }
 
-  const status: SubscriptionStatus = providerSub.status === "trialing" ? "trialing" : "active";
+  const now = new Date();
+  const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
 
   let subscription: HydratedDocument<SubscriptionDoc>;
   try {
@@ -68,15 +76,13 @@ async function createSubscriptionCore(
       ownerType,
       ownerId,
       planId: plan._id,
-      status,
+      status: "trialing",
       billingInterval,
-      currentPeriodStart: providerSub.currentPeriodStart,
-      currentPeriodEnd: providerSub.currentPeriodEnd,
-      trialStart: status === "trialing" ? new Date() : undefined,
-      trialEnd: providerSub.trialEnd,
-      provider: provider.name,
-      providerCustomerId: customer.providerCustomerId,
-      providerSubscriptionId: providerSub.providerSubscriptionId,
+      currentPeriodStart: now,
+      currentPeriodEnd: trialEnd,
+      trialStart: now,
+      trialEnd,
+      provider: env.BILLING_PROVIDER as SubscriptionDoc["provider"],
     });
   } catch (err) {
     // Backstop for the genuine race the pre-check above can't close.
@@ -92,7 +98,7 @@ async function createSubscriptionCore(
     ownerId,
     subscriptionId: subscription._id,
     type: "subscription_created",
-    provider: provider.name as SubscriptionDoc["provider"],
+    provider: subscription.provider,
     amountCents: pricing?.amountCents,
     currency: pricing?.currency,
     metadata: { planCode: plan.code },
@@ -119,8 +125,13 @@ async function createCheckoutSessionCore(
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
+  // A local-only trial (createSubscriptionCore — no providerSubscriptionId yet) is explicitly
+  // ALLOWED to proceed to checkout: that's how it ever gets a real payment method attached. Only a
+  // subscription already backed by a real provider resource blocks a second checkout.
   const existing = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
-  if (existing) throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
+  if (existing?.providerSubscriptionId) {
+    throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
+  }
 
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
@@ -354,12 +365,14 @@ const HISTORY_TYPE_BY_TARGET_STATUS: Partial<Record<SubscriptionStatus, BillingH
 };
 
 /**
- * Phase 27 — a checkout completing reports a BRAND-NEW subscription (no providerSubscriptionId we
- * already know about), so this creates a Subscription document rather than updating an existing
- * one — the counterpart to createCheckoutSessionCore, which deliberately created nothing. Reuses
- * the exact same partial-unique-index backstop createSubscriptionCore relies on: if a duplicate/
- * concurrent completion for the same owner races this insert, the loser is logged and dropped, not
- * a second live subscription.
+ * Phase 27 — a checkout completing reports a subscription that may be BRAND-NEW (no prior
+ * Subscription document at all — a no-trial plan going straight to checkout) or the conversion of
+ * an existing LOCAL-ONLY trial (createSubscriptionCore — has no providerSubscriptionId yet) into a
+ * real, provider-backed one. The former creates a document; the latter updates the trial's existing
+ * document in place (same _id, same trialStart) rather than creating a second one. Either way,
+ * reuses the exact same partial-unique-index backstop createSubscriptionCore relies on: if a
+ * duplicate/concurrent completion for the same owner races this, the loser is logged and dropped,
+ * not a second live subscription.
  */
 async function handleCheckoutCompletionEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
   const meta = event.checkoutMetadata!;
@@ -377,36 +390,56 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
   const snapshot = await provider.retrieveSubscription(event.providerSubscriptionId);
   const status: SubscriptionStatus = snapshot.status === "trialing" ? "trialing" : "active";
 
+  const existingLocalTrial = await Subscription.findOne({
+    ownerType: meta.ownerType,
+    ownerId: meta.ownerId,
+    status: { $in: LIVE_STATUSES },
+    providerSubscriptionId: { $exists: false },
+  });
+
   let subscription: HydratedDocument<SubscriptionDoc>;
-  try {
-    subscription = await Subscription.create({
-      ownerType: meta.ownerType,
-      ownerId: meta.ownerId,
-      planId: plan._id,
-      status,
-      billingInterval: meta.billingInterval,
-      currentPeriodStart: snapshot.currentPeriodStart,
-      currentPeriodEnd: snapshot.currentPeriodEnd,
-      trialStart: status === "trialing" ? new Date() : undefined,
-      trialEnd: snapshot.trialEnd,
-      provider: providerName,
-      providerCustomerId: meta.providerCustomerId,
-      providerSubscriptionId: event.providerSubscriptionId,
-    });
-  } catch (err) {
-    if ((err as { code?: number }).code === 11000) {
-      logger.info("duplicate checkout-completion event ignored — owner already has a live subscription", {
-        provider: providerName,
+  if (existingLocalTrial) {
+    existingLocalTrial.planId = plan._id;
+    existingLocalTrial.status = status;
+    existingLocalTrial.billingInterval = meta.billingInterval;
+    existingLocalTrial.currentPeriodStart = snapshot.currentPeriodStart;
+    existingLocalTrial.currentPeriodEnd = snapshot.currentPeriodEnd;
+    existingLocalTrial.trialEnd = snapshot.trialEnd ?? existingLocalTrial.trialEnd;
+    existingLocalTrial.provider = providerName as SubscriptionDoc["provider"];
+    existingLocalTrial.providerCustomerId = meta.providerCustomerId;
+    existingLocalTrial.providerSubscriptionId = event.providerSubscriptionId;
+    subscription = await existingLocalTrial.save();
+  } else {
+    try {
+      subscription = await Subscription.create({
         ownerType: meta.ownerType,
         ownerId: meta.ownerId,
+        planId: plan._id,
+        status,
+        billingInterval: meta.billingInterval,
+        currentPeriodStart: snapshot.currentPeriodStart,
+        currentPeriodEnd: snapshot.currentPeriodEnd,
+        trialStart: status === "trialing" ? new Date() : undefined,
+        trialEnd: snapshot.trialEnd,
+        provider: providerName,
+        providerCustomerId: meta.providerCustomerId,
+        providerSubscriptionId: event.providerSubscriptionId,
       });
-      await BillingWebhookEvent.updateOne(
-        { provider: providerName, eventId: event.eventId },
-        { $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" } }
-      );
-      return;
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        logger.info("duplicate checkout-completion event ignored — owner already has a live subscription", {
+          provider: providerName,
+          ownerType: meta.ownerType,
+          ownerId: meta.ownerId,
+        });
+        await BillingWebhookEvent.updateOne(
+          { provider: providerName, eventId: event.eventId },
+          { $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" } }
+        );
+        return;
+      }
+      throw err;
     }
-    throw err;
   }
 
   const pricing = resolvePricing(plan, meta.billingInterval);

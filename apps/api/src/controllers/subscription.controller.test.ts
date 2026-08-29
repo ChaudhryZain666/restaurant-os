@@ -8,6 +8,7 @@ import { Plan } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
 import { User } from "../models/User.js";
+import { getMockBillingProvider } from "../billing/index.js";
 import {
   closeTestConnections,
   createTestBusiness,
@@ -331,11 +332,32 @@ describe("POST /businesses/:businessId/subscription/mock-advance — dev-only tr
     userIds.push(owner.id as string, staff.id as string);
     const token = tokenFor(owner);
 
-    const createRes = await request(app)
-      .post(`/api/v1/businesses/${biz.id}/subscription`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ planCode: plan.code, billingInterval: "monthly" });
-    expect(createRes.body.data.subscription.status).toBe("trialing");
+    // Phase 34 closure — the no-card-trial create path no longer contacts the billing provider at
+    // all (real Paddle has no direct-create endpoint), so mock-advance needs a subscription that
+    // already has a real provider link, exactly like an owner who added a card during their trial.
+    // See subscription.service.ts's createSubscriptionCore doc comment.
+    const mockProvider = getMockBillingProvider();
+    const customer = await mockProvider.createCustomer({ ownerType: "business", ownerId: biz.id as string, email: owner.email!, name: owner.name! });
+    const providerSub = await mockProvider.createSubscription({
+      providerCustomerId: customer.providerCustomerId,
+      planCode: plan.code,
+      billingInterval: "monthly",
+      trialDays: 14,
+    });
+    await Subscription.create({
+      ownerType: "business",
+      ownerId: biz._id,
+      planId: plan._id,
+      status: "trialing",
+      billingInterval: "monthly",
+      currentPeriodStart: providerSub.currentPeriodStart,
+      currentPeriodEnd: providerSub.currentPeriodEnd,
+      trialStart: new Date(),
+      trialEnd: providerSub.trialEnd,
+      provider: "mock",
+      providerCustomerId: customer.providerCustomerId,
+      providerSubscriptionId: providerSub.providerSubscriptionId,
+    });
 
     const staffAttempt = await request(app)
       .post(`/api/v1/businesses/${biz.id}/subscription/mock-advance`)

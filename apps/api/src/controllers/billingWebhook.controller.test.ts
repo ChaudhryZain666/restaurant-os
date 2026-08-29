@@ -22,6 +22,18 @@ const businessIds: string[] = [];
 const restaurantIds: string[] = [];
 const userIds: string[] = [];
 
+/**
+ * Phase 34 closure — createSubscriptionCore (the no-card-trial path) no longer contacts the
+ * billing provider at all (see subscription.service.ts's doc comment: verified against a real
+ * Paddle account that direct subscription creation doesn't exist there), so a trial started via
+ * POST /businesses/:id/subscription now has no providerSubscriptionId to drive raw webhook events
+ * against. This helper instead builds the fixture directly at the state a real owner reaches by
+ * adding a card DURING a trial (checkout completing while still trialing) — a real mock provider
+ * subscription plus the local Subscription document exactly as handleCheckoutCompletionEvent's
+ * conversion-in-place branch would leave them — which is what this file's tests actually need: a
+ * live providerSubscriptionId to exercise the raw webhook endpoint's signature/idempotency
+ * mechanics against, independent of how that provider linkage came to exist.
+ */
 async function subscribedBusiness() {
   const biz = await createTestBusiness();
   const loc = await createTestRestaurant({ businessId: biz._id });
@@ -31,13 +43,36 @@ async function subscribedBusiness() {
   restaurantIds.push(loc.id as string);
   userIds.push(owner.id as string);
 
-  const createRes = await request(app)
-    .post(`/api/v1/businesses/${biz.id}/subscription`)
-    .set("Authorization", `Bearer ${token}`)
-    .send({ planCode: plan.code, billingInterval: "monthly" });
-  const subscription = await Subscription.findById(createRes.body.data.subscription.id);
+  const provider = getMockBillingProvider();
+  const customer = await provider.createCustomer({
+    ownerType: "business",
+    ownerId: biz.id as string,
+    email: owner.email!,
+    name: owner.name!,
+  });
+  const providerSub = await provider.createSubscription({
+    providerCustomerId: customer.providerCustomerId,
+    planCode: plan.code,
+    billingInterval: "monthly",
+    trialDays: 14,
+  });
 
-  return { business: biz, location: loc, owner, token, subscription: subscription! };
+  const subscription = await Subscription.create({
+    ownerType: "business",
+    ownerId: biz._id,
+    planId: plan._id,
+    status: "trialing",
+    billingInterval: "monthly",
+    currentPeriodStart: providerSub.currentPeriodStart,
+    currentPeriodEnd: providerSub.currentPeriodEnd,
+    trialStart: new Date(),
+    trialEnd: providerSub.trialEnd,
+    provider: "mock",
+    providerCustomerId: customer.providerCustomerId,
+    providerSubscriptionId: providerSub.providerSubscriptionId,
+  });
+
+  return { business: biz, location: loc, owner, token, subscription };
 }
 
 function postWebhook(rawBody: Buffer, signatureHeader: string) {
