@@ -92,6 +92,13 @@ export class MockPaymentProvider implements PaymentProvider {
     return { refundRef: `mock_re_${randomBytes(12).toString("hex")}`, status: "succeeded" };
   }
 
+  // "mock" is excluded from the BYOC provider enum entirely (RestaurantPaymentAccount.ts) — nothing
+  // real to verify — but the interface requires an implementation, and there's nothing to fake
+  // being wrong about, so this trivially always succeeds.
+  async verifyCredentials(): Promise<boolean> {
+    return true;
+  }
+
   // --- Mock-only driver surface below: not part of PaymentProvider, only ever called from the
   // dev-only mock-driver controller, which itself only registers routes when
   // env.PAYMENT_PROVIDER === "mock". ---

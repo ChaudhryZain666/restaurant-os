@@ -27,6 +27,11 @@ const paymentSchema = new Schema(
     // real provider selected for this platform's market and why it isn't wired up yet.
     provider: { type: String, required: true },
     providerRef: { type: String },
+    // Set only when this payment used a restaurant's own BYOC-connected account (see
+    // payments/restaurantProvider.ts) rather than the platform's pooled default — refundPayment
+    // needs this to rebuild the SAME credentials the original charge used, not whatever the
+    // pooled default currently resolves to. Never set for a pooled-account payment.
+    restaurantPaymentAccountId: { type: Schema.Types.ObjectId, ref: "RestaurantPaymentAccount" },
     currency: { type: String, required: true },
     // Snapshotted from Order.total by payment.service.ts at creation time — the server-computed
     // total is the ONLY source for this value; it is never accepted from a request body.

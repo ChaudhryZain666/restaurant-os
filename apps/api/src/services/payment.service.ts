@@ -8,6 +8,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { getPaymentProvider } from "../payments/index.js";
 import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
+import { buildProviderFromAccount, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
+import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import type { ProviderWebhookEvent } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
@@ -67,14 +69,25 @@ export async function createPaymentForOrder(
     throw ApiError.badRequest("This restaurant is temporarily unable to accept payments — please contact the restaurant.");
   }
 
-  // Phase 34 — country/currency eligibility routing is opt-in (env.PAYMENT_ELIGIBILITY_ROUTING,
-  // default false): every existing deployment/test/dev environment keeps today's exact behavior
-  // (the single PAYMENT_PROVIDER-configured default, regardless of restaurant country) unless a
-  // deployment deliberately turns this on. When enabled, a restaurant whose country has no eligible
-  // configured provider gets a clear error rather than silently falling back to a provider that
-  // doesn't actually serve that market — see payments/eligibility.ts.
+  // BYOC (restaurant-owned payment account, restaurantProvider.ts) is checked FIRST,
+  // unconditionally — a restaurant that connected its own account is a stronger, more explicit
+  // signal than country-based pooled routing, and this deliberately lets a restaurant in an
+  // otherwise-country-ineligible market accept online payments by connecting its own account
+  // directly (it's vouching for that account itself). Only when a restaurant has no active BYOC
+  // account does resolution fall through to the exact existing pooled/eligibility logic, unchanged.
   let provider = getPaymentProvider();
-  if (env.PAYMENT_ELIGIBILITY_ROUTING) {
+  let restaurantPaymentAccountId: string | undefined;
+  const own = await resolveRestaurantPaymentProvider(restaurantId);
+  if (own) {
+    provider = own.provider;
+    restaurantPaymentAccountId = own.accountId;
+  } else if (env.PAYMENT_ELIGIBILITY_ROUTING) {
+    // Phase 34 — country/currency eligibility routing is opt-in (env.PAYMENT_ELIGIBILITY_ROUTING,
+    // default false): every existing deployment/test/dev environment keeps today's exact behavior
+    // (the single PAYMENT_PROVIDER-configured default, regardless of restaurant country) unless a
+    // deployment deliberately turns this on. When enabled, a restaurant whose country has no
+    // eligible configured provider gets a clear error rather than silently falling back to a
+    // provider that doesn't actually serve that market — see payments/eligibility.ts.
     const eligible = resolveEligiblePaymentProvider(restaurant);
     if (!eligible) {
       throw ApiError.badRequest("Online payment isn't available for this restaurant's country yet — please pay with cash.");
@@ -104,6 +117,7 @@ export async function createPaymentForOrder(
       method: "online",
       provider: provider.name,
       providerRef: intent.providerRef,
+      restaurantPaymentAccountId,
       currency: restaurant.settings.currency,
       amount: order.total,
       status: intent.status,
@@ -136,8 +150,17 @@ export async function getPaymentById(restaurantId: string, paymentId: string): P
  * by construction: the insert into PaymentWebhookEvent is the source of truth for "have we seen
  * this event before," not an in-application check, so it's race-safe against the same event
  * arriving twice concurrently.
+ *
+ * `restaurantPaymentAccountId` is optional and only ever passed by the BYOC webhook route
+ * (handleRestaurantAccountWebhook) — defense-in-depth against a cross-tenant `providerRef`
+ * collision, not load-bearing (Stripe/Safepay identifiers are globally unique in practice). The
+ * pooled webhook path (handleProviderWebhook) never passes it, so its lookup is unchanged.
  */
-export async function processProviderEvent(providerName: string, event: ProviderWebhookEvent): Promise<void> {
+export async function processProviderEvent(
+  providerName: string,
+  event: ProviderWebhookEvent,
+  restaurantPaymentAccountId?: string
+): Promise<void> {
   try {
     await PaymentWebhookEvent.create({
       provider: providerName,
@@ -153,7 +176,11 @@ export async function processProviderEvent(providerName: string, event: Provider
     throw err;
   }
 
-  const payment = await Payment.findOne({ provider: providerName, providerRef: event.providerRef });
+  const payment = await Payment.findOne({
+    provider: providerName,
+    providerRef: event.providerRef,
+    ...(restaurantPaymentAccountId ? { restaurantPaymentAccountId } : {}),
+  });
   if (!payment) {
     logger.warn("payment webhook event for unknown payment reference", {
       provider: providerName,
@@ -292,7 +319,17 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     );
   }
 
-  const provider = getPaymentProvider();
+  // A refund must go through the SAME credentials the original charge used — never whatever the
+  // pooled default currently resolves to, and never a "currently active" BYOC account that might
+  // differ from the one this payment actually ran on. `restaurantPaymentAccountId` is looked up
+  // regardless of its current status (even `disconnected`, which is a soft transition precisely so
+  // a historical payment's refund path stays resolvable — see RestaurantPaymentAccount.ts).
+  let provider = getPaymentProvider();
+  if (payment.restaurantPaymentAccountId) {
+    const account = await RestaurantPaymentAccount.findById(payment.restaurantPaymentAccountId);
+    if (!account) throw new Error(`This payment's restaurant payment account (${payment.restaurantPaymentAccountId}) no longer exists.`);
+    provider = buildProviderFromAccount(account);
+  }
   let result;
   try {
     result = await provider.refund(payment.providerRef!, amount, reason);

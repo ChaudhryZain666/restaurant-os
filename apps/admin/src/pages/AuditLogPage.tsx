@@ -18,6 +18,7 @@ const TARGET_TYPE_OPTIONS: Array<AuditTargetType | "all"> = [
   "promotion",
   "subscription",
   "menu_import",
+  "payment_account",
 ];
 const TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
   order: "Orders",
@@ -28,6 +29,7 @@ const TARGET_TYPE_LABELS: Record<AuditTargetType, string> = {
   promotion: "Promotions",
   subscription: "Subscriptions",
   menu_import: "Menu imports",
+  payment_account: "Payment accounts",
 };
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { handleProviderWebhook } from "../controllers/paymentWebhook.controller.js";
+import { handleProviderWebhook, handleRestaurantAccountWebhook } from "../controllers/paymentWebhook.controller.js";
 
 /**
  * Mounted at /webhooks/payments/:provider — top-level, not under /restaurants: a webhook
@@ -13,3 +13,11 @@ import { handleProviderWebhook } from "../controllers/paymentWebhook.controller.
 export const paymentWebhookRouter = Router();
 
 paymentWebhookRouter.post("/:provider", asyncHandler(handleProviderWebhook));
+// Restaurant-owned payment accounts (BYOC — see restaurantProvider.ts): a shared per-provider-name
+// secret can't verify a webhook signed with a specific restaurant's OWN secret, so a BYOC-connected
+// restaurant points its provider dashboard's webhook config at THIS url instead of the one above,
+// naming the account up front so the right decrypted secret can be looked up before anything in
+// the payload is trusted. Route order matters: this MUST come after "/:provider" is registered, or
+// nothing — Express matches routes in registration order but these paths don't actually collide
+// (different segment counts), so this is purely a readability convention, not a correctness one.
+paymentWebhookRouter.post("/:provider/:restaurantPaymentAccountId", asyncHandler(handleRestaurantAccountWebhook));

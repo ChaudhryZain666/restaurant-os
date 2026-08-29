@@ -1,5 +1,45 @@
 # Payment Provider Decision
 
+## Update — restaurant-owned payment accounts (BYOC)
+
+The "Per-restaurant payment accounts: not built, deliberately deferred" line in the summary table
+below is now out of date for the *money-goes-directly-to-the-restaurant* part of that ask — full
+Stripe Connect (OAuth, application fees, a genuine multi-merchant marketplace model) is still not
+built and stays a documented future option, but a restaurant can now connect its own Stripe or
+Safepay account and have its orders settle directly into it, without that OAuth machinery.
+
+**Why not Stripe Connect**: researched directly against Safepay's complete official docs site
+(`safepay-docs.netlify.app`) and confirmed — not just "no evidence found," but checked against the
+full documentation navigation — that Safepay has no marketplace/sub-merchant/connected-account API
+at all (its "Connect" product is an unrelated P2P personal-payment-link feature). Building real
+Stripe Connect would mean two structurally different account models per provider, plus Stripe's own
+platform-approval process. Instead: **BYOC** — a restaurant pastes its own already-obtained provider
+secret key(s) into an admin settings page (`apps/admin/src/components/PaymentAccountSettingsPanel.tsx`,
+under Settings → Payment); the platform then calls that provider's normal API *as* that restaurant,
+using their credentials directly. One consistent mechanism for both providers, no OAuth, no Stripe
+platform approval needed.
+
+**Architecture**: `apps/api/src/models/RestaurantPaymentAccount.ts` (new collection, one per
+restaurant *location* — not per business, mirroring `DomainMapping.ts`'s exact per-location
+precedent), credentials encrypted at rest with AES-256-GCM
+(`apps/api/src/utils/credentialEncryption.ts`, key from `CREDENTIAL_ENCRYPTION_KEY`).
+`apps/api/src/payments/restaurantProvider.ts` resolves a restaurant's own active account and is
+checked FIRST in `createPaymentForOrder`/`refundPayment` (`payment.service.ts`), before falling
+back to the exact existing pooled/eligibility-engine path unchanged — zero behavior change for any
+restaurant that hasn't connected its own account. A restaurant-owned account gets its own webhook
+URL (`/webhooks/payments/:provider/:restaurantPaymentAccountId` — pasted by the owner into their
+own provider dashboard), since a shared per-provider-name secret can't verify a delivery signed with
+a specific restaurant's own secret. Connecting an account synchronously verifies it in the same
+request (Stripe: `GET /v1/balance`; Safepay: reuses the tracker-creation call, since no dedicated
+account-check endpoint exists) — no separate "verified" stage the way DomainMapping has, since there's
+no DNS-propagation-like time gap to wait out here.
+
+**Explicitly still deferred**: full Stripe Connect OAuth/application-fee model; simultaneous
+multi-provider-per-restaurant (blocked by the model's own partial unique index by design); automated
+credential rotation; restaurant-facing payout/transaction dashboards beyond a status badge and a
+masked fingerprint (the restaurant's own Stripe/Safepay dashboard is the dashboard — that's the
+point of BYOC).
+
 ## Update — Phase 34: the international-expansion adapter, plus a real eligibility engine
 
 Phase 29's "International expansion" section below anticipated this exactly: `StripeProvider`
@@ -219,7 +259,7 @@ current requirement for it and doing so would be speculative complexity.
 | Idempotency (checkout, webhooks, refunds) | Real, enforced at the database level via unique indexes, not just application logic — `provider` is a free-text field on every relevant model, so a third provider name needed no schema change |
 | Restaurant payment-method toggles (`cashEnabled`/`onlinePaymentEnabled`) | Real, Phase 15 — server-enforced at order creation, not just hidden client-side |
 | Customer checkout redirect (Phase 29) | Real — `OrderPaymentPanel.tsx` redirects to the active provider's real `clientSecret` checkout URL for any non-mock provider; simulate buttons only ever render for `mock` |
-| Per-restaurant payment accounts | **Not built, deliberately deferred** (Phase 29 audit, reconfirmed Phase 34) — this platform uses one platform-owned account per provider (see Multi-tenancy model above); restaurant-level payout/split-payment is a separate, future, and substantially larger project, not scoped here |
+| Per-restaurant payment accounts | **Built via BYOC** (see "Update — restaurant-owned payment accounts" above) — a restaurant can connect its own Stripe/Safepay account and have orders settle directly into it. The platform-pooled account (Multi-tenancy model above) remains the default and the fallback for any restaurant that hasn't connected one. Full Stripe Connect (OAuth, application fees, a true marketplace model) remains **not built, deliberately deferred** — a separate, larger project from BYOC |
 
 No code path in this repository reports a mock or unverified payment as confirmed-working, and no
 code path claims Safepay integration has been validated against a real account. `PAYMENT_PROVIDER`

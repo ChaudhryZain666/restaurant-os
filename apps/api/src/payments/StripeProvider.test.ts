@@ -192,3 +192,18 @@ describe("StripeProvider.refund", () => {
     await expect(provider().refund("cs_123", 5)).rejects.toThrow("no associated payment_intent");
   });
 });
+
+describe("StripeProvider.verifyCredentials", () => {
+  it("resolves true when GET /v1/balance succeeds", async () => {
+    const fetchSpy = mockFetchOnce(200, { object: "balance" });
+    await expect(provider().verifyCredentials()).resolves.toBe(true);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.stripe.com/v1/balance");
+    expect(init.method).toBe("GET");
+  });
+
+  it("resolves false, never throws, when the key is rejected", async () => {
+    mockFetchOnce(401, { error: { message: "Invalid API Key provided" } }, false);
+    await expect(provider().verifyCredentials()).resolves.toBe(false);
+  });
+});

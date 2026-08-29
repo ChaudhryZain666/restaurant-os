@@ -31,4 +31,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "subscription.past_due": "Marked past due",
   "menu.imported": "Menu imported",
   "restaurant.theme_published": "Storefront theme published",
+  "payment_account.connected": "Payment account connected",
+  "payment_account.disconnected": "Payment account disconnected",
 };

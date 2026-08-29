@@ -183,3 +183,22 @@ describe("SafepayProvider.baseUrlForEnv", () => {
     expect(SafepayProvider.baseUrlForEnv("production")).toBe("https://api.getsafepay.com");
   });
 });
+
+describe("SafepayProvider.verifyCredentials", () => {
+  it("resolves true when tracker creation succeeds and returns a token", async () => {
+    const fetchSpy = mockFetchOnce(200, { data: { token: "tok_verify" } });
+    await expect(provider().verifyCredentials()).resolves.toBe(true);
+    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://sandbox.api.getsafepay.com/order/v1/init");
+  });
+
+  it("resolves false, never throws, when the key is rejected", async () => {
+    mockFetchOnce(401, { message: "invalid merchant_api_key" }, false);
+    await expect(provider().verifyCredentials()).resolves.toBe(false);
+  });
+
+  it("resolves false if the response is 2xx but carries no token", async () => {
+    mockFetchOnce(200, { data: {} });
+    await expect(provider().verifyCredentials()).resolves.toBe(false);
+  });
+});

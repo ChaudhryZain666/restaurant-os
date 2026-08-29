@@ -60,4 +60,10 @@ export interface PaymentProvider {
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderWebhookEvent | null;
   refund(providerRef: string, amount: number, reason?: string): Promise<ProviderRefundResult>;
+  /** Restaurant-owned accounts (BYOC — see restaurantProvider.ts) only: a cheap, read-only,
+   *  zero-side-effect call proving these credentials actually authenticate against this provider,
+   *  made synchronously when a restaurant connects its own account, before it's ever marked
+   *  active. Resolves false (never throws) for a rejected/invalid credential — only a genuine
+   *  network/transport failure should throw. */
+  verifyCredentials(): Promise<boolean>;
 }

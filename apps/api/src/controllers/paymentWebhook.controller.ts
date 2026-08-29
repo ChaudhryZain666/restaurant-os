@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError.js";
 import { getPaymentProvider, KNOWN_PAYMENT_PROVIDER_NAMES, type PaymentProviderName } from "../payments/index.js";
+import { buildProviderFromAccount } from "../payments/restaurantProvider.js";
+import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import { processProviderEvent } from "../services/payment.service.js";
 
 /**
@@ -42,6 +44,38 @@ export async function handleProviderWebhook(req: Request, res: Response) {
   if (!event) throw ApiError.badRequest("Invalid webhook signature");
 
   await processProviderEvent(provider.name, event);
+
+  res.status(200).json({ received: true });
+}
+
+/**
+ * POST /webhooks/payments/:provider/:restaurantPaymentAccountId — the BYOC counterpart to
+ * handleProviderWebhook above (see restaurantProvider.ts, RestaurantPaymentAccount.ts). A shared
+ * per-provider-name secret can't verify a webhook signed with a specific restaurant's OWN secret,
+ * so a BYOC-connected restaurant's own provider dashboard points its webhook config at this URL
+ * instead — naming the account up front is the only way to know which decrypted secret to check
+ * before trusting anything in the payload. No auth here either, same reasoning as above: the
+ * account id alone isn't sensitive, and nothing of substance happens before signature verification.
+ */
+export async function handleRestaurantAccountWebhook(req: Request, res: Response) {
+  if (!KNOWN_PAYMENT_PROVIDER_NAMES.includes(req.params.provider as PaymentProviderName) || req.params.provider === "mock") {
+    throw ApiError.badRequest(`"${req.params.provider}" is not a BYOC-eligible payment provider`);
+  }
+
+  const account = await RestaurantPaymentAccount.findOne({
+    _id: req.params.restaurantPaymentAccountId,
+    provider: req.params.provider,
+  });
+  if (!account) throw ApiError.badRequest("No matching restaurant payment account for this provider/id");
+
+  const provider = buildProviderFromAccount(account);
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+  const signatureHeader = req.header(provider.signatureHeaderName);
+
+  const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
+  if (!event) throw ApiError.badRequest("Invalid webhook signature");
+
+  await processProviderEvent(provider.name, event, account._id.toString());
 
   res.status(200).json({ received: true });
 }

@@ -18,6 +18,12 @@ const envSchema = z.object({
   // makes local dev same-origin, but a production deployment that serves marketing as a genuinely
   // separate origin (e.g. a static host) needs this.
   MARKETING_ORIGIN: z.string().default("http://localhost:5175"),
+  // The API's own publicly-reachable origin — needed only to build absolute URLs that get shown TO
+  // a user for pasting somewhere else (currently just the BYOC webhook URL a restaurant pastes into
+  // its own Stripe/Safepay dashboard — see restaurantPaymentAccount.controller.ts). Every other
+  // *_ORIGIN above is a frontend's origin, used for CORS; this is the API itself, which otherwise
+  // has no reason to know its own public address.
+  API_PUBLIC_ORIGIN: z.string().default("http://localhost:4000"),
 
   // File storage (optional — StorageService throws only when actually used unconfigured)
   STORAGE_ENDPOINT: z.string().optional(),
@@ -88,6 +94,14 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  // Restaurant-owned payment accounts (BYOC — see restaurantProvider.ts/RestaurantPaymentAccount.ts):
+  // the AES-256-GCM key credentialEncryption.ts uses to encrypt a restaurant's own pasted-in
+  // provider secret keys at rest. Optional at boot, exactly like STRIPE_SECRET_KEY above — a
+  // deployment that never uses BYOC never needs it set; credentialEncryption.ts throws a clear
+  // error only the first time it's actually called without one configured. Expected to be a
+  // base64-encoded 32-byte key. Rotating this value without a migration permanently bricks every
+  // already-stored BYOC credential — there is no rotation tooling this phase.
+  CREDENTIAL_ENCRYPTION_KEY: z.string().optional(),
 
   // DNS verification (Phase 22 custom domains). "mock" (default outside production, mirroring
   // PAYMENT_PROVIDER's default-mock precedent) reads from the MockDnsRecord collection, seeded

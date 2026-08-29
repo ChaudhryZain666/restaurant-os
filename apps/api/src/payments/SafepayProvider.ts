@@ -241,6 +241,25 @@ export class SafepayProvider implements PaymentProvider {
 
     return { refundRef, status };
   }
+
+  // BYOC connect-time check (restaurantProvider.ts) — Safepay has no documented account-info/
+  // balance endpoint (confirmed against their full official docs site), so this reuses the same
+  // /order/v1/init tracker-creation call createIntent already makes, with a trivial synthetic
+  // payload. A 200 with a token proves the credentials authenticate; creating a tracker has no
+  // charge side effect — only a completed hosted checkout would actually move money.
+  async verifyCredentials(): Promise<boolean> {
+    try {
+      const response = await this.request<{ data?: { token?: string; tracker?: string } }>("POST", "/order/v1/init", {
+        merchant_api_key: this.apiKey,
+        amount: 100,
+        currency: "PKR",
+        order_id: `verify-${Date.now()}`,
+      });
+      return Boolean(response.data?.token ?? response.data?.tracker);
+    } catch {
+      return false;
+    }
+  }
 }
 
 /**

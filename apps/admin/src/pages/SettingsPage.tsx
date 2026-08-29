@@ -7,6 +7,7 @@ import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
 import { DomainSettingsPanel } from "../components/DomainSettingsPanel";
+import { PaymentAccountSettingsPanel } from "../components/PaymentAccountSettingsPanel";
 import { MapPreview } from "../components/MapPreview";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { uploadRestaurantImage } from "../lib/uploads";
@@ -516,10 +517,13 @@ export function SettingsPage() {
               </Badge>
             </div>
             <p className="text-xs text-muted">
-              Online payments run through this platform's shared payment provider — there's nothing for you to
-              connect or configure beyond turning it on. Card/wallet details never touch this platform's servers.
+              Online payments run through this platform's shared payment provider by default — connect your own
+              account below if you'd rather orders settle directly into it. Card/wallet details never touch this
+              platform's servers either way.
             </p>
           </fieldset>
+
+          <PaymentAccountSettingsPanel />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">

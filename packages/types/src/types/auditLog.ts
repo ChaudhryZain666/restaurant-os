@@ -43,9 +43,24 @@ export const AUDIT_ACTIONS = [
   // Phase 31 — fired only on an actual publish (draft -> live), never on every autosaved draft
   // edit; the audit log stays a record of real, customer-visible changes, not a live edit log.
   "restaurant.theme_published",
+  // Restaurant-owned payment accounts (BYOC — see RestaurantPaymentAccount.ts). Metadata carries
+  // only {provider, fingerprint}, never anything that could reconstruct the credential — same rule
+  // AuditLog.ts already holds every other action to.
+  "payment_account.connected",
+  "payment_account.disconnected",
 ] as const;
 
-export const AUDIT_TARGET_TYPES = ["order", "payment", "restaurant", "user", "domain", "promotion", "subscription", "menu_import"] as const;
+export const AUDIT_TARGET_TYPES = [
+  "order",
+  "payment",
+  "restaurant",
+  "user",
+  "domain",
+  "promotion",
+  "subscription",
+  "menu_import",
+  "payment_account",
+] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];

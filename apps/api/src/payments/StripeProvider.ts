@@ -207,6 +207,18 @@ export class StripeProvider implements PaymentProvider {
       response.status === "succeeded" ? "succeeded" : response.status === "failed" ? "failed" : "pending";
     return { refundRef: response.id, status };
   }
+
+  // BYOC connect-time check (restaurantProvider.ts) — GET /v1/balance is Stripe's own documented
+  // cheapest "is this key valid and live" call: read-only, no side effects, works for any
+  // authenticated secret key regardless of account configuration.
+  async verifyCredentials(): Promise<boolean> {
+    try {
+      await this.request("GET", "/v1/balance");
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 interface StripeCheckoutSession {
