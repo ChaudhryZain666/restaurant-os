@@ -61,6 +61,71 @@ afterAll(async () => {
   await closeTestConnections();
 });
 
+describe("Phase 38 — cross-tenant isolation on the Stripe Connect endpoints", () => {
+  it("owner of restaurant A cannot start/resume a Stripe Connect flow for restaurant B", async () => {
+    const { restaurant: restaurantB } = await connectableRestaurant();
+    const { ownerToken: ownerAToken } = await connectableRestaurant();
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantB.id}/payment-account/connect/stripe`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(res.status).toBe(403);
+
+    const stored = await RestaurantPaymentAccount.findOne({ restaurantId: restaurantB.id });
+    expect(stored).toBeNull();
+  });
+
+  it("owner of restaurant A cannot sync restaurant B's Stripe status", async () => {
+    const { restaurant: restaurantB, ownerToken: ownerBToken } = await connectableRestaurant();
+    mockFetchSequence(
+      { status: 200, body: { id: "acct_isolation_test" } },
+      { status: 200, body: { url: "https://connect.stripe.com/setup/c/acct_isolation_test/x" } }
+    );
+    await request(app).post(`/api/v1/restaurants/${restaurantB.id}/payment-account/connect/stripe`).set("Authorization", `Bearer ${ownerBToken}`);
+
+    const { ownerToken: ownerAToken } = await connectableRestaurant();
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantB.id}/payment-account/sync-stripe-status`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("owner of restaurant A cannot disconnect restaurant B's payment account", async () => {
+    const { restaurant: restaurantB, ownerToken: ownerBToken } = await ownedRestaurant();
+    mockFetchOnce(200, { data: { token: "tok_iso" } });
+    await request(app)
+      .post(`/api/v1/restaurants/${restaurantB.id}/payment-account`)
+      .set("Authorization", `Bearer ${ownerBToken}`)
+      .send({ provider: "safepay", credentials: { apiKey: "key_iso", secretKey: "sec_iso", webhookSecret: "wh_iso", env: "sandbox" } });
+
+    const { ownerToken: ownerAToken } = await ownedRestaurant();
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantB.id}/payment-account/disconnect`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(res.status).toBe(403);
+
+    const stillActive = await RestaurantPaymentAccount.findOne({ restaurantId: restaurantB.id, status: "active" });
+    expect(stillActive).not.toBeNull();
+  });
+
+  it("no endpoint accepts a client-supplied connectedAccountId — it is always server-resolved", async () => {
+    const { restaurant, ownerToken } = await connectableRestaurant();
+    mockFetchSequence(
+      { status: 200, body: { id: "acct_real_server_generated" } },
+      { status: 200, body: { url: "https://connect.stripe.com/setup/c/acct_real_server_generated/x" } }
+    );
+    // Even though the body below tries to smuggle a different connectedAccountId, the server must
+    // ignore it entirely — createConnectedAccount is the only source of this id.
+    await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/payment-account/connect/stripe`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ connectedAccountId: "acct_attacker_supplied" });
+
+    const stored = await RestaurantPaymentAccount.findOne({ restaurantId: restaurant.id, provider: "stripe" });
+    expect(stored!.connectedAccountId).toBe("acct_real_server_generated");
+  });
+});
+
 describe("GET /restaurants/:restaurantId/payment-account", () => {
   it("returns null when the restaurant has no connected account", async () => {
     const { restaurant, ownerToken } = await ownedRestaurant();
