@@ -104,6 +104,26 @@ describe("POST /agencies/:agencyId/subscription — creation + authorization", (
     const res = await request(app).get(`/api/v1/agencies/${agency.id}/subscription`).set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
     expect(res.status).toBe(403);
   });
+
+  it("rejects an OWNER-type plan — an agency account can't be assigned an owner/business plan (Phase 37 fix)", async () => {
+    const thirdAgency = await createTestAgency();
+    agencyIds.push(thirdAgency.id);
+    const thirdOwner = await createTestUser("agency_member");
+    userIds.push(thirdOwner.id);
+    await createTestAgencyMembership(thirdAgency._id, thirdOwner._id, { role: "agency_owner" });
+    const thirdOwnerToken = tokenFor(thirdOwner, [{ agencyId: thirdAgency.id, role: "agency_owner" }]);
+
+    const ownerPlan = await createTestPlan({ type: "OWNER", code: `owner-only-${Date.now()}` });
+    planIds.push(ownerPlan.id);
+
+    const res = await request(app)
+      .post(`/api/v1/agencies/${thirdAgency.id}/subscription`)
+      .set("Authorization", `Bearer ${thirdOwnerToken}`)
+      .send({ planCode: ownerPlan.code, billingInterval: "monthly" });
+    expect(res.status).toBe(400);
+    const created = await Subscription.findOne({ ownerType: "agency", ownerId: thirdAgency.id });
+    expect(created).toBeNull();
+  });
 });
 
 describe("subscription lifecycle — cancel / reactivate", () => {

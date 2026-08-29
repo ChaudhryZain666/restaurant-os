@@ -130,6 +130,18 @@ describe("POST /businesses/:businessId/subscription — creation + authorization
     expect(res.status).toBe(400);
   });
 
+  it("rejects an AGENCY-type plan — a business account can't be assigned an agency plan (Phase 37 fix)", async () => {
+    const agencyPlan = await createTestPlan({ code: `agency-only-${Date.now()}`, type: "AGENCY" });
+    planIds.push(agencyPlan.id);
+    const res = await request(app)
+      .post(`/api/v1/businesses/${otherBusiness.id}/subscription`)
+      .set("Authorization", `Bearer ${crossBusinessOwnerToken}`)
+      .send({ planCode: agencyPlan.code, billingInterval: "monthly" });
+    expect(res.status).toBe(400);
+    const created = await Subscription.findOne({ ownerType: "business", ownerId: otherBusiness.id });
+    expect(created).toBeNull();
+  });
+
   it("manager cannot create a subscription (billing.manage is owner-only)", async () => {
     const managerAttempt = await request(app)
       .post(`/api/v1/businesses/${business.id}/subscription`)

@@ -16,6 +16,14 @@ const LIVE_STATUSES: SubscriptionStatus[] = ["trialing", "active", "past_due", "
 
 const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
 
+// Phase 37 audit finding — Plan.type ("OWNER"/"AGENCY", the commercial tier) and
+// Subscription.ownerType ("business"/"agency", the structural holder) were never actually
+// cross-checked against each other anywhere: a request naming a valid, active, wrong-audience plan
+// code (an AGENCY plan for a business, or vice versa) would previously succeed. Enforced once here,
+// in the function both createSubscriptionForBusiness and createSubscriptionForAgency route through,
+// so both directions are closed identically rather than only guarding the new self-serve owner path.
+const EXPECTED_PLAN_TYPE: Record<SubscriptionOwnerType, "OWNER" | "AGENCY"> = { business: "OWNER", agency: "AGENCY" };
+
 /** A Plan's own trialDays (Phase 27) overrides env.TRIAL_PERIOD_DAYS when set, so a future plan can
  *  legitimately differ (e.g. a no-trial plan) without touching the global default every other plan
  *  still relies on. 0 (from either source) means no trial at all, never a value invented here. */
@@ -61,6 +69,9 @@ async function createSubscriptionCore(
 
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
+  if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
+    throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
+  }
 
   const trialDays = resolveTrialDays(plan);
   if (!trialDays) {
@@ -135,6 +146,9 @@ async function createCheckoutSessionCore(
 
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
+  if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
+    throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
+  }
 
   const pricing = resolvePricing(plan, billingInterval);
   if (!pricing?.providerPriceId) {
