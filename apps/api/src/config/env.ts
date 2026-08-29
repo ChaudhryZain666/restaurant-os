@@ -84,6 +84,15 @@ const envSchema = z.object({
   // see docs/payment-provider-decision.md's Phase 34 addendum.
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Phase 37 — Stripe Connect. A restaurant's "connect" BYOC path no longer collects/stores the
+  // restaurant's own secret key at all: STRIPE_SECRET_KEY above (the platform's own key) plus a
+  // stored connectedAccountId (via the Stripe-Account header — see StripeProvider.ts) is
+  // sufficient for every restaurant. This is the secret for the ONE centralized Connect-scoped
+  // webhook endpoint (events for every connected account, distinguished by event.account) —
+  // deliberately separate from STRIPE_WEBHOOK_SECRET above, which still only covers the pooled
+  // platform-account path. See paymentWebhook.controller.ts's handleStripeConnectWebhook and
+  // payments/stripeConnect.ts.
+  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
   // Phase 34 — opt-in country/currency payment routing (payments/eligibility.ts). Defaults to
   // "false" so every existing deployment/test/dev environment keeps today's exact behavior (every
   // restaurant routed to the single PAYMENT_PROVIDER-configured default, regardless of country) —

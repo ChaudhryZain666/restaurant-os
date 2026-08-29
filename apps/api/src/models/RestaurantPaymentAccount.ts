@@ -22,6 +22,20 @@ import { idTransform } from "../utils/schemaOptions.js";
  * `disconnected` is a soft transition, never a delete — refundPayment needs a disconnected
  * account's credentials to stay resolvable for as long as its original charges might still need
  * refunding.
+ *
+ * Phase 37 — `connectionMode` distinguishes HOW this account authorizes, on top of the existing
+ * `provider` field (WHICH provider). Researched against each provider's current official docs, not
+ * assumed: Stripe supports real platform-native connection (Connect, v1 Standard accounts, Direct
+ * Charges) — a restaurant's own secret key is never collected or stored for `platform_connect`
+ * accounts; the platform's own STRIPE_SECRET_KEY plus the stored `connectedAccountId` (via a
+ * `Stripe-Account` header — see StripeProvider.ts) is all that's needed. Safepay's current docs
+ * (safepay-docs.netlify.app) confirm no marketplace/OAuth/sub-merchant/central-webhook capability
+ * exists at all — `merchant_credentials` (the pre-Phase-37 encrypted-secret-key flow, unchanged) is
+ * genuinely the only option there, not a design shortcut.
+ * `status` for a `platform_connect` account additionally uses "action_required" — the account
+ * exists but Stripe's own `charges_enabled` is still false (onboarding incomplete or a new
+ * requirement appeared) — tracked centrally via the `account.updated` Connect webhook event,
+ * never inferred client-side.
  */
 const restaurantPaymentAccountSchema = new Schema(
   {
@@ -31,21 +45,43 @@ const restaurantPaymentAccountSchema = new Schema(
     restaurantId: { type: Schema.Types.ObjectId, ref: "Restaurant", required: true },
     businessId: { type: Schema.Types.ObjectId, ref: "Business", required: true, index: true },
     provider: { type: String, enum: ["stripe", "safepay"], required: true },
+    // Phase 37 — default "merchant_credentials" so any pre-existing dev-seeded row (all created
+    // before this field existed, all necessarily the manual-credential flow) still reads as valid
+    // with no backfill script needed — there is no real production data to migrate yet.
+    connectionMode: {
+      type: String,
+      enum: ["platform_connect", "merchant_credentials"],
+      default: "merchant_credentials",
+      required: true,
+    },
     status: {
       type: String,
-      enum: ["pending_verification", "active", "invalid", "disconnected"],
+      enum: ["pending_verification", "active", "action_required", "invalid", "disconnected"],
       default: "pending_verification",
       required: true,
     },
+    // platform_connect only — Stripe's own connected-account id (acct_...). Not a secret; safe to
+    // return to the frontend and to log.
+    connectedAccountId: { type: String },
+    // platform_connect only — mirrored locally from Stripe's account.updated events (see
+    // paymentWebhook.controller.ts's handleStripeConnectWebhook) so the UI never has to guess
+    // real capability from a bare "connected" boolean.
+    chargesEnabled: { type: Boolean },
+    payoutsEnabled: { type: Boolean },
+    requirementsDue: { type: [String], default: undefined },
+    disabledReason: { type: String },
+    // merchant_credentials only from Phase 37 onward — required on the schema pre-Phase-37, now
+    // optional since a platform_connect account never collects or stores a secret at all.
     encryptedCredentials: {
-      ciphertext: { type: String, required: true },
-      iv: { type: String, required: true },
-      authTag: { type: String, required: true },
-      keyVersion: { type: Number, required: true },
+      ciphertext: { type: String },
+      iv: { type: String },
+      authTag: { type: String },
+      keyVersion: { type: Number },
     },
     // Display-safe, never reversible — e.g. "sk_test_····4242" — lets the settings page show
     // "which key is connected" without ever storing or returning anything that could be replayed.
-    credentialFingerprint: { type: String, required: true },
+    // merchant_credentials only.
+    credentialFingerprint: { type: String },
     lastVerifiedAt: { type: Date },
     // Generic/safe message only — never the raw provider error body, which can echo back
     // fragments of the submitted key in some providers' validation error responses.
