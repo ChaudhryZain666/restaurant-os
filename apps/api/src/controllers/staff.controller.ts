@@ -86,6 +86,36 @@ export async function updateStaff(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
   const updates = req.body as UpdateStaffInput;
 
+  // Phase 35 audit fix — CRITICAL: locationIds was previously trusted verbatim from the request
+  // body. resolveTenantAccess's staff/kitchen_staff fast path (middleware/tenant.ts) grants access
+  // to every restaurant a staff account's locationIds names, with NO further DB check — so an
+  // unvalidated locationIds here let any restaurant_owner/manager grant their OWN staff account
+  // read/manage access to ANY other restaurant on the platform, just by knowing its id. Every id
+  // must be independently confirmed to belong to the SAME business as the caller's own restaurant,
+  // exactly like business.controller.ts's cloneFromLocationId already does for the identical class
+  // of "id from the request body, must stay inside this business" trust boundary.
+  if (updates.locationIds) {
+    const callerRestaurant = await Restaurant.findById(restaurantId).select("businessId");
+    if (!callerRestaurant) throw ApiError.notFound("Restaurant not found");
+    if (!callerRestaurant.businessId) {
+      // A legacy, not-yet-multi-location-migrated restaurant has no business to scope within —
+      // querying with `businessId: undefined` would silently drop that clause from the filter
+      // (Mongoose/Mongo treat an undefined field as "no constraint," not "must be unset"), which
+      // would let ANY restaurant id on the platform pass. The only safe grant here is the
+      // restaurant's own id, matching inviteStaff's existing single-location default exactly.
+      const onlySelf = updates.locationIds.length === 1 && updates.locationIds[0] === restaurantId;
+      if (!onlySelf) throw ApiError.badRequest("This restaurant has no business association yet — locationIds can only be its own id");
+    } else {
+      const validCount = await Restaurant.countDocuments({
+        _id: { $in: updates.locationIds },
+        businessId: callerRestaurant.businessId,
+      });
+      if (validCount !== updates.locationIds.length) {
+        throw ApiError.badRequest("locationIds must all belong to this staff member's own business");
+      }
+    }
+  }
+
   // Scoped to STAFF_ROLES so this can never be pointed at the owner account, a platform_admin,
   // or a customer by hand-editing the :id — only real staff rows in this tenant are reachable.
   const staff = await User.findOneAndUpdate(

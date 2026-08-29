@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
+import { Business } from "../models/Business.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
-import { closeTestConnections, createTestRestaurant, createTestUser, tokenFor } from "../test-utils/fixtures.js";
+import { closeTestConnections, createTestBusiness, createTestRestaurant, createTestUser, tokenFor } from "../test-utils/fixtures.js";
 
 const app = createApp();
 
@@ -270,8 +271,39 @@ describe("staff location assignment (Phase 18)", () => {
     expect(staff!.locationIds.map((id) => id.toString())).toEqual([restaurantA.id]);
   });
 
-  it("an owner can PATCH a staff member's locationIds to add a second location", async () => {
-    const restaurantC = await createTestRestaurant();
+  it("an owner can PATCH a staff member's locationIds to add a second location in the SAME business", async () => {
+    const business = await createTestBusiness();
+    const locationOne = await createTestRestaurant({ businessId: business._id });
+    const locationTwo = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", locationOne._id, { businessId: business._id });
+    try {
+      const invite = await request(app)
+        .post(`/api/v1/restaurants/${locationOne.id}/staff`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send(invitePayload());
+      const staffId = invite.body.data.staff.id;
+
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${locationOne.id}/staff/${staffId}`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ locationIds: [locationOne.id, locationTwo.id] });
+
+      expect(res.status).toBe(200);
+      const staff = await User.findById(staffId);
+      expect(staff!.locationIds.map((id) => id.toString()).sort()).toEqual([locationOne.id, locationTwo.id].sort());
+    } finally {
+      await User.deleteMany({ businessId: business._id });
+      await Restaurant.deleteMany({ businessId: business._id });
+      await Business.deleteOne({ _id: business._id });
+    }
+  });
+
+  // Phase 35 audit — CRITICAL cross-tenant privilege escalation, confirmed and fixed: locationIds
+  // used to be trusted verbatim, letting any owner grant their own staff account read/manage
+  // access to an ENTIRELY UNRELATED restaurant just by knowing its id — resolveTenantAccess's
+  // staff/kitchen_staff fast path (middleware/tenant.ts) trusts locationIds with no further check.
+  it("an owner CANNOT assign an unrelated restaurant's id to a staff member's locationIds", async () => {
+    const unrelatedRestaurant = await createTestRestaurant();
     try {
       const invite = await request(app)
         .post(`/api/v1/restaurants/${restaurantA.id}/staff`)
@@ -282,13 +314,40 @@ describe("staff location assignment (Phase 18)", () => {
       const res = await request(app)
         .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${staffId}`)
         .set("Authorization", `Bearer ${ownerAToken}`)
-        .send({ locationIds: [restaurantA.id, restaurantC.id] });
+        .send({ locationIds: [restaurantA.id, unrelatedRestaurant.id] });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
       const staff = await User.findById(staffId);
-      expect(staff!.locationIds.map((id) => id.toString()).sort()).toEqual([restaurantA.id, restaurantC.id].sort());
+      // Unchanged from the invite-time default — the malicious update never applied.
+      expect(staff!.locationIds.map((id) => id.toString())).toEqual([restaurantA.id]);
     } finally {
-      await Restaurant.deleteOne({ _id: restaurantC._id });
+      await Restaurant.deleteOne({ _id: unrelatedRestaurant._id });
+    }
+  });
+
+  it("rejects a locationIds update to a business-associated restaurant's location list entirely, when the target id belongs to a DIFFERENT business", async () => {
+    const businessOne = await createTestBusiness();
+    const businessTwo = await createTestBusiness();
+    const locationOne = await createTestRestaurant({ businessId: businessOne._id });
+    const locationTwo = await createTestRestaurant({ businessId: businessTwo._id });
+    const owner = await createTestUser("restaurant_owner", locationOne._id, { businessId: businessOne._id });
+    try {
+      const invite = await request(app)
+        .post(`/api/v1/restaurants/${locationOne.id}/staff`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send(invitePayload());
+      const staffId = invite.body.data.staff.id;
+
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${locationOne.id}/staff/${staffId}`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ locationIds: [locationOne.id, locationTwo.id] });
+
+      expect(res.status).toBe(400);
+    } finally {
+      await User.deleteMany({ businessId: { $in: [businessOne._id, businessTwo._id] } });
+      await Restaurant.deleteMany({ businessId: { $in: [businessOne._id, businessTwo._id] } });
+      await Business.deleteMany({ _id: { $in: [businessOne._id, businessTwo._id] } });
     }
   });
 });

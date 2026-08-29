@@ -6,15 +6,20 @@ import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { createPaymentForOrder, getPaymentById, listPaymentsForOrder, refundPayment } from "../services/payment.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
+import { resolveTenantAccess } from "../middleware/tenant.js";
 
 async function assertCanViewOrderPayments(req: Request, restaurantId: string, orderId: string) {
   const order = await Order.findOne({ _id: orderId, restaurantId });
   if (!order) throw ApiError.notFound("Order not found");
 
   const isOwner = order.customerId.toString() === req.user!.id;
+  // Phase 35 audit fix — was `req.user!.restaurantId === restaurantId`, the same flat-comparison
+  // bug already fixed once in order.controller.ts's getOrder (Phase 29 finding P1-8): over-
+  // restrictive, not a security hole, but a genuine 403 for any multi-location owner/manager/agency
+  // member viewing payments for a location other than the one their JWT was originally issued for.
   const isStaff =
     req.user!.role === "platform_admin" ||
-    (roleHasPermission(req.user!.role, "restaurant.orders.read") && req.user!.restaurantId === restaurantId);
+    (roleHasPermission(req.user!.role, "restaurant.orders.read") && (await resolveTenantAccess(req.user!, restaurantId)).allowed);
   if (!isOwner && !isStaff) throw ApiError.forbidden();
 }
 

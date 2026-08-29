@@ -16,6 +16,7 @@ import { sendSuccess } from "../common/response.js";
 import { nextTicketNumber } from "../services/ticketNumber.service.js";
 import { isValidTicketTransition } from "../services/ticketStateMachine.js";
 import { emitTicketEvent } from "../events/ticketEvents.js";
+import { resolveTenantAccess } from "../middleware/tenant.js";
 
 type AuthedUser = { id: string; role: UserRole; restaurantId?: string };
 type TicketDoc = HydratedDocument<SupportTicketDoc>;
@@ -42,15 +43,21 @@ interface TicketAccess {
  * for every ticket. Internal notes are gated entirely separately (support.tickets.internal_notes),
  * which today only platform_admin holds — a restaurant owner viewing their own restaurant's
  * ticket is `isStaff` but never `canSeeInternal`.
+ *
+ * Phase 35 audit fix — was a flat `user.restaurantId === ticket.restaurantId` comparison, the same
+ * bug class already fixed once in order.controller.ts's getOrder (Phase 29 finding P1-8) and this
+ * session in payment.controller.ts's assertCanViewOrderPayments: over-restrictive, not a security
+ * hole, but a false 403 for any multi-location owner/manager/agency member viewing a support
+ * ticket for a location other than the one their JWT was originally issued for. Now async so it can
+ * go through the same resolveTenantAccess every other multi-location-aware route already uses.
  */
-function getTicketAccess(ticket: TicketDoc, user: AuthedUser): TicketAccess {
+async function getTicketAccess(ticket: TicketDoc, user: AuthedUser): Promise<TicketAccess> {
   const isOwner = ticket.createdBy.toString() === user.id;
   const isPlatformStaff = user.role === "platform_admin" && roleHasPermission(user.role, "support.tickets.read");
   const isRestaurantStaff =
     ticket.restaurantId != null &&
-    user.restaurantId !== undefined &&
-    user.restaurantId === ticket.restaurantId.toString() &&
-    roleHasPermission(user.role, "support.tickets.read");
+    roleHasPermission(user.role, "support.tickets.read") &&
+    (await resolveTenantAccess(user, ticket.restaurantId.toString())).allowed;
   const canSeeInternal = roleHasPermission(user.role, "support.tickets.internal_notes");
   return { isOwner, isStaff: isPlatformStaff || isRestaurantStaff, canSeeInternal };
 }
@@ -137,7 +144,7 @@ export async function getTicket(req: Request, res: Response) {
   const ticket = await SupportTicket.findById(req.params.id);
   if (!ticket) throw ApiError.notFound("Ticket not found");
 
-  const access = getTicketAccess(ticket, req.user!);
+  const access = await getTicketAccess(ticket, req.user!);
   if (!access.isOwner && !access.isStaff) throw ApiError.forbidden();
 
   const [enriched] = access.isStaff ? await enrichTickets([ticket]) : [ticket.toJSON()];
@@ -148,7 +155,7 @@ export async function getTicketMessages(req: Request, res: Response) {
   const ticket = await SupportTicket.findById(req.params.id, "createdBy restaurantId");
   if (!ticket) throw ApiError.notFound("Ticket not found");
 
-  const access = getTicketAccess(ticket, req.user!);
+  const access = await getTicketAccess(ticket, req.user!);
   if (!access.isOwner && !access.isStaff) throw ApiError.forbidden();
 
   // The enforcement point: internal notes are excluded by the MongoDB query itself for any
@@ -165,7 +172,7 @@ export async function createTicketMessage(req: Request, res: Response) {
   const ticket = await SupportTicket.findById(req.params.id);
   if (!ticket) throw ApiError.notFound("Ticket not found");
 
-  const access = getTicketAccess(ticket, req.user!);
+  const access = await getTicketAccess(ticket, req.user!);
   if (!access.isOwner && !access.isStaff) throw ApiError.forbidden();
   if (ticket.status === "closed") throw ApiError.badRequest("This ticket is closed and no longer accepts replies");
 

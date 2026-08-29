@@ -32,6 +32,7 @@ import {
   verifyRefreshToken,
 } from "../services/token.service.js";
 import { getActiveAgencyMemberships } from "../services/agencyMembership.service.js";
+import { parseTtlSeconds } from "../utils/ttl.js";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_CHANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -52,7 +53,12 @@ function setRefreshCookie(res: Response, token: string) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/api/v1/auth",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+    // Phase 35 audit fix (M3) — was a hardcoded 30-day literal, decoupled from the actual
+    // token.service.ts-enforced TTL (env.REFRESH_TOKEN_TTL, operator-configurable, also defaults
+    // to 30d). If an operator ever shortens REFRESH_TOKEN_TTL, the browser would keep sending an
+    // already-expired/revoked cookie for longer than the server considers it valid — harmless
+    // (the server still rejects it), but a real, easily-avoided inconsistency.
+    maxAge: parseTtlSeconds(env.REFRESH_TOKEN_TTL) * 1000,
   });
 }
 
@@ -164,7 +170,19 @@ export async function refresh(req: Request, res: Response) {
   }
 
   const active = await isRefreshTokenActive(payload.sub, payload.jti);
-  if (!active) throw ApiError.unauthorized("Refresh token has been revoked");
+  if (!active) {
+    // Phase 35 audit fix (M1) — a refresh token that verifies cryptographically (real, not
+    // expired) but is no longer present in Redis was already consumed by a prior refresh, an
+    // explicit logout, or a password change — reaching this branch again means the SAME token is
+    // being presented a second time. Standard refresh-token-rotation reuse detection treats any
+    // repeat presentation of an already-rotated-away token as a possible theft signal, since a
+    // legitimate client only ever presents each refresh token once by construction. Revoking every
+    // active session for this user closes the window an attacker's own rotated session would
+    // otherwise keep alive after stealing a token — the legitimate user simply has to log back in
+    // everywhere, the same cost password-reset/change already impose today.
+    await revokeAllRefreshTokens(payload.sub);
+    throw ApiError.unauthorized("Refresh token has been revoked");
+  }
 
   const user = await User.findById(payload.sub);
   if (!user) throw ApiError.unauthorized("User no longer exists");
