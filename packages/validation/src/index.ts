@@ -1,4 +1,5 @@
 export * from "./auth.js";
+export * from "./businessSelfServe.js";
 export * from "./address.js";
 export * from "./menu.js";
 export * from "./category.js";

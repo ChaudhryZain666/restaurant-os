@@ -416,3 +416,82 @@ describe("POST /businesses/:businessId/locations — cloneFromLocationId (Phase 
     expect(itemCount).toBe(0);
   });
 });
+
+describe("POST /businesses/self-serve (Phase 37) — individual owner self-provisioning", () => {
+  const cleanupUserIds: mongoose.Types.ObjectId[] = [];
+  const cleanupBusinessIds: mongoose.Types.ObjectId[] = [];
+  const cleanupRestaurantIds: mongoose.Types.ObjectId[] = [];
+
+  afterAll(async () => {
+    await Restaurant.deleteMany({ _id: { $in: cleanupRestaurantIds } });
+    await Business.deleteMany({ _id: { $in: cleanupBusinessIds } });
+    await User.deleteMany({ _id: { $in: cleanupUserIds } });
+  });
+
+  it("a verified customer becomes the real owner of a brand-new business + restaurant", async () => {
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    cleanupUserIds.push(customer._id);
+    const token = tokenFor(customer);
+    const slug = `selfserve-${Date.now()}`;
+
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "My First Restaurant", slug });
+
+    expect(res.status).toBe(201);
+    cleanupBusinessIds.push(new mongoose.Types.ObjectId(res.body.data.business.id));
+    cleanupRestaurantIds.push(new mongoose.Types.ObjectId(res.body.data.restaurant.id));
+
+    expect(res.body.data.business.ownerId).toBe(customer.id);
+    expect(res.body.data.restaurant.businessId).toBe(res.body.data.business.id);
+    expect(res.body.data.restaurant.ownerId).toBe(customer.id);
+    // A brand-new restaurant must never be publicly orderable before its owner sets anything up.
+    expect(res.body.data.restaurant.status).toBe("pending");
+
+    const storedUser = await User.findById(customer._id);
+    expect(storedUser!.role).toBe("restaurant_owner");
+    expect(storedUser!.businessId?.toString()).toBe(res.body.data.business.id);
+    expect(storedUser!.restaurantId?.toString()).toBe(res.body.data.restaurant.id);
+  });
+
+  it("rejects an unverified email — the platform must not provision real ownership structure before email ownership is confirmed", async () => {
+    const customer = await createTestUser("customer"); // emailVerifiedAt left unset
+    cleanupUserIds.push(customer._id);
+    const token = tokenFor(customer);
+
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Should Fail", slug: `unverified-${Date.now()}` });
+
+    expect(res.status).toBe(403);
+    const stillNoBusiness = await User.findById(customer._id);
+    expect(stillNoBusiness!.businessId).toBeUndefined();
+  });
+
+  it("rejects a caller who already has a business — this is a create-my-FIRST-business endpoint, not a re-provisioning one", async () => {
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ name: "Should Fail", slug: `already-has-one-${Date.now()}` });
+    expect(res.status).toBe(409);
+  });
+
+  it("rejects a duplicate slug and creates nothing (no orphaned Business left behind)", async () => {
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    cleanupUserIds.push(customer._id);
+    const token = tokenFor(customer);
+
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Dupe", slug: locationA1.slug });
+
+    expect(res.status).toBe(409);
+    const orphanedBusiness = await Business.findOne({ ownerId: customer._id });
+    expect(orphanedBusiness).toBeNull();
+    const storedUser = await User.findById(customer._id);
+    expect(storedUser!.businessId).toBeUndefined();
+  });
+});

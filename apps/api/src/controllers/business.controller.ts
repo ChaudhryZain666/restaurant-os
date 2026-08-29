@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
-import type { CreateLocationInput } from "@restaurant/validation";
-import { Business } from "../models/Business.js";
+import type { CreateBusinessSelfServeInput, CreateLocationInput } from "@restaurant/validation";
+import { Business, type BusinessDoc } from "../models/Business.js";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
+import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { recordAuditEvent } from "../services/audit.service.js";
@@ -150,4 +151,103 @@ export async function createLocationForBusiness(req: Request, res: Response) {
   });
 
   sendSuccess(res, { restaurant: restaurant.toJSON() }, 201);
+}
+
+/**
+ * POST /businesses/self-serve (Phase 37) — the individual-owner counterpart to
+ * agency.controller.ts's createAgency: an already-authenticated caller creates their OWN first
+ * Business + first Restaurant (location) and becomes its owner directly, no invite/token round
+ * trip. Mirrors createRestaurant's (restaurant.controller.ts) transaction shape for the actual
+ * Business/Restaurant document creation, but "attach the caller as owner" instead of
+ * creating/inviting a separate owner User — the same difference createAgency has from
+ * restaurant.controller.ts's platform_admin-only, invite-based provisioning.
+ *
+ * Two server-authoritative gates, neither trusted from the client:
+ *  - req.user!.businessId must be unset — prevents silently re-pointing an already-provisioned
+ *    account's business association (this is a create-my-FIRST-business endpoint, not a way to
+ *    switch or add a second one).
+ *  - emailVerifiedAt must be set (re-read fresh from the DB, never from the JWT — this claim was
+ *    deliberately never added to the token, see auth.controller.ts's issueSession comment
+ *    convention) — the Phase 37 mission's explicit ordering: verify email BEFORE the platform
+ *    provisions real ownership structure, so a mistyped/unowned address can't get a live business
+ *    + about-to-exist trial subscription attached to it.
+ *
+ * No location-slot reservation (reserveLocationSlot) — same reasoning createRestaurant's own
+ * new-business branch already documents: a brand-new business's first location is never itself
+ * limited by a location count.
+ */
+export async function createBusinessSelfServe(req: Request, res: Response) {
+  const { name, slug, timezone, currency } = req.body as CreateBusinessSelfServeInput;
+
+  const caller = await User.findById(req.user!.id);
+  if (!caller) throw ApiError.unauthorized("User no longer exists");
+  if (caller.businessId) throw ApiError.conflict("You already have a business set up");
+  if (!caller.emailVerifiedAt) {
+    throw ApiError.forbidden("Please verify your email address before creating your restaurant");
+  }
+
+  const existingSlug = await Restaurant.findOne({ slug });
+  if (existingSlug) throw ApiError.conflict("That restaurant URL is already taken — try another");
+  const existingBusinessSlug = await Business.findOne({ slug });
+  if (existingBusinessSlug) throw ApiError.conflict("That restaurant URL is already taken — try another");
+
+  const session = await mongoose.startSession();
+  let business: HydratedDocument<BusinessDoc>;
+  let restaurant: HydratedDocument<RestaurantDoc>;
+  try {
+    try {
+      const created = (await session.withTransaction(async () => {
+        const [createdBusiness] = await Business.create(
+          [{ name, slug, ownerId: caller._id, status: "active" }],
+          { session }
+        );
+        const [createdRestaurant] = await Restaurant.create(
+          [
+            {
+              name,
+              slug,
+              ownerId: caller._id,
+              businessId: createdBusiness._id,
+              status: "pending",
+              settings: {
+                ...(timezone ? { timezone } : {}),
+                ...(currency ? { currency } : {}),
+              },
+            },
+          ],
+          { session }
+        );
+
+        caller.businessId = createdBusiness._id;
+        caller.restaurantId = createdRestaurant._id;
+        // Mirrors createAgency's exact conditional — never overwrites a more specific existing
+        // role (e.g. agency_member) the way an unconditional assignment would.
+        if (caller.role === "customer") caller.role = "restaurant_owner";
+        await caller.save({ session });
+
+        return { createdBusiness, createdRestaurant };
+      })) as { createdBusiness: HydratedDocument<BusinessDoc>; createdRestaurant: HydratedDocument<RestaurantDoc> };
+      business = created.createdBusiness;
+      restaurant = created.createdRestaurant;
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw ApiError.conflict("That restaurant URL is already taken — try another");
+      }
+      throw err;
+    }
+  } finally {
+    await session.endSession();
+  }
+
+  await recordAuditEvent({
+    restaurantId: restaurant._id,
+    actorUserId: caller._id,
+    actorRole: caller.role,
+    action: "restaurant.created",
+    targetType: "restaurant",
+    targetId: restaurant._id,
+    metadata: { businessId: business._id.toString(), createdViaSelfServeSignup: true },
+  });
+
+  sendSuccess(res, { business: business.toJSON(), restaurant: restaurant.toJSON() }, 201);
 }
