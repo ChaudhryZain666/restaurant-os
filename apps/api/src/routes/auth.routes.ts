@@ -11,10 +11,12 @@ import {
   requestPasswordResetSchema,
   resetPasswordSchema,
   updateProfileSchema,
+  verifyEmailSchema,
 } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { jsonRateLimitHandler } from "../middleware/rateLimitHandler.js";
+import { inviteResendLimiter } from "../middleware/inviteResendLimiter.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   acceptInvite,
@@ -28,9 +30,11 @@ import {
   register,
   requestEmailChange,
   requestPasswordReset,
+  resendVerification,
   resetPassword,
   startDemoSession,
   updateMe,
+  verifyEmail,
 } from "../controllers/auth.controller.js";
 
 export const authRouter = Router();
@@ -70,6 +74,8 @@ authRouter.post(
 );
 authRouter.post("/reset-password", authLimiter, validateBody(resetPasswordSchema), asyncHandler(resetPassword));
 authRouter.post("/accept-invite", authLimiter, validateBody(acceptInviteSchema), asyncHandler(acceptInvite));
+authRouter.post("/verify-email", authLimiter, validateBody(verifyEmailSchema), asyncHandler(verifyEmail));
+authRouter.post("/resend-verification", requireAuth, inviteResendLimiter, asyncHandler(resendVerification));
 authRouter.get("/me", requireAuth, asyncHandler(me));
 authRouter.patch("/me", requireAuth, validateBody(updateProfileSchema), asyncHandler(updateMe));
 authRouter.post(

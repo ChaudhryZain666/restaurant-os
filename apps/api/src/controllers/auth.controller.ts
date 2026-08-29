@@ -13,6 +13,7 @@ import type {
   RequestPasswordResetInput,
   ResetPasswordInput,
   UpdateProfileInput,
+  VerifyEmailInput,
 } from "@restaurant/validation";
 import { User, type UserDoc } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -20,7 +21,7 @@ import { sendSuccess } from "../common/response.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
-import { emailChangeVerificationEmail, passwordResetEmail } from "../email/templates.js";
+import { emailChangeVerificationEmail, emailVerificationEmail, passwordResetEmail } from "../email/templates.js";
 import type { AgencyMembershipRole } from "@restaurant/types";
 import { generateSecureToken, hashToken } from "../services/secureToken.service.js";
 import {
@@ -36,6 +37,10 @@ import { parseTtlSeconds } from "../utils/ttl.js";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_CHANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// Phase 37 — longer than the 1-hour password-reset TTL (this isn't a security-response action, a
+// human just needs time to go check their inbox) but shorter than a 7-day staff/owner invite (this
+// is the very next expected step in an active signup session, not a passive onboarding action).
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Only ever trusts an Origin that's actually one of our own two frontends, so an email link can
  *  never be pointed at an attacker-controlled host via a spoofed request header. */
@@ -77,6 +82,7 @@ export function toPublicUser(user: HydratedDocument<UserDoc>, agencyMemberships:
     phone: user.phone,
     mustChangePassword: user.mustChangePassword ?? false,
     isDemoAccount: user.isDemoAccount ?? false,
+    emailVerified: Boolean(user.emailVerifiedAt),
   };
 }
 
@@ -107,6 +113,24 @@ export async function issueSession(
   return accessToken;
 }
 
+/** Shared by register() and resendVerification() — generates a fresh token (overwriting any prior
+ *  one, same "resend invalidates the old link" behavior as staff.controller.ts's resendStaffInvite)
+ *  and emails it. Never throws on send failure — the account still exists and can retry via resend,
+ *  matching every other best-effort email send in this file (requestPasswordReset, etc.). */
+async function sendVerificationEmail(req: Request, user: HydratedDocument<UserDoc>): Promise<void> {
+  const { raw, hash } = generateSecureToken();
+  user.emailVerificationTokenHash = hash;
+  user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
+  await user.save();
+
+  const verifyUrl = `${resolveAppOrigin(req)}/verify-email?token=${raw}`;
+  try {
+    await getEmailService().send(emailVerificationEmail(user.email, verifyUrl));
+  } catch (err) {
+    logger.error("failed to send email-verification email", { error: (err as Error).message });
+  }
+}
+
 export async function register(req: Request, res: Response) {
   const { name, email, password, phone } = req.body as RegisterInput;
 
@@ -115,6 +139,12 @@ export async function register(req: Request, res: Response) {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ name, email, passwordHash, phone });
+  // Phase 37 — every self-registered account gets a verification email; nothing existing reads
+  // emailVerifiedAt yet except the new self-serve business-provisioning endpoint, so this is a
+  // behavior-neutral addition for every OTHER caller of /auth/register (including the agency
+  // signup wizard's account step) — they simply also now receive a real, correct verification
+  // email, with nothing downstream of them changed or gated.
+  await sendVerificationEmail(req, user);
 
   // A brand-new account can't have any agency memberships yet — skip the query.
   const accessToken = await issueSession(res, user, []);
@@ -265,9 +295,17 @@ export async function acceptInvite(req: Request, res: Response) {
   // sequential replay would get. A plain findOne-then-save (this codebase's older pattern, see
   // resetPassword) leaves a window where both requests' findOne succeeds before either save()
   // clears the token.
+  // Phase 37 — clicking a real, emailed invite link is itself proof this address is reachable by
+  // its recipient, exactly what /auth/verify-email exists to prove for a self-registered account.
+  // Setting emailVerifiedAt here (only if not already set — $min against a fixed past date isn't
+  // needed since this path only ever fires once per token) means an invited owner/staff account
+  // never needs the separate verification-email step at all.
   const user = await User.findOneAndUpdate(
     { inviteTokenHash: hashToken(token), inviteExpiresAt: { $gt: new Date() } },
-    { $set: { passwordHash }, $unset: { inviteTokenHash: "", inviteExpiresAt: "" } },
+    {
+      $set: { passwordHash, emailVerifiedAt: new Date() },
+      $unset: { inviteTokenHash: "", inviteExpiresAt: "" },
+    },
     { new: true }
   );
   if (!user) throw ApiError.badRequest("This invitation link is invalid or has expired");
@@ -275,6 +313,49 @@ export async function acceptInvite(req: Request, res: Response) {
   const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
   const accessToken = await issueSession(res, user, agencyMemberships);
   sendSuccess(res, { user: toPublicUser(user, agencyMemberships), accessToken });
+}
+
+/**
+ * Phase 37 — public (no auth required: the person clicking the emailed link may be on a different
+ * device/browser than the one that registered, so this can't depend on an existing session).
+ * Same atomic find-and-clear pattern as resetPassword/acceptInvite, for the same reason: a plain
+ * findOne-then-save would let two concurrent requests for the same still-valid token both pass
+ * validation before either write cleared it.
+ */
+export async function verifyEmail(req: Request, res: Response) {
+  const { token } = req.body as VerifyEmailInput;
+
+  const user = await User.findOneAndUpdate(
+    { emailVerificationTokenHash: hashToken(token), emailVerificationExpiresAt: { $gt: new Date() } },
+    { $set: { emailVerifiedAt: new Date() }, $unset: { emailVerificationTokenHash: "", emailVerificationExpiresAt: "" } },
+    { new: true }
+  );
+  if (!user) throw ApiError.badRequest("This verification link is invalid or has expired");
+
+  sendSuccess(res, { message: "Email verified.", email: user.email });
+}
+
+/**
+ * Phase 37 — authenticated (uses req.user!.id, not an email in the body), so there's no
+ * account-enumeration surface here the way requestPasswordReset has to guard against: the caller
+ * already has a valid session and is asking to resend to their OWN address. Idempotent/harmless if
+ * already verified — just says so rather than sending a pointless email. Rate-limited by
+ * inviteResendLimiter at the route level (routes/auth.routes.ts) — shares that same limiter's
+ * budget with the other three authenticated "resend an onboarding email" endpoints, matching this
+ * codebase's established one-limiter-per-action-class pattern (see inviteResendLimiter.ts's own
+ * doc comment).
+ */
+export async function resendVerification(req: Request, res: Response) {
+  const user = await User.findById(req.user!.id);
+  if (!user) throw ApiError.unauthorized("User no longer exists");
+
+  if (user.emailVerifiedAt) {
+    sendSuccess(res, { message: "Your email is already verified." });
+    return;
+  }
+
+  await sendVerificationEmail(req, user);
+  sendSuccess(res, { message: `A verification link has been sent to ${user.email}.` });
 }
 
 /**

@@ -27,6 +27,20 @@ export function passwordResetEmail(to: string, resetUrl: string): EmailMessage {
   };
 }
 
+export function emailVerificationEmail(to: string, verifyUrl: string): EmailMessage {
+  return {
+    to,
+    subject: "Verify your email to finish setting up Tablecloth",
+    html: layout(
+      "Verify your email address",
+      `<p>Confirm this is really your email address to continue setting up your restaurant. This link expires in 24 hours and can only be used once.</p>
+       <p><a href="${verifyUrl}" style="color:#c2410c;">Verify my email address</a></p>
+       <p style="color:#78716c; font-size: 13px;">If you didn't create a Tablecloth account, you can safely ignore this email.</p>`
+    ),
+    text: `Verify your Tablecloth email address: ${verifyUrl}\n\nThis link expires in 24 hours and can only be used once. If you didn't create an account, ignore this email.`,
+  };
+}
+
 export function emailChangeVerificationEmail(to: string, confirmUrl: string): EmailMessage {
   return {
     to,

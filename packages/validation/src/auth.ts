@@ -58,3 +58,8 @@ export const deleteMeSchema = z.object({
   currentPassword: z.string().min(1),
 });
 export type DeleteMeInput = z.infer<typeof deleteMeSchema>;
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1),
+});
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;

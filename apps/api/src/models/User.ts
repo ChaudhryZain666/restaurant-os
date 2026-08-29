@@ -78,6 +78,20 @@ export interface UserDoc {
   /** Phase 32 — set only alongside isDemoAccount; cleanupDemoData.ts deletes the account (and its
    *  demo orders) once this passes, so public playground traffic can't accumulate unbounded. */
   demoExpiresAt?: Date;
+  /** Phase 37 — set the moment this account's email address is confirmed reachable: either via
+   *  POST /auth/verify-email (self-registered accounts) or automatically at invite-acceptance
+   *  (clicking a real emailed invite link is itself proof of ownership — see acceptInvite). Never
+   *  set at registration time. Nothing in the pre-Phase-37 auth flow reads this field, so its
+   *  absence is a no-op for every existing account/flow (agency owners, staff, invited owners
+   *  created before this phase all simply have it undefined forever unless they re-verify).
+   *  Consumed only by the new self-serve business-provisioning endpoint (businessController's
+   *  createBusinessSelfServe) as a gate — never by login itself, matching this codebase's existing
+   *  soft-gate precedent (mustChangePassword) rather than blocking authentication outright. */
+  emailVerifiedAt?: Date;
+  /** SHA-256 hash of the current email-verification token, never the raw token — same
+   *  secureToken.service.ts pattern as passwordResetTokenHash/inviteTokenHash. */
+  emailVerificationTokenHash?: string;
+  emailVerificationExpiresAt?: Date;
 }
 
 const addressSchema = new Schema<AddressDoc>({
@@ -117,6 +131,9 @@ const userSchema = new Schema<UserDoc>(
     deletedAt: { type: Date },
     isDemoAccount: { type: Boolean, default: false },
     demoExpiresAt: { type: Date },
+    emailVerifiedAt: { type: Date },
+    emailVerificationTokenHash: { type: String, index: { sparse: true } },
+    emailVerificationExpiresAt: { type: Date },
   },
   {
     timestamps: true,
@@ -131,6 +148,9 @@ const userSchema = new Schema<UserDoc>(
         // Same reasoning as invitePending above — the account settings page needs to know a
         // change is pending, never the token itself.
         sensitive.emailChangePending = Boolean(sensitive.emailChangeTokenHash);
+        // Same reasoning again — the signup wizard needs to know whether it can proceed to
+        // business creation, never the token itself.
+        sensitive.emailVerified = Boolean(sensitive.emailVerifiedAt);
         delete sensitive.passwordHash;
         delete sensitive.passwordResetTokenHash;
         delete sensitive.passwordResetExpiresAt;
@@ -139,6 +159,8 @@ const userSchema = new Schema<UserDoc>(
         delete sensitive.pendingEmail;
         delete sensitive.emailChangeTokenHash;
         delete sensitive.emailChangeExpiresAt;
+        delete sensitive.emailVerificationTokenHash;
+        delete sensitive.emailVerificationExpiresAt;
         const record = ret as unknown as { addresses?: Array<Record<string, unknown>> };
         record.addresses?.forEach((addr) => {
           if (addr._id) {
