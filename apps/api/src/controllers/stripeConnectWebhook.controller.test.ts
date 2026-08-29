@@ -26,7 +26,25 @@ beforeAll(async () => {
   await connectDB();
 });
 
+// Phase 38 fix — every test below uses a hardcoded evt_* id (needed since the assertions care about
+// exact idempotency behavior for a SPECIFIC eventId). Without cleaning these up, a second run of
+// this file collides with the unique {provider, eventId} index left over from the FIRST run,
+// silently no-ops via the "duplicate event" branch, and every status-transition assertion fails —
+// a real bug in this test's own hygiene, not in the application: reproduced by running this file
+// twice in a row (even in full isolation, nothing else running) and seeing every previously-passing
+// assertion fail on the second run.
+const webhookEventIds = [
+  "evt_unknown_1",
+  "evt_activate_1",
+  "evt_incomplete_1",
+  "evt_deauth_1",
+  "evt_sticky_1",
+  "evt_dup_1",
+  "evt_payment_1",
+];
+
 afterAll(async () => {
+  await PaymentWebhookEvent.deleteMany({ provider: "stripe", eventId: { $in: webhookEventIds } });
   await Payment.deleteMany({ restaurantId: { $in: restaurantIds } });
   await RestaurantPaymentAccount.deleteMany({ _id: { $in: accountIds } });
   await Restaurant.deleteMany({ _id: { $in: restaurantIds } });
