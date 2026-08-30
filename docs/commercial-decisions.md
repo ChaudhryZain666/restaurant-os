@@ -464,3 +464,60 @@ API call this phase made was hardcoded to `sandbox-api.paddle.com`, never `api.p
 was never written to by any script (read-only, via `dotenv`); no production webhook, product, price,
 or subscription was created or could have been, given the sandbox-scoped key. Stripe Connect and all
 restaurant-order-payment code were not touched.
+
+## 21. Phase 40.1 — real checkout-completion idempotency fix, real Paddle.js checkout, one real account-config blocker
+
+**Idempotency fix, live-verified**: `processBillingProviderEvent` now atomically distinguishes a
+genuinely concurrent in-flight duplicate webhook delivery from a stuck event whose only prior
+attempt failed before finishing, via a new `BillingWebhookEvent.processingStartedAt` field and the
+same atomic-guard-with-condition-in-filter pattern already used by `reserveLocationSlot`/
+`reserveBusinessSlot`. Closes the real gap Phase 40 found: a transient failure during
+checkout-completion processing (e.g. `provider.retrieveSubscription()` failing) no longer
+permanently swallows the event's genuine retry as a false duplicate. Proven by 6 tests: first
+delivery, safe duplicate delivery, a forced transient failure, successful retry after that failure,
+invalid signature, tampered payload — see `billingWebhookIdempotency.service.test.ts`.
+
+**Real Paddle.js checkout wired into the admin app** (`apps/admin/src/lib/paddle.ts`,
+`BillingPage.tsx`, `index.html`): the previously-missing frontend half of Phase 40's `clientToken`
+fix. Live-verified against the real sandbox: clicking "Subscribe now" correctly calls the real
+checkout API, receives a real `clientToken`/`providerPriceId`/`providerCustomerId`, and opens a
+genuine Paddle.js overlay — confirmed via real browser network inspection showing the correct real
+price id and the correct real client token embedded in Paddle's own hosted checkout URL.
+
+**Real finding — checkout creates a new Paddle customer on every attempt**: `createCheckoutSessionCore`
+calls `provider.createCustomer()` unconditionally each time checkout is launched, with no check for
+an existing Paddle customer tied to the same owner. Live-verified consequence: a second checkout
+attempt for the same email received a real Paddle `409 customer email conflicts with customer of id
+...`. This is a genuine gap (a user re-attempting checkout after an interruption would hit this
+against a real account) — **documented, not fixed this phase**, since a proper fix (persisting and
+reusing a provider customer id independent of a completed Subscription) touches the same
+class of financial-flow logic the idempotency fix above already changed once this phase; a second
+change to the same area deserves its own careful pass, not a rushed addition under time pressure.
+
+**Real, external blocker — Paddle account has no default checkout URL configured**: the actual
+checkout overlay's internal transaction call failed with a real, specific, documented Paddle error:
+`transaction_default_checkout_url_not_set` (`sandbox-checkout-service.paddle.com/transaction-checkout`,
+HTTP 400). Per Paddle's own error documentation, this requires a human with dashboard access to set
+a Default Payment Link URL under **Checkout > Checkout Settings** in the Paddle dashboard — a
+one-time, account-level setting, not something any code or API call in this codebase can configure.
+This is the same class of finding as the client-side token gap Phase 40 found: real, precisely
+identified, requiring one manual human step, not routed around. Once set, the checkout flow proven
+correct up to this point (real Paddle.js initialization, real overlay, real price/customer/token)
+should be able to complete — this was not re-verified after the blocker was found, since fixing it
+requires dashboard access outside this session's reach.
+
+**Test-fixture pollution fix, live-verified**: `e2e/agency-management.spec.ts`'s raw-Mongo-inserted
+Plan/Subscription documents (the exact mechanism behind the leftover test plans Phase 40 found in
+`/public/plans`) are now tracked by exact `_id` and deleted in `afterAll` (fires even on test
+failure). Verified by actually running the spec twice and confirming the catalog stayed clean both
+times. Also fixed a second, unrelated stale assertion in the same test: it expected a clickable
+"New business" button that server-rejects at the limit, but Phase 39's own UI fix now correctly
+disables that button before the click is even possible.
+
+**Regression**: 1016/1016 full suite passing, clean, no contention. TypeScript clean for `apps/api`
+and `apps/admin`.
+
+**Production safety**: unchanged from Phase 40's statement above — `PADDLE_ENV` stayed `sandbox`
+throughout; the real client-side token the founder provided is a public, per-checkout-session value
+by Paddle's own design (never a secret credential), was never written to any file, and was only ever
+passed via process-launch environment variables. `.env` was never modified.
