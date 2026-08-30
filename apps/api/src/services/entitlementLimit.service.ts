@@ -4,7 +4,7 @@ import { Business } from "../models/Business.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
-import { getEntitlements, hasEntitlement } from "./entitlement.service.js";
+import { getEntitlements, hasEntitlement, type EntitlementValue } from "./entitlement.service.js";
 import { ApiError } from "../utils/ApiError.js";
 
 /**
@@ -61,16 +61,68 @@ async function resolveOwnerPlan(ownerType: SubscriptionOwnerType, ownerId: strin
 }
 
 /**
+ * Phase 39 — the precedence model the founder decision requires: (1) the business's own direct
+ * subscription, if it has one; (2) failing that, an agency-inherited entitlement source, if the
+ * business is agency-managed AND that agency has a live, real subscription (LIVE_STATUSES already
+ * includes "cancelling" and "past_due", so this reuses the existing state machine as the grace
+ * period rather than inventing a second one — a cancelling agency subscription keeps granting
+ * inherited entitlements through its paid period, exactly like a business's own subscription would);
+ * (3) failing both, `null` — callers fall back to the existing generous no-subscription defaults
+ * below, UNCHANGED, so grandfathered/pre-existing businesses are never retroactively capped.
+ *
+ * This closes the gap the Phase 39 audit found: previously an agency-managed business with no
+ * subscription of its own always hit the generous defaults for free, regardless of whether its
+ * managing agency was itself a paying customer. It does NOT change behavior for a business that
+ * isn't agency-managed, or whose agency has no live subscription — both still fall through to the
+ * same defaults as before. Supersedes docs/commercial-decisions.md §14's original "an agency-created
+ * business does not inherit its managing agency's subscription" decision — see that doc's Phase 39
+ * section for the reversal and reasoning.
+ */
+async function resolveBusinessPlanWithInheritance(businessId: string): Promise<{ plan: PlanDoc; source: "business" | "agency" } | null> {
+  const directPlan = await resolveOwnerPlan("business", businessId);
+  if (directPlan) return { plan: directPlan, source: "business" };
+
+  const business = await Business.findById(businessId).select("agencyId");
+  if (!business?.agencyId) return null;
+
+  const agencyPlan = await resolveOwnerPlan("agency", business.agencyId.toString());
+  if (!agencyPlan) return null;
+
+  return { plan: agencyPlan, source: "agency" };
+}
+
+/**
  * Boolean feature-entitlement check. No subscription (or a subscription whose plan lacks the key)
  * defaults to TRUE — deliberately generous, so this phase's enforcement can never retroactively
  * break an existing business or agency that never subscribed at all. It becomes a REAL, meaningful
  * gate only once an owner/agency has an active subscription on a plan that explicitly excludes the
- * feature (e.g. a future cheaper tier) — see docs/commercial-decisions.md.
+ * feature — see docs/commercial-decisions.md. For a `"business"` owner, this now resolves through
+ * the agency-inheritance precedence above before falling back to the generous default.
  */
 export async function hasFeatureEntitlement(ownerType: SubscriptionOwnerType, ownerId: string, key: string): Promise<boolean> {
+  if (ownerType === "business") {
+    const resolved = await resolveBusinessPlanWithInheritance(ownerId);
+    if (!resolved) return true;
+    return hasEntitlement(resolved.plan, key);
+  }
   const plan = await resolveOwnerPlan(ownerType, ownerId);
   if (!plan) return true;
   return hasEntitlement(plan, key);
+}
+
+/**
+ * Resolves a business's effective entitlements for API responses (subscription.controller.ts's
+ * GET .../subscription/entitlements) — never 404s for "no direct subscription," since an
+ * agency-managed business can have real, meaningful entitlements without one. `source` tells the
+ * caller which relationship the entitlements came from, purely informational (never itself an
+ * authorization decision).
+ */
+export async function resolveBusinessEntitlements(
+  businessId: string
+): Promise<{ entitlements: Record<string, EntitlementValue> | null; source: "business" | "agency" | "default" }> {
+  const resolved = await resolveBusinessPlanWithInheritance(businessId);
+  if (!resolved) return { entitlements: null, source: "default" };
+  return { entitlements: getEntitlements(resolved.plan), source: resolved.source };
 }
 
 /**
@@ -79,9 +131,11 @@ export async function hasFeatureEntitlement(ownerType: SubscriptionOwnerType, ow
  * actually gate a feature this way (businessAnalytics/businessPromotion at the business level;
  * restaurantDomain's location-level domain-creation route, since custom-domain MANAGEMENT is a
  * per-location action even though the entitlement itself is business-wide). Always resolves against
- * the BUSINESS's own subscription, ownerType:"business" — an agency-managed business is never
- * gated by its agency's subscription (see this phase's "Agency vs Business billing relationship"
- * decision, docs/multi-tenant-storefront-architecture.md).
+ * `hasFeatureEntitlement("business", businessId, key)` — which, as of Phase 39, checks the
+ * business's OWN subscription first, then falls back to its managing agency's live subscription if
+ * it's agency-managed and has none of its own (resolveBusinessPlanWithInheritance's precedence).
+ * See docs/commercial-decisions.md §19 for the full decision — this reverses the original Phase 27
+ * behavior, where an agency-managed business was never gated by its agency's subscription at all.
  *
  * `from: "restaurantId"` resolves the business via that location's own businessId first (one extra
  * read, only on that code path) — used only by the one location-scoped route this phase gates.
@@ -102,10 +156,20 @@ export function requireEntitlement(key: string, from: "businessId" | "restaurant
   };
 }
 
+/**
+ * Phase 39 — an agency-inherited plan is an AGENCY-type Plan, which expresses its managed-business
+ * location allowance under a DIFFERENT key (`managed_business_max_locations`) than a direct
+ * OWNER-type subscription's `max_locations`, so the two are never confused with the agency's own
+ * `max_businesses` limit. A legacy agency plan (seeded before Phase 39, e.g. `agency_starter`/
+ * `agency_growth`) has no `managed_business_max_locations` key at all — falls through to the same
+ * generous default a direct no-subscription business gets, which is the correct, non-retroactive
+ * direction to err (see resolveBusinessPlanWithInheritance's doc comment).
+ */
 async function getMaxLocations(businessId: string): Promise<number> {
-  const plan = await resolveOwnerPlan("business", businessId);
-  if (!plan) return NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS;
-  const value = getEntitlements(plan).max_locations;
+  const resolved = await resolveBusinessPlanWithInheritance(businessId);
+  if (!resolved) return NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS;
+  const key = resolved.source === "agency" ? "managed_business_max_locations" : "max_locations";
+  const value = getEntitlements(resolved.plan)[key];
   return typeof value === "number" && value > 0 ? value : NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS;
 }
 
@@ -136,7 +200,9 @@ export async function releaseLocationSlot(businessId: string): Promise<void> {
 
 /** For the frontend's "add location" affordance — a pre-check, never itself an authorization
  *  decision (reserveLocationSlot's atomic guard remains the real one). Works whether or not the
- *  business has a subscription at all, unlike getEntitlementsHandler (which 404s with none). */
+ *  business has a subscription at all, same as getEntitlementsHandler (Phase 39 — no longer 404s
+ *  when there's no direct subscription, since an agency-managed business can still have real,
+ *  inherited entitlements). */
 export async function getLocationLimitStatus(businessId: string): Promise<{ max: number; current: number; canCreate: boolean }> {
   const [business, max] = await Promise.all([Business.findById(businessId).select("locationCount"), getMaxLocations(businessId)]);
   const current = business?.locationCount ?? 0;

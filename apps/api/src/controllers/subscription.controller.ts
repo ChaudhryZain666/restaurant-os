@@ -2,17 +2,15 @@ import type { Request, Response } from "express";
 import type { HydratedDocument, Types } from "mongoose";
 import type { CreateSubscriptionInput, ChangeSubscriptionPlanInput } from "@restaurant/validation";
 import type { PaginationQueryInput } from "@restaurant/validation";
-import { Plan, type PlanDoc } from "../models/Plan.js";
+import { Plan } from "../models/Plan.js";
 import type { SubscriptionDoc } from "../models/Subscription.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
-import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { paginateQuery } from "../utils/pagination.js";
 import { env } from "../config/env.js";
 import { recordAuditEvent } from "../services/audit.service.js";
-import { getEntitlements } from "../services/entitlement.service.js";
-import { getLocationLimitStatus } from "../services/entitlementLimit.service.js";
+import { getLocationLimitStatus, resolveBusinessEntitlements } from "../services/entitlementLimit.service.js";
 import {
   cancelSubscription,
   changeSubscriptionPlan,
@@ -120,13 +118,17 @@ export async function changePlanHandler(req: Request, res: Response) {
   sendSuccess(res, await toResponseShape(subscription));
 }
 
+/**
+ * Phase 39 — no longer 404s when the business has no direct subscription: an agency-managed
+ * business can have real entitlements inherited from its managing agency's plan (see
+ * entitlementLimit.service.ts's resolveBusinessPlanWithInheritance). `source` tells the caller
+ * where the returned entitlements came from ("business" | "agency" | "default"), so the admin UI
+ * can render an accurate upgrade path rather than a generic "no plan" message.
+ */
 export async function getEntitlementsHandler(req: Request, res: Response) {
   const { businessId } = req.params;
-  const subscription = await getSubscriptionForBusiness(businessId);
-  if (!subscription) throw ApiError.notFound("This business has no subscription");
-  const plan = await Plan.findById(subscription.planId);
-  if (!plan) throw ApiError.notFound("Subscription plan not found");
-  sendSuccess(res, { entitlements: getEntitlements(plan as PlanDoc) });
+  const { entitlements, source } = await resolveBusinessEntitlements(businessId);
+  sendSuccess(res, { entitlements, source });
 }
 
 /** GET /businesses/:businessId/subscription/location-limit — a pre-check for the LocationsPage

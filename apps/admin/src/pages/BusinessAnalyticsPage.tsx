@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { BusinessAnalyticsOverview, BusinessAnalyticsProducts, BusinessAnalyticsTrends } from "@restaurant/types";
-import { Card, Skeleton } from "@restaurant/ui";
+import { Badge, Card, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
@@ -37,6 +38,8 @@ const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 
 export function BusinessAnalyticsPage() {
   const { user } = useAuth();
   const businessId = user!.businessId!;
+  const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);
+  const canView = has("business_analytics");
 
   const [from, setFrom] = useState(daysAgoIso(6));
   const [to, setTo] = useState(todayIso());
@@ -48,6 +51,10 @@ export function BusinessAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (entitlementsLoading || !canView) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     const qs = `?from=${from}&to=${to}`;
@@ -64,7 +71,30 @@ export function BusinessAnalyticsPage() {
       })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, [businessId, from, to]);
+  }, [businessId, from, to, entitlementsLoading, canView]);
+
+  // Phase 39 — a locked/upgrade state, resolved via the same entitlement the server's
+  // requireEntitlement("business_analytics") guard checks (businessAnalytics.routes.ts), so this
+  // can never disagree with what the API actually allows. The server guard remains authoritative;
+  // this only avoids surfacing a raw 403 as the page's content.
+  if (!entitlementsLoading && !canView) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Business Analytics</h1>
+        </div>
+        <Card className="flex flex-col gap-2">
+          <Badge tone="warning" className="self-start">
+            Upgrade required
+          </Badge>
+          <p className="text-sm text-foreground">
+            Business-wide analytics aren't included on your current plan. Upgrade to Owner — Growth (or an agency
+            plan that grants it) to see performance across every location.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

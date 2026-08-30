@@ -36,6 +36,7 @@ export function AgencyBusinessesPage() {
   const { activeAgencyId } = useAgency();
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Paginated<AgencyBusinessSummary> | null>(null);
+  const [usage, setUsage] = useState<{ maxBusinesses: number; businessCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -48,10 +49,12 @@ export function AgencyBusinessesPage() {
 
   async function reload() {
     if (!activeAgencyId) return;
-    const data = await apiClient.request<Paginated<AgencyBusinessSummary>>(
-      `/agencies/${activeAgencyId}/businesses?page=${page}&limit=${PAGE_SIZE}`
-    );
+    const [data, entitlementsRes] = await Promise.all([
+      apiClient.request<Paginated<AgencyBusinessSummary>>(`/agencies/${activeAgencyId}/businesses?page=${page}&limit=${PAGE_SIZE}`),
+      apiClient.request<{ usage: { maxBusinesses: number; businessCount: number } }>(`/agencies/${activeAgencyId}/subscription/entitlements`),
+    ]);
     setResult(data);
+    setUsage(entitlementsRes.usage);
   }
 
   useEffect(() => {
@@ -61,6 +64,13 @@ export function AgencyBusinessesPage() {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAgencyId, page]);
+
+  // Phase 39 — a pre-check so the "New business" action can be disabled and explained at the
+  // limit, instead of only failing with a 409 after the form is filled out. reserveBusinessSlot
+  // (agencyEntitlement.service.ts) remains the real, atomic, server-side guard — this is convenience
+  // only, and can be momentarily stale under concurrent creation, exactly like canCreateAnotherBusiness
+  // always has been.
+  const atBusinessLimit = usage !== null && usage.businessCount >= usage.maxBusinesses;
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -95,7 +105,7 @@ export function AgencyBusinessesPage() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Businesses</h1>
           <p className="text-sm text-muted">Every business this agency manages.</p>
         </div>
-        <Button size="sm" onClick={() => setShowForm((v) => !v)}>
+        <Button size="sm" onClick={() => setShowForm((v) => !v)} disabled={!showForm && atBusinessLimit}>
           {showForm ? "Cancel" : "New business"}
         </Button>
       </div>
@@ -103,6 +113,13 @@ export function AgencyBusinessesPage() {
       {error && (
         <Alert tone="danger" role="alert">
           {error}
+        </Alert>
+      )}
+
+      {atBusinessLimit && !showForm && (
+        <Alert tone="warning">
+          You've used {usage!.businessCount} of {usage!.maxBusinesses} businesses included on your plan. Upgrade to
+          add another.
         </Alert>
       )}
 
@@ -232,7 +249,7 @@ export function AgencyBusinessesPage() {
                 className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
               />
             </label>
-            <Button type="submit" size="sm" disabled={creating} className="self-start sm:col-span-2">
+            <Button type="submit" size="sm" disabled={creating || atBusinessLimit} className="self-start sm:col-span-2">
               {creating
                 ? "Creating..."
                 : provisioningMode === "direct"

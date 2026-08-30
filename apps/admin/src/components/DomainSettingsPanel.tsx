@@ -4,6 +4,7 @@ import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useActiveLocationId } from "../context/LocationContext";
+import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -30,10 +31,17 @@ const STATUS_LABEL: Record<DomainMappingStatus, string> = {
  * tab is only reachable at all from within SettingsPage, which no unauthorized role can open in
  * the first place, matching this app's established convention of gating server-side rather than
  * duplicating role checks in the UI.
+ *
+ * Phase 39 — the "Add domain" action is now gated on the `custom_domains` entitlement client-side
+ * too (useBusinessEntitlements), so a Starter-tier owner sees an upgrade message instead of
+ * discovering the restriction only after a 403. The server-side `requireEntitlement("custom_domains")`
+ * guard (restaurantDomain.routes.ts) remains the real, unweakened authority — this is convenience only.
  */
 export function DomainSettingsPanel() {
   const { user } = useAuth();
   const restaurantId = useActiveLocationId();
+  const { has, loading: entitlementsLoading } = useBusinessEntitlements(user?.businessId);
+  const canAddDomain = has("custom_domains");
   const [domains, setDomains] = useState<DomainMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,24 +196,38 @@ export function DomainSettingsPanel() {
 
       <fieldset className="flex flex-col gap-2 rounded-xl border border-dashed border-border p-4">
         <legend className="px-1 text-sm font-medium">Add a custom domain</legend>
-        <label className="flex flex-col gap-1 text-sm">
-          Domain
-          <input
-            value={hostnameDraft}
-            onChange={(e) => setHostnameDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void handleAdd();
-              }
-            }}
-            placeholder="orders.yourrestaurant.com"
-            className={inputClass}
-          />
-        </label>
-        <Button type="button" size="sm" disabled={adding || !hostnameDraft.trim()} onClick={handleAdd} className="self-start">
-          {adding ? "Adding..." : "Add domain"}
-        </Button>
+        {!entitlementsLoading && !canAddDomain ? (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-3 text-sm">
+            <p className="flex items-center gap-1.5 font-medium text-foreground">
+              <Badge tone="warning">Upgrade required</Badge>
+            </p>
+            <p className="text-muted">
+              Custom domains aren't included on your current plan. Upgrade to Owner — Growth (or an agency plan that
+              grants it) to connect your own domain to this storefront.
+            </p>
+          </div>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1 text-sm">
+              Domain
+              <input
+                value={hostnameDraft}
+                onChange={(e) => setHostnameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleAdd();
+                  }
+                }}
+                placeholder="orders.yourrestaurant.com"
+                className={inputClass}
+              />
+            </label>
+            <Button type="button" size="sm" disabled={adding || !hostnameDraft.trim()} onClick={handleAdd} className="self-start">
+              {adding ? "Adding..." : "Add domain"}
+            </Button>
+          </>
+        )}
       </fieldset>
     </div>
   );

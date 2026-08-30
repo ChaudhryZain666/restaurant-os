@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
+import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 import { IconTag } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -40,6 +41,8 @@ export function BusinessPromotionsPage() {
   const { user } = useAuth();
   const businessId = user!.businessId!;
   const { locations } = useActiveLocation();
+  const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);
+  const canView = has("business_promotions");
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,10 +58,15 @@ export function BusinessPromotionsPage() {
   }
 
   useEffect(() => {
+    if (entitlementsLoading || !canView) {
+      setLoading(false);
+      return;
+    }
     reload()
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entitlementsLoading, canView]);
 
   function toggleLocation(locationId: string) {
     setDraft((d) => ({
@@ -127,6 +135,28 @@ export function BusinessPromotionsPage() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Phase 39 — a locked/upgrade state, resolved via the same entitlement the server's
+  // requireEntitlement("business_promotions") guard checks (businessPromotion.routes.ts), so this
+  // can never disagree with what the API actually allows. The server guard remains authoritative.
+  if (!entitlementsLoading && !canView) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Business Promotions</h1>
+        </div>
+        <Card className="flex flex-col gap-2">
+          <Badge tone="warning" className="self-start">
+            Upgrade required
+          </Badge>
+          <p className="text-sm text-foreground">
+            Business-wide promotions aren't included on your current plan. Upgrade to Owner — Growth (or an agency
+            plan that grants it) to run a promotion across every location.
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   if (loading) return <p className="text-muted">Loading promotions...</p>;

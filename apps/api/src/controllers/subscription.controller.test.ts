@@ -217,11 +217,13 @@ describe("GET /businesses/:businessId/subscription and /entitlements — visibil
     expect(res.body.data.entitlements.some_key_that_does_not_exist).toBeUndefined();
   });
 
-  it("404s entitlements for a business with no subscription", async () => {
+  it("Phase 39 — no longer 404s for a business with no subscription: returns null entitlements with source 'default' (an agency-managed business can have real inherited entitlements with no direct subscription of its own — resolveBusinessEntitlements handles that case, not a 404)", async () => {
     const res = await request(app)
       .get(`/api/v1/businesses/${otherBusiness.id}/subscription/entitlements`)
       .set("Authorization", `Bearer ${crossBusinessOwnerToken}`);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body.data.entitlements).toBeNull();
+    expect(res.body.data.source).toBe("default");
   });
 });
 

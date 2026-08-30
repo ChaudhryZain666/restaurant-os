@@ -176,7 +176,97 @@ async function seed() {
     },
     { upsert: true }
   );
-  console.log("[seed] ensured plan catalog (owner_basic, owner_pro, agency_starter, agency_growth; legacy owner/agency retained inactive)");
+  // Retired from new signups the moment Phase 39's approved catalog exists — same non-destructive
+  // mechanism as the owner/agency -> owner_basic/owner_pro/agency_starter/agency_growth transition
+  // above: flip isActive:false, never delete, never mutate pricing. Subscription.planId is a live,
+  // non-snapshotted FK, so every existing $15/$29/$99/$249 subscriber keeps seeing exactly the terms
+  // they signed up under, forever — see docs/commercial-decisions.md's Phase 39 section.
+  await Plan.updateMany({ code: { $in: ["owner_basic", "owner_pro", "agency_starter", "agency_growth"] } }, { $set: { isActive: false } });
+
+  // Phase 39 — the founder-approved commercial catalog (docs/commercial-decisions.md's Phase 39
+  // section). Unlike the Phase 34 tiers, these prices/limits are an explicit founder decision, not a
+  // defaulted starting point.
+  await Plan.findOneAndUpdate(
+    { code: "owner_starter" },
+    {
+      $setOnInsert: {
+        code: "owner_starter",
+        name: "Owner — Starter",
+        type: "OWNER",
+        description: "Core online ordering for a single restaurant location.",
+        pricing: [
+          { interval: "monthly", amountCents: 5900, currency: "USD", providerPriceId: "mock_price_owner_starter_monthly" },
+          { interval: "yearly", amountCents: 59000, currency: "USD", providerPriceId: "mock_price_owner_starter_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: false },
+          { key: "business_analytics", value: false },
+          { key: "business_promotions", value: false },
+          { key: "max_locations", value: 1 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "owner_growth" },
+    {
+      $setOnInsert: {
+        code: "owner_growth",
+        name: "Owner — Growth",
+        type: "OWNER",
+        description: "Multi-location ordering with custom domains, analytics, and promotions.",
+        pricing: [
+          { interval: "monthly", amountCents: 9900, currency: "USD", providerPriceId: "mock_price_owner_growth_monthly" },
+          { interval: "yearly", amountCents: 99000, currency: "USD", providerPriceId: "mock_price_owner_growth_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+          { key: "max_locations", value: 2 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  await Plan.findOneAndUpdate(
+    { code: "agency_growth_v2" },
+    {
+      $setOnInsert: {
+        code: "agency_growth_v2",
+        name: "Agency — Growth",
+        type: "AGENCY",
+        description: "For an agency managing up to 5 client businesses, each inheriting Growth-tier entitlements.",
+        pricing: [
+          { interval: "monthly", amountCents: 17900, currency: "USD", providerPriceId: "mock_price_agency_growth_v2_monthly" },
+          { interval: "yearly", amountCents: 179000, currency: "USD", providerPriceId: "mock_price_agency_growth_v2_yearly" },
+        ],
+        entitlements: [
+          { key: "custom_domains", value: true },
+          { key: "business_analytics", value: true },
+          { key: "business_promotions", value: true },
+          { key: "max_businesses", value: 5 },
+          // Phase 39 — a managed business with no subscription of its own inherits THIS plan's
+          // entitlements (entitlementLimit.service.ts's resolveBusinessPlanWithInheritance). This
+          // key is deliberately distinct from max_locations (which only applies to a direct OWNER
+          // subscription) so it's never confused with this plan's own max_businesses above. Set to
+          // match Owner Growth's included-location count, since "Agency Growth" is defined as
+          // granting Growth-tier entitlements to every managed business (founder spec, Phase 39 §12)
+          // — this is the explicit, documented interpretation of "the appropriate location
+          // entitlement," which the spec named by tier but did not number directly.
+          { key: "managed_business_max_locations", value: 2 },
+        ],
+        isActive: true,
+      },
+    },
+    { upsert: true }
+  );
+  console.log(
+    "[seed] ensured plan catalog (owner_starter, owner_growth, agency_growth_v2 active; owner_basic/owner_pro/agency_starter/agency_growth and legacy owner/agency retained inactive)"
+  );
 
   const platformAdminEmail = "platform-admin@restaurant.local";
   let platformAdmin = await User.findOne({ email: platformAdminEmail });
