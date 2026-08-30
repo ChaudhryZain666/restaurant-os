@@ -119,13 +119,24 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
  */
 test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succeed (Phase 27)", () => {
   let db: mongoose.Connection;
+  // Phase 40.1 — Phase 40's live Paddle verification found these raw-inserted Plan documents
+  // leaking into the real /public/plans response across many past runs of this exact spec (they
+  // bypass Mongoose entirely, so no application-level cleanup mechanism ever saw them). Tracked by
+  // exact _id here and deleted by _id in afterAll — never a broad "delete plans matching X" query,
+  // which could destroy real catalog data if a naming collision ever occurred.
+  const createdPlanIds: import("mongoose").Types.ObjectId[] = [];
+  const createdSubscriptionIds: import("mongoose").Types.ObjectId[] = [];
 
   test.beforeAll(async () => {
     const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
     db = conn;
   });
 
+  // Playwright runs afterAll even when the test above fails, so this cleanup fires regardless of
+  // outcome — the exact property the raw-insert pollution this fixes was missing entirely.
   test.afterAll(async () => {
+    if (createdPlanIds.length > 0) await db.collection("plans").deleteMany({ _id: { $in: createdPlanIds } });
+    if (createdSubscriptionIds.length > 0) await db.collection("subscriptions").deleteMany({ _id: { $in: createdSubscriptionIds } });
     await db.close();
   });
 
@@ -159,6 +170,7 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    createdPlanIds.push(lowPlan.insertedId);
     const highPlan = await db.collection("plans").insertOne({
       code: `e2e-agency-high-${stamp}`,
       name: "E2E High Limit",
@@ -169,7 +181,8 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    await db.collection("subscriptions").insertOne({
+    createdPlanIds.push(highPlan.insertedId);
+    const subscriptionInsert = await db.collection("subscriptions").insertOne({
       ownerType: "agency",
       ownerId: agencyId,
       planId: lowPlan.insertedId,
@@ -185,6 +198,7 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    createdSubscriptionIds.push(subscriptionInsert.insertedId);
 
     // --- Subscribed to a plan whose real max_businesses is 1: the first business succeeds. ---
     await page.getByRole("link", { name: "Businesses", exact: true }).click();
@@ -198,18 +212,14 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await page.getByRole("button", { name: "Create business & invite owner" }).click();
     await expect(page.getByText(`Limit Client One ${stamp}`)).toBeVisible({ timeout: 10_000 });
 
-    // --- A second business is REJECTED by the real server-side limit — a genuine error, not a
-    // disabled button (the form itself never pre-checks the limit client-side). ---
-    await page.getByRole("button", { name: "New business" }).click();
-    await page.getByLabel("Business name").fill(`Limit Client Two ${stamp}`);
-    await page.getByLabel("Business slug").fill(`limit-client-two-${stamp}`);
-    await page.getByLabel("First location name").fill(`Limit Location Two ${stamp}`);
-    await page.getByLabel("Location slug").fill(`limit-location-two-${stamp}`);
-    await page.getByLabel("Owner full name").fill("Limit Client Owner Two");
-    await page.getByLabel("Owner email").fill(`limit-client-owner-two-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create business & invite owner" }).click();
-    await expect(page.getByText(/business limit/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(`Limit Client Two ${stamp}`)).not.toBeVisible();
+    // --- Phase 39 added a real client-side pre-check (AgencyBusinessesPage.tsx) that disables
+    // "New business" once the plan's real limit is reached — so a second business is now blocked
+    // BEFORE the form can even open, not by a server 409 after filling it out (this test's own
+    // premise until Phase 40.1 updated it to match). The atomic server-side guard
+    // (reserveBusinessSlot) is unchanged and re-proven directly, with real numbers, by
+    // agencyEntitlementInheritance.service.test.ts — not duplicated here. ---
+    await expect(page.getByText(/used 1 of 1 business/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: "New business" })).toBeDisabled();
 
     // --- Upgrade to the higher-limit plan via the real Billing UI change-plan action. ---
     await page.getByRole("link", { name: "Billing", exact: true }).click();

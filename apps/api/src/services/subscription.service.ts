@@ -393,9 +393,12 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
   const plan = await Plan.findOne({ code: meta.planCode, isActive: true });
   if (!plan) {
     logger.warn("checkout-completion webhook for unknown plan code", { provider: providerName, planCode: meta.planCode });
+    // Deliberately left retryable (processedAt NOT set, processingStartedAt cleared): if this is a
+    // real transient data-consistency issue (e.g. a plan momentarily deactivated) rather than a
+    // permanent mismatch, a later retry of the identical event should still get a fair chance.
     await BillingWebhookEvent.updateOne(
       { provider: providerName, eventId: event.eventId },
-      { $set: { processingError: `Unknown plan code: ${meta.planCode}` } }
+      { $set: { processingError: `Unknown plan code: ${meta.planCode}` }, $unset: { processingStartedAt: "" } }
     );
     return;
   }
@@ -448,7 +451,10 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
         });
         await BillingWebhookEvent.updateOne(
           { provider: providerName, eventId: event.eventId },
-          { $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" } }
+          {
+            $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" },
+            $unset: { processingStartedAt: "" },
+          }
         );
         return;
       }
@@ -481,7 +487,72 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
     });
   }
 
-  await BillingWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+  await BillingWebhookEvent.updateOne(
+    { provider: providerName, eventId: event.eventId },
+    { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+  );
+}
+
+/**
+ * Phase 40.1 — the atomic claim mechanism that closes a real gap Phase 40's live Paddle
+ * verification found: the OLD logic (a plain `BillingWebhookEvent.create()`, treating any
+ * duplicate-key error as "already handled") could not tell "genuinely already processed" apart from
+ * "a prior attempt's marker exists, but that attempt failed before finishing" — a transient failure
+ * partway through (e.g. `retrieveSubscription()` timing out) would permanently swallow every future
+ * retry of the identical event as a false duplicate, silently losing a real checkout forever.
+ *
+ * Two-step, reusing this codebase's own established atomic-guard pattern (reserveLocationSlot/
+ * reserveBusinessSlot: a single findOneAndUpdate with the condition IN the filter, never
+ * check-then-act):
+ *
+ * 1. Try the plain insert first — for a BRAND NEW event, this is the same atomic guard as before,
+ *    unchanged: the unique {provider,eventId} index lets at most one concurrent insert win.
+ * 2. If that insert loses to a duplicate-key error, a marker already exists. Attempt to atomically
+ *    CLAIM it via findOneAndUpdate, matching only a record with BOTH `processedAt` and
+ *    `processingStartedAt` unset — a document that's either brand new (impossible here, since we
+ *    just failed to insert it) or, critically, one whose only prior attempt failed and cleared
+ *    `processingStartedAt` on the way out (see the try/catch below). Only one of any number of truly
+ *    concurrent claim attempts can win this — the update is what makes it exclusive, not the filter
+ *    alone: the loser's identical filter fails to match once the winner's write lands.
+ *
+ * Returns `true` (proceed to process) only when this call was the one that actually won a claim —
+ * either the original insert or the retry-claim. Returns `false` for every other case: a genuinely
+ * concurrent in-flight duplicate (someone else currently holds the claim), or a truly
+ * already-completed event (`processedAt` set) — both correctly a silent no-op, exactly matching the
+ * pre-existing, still-tested "duplicate ignored" behavior for those two cases specifically.
+ */
+async function claimWebhookEventForProcessing(providerName: string, event: ProviderBillingWebhookEvent): Promise<boolean> {
+  try {
+    await BillingWebhookEvent.create({
+      provider: providerName,
+      eventId: event.eventId,
+      eventType: event.eventType,
+      payload: event.raw,
+      processingStartedAt: new Date(),
+    });
+    return true;
+  } catch (err) {
+    if ((err as { code?: number }).code !== 11000) throw err;
+  }
+
+  const claimed = await BillingWebhookEvent.findOneAndUpdate(
+    { provider: providerName, eventId: event.eventId, processedAt: { $exists: false }, processingStartedAt: { $exists: false } },
+    { $set: { processingStartedAt: new Date() } },
+    { new: true }
+  );
+  if (claimed) {
+    logger.info("retrying a previously-stuck billing webhook event whose earlier attempt never finished", {
+      provider: providerName,
+      eventId: event.eventId,
+    });
+    return true;
+  }
+
+  logger.info("duplicate billing webhook event ignored — already processed or a concurrent delivery is in flight", {
+    provider: providerName,
+    eventId: event.eventId,
+  });
+  return false;
 }
 
 /**
@@ -496,74 +567,79 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
  * Phase 27 — event.checkoutMetadata present means this is a checkout completing (a subscription
  * being reported for the very first time), routed to handleCheckoutCompletionEvent above instead of
  * the status-transition logic below, which only ever applies to an ALREADY-existing subscription.
+ *
+ * Phase 40.1 — everything from the claim onward is wrapped in try/catch: an uncaught throw (e.g. a
+ * transient failure in handleCheckoutCompletionEvent's real provider.retrieveSubscription() call)
+ * now clears processingStartedAt and records processingError, leaving the event genuinely retryable
+ * on the next delivery, then re-throws so the HTTP layer still returns a non-2xx — the correct
+ * signal for a real provider's own retry mechanism to actually retry.
  */
 export async function processBillingProviderEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
+  const claimed = await claimWebhookEventForProcessing(providerName, event);
+  if (!claimed) return;
+
   try {
-    await BillingWebhookEvent.create({
-      provider: providerName,
-      eventId: event.eventId,
-      eventType: event.eventType,
-      payload: event.raw,
-    });
-  } catch (err) {
-    if ((err as { code?: number }).code === 11000) {
-      logger.info("duplicate billing webhook event ignored", { provider: providerName, eventId: event.eventId });
+    if (event.checkoutMetadata) {
+      await handleCheckoutCompletionEvent(providerName, event);
       return;
     }
+
+    const subscription = await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId });
+    if (!subscription) {
+      logger.warn("billing webhook event for unknown subscription reference", {
+        provider: providerName,
+        providerSubscriptionId: event.providerSubscriptionId,
+      });
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+      );
+      return;
+    }
+
+    const targetStatus = resolveTransitionTarget(subscription.status, event.status);
+    if (!isValidSubscriptionTransition(subscription.status, targetStatus)) {
+      logger.warn("ignored invalid subscription status transition from webhook", {
+        subscriptionId: subscription.id,
+        from: subscription.status,
+        to: targetStatus,
+      });
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date(), processingError: `Ignored: ${subscription.status} -> ${targetStatus}` }, $unset: { processingStartedAt: "" } }
+      );
+      return;
+    }
+
+    // Guarded by status: {$ne: to} so a race between two deliveries of the same real-world
+    // transition can't apply it twice — mirrors payment.service.ts's webhook-driven status guard.
+    const applied = await Subscription.findOneAndUpdate(
+      { _id: subscription._id, status: { $ne: targetStatus } },
+      { $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) } },
+      { new: true }
+    );
+
+    const historyType = HISTORY_TYPE_BY_TARGET_STATUS[targetStatus];
+    if (applied && historyType) {
+      await recordBillingHistoryEvent({
+        ownerType: subscription.ownerType as SubscriptionOwnerType,
+        ownerId: subscription.ownerId.toString(),
+        subscriptionId: subscription._id,
+        type: historyType,
+        provider: providerName as SubscriptionDoc["provider"],
+        providerReference: event.eventId,
+      });
+    }
+
+    await BillingWebhookEvent.updateOne(
+      { provider: providerName, eventId: event.eventId },
+      { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+    );
+  } catch (err) {
+    await BillingWebhookEvent.updateOne(
+      { provider: providerName, eventId: event.eventId },
+      { $set: { processingError: (err as Error).message }, $unset: { processingStartedAt: "" } }
+    );
     throw err;
   }
-
-  if (event.checkoutMetadata) {
-    await handleCheckoutCompletionEvent(providerName, event);
-    return;
-  }
-
-  const subscription = await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId });
-  if (!subscription) {
-    logger.warn("billing webhook event for unknown subscription reference", {
-      provider: providerName,
-      providerSubscriptionId: event.providerSubscriptionId,
-    });
-    await BillingWebhookEvent.updateOne(
-      { provider: providerName, eventId: event.eventId },
-      { $set: { processingError: "No matching subscription for providerSubscriptionId" } }
-    );
-    return;
-  }
-
-  const targetStatus = resolveTransitionTarget(subscription.status, event.status);
-  if (!isValidSubscriptionTransition(subscription.status, targetStatus)) {
-    logger.warn("ignored invalid subscription status transition from webhook", {
-      subscriptionId: subscription.id,
-      from: subscription.status,
-      to: targetStatus,
-    });
-    await BillingWebhookEvent.updateOne(
-      { provider: providerName, eventId: event.eventId },
-      { $set: { processedAt: new Date(), processingError: `Ignored: ${subscription.status} -> ${targetStatus}` } }
-    );
-    return;
-  }
-
-  // Guarded by status: {$ne: to} so a race between two deliveries of the same real-world
-  // transition can't apply it twice — mirrors payment.service.ts's webhook-driven status guard.
-  const applied = await Subscription.findOneAndUpdate(
-    { _id: subscription._id, status: { $ne: targetStatus } },
-    { $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) } },
-    { new: true }
-  );
-
-  const historyType = HISTORY_TYPE_BY_TARGET_STATUS[targetStatus];
-  if (applied && historyType) {
-    await recordBillingHistoryEvent({
-      ownerType: subscription.ownerType as SubscriptionOwnerType,
-      ownerId: subscription.ownerId.toString(),
-      subscriptionId: subscription._id,
-      type: historyType,
-      provider: providerName as SubscriptionDoc["provider"],
-      providerReference: event.eventId,
-    });
-  }
-
-  await BillingWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
 }

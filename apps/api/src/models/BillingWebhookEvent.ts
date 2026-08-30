@@ -17,6 +17,15 @@ const billingWebhookEventSchema = new Schema(
     payload: { type: Schema.Types.Mixed },
     processedAt: { type: Date },
     processingError: { type: String },
+    // Phase 40.1 — set the moment an attempt begins actually processing this event (after the
+    // idempotency-marker insert/claim), cleared on both success and failure. Its ABSENCE alongside
+    // processedAt also being absent means "claimable" — either never attempted, or a prior attempt
+    // failed and cleared it. Its PRESENCE means a concurrent attempt is actively working on this
+    // event right now. This is what lets claimWebhookEventForProcessing distinguish "a genuinely
+    // concurrent in-flight duplicate delivery" (must no-op) from "a stuck event whose only attempt
+    // failed before finishing" (must be retryable) — see that function's doc comment for the full
+    // reasoning behind the bug this closes.
+    processingStartedAt: { type: Date },
   },
   { timestamps: true }
 );
