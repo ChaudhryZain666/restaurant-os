@@ -137,6 +137,14 @@ const envSchema = z.object({
   PADDLE_API_KEY: z.string().optional(),
   PADDLE_WEBHOOK_SECRET: z.string().optional(),
   PADDLE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  // Phase 40 — a real, dashboard-only credential (Paddle > Developer tools > Authentication; no API
+  // endpoint exists to list/create these — confirmed live this phase, a 404 "invalid_url" against
+  // /authentication). Distinct from PADDLE_API_KEY (a private server-side secret): this is the
+  // public, per-environment token Paddle.js's Paddle.Initialize({token}) needs client-side to open
+  // an overlay checkout at all — see PaddleBillingProvider.ts's createCheckoutSession, which
+  // previously and incorrectly returned the per-customer providerCustomerId in this field's place, a
+  // real bug this phase's live verification found and fixed.
+  PADDLE_CLIENT_TOKEN: z.string().optional(),
   // No final trial-length commercial decision has been made — this stays configuration, never a
   // hardcoded literal in application code. 14 here is a working default for local development/
   // testing only, not a commercial decision (see docs/commercial-decisions.md). A Plan's own

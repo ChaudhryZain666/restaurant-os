@@ -388,3 +388,79 @@ add-on system was built (explicitly out of scope this phase). No changes were ma
 Safepay, or any restaurant-order-payment code — the 0% commission decision above is a statement
 about what does NOT exist (no fee-taking code was added), not a change to the verified Phase 38
 payment architecture.
+
+## 20. Phase 40 — real Paddle sandbox verification: catalog live, one real bug fixed, one real external blocker
+
+**Real sandbox catalog now exists** (a real Paddle sandbox account, PADDLE_API_KEY confirmed live
+against `sandbox-api.paddle.com` this phase — never `api.paddle.com`/production): three real
+Products, six real Prices (monthly + annual for each of `owner_starter`/`owner_growth`/
+`agency_growth_v2`), created idempotently (checked for and reused a partially-created product from
+an earlier attempt whose response was lost to a real, transient network timeout — confirmed no
+duplicate was created). The real sandbox price/product ids are mapped into each Plan's
+`pricing[].providerPriceId`/`providerProductId`, replacing the `mock_price_*` placeholders in this
+dev database only — see the deployment-level (not schema-level) sandbox/production separation
+reasoning in that migration's own code comment; this dev database's rows must never be copied into a
+production deployment.
+
+**Real bug found and fixed**: `PaddleBillingProvider.createCheckoutSession` returned the per-customer
+`providerCustomerId` as `clientToken` — real Paddle.js's `Paddle.Initialize({token})` requires a
+public, PER-ENVIRONMENT client-side token instead (confirmed against developer.paddle.com/paddlejs
+live this phase), which is dashboard-only (no API creates/lists it — confirmed via a clean
+`invalid_url` 404 against a probed endpoint). Fixed: a new `PADDLE_CLIENT_TOKEN` env var, the
+provider now throws clearly if it's unset rather than handing the frontend an invalid token, and
+`providerCustomerId` is threaded through the checkout-session response as its own field (needed
+separately by `Paddle.Checkout.open()`). Covered by two new unit tests.
+
+**Real external blocker, honestly reported (mirrors the Phase 38 hCaptcha precedent)**: a full,
+browser-driven Paddle.js overlay checkout could not be completed this phase, because no
+`PADDLE_CLIENT_TOKEN` value exists anywhere in this environment and Paddle's API has no endpoint to
+create or retrieve one — it requires a human logging into the Paddle sandbox dashboard
+(Developer tools > Authentication) to fetch it. This is the one manual step needed to unlock full
+live checkout-UI verification, exactly analogous to Phase 38's hCaptcha step. Everything else about
+checkout was verified as far as possible without it: `createCustomer`/`retrieveCustomer` proven live
+and correct; the direct (non-checkout) `createSubscription` path proven to return a real, clean 405
+("HTTP method used isn't allowed for this endpoint") — confirming the file's own long-standing
+"ASSUMED/less-trodden" caveat was correct, and confirmed dead/unreachable in real app code (grepped:
+only test files and this phase's own verification script ever call it — `subscription.service.ts`'s
+`createSubscriptionCore` has deliberately contacted no provider at all since Phase 34's earlier fix,
+so this 405 has no live consequence today).
+
+**Real webhook verification, using a real secret**: a real Notification Destination + real
+`endpoint_secret_key` were created via Paddle's live Notification Settings API (sandbox only,
+`traffic_source: "simulation"` so it can never carry real production traffic). Since Paddle has no
+local-tunnel equivalent to the Stripe CLI and this environment has no ngrok/cloudflared/hookdeck
+installed (confirmed absent), automatic delivery to `localhost` was impossible — worked around
+exactly as Phase 38 did for the analogous Stripe CLI limitation: a payload was signed with the REAL
+secret, using the REAL documented signature format, and delivered directly to the real running local
+server. This proved, live: correct rejection of a wrong-secret signature (400); correct acceptance
+of a validly-signed real event with a genuine `active` → `cancelled` state transition applied;
+correct idempotency on exact redelivery (still exactly 1 `BillingWebhookEvent` record, subscription
+status unchanged, not reprocessed); correct rejection of a tampered body even with an otherwise
+valid-looking signature (400).
+
+**Second real finding from webhook testing (documented, not fixed this phase)**: a checkout-completion
+event (`subscription.created` with `custom_data`) was delivered with a valid signature but a
+synthetic `providerSubscriptionId` (since no real Paddle subscription could be created — blocked by
+the same client-token gap above). Result: a real 500, because `handleCheckoutCompletionEvent`
+re-verifies by calling `provider.retrieveSubscription()` against the real Paddle API rather than
+trusting the webhook body alone (a real, working safeguard) — but that call throws unhandled, and
+because `processBillingProviderEvent` inserts into `BillingWebhookEvent` (the idempotency guard)
+*before* attempting checkout-completion processing, a **genuine transient Paddle API failure during
+a real checkout-completion event would cause that event to be permanently marked "seen," and
+Paddle's automatic retry of the identical event would then be silently swallowed as a duplicate —
+meaning that subscription would never get created from the webhook, with no automatic recovery.**
+This is a real, evidence-based finding with real financial-correctness implications, deliberately
+**not fixed this phase**: the correct fix touches idempotency semantics on a financial code path, and
+deserves its own careful, dedicated pass rather than a patch appended to an already-large
+verification phase. Flagged here so it is never lost track of.
+
+**Regression**: 1009/1010 full suite passing (the sole failure, `table.controller.test.ts`, confirmed
+via isolated re-run — 19/19 clean — as the same environmental-contention pattern documented
+repeatedly across this session, not a real regression; unrelated to any Phase 40 change). TypeScript
+clean for `apps/api` and `apps/admin`.
+
+**Production safety**: `PADDLE_ENV` remains `sandbox` in every environment this phase touched; every
+API call this phase made was hardcoded to `sandbox-api.paddle.com`, never `api.paddle.com`; `.env`
+was never written to by any script (read-only, via `dotenv`); no production webhook, product, price,
+or subscription was created or could have been, given the sandbox-scoped key. Stripe Connect and all
+restaurant-order-payment code were not touched.

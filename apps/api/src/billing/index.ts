@@ -24,7 +24,12 @@ export function getBillingProvider(): BillingProvider {
     if (!env.PADDLE_API_KEY || !env.PADDLE_WEBHOOK_SECRET) {
       throw new Error("BILLING_PROVIDER=paddle requires PADDLE_API_KEY and PADDLE_WEBHOOK_SECRET to be configured.");
     }
-    instance = new PaddleBillingProvider(env.PADDLE_API_KEY, env.PADDLE_WEBHOOK_SECRET, PaddleBillingProvider.baseUrlForEnv(env.PADDLE_ENV));
+    instance = new PaddleBillingProvider(
+      env.PADDLE_API_KEY,
+      env.PADDLE_WEBHOOK_SECRET,
+      PaddleBillingProvider.baseUrlForEnv(env.PADDLE_ENV),
+      env.PADDLE_CLIENT_TOKEN
+    );
     return instance;
   }
   throw new Error(`BILLING_PROVIDER="${env.BILLING_PROVIDER as string}" is not a recognized provider.`);

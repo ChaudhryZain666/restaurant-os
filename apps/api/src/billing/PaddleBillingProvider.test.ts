@@ -14,9 +14,48 @@ function mockFetchOnce(status: number, body: unknown, ok = status >= 200 && stat
   } as unknown as Response);
 }
 
-function provider() {
-  return new PaddleBillingProvider("api-key", "webhook-secret", "https://sandbox-api.paddle.com");
+function provider(clientToken?: string) {
+  return new PaddleBillingProvider("api-key", "webhook-secret", "https://sandbox-api.paddle.com", clientToken);
 }
+
+/**
+ * Phase 40 — proves the real bug live verification found: createCheckoutSession previously
+ * returned the per-CUSTOMER providerCustomerId as `clientToken`, which real Paddle.js's
+ * Paddle.Initialize({token}) requires to be a public, per-ENVIRONMENT credential instead (confirmed
+ * against developer.paddle.com/paddlejs). Fixed to source clientToken from a real
+ * PADDLE_CLIENT_TOKEN value, and to thread providerCustomerId through as its own separate field.
+ */
+describe("PaddleBillingProvider.createCheckoutSession", () => {
+  it("returns the real per-environment client token, not the per-customer id", async () => {
+    const session = await provider("real-env-client-token").createCheckoutSession({
+      providerCustomerId: "ctm_123",
+      providerPriceId: "pri_456",
+      metadata: { ownerType: "business", ownerId: "biz-1", planCode: "owner_growth", billingInterval: "monthly" },
+      successUrl: "https://admin.example.com/billing-checkout-complete",
+      cancelUrl: "https://admin.example.com/billing",
+    });
+    expect(session).toEqual({
+      mode: "overlay",
+      clientToken: "real-env-client-token",
+      providerPriceId: "pri_456",
+      providerCustomerId: "ctm_123",
+    });
+    // The bug this fixed: clientToken must never equal the customer id.
+    expect(session.clientToken).not.toBe("ctm_123");
+  });
+
+  it("throws clearly when PADDLE_CLIENT_TOKEN is not configured, rather than handing the frontend an invalid token", async () => {
+    await expect(
+      provider(undefined).createCheckoutSession({
+        providerCustomerId: "ctm_123",
+        providerPriceId: "pri_456",
+        metadata: { ownerType: "business", ownerId: "biz-1", planCode: "owner_growth", billingInterval: "monthly" },
+        successUrl: "https://admin.example.com/billing-checkout-complete",
+        cancelUrl: "https://admin.example.com/billing",
+      })
+    ).rejects.toThrow("PADDLE_CLIENT_TOKEN is not configured");
+  });
+});
 
 describe("PaddleBillingProvider.createCustomer", () => {
   it("creates a customer and returns its provider id", async () => {

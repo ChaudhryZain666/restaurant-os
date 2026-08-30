@@ -72,7 +72,13 @@ export class PaddleBillingProvider implements BillingProvider {
   constructor(
     private readonly apiKey: string,
     private readonly webhookSecret: string,
-    private readonly baseUrl: string = SANDBOX_BASE_URL
+    private readonly baseUrl: string = SANDBOX_BASE_URL,
+    /** Phase 40 — the public, per-environment Paddle.js client-side token (PADDLE_CLIENT_TOKEN),
+     *  distinct from apiKey (a private server-side secret). Real Paddle.js's Paddle.Initialize
+     *  requires this; it is dashboard-only (no API endpoint creates/lists it — confirmed live this
+     *  phase). Absent in an environment that hasn't configured it yet — createCheckoutSession
+     *  throws clearly rather than silently handing the frontend an invalid token. */
+    private readonly clientToken?: string
   ) {}
 
   static baseUrlForEnv(paddleEnv: "sandbox" | "production"): string {
@@ -177,14 +183,29 @@ export class PaddleBillingProvider implements BillingProvider {
   }
 
   /**
-   * VERIFIED shape (client-side): Paddle's overlay checkout (Paddle.js `Paddle.Checkout.open`) is
-   * driven from the FRONTEND given a price id, a customer id, and custom data — there is no
-   * server-side "create checkout session" REST call to make first. `clientToken` here is just the
-   * price id itself (Paddle.js needs no separate session token, unlike some redirect-based
-   * providers) — mode:"overlay" tells the frontend to launch Paddle.js rather than navigate to a URL.
+   * VERIFIED shape (client-side, re-checked live against developer.paddle.com/paddlejs this phase):
+   * Paddle's overlay checkout (Paddle.js `Paddle.Checkout.open`) is driven from the FRONTEND given a
+   * price id, a customer id, and custom data — there is no server-side "create checkout session"
+   * REST call to make first. `Paddle.Initialize({token})` requires a real, PUBLIC, per-environment
+   * client-side token (Paddle > Developer tools > Authentication — dashboard-only, no API
+   * equivalent), never a per-customer value.
+   *
+   * Phase 40 fix: this previously returned `clientToken: input.providerCustomerId` — a real bug
+   * (would have handed Paddle.Initialize an invalid token, silently breaking every real checkout
+   * attempt) found by comparing against Paddle's actual current docs, not merely re-reading this
+   * file's own prior assumptions. providerCustomerId is now correctly threaded through as its own
+   * field instead, for the frontend's separate `Paddle.Checkout.open({customer: {id: ...}})` call.
    */
   async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession> {
-    return { mode: "overlay", clientToken: input.providerCustomerId, providerPriceId: input.providerPriceId };
+    if (!this.clientToken) {
+      throw new Error("PADDLE_CLIENT_TOKEN is not configured — cannot open a real Paddle.js checkout without it.");
+    }
+    return {
+      mode: "overlay",
+      clientToken: this.clientToken,
+      providerPriceId: input.providerPriceId,
+      providerCustomerId: input.providerCustomerId,
+    };
   }
 
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null> {

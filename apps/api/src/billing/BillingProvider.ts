@@ -58,10 +58,15 @@ export interface ProviderCheckoutSession {
   mode: ProviderCheckoutMode;
   /** Present when mode === "redirect". */
   url?: string;
-  /** Present when mode === "overlay" — an opaque token/config the frontend passes to the
-   *  provider's own client-side SDK, never a secret credential. */
+  /** Present when mode === "overlay" — the provider's own PUBLIC, per-environment client-side
+   *  token (e.g. Paddle.js's Paddle.Initialize({token})), never a per-customer or secret value.
+   *  Phase 40 — corrected from an earlier bug that returned providerCustomerId here instead. */
   clientToken?: string;
   providerPriceId?: string;
+  /** Present when mode === "overlay" — the provider's own customer reference, which the frontend's
+   *  SDK needs separately from clientToken to associate the checkout with the right customer
+   *  (e.g. Paddle.Checkout.open({customer: {id: providerCustomerId}, ...})). */
+  providerCustomerId?: string;
 }
 
 export interface ProviderInvoice {
