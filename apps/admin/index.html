@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tablecloth — Restaurant Admin</title>
+    <!-- Phase 40.1 — Paddle's own documented integration requires loading Paddle.js directly from
+         cdn.paddle.com (never a bundled/proxied copy, per Paddle's own security guidance) for the
+         overlay checkout BillingPage.tsx drives. No token lives here — Paddle.Initialize is only
+         ever called with the clientToken the backend's own checkout API response returns. -->
+    <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   </head>
   <body>
     <div id="root"></div>

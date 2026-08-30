@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
+import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 import { useAuth } from "../context/AuthContext";
 
 const STATUS_TONE: Record<Subscription["status"], "success" | "neutral" | "warning" | "danger"> = {
@@ -111,21 +112,28 @@ export function BillingPage() {
   }
 
   /** The payment-method-up-front path (see subscription.service.ts's createCheckoutSessionCore).
-   *  Nothing is created here — the redirect target's own completion is what triggers a real
-   *  Subscription via the webhook path; a "mode: overlay" response (a real provider like Paddle)
-   *  has no client-side widget wired up yet in this admin app — deployment-dependent, documented. */
+   *  Nothing is created here — completion (the redirect target for a "redirect" provider, or
+   *  Paddle.js's real "checkout.completed" event for an "overlay" one) is what triggers a real
+   *  Subscription via the webhook path. Phase 40.1 — the "overlay" branch now actually opens a real
+   *  Paddle.js checkout using the real clientToken/providerPriceId/providerCustomerId the backend's
+   *  checkout API response carries; on completion, reload() re-fetches so the real webhook-driven
+   *  state shows up once it lands (may take a moment — not instantaneous with the UI event). */
   async function checkout() {
     setBusy(true);
     setError(null);
     try {
-      const res = await apiClient.request<{ checkout: { mode: string; url?: string } }>(
-        `/businesses/${businessId}/subscription/checkout`,
-        { method: "POST", body: { planCode: selectedPlanCode, billingInterval } }
-      );
+      const res = await apiClient.request<{
+        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string };
+      }>(`/businesses/${businessId}/subscription/checkout`, { method: "POST", body: { planCode: selectedPlanCode, billingInterval } });
       if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
+      } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
+        if (!isPaddleJsLoaded()) throw new Error("Paddle.js did not load — check your network connection and try again.");
+        openPaddleCheckout(res.checkout.clientToken, res.checkout.providerPriceId, res.checkout.providerCustomerId, () => {
+          void reload();
+        });
       } else {
-        setError("This provider's checkout widget isn't wired into the admin app yet.");
+        setError("This provider's checkout could not be started — missing checkout details in the server's response.");
       }
     } catch (err) {
       setError((err as Error).message);
