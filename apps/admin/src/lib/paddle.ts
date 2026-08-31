@@ -16,7 +16,11 @@ interface PaddleGlobal {
   Environment: { set: (env: "sandbox" | "production") => void };
   Initialize: (options: { token: string; eventCallback?: (event: PaddleCheckoutCompletedEvent) => void }) => void;
   Checkout: {
-    open: (options: { items: Array<{ priceId: string; quantity: number }>; customer: { id: string } }) => void;
+    open: (options: {
+      items: Array<{ priceId: string; quantity: number }>;
+      customer: { id: string };
+      customData?: Record<string, string>;
+    }) => void;
   };
 }
 
@@ -38,6 +42,7 @@ export function openPaddleCheckout(
   clientToken: string,
   providerPriceId: string,
   providerCustomerId: string,
+  customData: Record<string, string>,
   onCompleted: () => void
 ): void {
   if (!window.Paddle) throw new Error("Paddle.js did not load — check your network connection and try again.");
@@ -54,8 +59,14 @@ export function openPaddleCheckout(
     initialized = true;
   }
 
+  // Paddle copies customData onto the transaction and, for recurring items, onto the subscription
+  // it creates — this is the ONLY way the webhook later sees which owner/plan a checkout was for
+  // (PaddleBillingProvider.verifyWebhookSignature's checkoutMetadata requires custom_data.ownerType).
+  // Without this, a real completed checkout could never be attributed to a local Subscription, in
+  // sandbox or production.
   window.Paddle.Checkout.open({
     items: [{ priceId: providerPriceId, quantity: 1 }],
     customer: { id: providerCustomerId },
+    customData,
   });
 }

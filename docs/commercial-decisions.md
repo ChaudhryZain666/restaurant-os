@@ -521,3 +521,71 @@ and `apps/admin`.
 throughout; the real client-side token the founder provided is a public, per-checkout-session value
 by Paddle's own design (never a secret credential), was never written to any file, and was only ever
 passed via process-launch environment variables. `.env` was never modified.
+
+## 22. Phase 40.2 — real end-to-end checkout completion, cancellation, and the customData gap
+
+**Blocker resolved**: the founder set the Default Payment Link URL (`http://localhost:5174/billing`,
+valid for a Paddle sandbox account per Paddle's own docs — no approval required) in the Paddle
+dashboard's Checkout Settings. Re-running the real Playwright-driven checkout (Owner Starter, real
+test card `4242 4242 4242 4242`, real "Your details" → "Payment" two-step overlay) then completed for
+real: Paddle's own hosted UI showed the genuine confirmation, "Your transaction has been completed
+successfully." Screenshot evidence captured.
+
+**Second real finding, found and fixed this phase — checkout never sent `customData` to Paddle**:
+`Paddle.Checkout.open()` was called with only `items` and `customer`, never `customData`. Per
+Paddle's own docs, `customData` is what gets copied onto the resulting transaction and (for recurring
+items) the subscription — it is the *only* way a webhook's `custom_data.ownerType`/`ownerId`/
+`planCode`/`billingInterval` can ever be populated
+(`PaddleBillingProvider.verifyWebhookSignature`'s `isCheckoutCreation` check requires
+`custom_data.ownerType`). Without it, a real completed Paddle checkout could never be attributed to a
+local `Subscription` — in sandbox or in production; this was not a localhost-only limitation. Fixed
+in `apps/admin/src/lib/paddle.ts` (`openPaddleCheckout` now takes and forwards a `customData` param)
+and `apps/admin/src/pages/BillingPage.tsx` (passes `{ownerType: "business", ownerId, planCode,
+billingInterval}` at the real call site). Live-verified: a fresh real checkout's resulting real Paddle
+subscription (`GET /subscriptions/{id}` against the real sandbox API) came back with the correct
+`custom_data` attached.
+
+**Full lifecycle chain, live-verified end to end with real data** (Scenario A — Owner Starter):
+plan selection → real Paddle.js overlay checkout → real Paddle subscription (`sub_...`, confirmed via
+direct API retrieval) → webhook delivered to the local endpoint (Paddle cannot reach `localhost` —
+no local-tunnel tool is available in this environment, confirmed absent again this phase — so the
+real, genuinely-retrieved Paddle subscription data was relayed to the local webhook endpoint with a
+real `Paddle-Signature` HMAC, the same documented workaround Phase 40 established) → local
+`BillingWebhookEvent` recorded and marked `processedAt` → local `Subscription` created
+(`provider: "paddle"`, correct real `providerCustomerId`/`providerSubscriptionId`, correct billing
+period dates matching Paddle's own exactly) → entitlements resolved correctly (`owner_starter`:
+`max_locations: 1`, all other flags `false`, matching the real plan) → admin UI reflects it correctly
+("Owner — Starter", "Active", "$59.00/mo", correct renewal date, billing history rows for
+"Subscription started" and "Payment succeeded"). Verified via direct DB/API queries against genuine
+retrieved state, plus a Playwright-driven reload of the real billing page (screenshot evidence).
+
+**Cancellation lifecycle, live-verified**: unlike checkout completion, cancellation is synchronous —
+`cancelSubscriptionCore` calls `provider.cancelSubscription()` directly and updates the local
+`Subscription` in the same request, with no webhook dependency. Clicked "Cancel subscription" through
+the real admin UI on the real active subscription above; confirmed both locally (status →
+`"cancelling"`, `cancelAt` set to the real period end, a "Cancellation scheduled" billing-history row,
+UI badge updates to "Cancelling") and independently against Paddle's own API
+(`scheduled_change: {action: "cancel", effective_at: ...}` on the real subscription, matching exactly).
+
+**Minor UI-copy defect found and fixed**: the billing page's subtitle unconditionally read "No real
+payment provider is connected yet — this runs against a mock billing system for now," regardless of
+the subscription's actual provider — now factually wrong once a real Paddle subscription exists.
+Made conditional on `subscription.provider !== "mock"` in `BillingPage.tsx`.
+
+**Not attempted this phase**: Scenario B (Owner Growth) and Scenario C (Agency Growth) checkouts —
+the mission's explicit qualifier ("only if practical without creating unnecessary persistent data")
+was treated as satisfied by Scenario A's full verification; the customer-email-conflict gap Phase
+40.1 documented (still unfixed) would have required yet another fresh test identity per attempt.
+`AgencyBillingPage.tsx` was also found to have never been wired for overlay-mode checkout at all
+(`checkout.mode === "overlay"` isn't handled there — only `"redirect"`) — a real, separate gap,
+documented here rather than fixed under this phase's scope.
+
+**Cleanup**: all 5 test businesses/owners/locations created across this phase's checkout attempts,
+their `Subscription`/`BillingHistoryEvent`/`BillingWebhookEvent` records, the throwaway verification
+scripts, and the Paddle sandbox notification-settings destination were all deleted by exact id/prefix
+match after verification completed. The API dev server was restarted with no `BILLING_PROVIDER`
+override, returning it to its normal `mock` default.
+
+**Production safety**: unchanged — `PADDLE_ENV` stayed `sandbox` throughout every real API call this
+phase made; `.env` was never modified by any script; no production Paddle product, price,
+subscription, or webhook destination was created or reachable.

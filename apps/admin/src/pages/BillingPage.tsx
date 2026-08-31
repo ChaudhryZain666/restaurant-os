@@ -129,9 +129,15 @@ export function BillingPage() {
         window.location.assign(res.checkout.url);
       } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
         if (!isPaddleJsLoaded()) throw new Error("Paddle.js did not load — check your network connection and try again.");
-        openPaddleCheckout(res.checkout.clientToken, res.checkout.providerPriceId, res.checkout.providerCustomerId, () => {
-          void reload();
-        });
+        openPaddleCheckout(
+          res.checkout.clientToken,
+          res.checkout.providerPriceId,
+          res.checkout.providerCustomerId,
+          { ownerType: "business", ownerId: businessId, planCode: selectedPlanCode, billingInterval },
+          () => {
+            void reload();
+          }
+        );
       } else {
         setError("This provider's checkout could not be started — missing checkout details in the server's response.");
       }
@@ -208,8 +214,9 @@ export function BillingPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Billing</h1>
         <p className="text-sm text-muted">
-          Your subscription status. No real payment provider is connected yet — this runs against a mock billing
-          system for now.
+          {subscription && subscription.provider !== "mock"
+            ? "Your subscription status."
+            : "Your subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."}
         </p>
       </div>
 
