@@ -74,7 +74,26 @@ export class MockBillingProvider implements BillingProvider {
     this.secret = webhookSecret;
   }
 
+  /** Phase 40.3 — mirrors PaddleBillingProvider's real, live-verified idempotent-per-email contract
+   *  (a real Paddle account 409s a second customer created with an already-used email) so the
+   *  customer-reuse fix's edge cases are unit-testable without a live Paddle call: reuse an existing
+   *  customer for the same owner, but never silently merge across two different owners. An empty
+   *  email never participates in reuse lookup — real callers always resolve a real owner email
+   *  (resolveOwnerIdentity), so an empty string only ever occurs when a test fixture never linked a
+   *  business's ownerId to a real User; treating that shared "" as one identity would falsely
+   *  collide unrelated test owners against each other, which never happened before this fix since
+   *  the old code didn't dedupe by email at all. */
   async createCustomer(input: CreateBillingCustomerInput): Promise<ProviderBillingCustomer> {
+    const existing = input.email ? [...this.customers.entries()].find(([, record]) => record.email === input.email) : undefined;
+    if (existing) {
+      const [providerCustomerId, record] = existing;
+      if (record.ownerType !== input.ownerType || record.ownerId !== input.ownerId) {
+        throw new Error(
+          `Mock customer email is already associated with a different owner (existing mock customer ${providerCustomerId}) — refusing to reuse across owners.`
+        );
+      }
+      return { providerCustomerId, email: record.email, name: record.name };
+    }
     const providerCustomerId = `mock_cus_${randomBytes(12).toString("hex")}`;
     this.customers.set(providerCustomerId, { ownerType: input.ownerType, ownerId: input.ownerId, email: input.email, name: input.name });
     return { providerCustomerId, email: input.email, name: input.name };

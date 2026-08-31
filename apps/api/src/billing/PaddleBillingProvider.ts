@@ -22,6 +22,22 @@ const REQUEST_TIMEOUT_MS = 10_000;
 // this, even if the HMAC itself checks out, to close a replay window.
 const WEBHOOK_MAX_AGE_SECONDS = 5;
 
+/** Carries Paddle's real structured error fields (`error.code`/`error.detail`) so a caller can
+ *  branch on the stable machine-readable `code` rather than parsing prose out of a message string.
+ *  Phase 40.3 — added specifically so createCustomer can recognize `customer_already_exists`
+ *  (HTTP 409) and recover, instead of every non-2xx response collapsing into an opaque Error. */
+class PaddleApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly detail?: string
+  ) {
+    super(message);
+    this.name = "PaddleApiError";
+  }
+}
+
 /**
  * Everything below the request-shaping helpers is genuinely wired against Paddle's real
  * sandbox/production hosts and their published Billing API v2 — but, exactly like
@@ -85,24 +101,44 @@ export class PaddleBillingProvider implements BillingProvider {
     return paddleEnv === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
   }
 
+  /**
+   * Phase 40.3 — real, live-verified transient connectivity issue to Paddle's Cloudflare-fronted
+   * sandbox edge (a genuine ConnectTimeoutError, not a code fault — confirmed by immediately
+   * succeeding on a bare retry, both during this phase's own reconnaissance and inside the
+   * customer-reuse recovery path's own GET call). Phase 40's catalog-creation script already added
+   * retry-with-backoff for the exact same class of failure; this brings that same resilience to
+   * every real Paddle call this adapter makes, not just that one script. Only TRANSPORT failures
+   * (DNS/connect/timeout) are retried — a real HTTP error response (4xx/5xx, parsed into
+   * PaddleApiError below) is never retried here, since that's a meaningful business-logic signal,
+   * not a connectivity blip.
+   */
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+    const attempts = 3;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        return await fetch(url, { ...init, signal: controller.signal });
+      } catch (err) {
+        if (attempt === attempts) {
+          if (err instanceof Error && err.name === "AbortError") throw new Error("Paddle request timed out");
+          throw new Error(`Could not reach Paddle: ${(err as Error).message}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new Error("Unreachable"); // satisfies TS — the loop above always returns or throws
+  }
+
   private async request<T>(method: "GET" | "POST" | "PATCH", path: string, body?: Record<string, unknown>): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw new Error("Paddle request timed out");
-      throw new Error(`Could not reach Paddle: ${(err as Error).message}`);
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await this.fetchWithRetry(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
     let json: unknown;
     try {
@@ -112,22 +148,59 @@ export class PaddleBillingProvider implements BillingProvider {
     }
 
     if (!res.ok) {
-      const message = (json as { error?: { detail?: string } })?.error?.detail;
-      throw new Error(`Paddle returned HTTP ${res.status}${message ? `: ${message}` : ""}`);
+      const error = (json as { error?: { code?: string; detail?: string } })?.error;
+      throw new PaddleApiError(
+        `Paddle returned HTTP ${res.status}${error?.detail ? `: ${error.detail}` : ""}`,
+        res.status,
+        error?.code,
+        error?.detail
+      );
     }
 
     return json as T;
   }
 
+  /**
+   * Phase 40.3 — real, live-verified finding: calling this unconditionally on every checkout
+   * attempt (the original behavior) means a second checkout for the same owner — after an
+   * abandoned first attempt, or after a cancelled subscription — hits a real Paddle 409
+   * (`customer_already_exists`), since Paddle enforces one customer per email. Confirmed live
+   * against the sandbox: `{"error":{"code":"customer_already_exists","detail":"customer email
+   * conflicts with customer of id ctm_..."}}`. This makes createCustomer idempotent per email
+   * instead: on that specific conflict, fetch the existing customer's own custom_data and reuse its
+   * id ONLY if it belongs to the same owner — Paddle's own email-uniqueness check is what makes this
+   * safe under concurrency (two racing creates for the same owner/email always resolve to one real
+   * customer, the loser recovering here), but a genuine cross-owner email collision must never be
+   * silently merged, so that case throws instead of reusing.
+   */
   async createCustomer(input: CreateBillingCustomerInput): Promise<ProviderBillingCustomer> {
-    const response = await this.request<{ data?: { id?: string; email?: string; name?: string } }>("POST", "/customers", {
-      email: input.email,
-      name: input.name,
-      custom_data: { ownerType: input.ownerType, ownerId: input.ownerId },
-    });
-    const providerCustomerId = response.data?.id;
-    if (!providerCustomerId) throw new Error("Paddle did not return a customer id");
-    return { providerCustomerId, email: response.data?.email, name: response.data?.name };
+    try {
+      const response = await this.request<{ data?: { id?: string; email?: string; name?: string } }>("POST", "/customers", {
+        email: input.email,
+        name: input.name,
+        custom_data: { ownerType: input.ownerType, ownerId: input.ownerId },
+      });
+      const providerCustomerId = response.data?.id;
+      if (!providerCustomerId) throw new Error("Paddle did not return a customer id");
+      return { providerCustomerId, email: response.data?.email, name: response.data?.name };
+    } catch (err) {
+      if (!(err instanceof PaddleApiError) || err.status !== 409 || err.code !== "customer_already_exists") throw err;
+
+      const existingId = err.detail?.match(/customer of id (ctm_[a-zA-Z0-9]+)/)?.[1];
+      if (!existingId) throw err;
+
+      const existing = await this.request<{
+        data?: { id?: string; email?: string; name?: string; custom_data?: Record<string, unknown> };
+      }>("GET", `/customers/${existingId}`);
+      const sameOwner =
+        existing.data?.custom_data?.ownerType === input.ownerType && existing.data?.custom_data?.ownerId === input.ownerId;
+      if (!sameOwner) {
+        throw new Error(
+          `Paddle customer email is already associated with a different owner (existing Paddle customer ${existingId}) — refusing to reuse across owners.`
+        );
+      }
+      return { providerCustomerId: existingId, email: existing.data?.email, name: existing.data?.name };
+    }
   }
 
   async retrieveCustomer(providerCustomerId: string): Promise<ProviderBillingCustomer> {

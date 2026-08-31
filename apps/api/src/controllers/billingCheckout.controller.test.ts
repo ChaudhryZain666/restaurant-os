@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
+import { getMockBillingProvider } from "../billing/index.js";
 import { connectDB } from "../config/db.js";
 import { Agency } from "../models/Agency.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
@@ -232,5 +233,131 @@ describe("Agency checkout — mirrors the business flow, isolated per agency", (
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(ownRes.status).toBe(200);
     expect(ownRes.body.data.items.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * Phase 40.3 — real, live-verified finding: createCheckoutSessionCore called provider.createCustomer
+ * unconditionally on every checkout attempt, which against a real Paddle account hits an actual 409
+ * `customer_already_exists` on any retry (abandoned first attempt, or checkout after a prior
+ * cancellation) — Paddle enforces one customer per email. Fixed by making createCustomer idempotent
+ * per email at the provider level (PaddleBillingProvider.ts / MockBillingProvider.ts, both proven
+ * individually in their own unit tests); these are the integration-level proofs that the real
+ * checkout HTTP path benefits from that fix, exercised through the exact code path a real retry
+ * would take.
+ */
+describe("checkout provider-customer reuse — the real 409 class of bug", () => {
+  it("a second checkout attempt after an abandoned first one reuses the same provider customer, not a new one", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    business.ownerId = owner._id; // resolveOwnerIdentity reads this to find the real owner email
+    await business.save();
+    const plan = await createTestPlan({ pricing: [{ interval: "monthly", amountCents: 7900, currency: "USD", providerPriceId: "mock_price_1" }] });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(plan.id);
+    const authHeader = `Bearer ${tokenFor(owner)}`;
+
+    // Attempt 1 — abandoned: launches checkout (which, under the hood, calls provider.createCustomer)
+    // but is never completed, exactly like a real customer closing the tab.
+    const abandoned = await request(app)
+      .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+      .set("Authorization", authHeader)
+      .send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(abandoned.status).toBe(200);
+
+    // Attempt 2 — the real retry. Before the fix, this call's own provider.createCustomer would have
+    // been a real second create for the same email — the exact shape of the live Paddle 409 this
+    // phase found and reproduced against the real sandbox API.
+    const retry = await request(app)
+      .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+      .set("Authorization", authHeader)
+      .send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(retry.status).toBe(200);
+
+    const token = (retry.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`).expect(200);
+
+    const stored = await Subscription.findOne({ ownerType: "business", ownerId: business._id });
+    expect(stored).not.toBeNull();
+
+    // Proof of reuse: calling createCustomer again for this exact owner/email now returns the SAME
+    // provider customer id createCheckoutSessionCore already resolved to above — if the retry had
+    // instead created a second, orphaned customer, this would come back with a third, different id.
+    const reResolved = await getMockBillingProvider().createCustomer({
+      ownerType: "business",
+      ownerId: business.id as string,
+      email: owner.email!,
+      name: owner.name!,
+    });
+    expect(reResolved.providerCustomerId).toBe(stored!.providerCustomerId);
+  });
+
+  it("cancelling then re-subscribing reuses the same provider customer across the new subscription", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    business.ownerId = owner._id; // resolveOwnerIdentity reads this to find the real owner email
+    await business.save();
+    const plan = await createTestPlan({ pricing: [{ interval: "monthly", amountCents: 7900, currency: "USD", providerPriceId: "mock_price_1" }] });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(plan.id);
+    const authHeader = `Bearer ${tokenFor(owner)}`;
+
+    const firstCheckout = await request(app)
+      .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+      .set("Authorization", authHeader)
+      .send({ planCode: plan.code, billingInterval: "monthly" });
+    const firstToken = (firstCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    await request(app).post(`/api/v1/billing/mock-checkout/${firstToken}/complete`).expect(200);
+    const firstSub = await Subscription.findOne({ ownerType: "business", ownerId: business._id });
+    const firstCustomerId = firstSub!.providerCustomerId;
+    expect(firstCustomerId).toBeDefined();
+
+    // Cancel immediately (not at period end), matching subscription.service.ts's own semantics for
+    // an immediate cancellation, so a second checkout is allowed right away.
+    await Subscription.updateOne({ _id: firstSub!._id }, { $set: { status: "cancelled", cancelledAt: new Date() } });
+
+    const secondCheckout = await request(app)
+      .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+      .set("Authorization", authHeader)
+      .send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(secondCheckout.status).toBe(200);
+    const secondToken = (secondCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    await request(app).post(`/api/v1/billing/mock-checkout/${secondToken}/complete`).expect(200);
+
+    const secondSub = await Subscription.findOne({ ownerType: "business", ownerId: business._id, status: "active" });
+    expect(secondSub!.id).not.toBe(firstSub!.id); // a genuinely new subscription document
+    expect(secondSub!.providerCustomerId).toBe(firstCustomerId); // but the SAME provider customer
+
+    const historyCount = await Subscription.countDocuments({ ownerType: "business", ownerId: business._id });
+    expect(historyCount).toBe(2); // the cancelled row is kept, not deleted
+  });
+
+  it("two different local owners who happen to share an email are never silently merged into one provider customer", async () => {
+    const sharedEmail = `shared-${Date.now()}@test.local`;
+    const business = await createTestBusiness();
+    businessIds.push(business.id);
+    const otherAgency = await createTestAgency({ contactEmail: sharedEmail });
+    agencyIds.push(otherAgency.id);
+
+    const provider = getMockBillingProvider();
+    const businessCustomer = await provider.createCustomer({
+      ownerType: "business",
+      ownerId: business.id as string,
+      email: sharedEmail,
+      name: "Shared Email Business",
+    });
+    expect(businessCustomer.providerCustomerId).toBeDefined();
+
+    // A DIFFERENT owner (an agency) resolving to the exact same email must never receive the
+    // business's customer id back — that would misattribute one owner's billing identity to another.
+    await expect(
+      provider.createCustomer({ ownerType: "agency", ownerId: otherAgency.id as string, email: sharedEmail, name: "Shared Email Agency" })
+    ).rejects.toThrow(/different owner/);
   });
 });

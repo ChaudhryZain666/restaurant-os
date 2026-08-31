@@ -3,6 +3,7 @@ import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restau
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
+import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 
 const STATUS_TONE: Record<Subscription["status"], "success" | "neutral" | "warning" | "danger"> = {
   trialing: "warning",
@@ -143,14 +144,24 @@ export function AgencyBillingPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await apiClient.request<{ checkout: { mode: string; url?: string } }>(
-        `/agencies/${activeAgencyId}/subscription/checkout`,
-        { method: "POST", body: { planCode: selectedPlanCode, billingInterval } }
-      );
+      const res = await apiClient.request<{
+        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string };
+      }>(`/agencies/${activeAgencyId}/subscription/checkout`, { method: "POST", body: { planCode: selectedPlanCode, billingInterval } });
       if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
+      } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
+        if (!isPaddleJsLoaded()) throw new Error("Paddle.js did not load — check your network connection and try again.");
+        openPaddleCheckout(
+          res.checkout.clientToken,
+          res.checkout.providerPriceId,
+          res.checkout.providerCustomerId,
+          { ownerType: "agency", ownerId: activeAgencyId!, planCode: selectedPlanCode, billingInterval },
+          () => {
+            void reload();
+          }
+        );
       } else {
-        setError("This provider's checkout widget isn't wired into the admin app yet.");
+        setError("This provider's checkout could not be started — missing checkout details in the server's response.");
       }
     } catch (err) {
       setError((err as Error).message);
@@ -208,8 +219,9 @@ export function AgencyBillingPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Agency billing</h1>
         <p className="text-sm text-muted">
-          Your agency's subscription status. No real payment provider is connected yet — this runs against a mock
-          billing system for now.
+          {subscription && subscription.provider !== "mock"
+            ? "Your agency's subscription status."
+            : "Your agency's subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."}
         </p>
       </div>
 

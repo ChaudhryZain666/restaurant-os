@@ -83,6 +83,75 @@ describe("PaddleBillingProvider.createCustomer", () => {
       /HTTP 402/
     );
   });
+
+  /**
+   * Phase 40.3 — live-verified against the real Paddle sandbox: a second createCustomer call with
+   * an email already in use returns exactly
+   * `{"error":{"code":"customer_already_exists","detail":"customer email conflicts with customer of
+   * id ctm_..."}}` (HTTP 409). This is the real class of failure a checkout retry/abandoned-checkout
+   * hits. createCustomer must recover by reusing that existing customer — but only for the same
+   * owner.
+   */
+  it("recovers from a same-owner Paddle 409 by reusing the existing customer", async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        status: 409,
+        ok: false,
+        json: async () => ({
+          error: { code: "customer_already_exists", detail: "customer email conflicts with customer of id ctm_existing123" },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => ({
+          data: { id: "ctm_existing123", email: "a@b.com", name: "Acme", custom_data: { ownerType: "business", ownerId: "biz-1" } },
+        }),
+      } as unknown as Response);
+
+    const customer = await provider().createCustomer({ ownerType: "business", ownerId: "biz-1", email: "a@b.com", name: "Acme" });
+
+    expect(customer).toEqual({ providerCustomerId: "ctm_existing123", email: "a@b.com", name: "Acme" });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect((fetchSpy.mock.calls[1] as [string])[0]).toBe("https://sandbox-api.paddle.com/customers/ctm_existing123");
+  });
+
+  it("refuses to reuse a Paddle customer that belongs to a different owner, rather than silently merging", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        status: 409,
+        ok: false,
+        json: async () => ({
+          error: { code: "customer_already_exists", detail: "customer email conflicts with customer of id ctm_existing123" },
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => ({
+          data: {
+            id: "ctm_existing123",
+            email: "a@b.com",
+            name: "Someone Else",
+            custom_data: { ownerType: "business", ownerId: "biz-DIFFERENT" },
+          },
+        }),
+      } as unknown as Response);
+
+    await expect(
+      provider().createCustomer({ ownerType: "business", ownerId: "biz-1", email: "a@b.com", name: "Acme" })
+    ).rejects.toThrow(/different owner/);
+  });
+
+  it("does not attempt recovery for a 409 that isn't customer_already_exists", async () => {
+    const fetchSpy = mockFetchOnce(409, { error: { code: "some_other_conflict", detail: "unrelated conflict" } }, false);
+    await expect(provider().createCustomer({ ownerType: "business", ownerId: "biz-1", email: "a@b.com", name: "Acme" })).rejects.toThrow(
+      /HTTP 409/
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("PaddleBillingProvider.createSubscription / retrieveSubscription / cancelSubscription", () => {
