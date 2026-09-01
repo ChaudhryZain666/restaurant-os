@@ -8,10 +8,13 @@ import type { ThemeColorTokens, ThemeKey } from "@restaurant/types";
  * the components, never business logic) is what keeps "Theme Definition" a code-only, developer-
  * controlled layer that the admin app can describe without being able to render or mutate it.
  *
- * Phase 33 — rebuilt around the five current directions (Cinematic/Luxury/Contemporary/Urban/
- * Minimal), replacing Classic/Modern/Editorial (still valid, persisted `themeKey` values — see
- * registry.tsx's LEGACY_THEME_KEY_ALIASES — but no longer offered here, since Theme Studio only
- * ever *writes* one of the five current keys going forward). `styleTags` mirror each theme's real
+ * Phase 33 added five new directions (Cinematic/Luxury/Contemporary/Urban/Minimal) alongside the
+ * three from Phase 31 (Classic/Modern/Editorial). Phase 41 — restored the three Phase 31 entries to
+ * this catalog: they had been dropped when Phase 33 shipped, which meant the platform's own
+ * protected default theme (Classic) was fully implemented and selectable via the API, but had no
+ * path to select it from the Theme Studio UI at all — an owner could only reach it via a raw API
+ * call. There is no `LEGACY_THEME_KEY_ALIASES` remapping mechanism; all eight keys are simply real,
+ * independently valid theme selections. `styleTags` mirror each theme's real
  * `ThemeDefinition.styleTags` in apps/web's registry.
  */
 export interface ThemeCatalogEntry {
@@ -57,5 +60,26 @@ export const THEME_CATALOG: ThemeCatalogEntry[] = [
     description: "Calm and precise — enormous whitespace, a text-first dotted-leader menu, near-silent motion, no shadows, no cards. The absence of visual noise is the design.",
     styleTags: ["Calm", "Refined", "Precise"],
     swatch: { primary: "#5b5347", secondary: "#1c1a17", accent: "#8a7a5c", background: "#ffffff" },
+  },
+  {
+    key: "classic",
+    name: "Classic",
+    description: "Warm and familiar — a rounded banner, pill navigation, and a friendly card grid. The traditional restaurant-website register. The platform's protected default theme.",
+    styleTags: ["Traditional", "Friendly", "Familiar"],
+    swatch: { primary: "#c2410c", secondary: "#292524", accent: "#b45309", background: "#fbf9f7" },
+  },
+  {
+    key: "modern",
+    name: "Modern",
+    description: "Bold and high-contrast — an asymmetric split hero, sharp edges, full-bleed photo tiles. A confident, editorial-brand register.",
+    styleTags: ["Bold", "High-contrast", "Confident"],
+    swatch: { primary: "#dc2626", secondary: "#111111", accent: "#f59e0b", background: "#ffffff" },
+  },
+  {
+    key: "editorial",
+    name: "Editorial",
+    description: "Quiet and refined — a full-bleed immersive banner, a magazine-style list menu, generous whitespace. A magazine-front-page register.",
+    styleTags: ["Quiet", "Refined", "Spacious"],
+    swatch: { primary: "#44403c", secondary: "#1c1917", accent: "#92400e", background: "#faf7f2" },
   },
 ];

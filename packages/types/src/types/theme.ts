@@ -11,11 +11,14 @@
  *  3. STOREFRONT RUNTIME (apps/web) — merges 1 + 2 and renders. Never touches ordering logic.
  */
 
-/** Phase 33 — the first three are legacy keys, kept permanently valid (never removed) so a restaurant
- *  that persisted one before this phase never fails validation on an unrelated save; the storefront
- *  registry (apps/web/src/theme/registry.tsx) resolves them to one of the five current themes via
- *  LEGACY_THEME_KEY_ALIASES for rendering. Theme Studio only ever writes one of the five current
- *  keys going forward. */
+/** Phase 33 added the five current keys alongside the first three (from Phase 31). All eight are
+ *  independently real, permanently valid theme selections — there is no alias/remapping mechanism;
+ *  `classic`/`modern`/`editorial` each render as themselves via
+ *  apps/web/src/theme/registry.tsx. `classic` is also this platform's protected default theme (see
+ *  registry.tsx's DEFAULT_THEME_KEY) and, as of Phase 41, a real selectable entry in the admin
+ *  Theme Studio catalog again — an earlier exploratory attempt to alias the three legacy keys onto
+ *  "closest successor" current themes was reverted (see docs/theme-architecture.md), and that
+ *  revert is why every one of these eight keys still needs to stay independently real. */
 export const THEME_KEYS = [
   "classic",
   "modern",

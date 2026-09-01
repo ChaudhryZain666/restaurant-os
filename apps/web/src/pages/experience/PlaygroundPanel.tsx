@@ -48,7 +48,7 @@ function isValidHex(value: string): boolean {
  */
 export function PlaygroundPanel() {
   const { restaurant } = useRestaurant();
-  const { override, setOverride, updateOverride, clearOverride } = useThemeOverride();
+  const { override, setOverride, updateOverride } = useThemeOverride();
   const [device, setDevice] = useState<(typeof DEVICES)[number]["key"]>("desktop");
 
   const activeConfig: RestaurantThemeConfig = normalizeThemeConfig(
@@ -84,6 +84,16 @@ export function PlaygroundPanel() {
   function selectTheme(key: string) {
     if (!restaurant) return;
     updateOverride(restaurant.slug, { themeKey: key as RestaurantThemeConfig["themeKey"] });
+  }
+  // Phase 41 — real fix for "Reset to original" being immediately clobbered back to Cinematic.
+  // The old implementation called clearOverride(), which sets override to null; the seeding effect
+  // above then re-fires on the very next render (its guard is `override?.slug === restaurant.slug`,
+  // which null fails) and re-seeds Cinematic again — so the button visually did nothing. Setting the
+  // override EXPLICITLY to the restaurant's real persisted theme, instead of clearing it, satisfies
+  // that same guard and genuinely shows the restaurant's actual theme (Classic, for demo-restaurant).
+  function resetToOriginal() {
+    if (!restaurant) return;
+    setOverride(restaurant.slug, restaurant.settings.theme);
   }
 
   const activeDevice = DEVICES.find((d) => d.key === device)!;
@@ -192,7 +202,7 @@ export function PlaygroundPanel() {
           </div>
         </fieldset>
 
-        <Button type="button" variant="ghost" size="sm" onClick={clearOverride}>
+        <Button type="button" variant="ghost" size="sm" onClick={resetToOriginal}>
           Reset to original
         </Button>
       </div>

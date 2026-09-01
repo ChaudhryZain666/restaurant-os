@@ -18,7 +18,7 @@ import {
   unpublishRestaurant,
   updateRestaurant,
 } from "../controllers/restaurant.controller.js";
-import { discardThemeDraft, getThemeConfig, publishTheme, updateThemeDraft } from "../controllers/theme.controller.js";
+import { discardThemeDraft, getThemeConfig, publishTheme, rollbackTheme, updateThemeDraft } from "../controllers/theme.controller.js";
 
 export const restaurantRouter = Router();
 
@@ -113,4 +113,13 @@ restaurantRouter.post(
   requireTenantMatch(),
   requireTenantPermission("restaurant.settings.manage"),
   asyncHandler(discardThemeDraft)
+);
+// Phase 41 — one-click "publish is reversible" (Theme B -> Theme A), same tenant/permission gate
+// as every other theme route above.
+restaurantRouter.post(
+  "/:restaurantId/theme/rollback",
+  requireAuth,
+  requireTenantMatch(),
+  requireTenantPermission("restaurant.settings.manage"),
+  asyncHandler(rollbackTheme)
 );

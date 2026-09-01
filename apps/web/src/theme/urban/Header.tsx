@@ -134,8 +134,14 @@ export function UrbanHeader({ restaurant, restaurantLoading, menuHref, cartHref,
       {/* Reserves clearance under the fixed bar below for every screen under Tailwind's `md`
           breakpoint (768px) — injected here (not in Layout.tsx) since Header is this theme's only
           mount point, the same "inject a scoped tag from a component" pattern MenuPage already uses
-          for its SEO <meta>/<script> tags. */}
-      <style>{"@media (max-width: 767.98px) { body { padding-bottom: 4.75rem; } }"}</style>
+          for its SEO <meta>/<script> tags.
+          Phase 41 — scoped to `#main-content` (Layout.tsx's own `<main>`, present on every themed
+          page) instead of the real `body` element. Targeting `body` directly was a genuine
+          isolation gap: while Urban was active, this rule applied globally to the whole app (every
+          route, not just the storefront), and — inside the demo playground's constrained
+          device-frame preview specifically — it padded the wrong document body entirely, since the
+          fixed bar itself is positioned against the true browser viewport, not the preview frame. */}
+      <style>{"@media (max-width: 767.98px) { #main-content { padding-bottom: 4.75rem; } }"}</style>
 
       {!mobileOpen && !onCartPage && (
         <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t-4 border-secondary bg-primary px-4 py-3 text-primary-foreground md:hidden">

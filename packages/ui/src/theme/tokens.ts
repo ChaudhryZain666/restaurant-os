@@ -118,7 +118,7 @@ const DENSITY_SPACING_VALUES: Record<ThemeDensity, string> = {
  *  `rgb(var(--color-x-rgb) / <alpha-value>)` pattern requires so opacity modifiers
  *  (bg-primary/10, text-foreground/70, ...) work on a runtime-overridden color. See this file's
  *  own note on index.css's matching static `-rgb` variables. */
-function hexToRgbTriplet(hex: string): string {
+export function hexToRgbTriplet(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);

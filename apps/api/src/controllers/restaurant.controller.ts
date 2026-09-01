@@ -292,7 +292,12 @@ export async function unpublishRestaurant(req: Request, res: Response) {
 /** True public/anonymous responses (getRestaurantBySlug, getRestaurantByDomain) — never exposes
  *  unpublished theme edits, only the published `settings.theme`. */
 function toPublicRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
-  const { ownerId: _ownerId, themeDraft: _themeDraft, ...publicFields } = restaurant.toJSON() as Record<string, unknown> & {
+  const {
+    ownerId: _ownerId,
+    themeDraft: _themeDraft,
+    themePreviousPublished: _themePreviousPublished,
+    ...publicFields
+  } = restaurant.toJSON() as Record<string, unknown> & {
     settings: Record<string, unknown>;
   };
   return { ...publicFields, settings: { ...publicFields.settings, theme: normalizeThemeConfig(publicFields.settings.theme as Partial<RestaurantThemeConfig>) } };
@@ -306,7 +311,7 @@ function toPublicRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
  *  alongside. */
 function toPreviewRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
   const json = restaurant.toJSON() as Record<string, unknown> & { settings: Record<string, unknown> };
-  const { ownerId: _ownerId, themeDraft, ...publicFields } = json;
+  const { ownerId: _ownerId, themeDraft, themePreviousPublished: _themePreviousPublished, ...publicFields } = json;
   const theme = normalizeThemeConfig((themeDraft ?? publicFields.settings.theme) as Partial<RestaurantThemeConfig>);
   return { ...publicFields, settings: { ...publicFields.settings, theme } };
 }

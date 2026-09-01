@@ -220,6 +220,59 @@ describe("POST /restaurants/:restaurantId/theme/publish", () => {
   });
 });
 
+describe("POST /restaurants/:restaurantId/theme/rollback", () => {
+  it("rejects rolling back when there is no previous published theme", async () => {
+    // restaurantB has never had a real publish in this file up to this point.
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantB.id}/theme/rollback`)
+      .set("Authorization", `Bearer ${ownerBToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("swaps the published theme back to what it was before the most recent publish, clears the rollback target, and audit-logs it", async () => {
+    // restaurantA was just published to "modern" above, from the original default "classic" — so
+    // themePreviousPublished should now hold classic.
+    const before = await request(app)
+      .get(`/api/v1/restaurants/${restaurantA.id}/theme`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(before.body.data.canRollback).toBe(true);
+
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/theme/rollback`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.theme.themeKey).toBe("classic");
+
+    const stored = await Restaurant.findById(restaurantA._id).select("settings.theme themePreviousPublished themeDraft");
+    expect(stored!.settings.theme.themeKey).toBe("classic");
+    expect(stored!.themePreviousPublished).toBeUndefined();
+
+    const auditEntry = await AuditLog.findOne({ restaurantId: restaurantA._id, action: "restaurant.theme_rolled_back" });
+    expect(auditEntry).not.toBeNull();
+    expect(auditEntry!.metadata).toMatchObject({ themeKey: "classic" });
+
+    // Rolling back a second time in a row has nothing left to roll back to.
+    const again = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/theme/rollback`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(again.status).toBe(400);
+
+    // The public storefront reflects the rollback immediately, same as a real publish does.
+    const publicRes = await request(app).get(`/api/v1/restaurants/by-slug/${restaurantA.slug}`);
+    expect(publicRes.body.data.restaurant.settings.theme.themeKey).toBe("classic");
+  });
+
+  it("never exposes themePreviousPublished on the public or preview storefront response", async () => {
+    const publicRes = await request(app).get(`/api/v1/restaurants/by-slug/${restaurantA.slug}`);
+    expect(publicRes.body.data.restaurant.themePreviousPublished).toBeUndefined();
+
+    const previewRes = await request(app)
+      .get(`/api/v1/restaurants/by-slug/${restaurantA.slug}/preview`)
+      .set("Authorization", `Bearer ${ownerAToken}`);
+    expect(previewRes.body.data.restaurant.themePreviousPublished).toBeUndefined();
+  });
+});
+
 describe("POST /restaurants/:restaurantId/theme/discard-draft", () => {
   it("discards the draft without touching the published theme", async () => {
     await request(app)

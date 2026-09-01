@@ -12,6 +12,7 @@ interface ThemeResponse {
   published: RestaurantThemeConfig;
   draft: RestaurantThemeConfig | null;
   hasUnpublishedChanges: boolean;
+  canRollback: boolean;
 }
 
 const COLOR_FIELDS = [
@@ -55,6 +56,7 @@ export function ThemeStudioPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
 
   useEffect(() => {
     if (!restaurant) return;
@@ -139,6 +141,26 @@ export function ThemeStudioPage() {
       setError((err as Error).message);
     } finally {
       setDiscarding(false);
+    }
+  }
+
+  /** Phase 41 — undoes the most recent publish (Theme B -> Theme A), one level deep. Only ever
+   *  touches the published theme, exactly like publish itself — any in-progress draft is untouched,
+   *  so it's re-fetched here purely to refresh `canRollback`, not because rollback could affect it. */
+  async function handleRollback() {
+    if (!restaurant) return;
+    setRollingBack(true);
+    try {
+      const res = await apiClient.request<{ theme: RestaurantThemeConfig }>(`/restaurants/${restaurant.id}/theme/rollback`, {
+        method: "POST",
+      });
+      setThemeData((prev) => (prev ? { ...prev, published: res.theme, canRollback: false } : prev));
+      if (!themeData?.hasUnpublishedChanges) setDraft(normalizeThemeConfig(res.theme));
+      showToast({ title: "Theme rolled back", description: "Your storefront now shows the previously published theme." });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRollingBack(false);
     }
   }
 
@@ -313,6 +335,16 @@ export function ThemeStudioPage() {
         {themeData.hasUnpublishedChanges && (
           <Button type="button" variant="ghost" onClick={handleDiscardDraft} disabled={saving || publishing || discarding}>
             {discarding ? "Discarding…" : "Discard draft"}
+          </Button>
+        )}
+        {themeData.canRollback && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleRollback}
+            disabled={saving || publishing || discarding || rollingBack}
+          >
+            {rollingBack ? "Rolling back…" : "Rollback to previous theme"}
           </Button>
         )}
       </div>

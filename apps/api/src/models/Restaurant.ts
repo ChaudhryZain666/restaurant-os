@@ -35,10 +35,13 @@ const businessHoursDaySchema = new Schema(
 // primary gate, but the schema itself stays strict too.
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 // Phase 33 — widened to add the five current theme keys (cinematic/luxury/contemporary/urban/
-// minimal) while keeping the three legacy keys permanently valid: this array is the Mongoose enum
-// gate, so removing a legacy value here would fail ANY save (even an unrelated color-only draft
-// edit) on a restaurant that still has that value persisted — never rewritten, only resolved to a
-// current theme for rendering via apps/web/src/theme/registry.tsx's LEGACY_THEME_KEY_ALIASES.
+// minimal) while keeping the three original keys (classic/modern/editorial) permanently valid: this
+// array is the Mongoose enum gate, so removing one of them here would fail ANY save (even an
+// unrelated color-only draft edit) on a restaurant that still has that value persisted. There is no
+// alias/remapping mechanism — each of the eight keys renders as itself via
+// apps/web/src/theme/registry.tsx. `classic` is also this platform's protected default theme (see
+// registry.tsx's DEFAULT_THEME_KEY) and, as of Phase 41, a real selectable entry in the admin
+// Theme Studio catalog again (apps/admin/src/lib/themeCatalog.ts).
 // Deliberately NOT importing @restaurant/types' THEME_KEYS here — matches this file's pre-existing
 // duplication of that list, kept manually in sync rather than refactored in this phase.
 const THEME_KEYS = ["classic", "modern", "editorial", "cinematic", "luxury", "contemporary", "urban", "minimal"] as const;
@@ -160,6 +163,14 @@ const restaurantSchema = new Schema(
     // Never included on the public (unauthenticated) storefront response — see
     // restaurant.controller.ts's toPublicRestaurant/previewRestaurantBySlug.
     themeDraft: { type: themeConfigSchema },
+    // Phase 41 — a one-deep snapshot of whatever settings.theme held immediately before the most
+    // recent publish, written by publishTheme right before it overwrites settings.theme. This is
+    // what makes "publish is reversible" a real one-click action (POST .../theme/rollback) instead
+    // of "re-select the old theme and publish again" — the mission's own explicit distinction. No
+    // default, same reasoning as themeDraft: undefined means "nothing has ever been published for
+    // this restaurant yet, there is nothing to roll back to." Also never included on the public
+    // storefront response, for the same reason themeDraft isn't.
+    themePreviousPublished: { type: themeConfigSchema },
   },
   { timestamps: true, toJSON: idTransform }
 );

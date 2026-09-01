@@ -34,8 +34,8 @@ export function DemoPage() {
           </span>
           <h3 className="font-heading text-2xl font-semibold text-foreground">Open the interactive playground</h3>
           <p className="max-w-lg text-sm text-muted">
-            Classic, Modern, or Editorial — pick a theme, adjust the brand colors, preview it on desktop and
-            mobile, then order from it yourself.
+            Cinematic, Luxury, Contemporary, Urban, or Minimal — pick a theme, adjust the brand colors, preview
+            it on desktop and mobile, then order from it yourself.
           </p>
           <a
             href={EXPERIENCE_URL}

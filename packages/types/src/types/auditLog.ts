@@ -43,6 +43,9 @@ export const AUDIT_ACTIONS = [
   // Phase 31 — fired only on an actual publish (draft -> live), never on every autosaved draft
   // edit; the audit log stays a record of real, customer-visible changes, not a live edit log.
   "restaurant.theme_published",
+  // Phase 41 — fired on the new one-click rollback action (POST .../theme/rollback), which swaps
+  // the published theme back to whatever it was immediately before the last publish.
+  "restaurant.theme_rolled_back",
   // Restaurant-owned payment accounts (BYOC — see RestaurantPaymentAccount.ts). Metadata carries
   // only {provider, fingerprint}, never anything that could reconstruct the credential — same rule
   // AuditLog.ts already holds every other action to.

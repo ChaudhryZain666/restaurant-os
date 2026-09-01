@@ -15,15 +15,23 @@ import { recordAuditEvent } from "../services/audit.service.js";
  */
 export async function getThemeConfig(req: Request, res: Response) {
   const { restaurantId } = req.params;
-  const restaurant = await Restaurant.findById(restaurantId).select("settings.theme themeDraft");
+  const restaurant = await Restaurant.findById(restaurantId).select("settings.theme themeDraft themePreviousPublished");
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
   const published = normalizeThemeConfig(restaurant.settings.theme as Partial<RestaurantThemeConfig>);
   const draft = restaurant.themeDraft ? normalizeThemeConfig(restaurant.themeDraft as Partial<RestaurantThemeConfig>) : null;
+  const previousPublished = restaurant.themePreviousPublished
+    ? normalizeThemeConfig(restaurant.themePreviousPublished as Partial<RestaurantThemeConfig>)
+    : null;
   sendSuccess(res, {
     published,
     draft,
     hasUnpublishedChanges: draft !== null && JSON.stringify(draft) !== JSON.stringify(published),
+    // Phase 41 — lets the Theme Studio show/hide "Rollback to previous theme" without a second
+    // request. Comparing against `published` (not just checking non-null) so the button correctly
+    // disappears right after a rollback — at that point the two are identical, since rollbackTheme
+    // swaps them.
+    canRollback: previousPublished !== null && JSON.stringify(previousPublished) !== JSON.stringify(published),
   });
 }
 
@@ -84,7 +92,9 @@ export async function publishTheme(req: Request, res: Response) {
     throw ApiError.badRequest("There are no unpublished theme changes to publish.");
   }
 
+  const previouslyPublished = restaurant.settings.theme;
   const published = restaurant.themeDraft;
+  restaurant.themePreviousPublished = previouslyPublished;
   restaurant.settings.theme = published;
   restaurant.themeDraft = undefined;
   await restaurant.save();
@@ -97,6 +107,42 @@ export async function publishTheme(req: Request, res: Response) {
     targetType: "restaurant",
     targetId: restaurant._id,
     metadata: { themeKey: (published as RestaurantThemeConfig).themeKey },
+  });
+
+  sendSuccess(res, { theme: normalizeThemeConfig(restaurant.settings.theme as Partial<RestaurantThemeConfig>) });
+}
+
+/**
+ * POST /restaurants/:restaurantId/theme/rollback — Phase 41. Makes "publishing is reversible" a
+ * real one-click action rather than "re-select the old theme and publish again": swaps
+ * `settings.theme` back to whatever `themePreviousPublished` holds (the snapshot publishTheme took
+ * immediately before its own last overwrite), then clears the snapshot. One level deep only —
+ * rolling back does not itself create a further rollback target, matching "Theme B → Theme A" as a
+ * single, deliberate action rather than open-ended undo/redo. Any in-progress DRAFT is left alone;
+ * rollback only ever touches the published config, exactly like publish only ever touches it.
+ */
+export async function rollbackTheme(req: Request, res: Response) {
+  const { restaurantId } = req.params;
+  const restaurant = await Restaurant.findById(restaurantId).select("settings.theme themePreviousPublished");
+  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+
+  if (!restaurant.themePreviousPublished) {
+    throw ApiError.badRequest("There is no previous published theme to roll back to.");
+  }
+
+  const rolledBackTo = restaurant.themePreviousPublished;
+  restaurant.settings.theme = rolledBackTo;
+  restaurant.themePreviousPublished = undefined;
+  await restaurant.save();
+
+  await recordAuditEvent({
+    restaurantId: restaurant._id,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "restaurant.theme_rolled_back",
+    targetType: "restaurant",
+    targetId: restaurant._id,
+    metadata: { themeKey: (rolledBackTo as RestaurantThemeConfig).themeKey },
   });
 
   sendSuccess(res, { theme: normalizeThemeConfig(restaurant.settings.theme as Partial<RestaurantThemeConfig>) });
