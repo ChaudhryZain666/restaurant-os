@@ -28,9 +28,14 @@ export function CinematicHero({ restaurant, availability, orderingOpen, directio
     // context beats DOM order), giving the "type sits directly on a full-bleed image, nav floats
     // transparently over it" look without requiring Layout.tsx (shared by every theme) to change.
     <section
-      className={`relative -mx-4 -mt-[calc(1.5rem+76px)] flex flex-col justify-end overflow-hidden bg-secondary sm:-mx-6 sm:-mt-[calc(2rem+76px)] ${
-        preview ? "min-h-[70vh]" : "min-h-[88vh] sm:min-h-[92vh]"
-      }`}
+      className={`relative -mt-[calc(1.5rem+76px)] flex flex-col justify-end overflow-hidden bg-secondary sm:-mt-[calc(2rem+76px)] ${
+        // .full-bleed escapes to the real browser viewport via 100vw — correct on the live
+        // storefront, but inside the Theme Studio playground's own bounded device-frame it would
+        // blow straight past the frame into the surrounding page. The playground frame's own width
+        // IS the hero's available width there, so plain edge-to-edge-of-parent margins are what's
+        // actually correct in preview mode.
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      } ${preview ? "min-h-[70vh]" : "min-h-[88vh] sm:min-h-[92vh]"}`}
     >
       {restaurant?.coverImage && (
         <img src={restaurant.coverImage} alt="" className="cinematic-grade absolute inset-0 h-full w-full object-cover" />

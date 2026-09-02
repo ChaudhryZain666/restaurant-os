@@ -104,6 +104,28 @@ body {
   min-height: 100svh;
   display: flex;
   flex-direction: column;
+  /* Pairs with .full-bleed below — 100vw is measured against the viewport including any classic
+     (non-overlay) scrollbar, which can otherwise leave a full-bleed element a few pixels wider
+     than the visible page and introduce a stray horizontal scrollbar. */
+  overflow-x: hidden;
+}
+
+/* Phase 42 — a real fix for "full-bleed" sections (Cinematic's Hero/Gallery/Cta/Footer, and the
+   equivalent in several other themes): `-mx-4 sm:-mx-6` alone only cancels the IMMEDIATE parent's
+   own padding. MenuPage.tsx wraps its whole page in a `max-w-5xl mx-auto` container, so a
+   full-bleed section nested inside that only ever reached the edge of that 1024px column, not the
+   real viewport edge — invisible when every theme was still using flat, low-contrast placeholder
+   SVGs, but glaring the moment real photography made the empty gutters visible. This escapes ALL
+   ancestor constraints (padding, max-width, centering) regardless of nesting depth. */
+.full-bleed {
+  width: 100vw;
+  /* Margin-based, not position+left/right: several full-bleed sections (Cinematic's
+     CategoryNav) are `sticky`, and `position: relative` from the left/right-based version of this
+     trick would silently override `position: sticky` (only one position value can win). Margin
+     doesn't touch `position` at all, so this works identically on static, sticky, and relative
+     elements. */
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
 }
 
 h1,

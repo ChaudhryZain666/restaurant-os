@@ -20,7 +20,10 @@ export function CinematicFooter({ restaurant, hideBranding }: FooterProps) {
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 
   return (
-    <footer className="-mx-4 mt-16 bg-secondary px-6 py-14 text-secondary-foreground sm:-mx-6 sm:px-14">
+    // Unlike Hero/Gallery/Cta, the footer is rendered by Layout.tsx as a sibling of <main>, not
+    // nested inside MenuPage's max-w-5xl wrapper — its parent already has zero horizontal padding,
+    // so it's already full-width with nothing to cancel. No -mx-4/-mx-6 or .full-bleed needed here.
+    <footer className="mt-16 bg-secondary px-6 py-14 text-secondary-foreground sm:px-14">
       <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-10 sm:grid-cols-3">
         <div className="flex flex-col gap-2">
           <span className="font-heading text-lg font-semibold uppercase tracking-[0.14em]">{restaurant?.name ?? "Restaurant"}</span>

@@ -1,7 +1,16 @@
-import { Reveal } from "@restaurant/ui";
+import { Reveal, cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { AboutProps, CtaProps, FeaturedProps, GalleryProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon, PlateIcon } from "../icons";
+
+// See Hero.tsx's identical note — .full-bleed escapes to the real viewport, which is only correct
+// on the live storefront; inside the Theme Studio playground's bounded device-frame, the frame's
+// own width is what "full width" should mean, so these full-bleed sections fall back to the
+// original margin-cancel-only behavior there.
+function fullBleedClass(preview: boolean) {
+  return preview ? "-mx-4 sm:-mx-6" : "full-bleed";
+}
 
 /** Cinematic — one large hero-scale dish, mask-revealed on scroll, not a strip of three cards. The
  *  dish IS the section; text sits beside/over it, never in a separate card below an image. */
@@ -45,12 +54,13 @@ export function CinematicAbout({ restaurant }: AboutProps) {
 /** Cinematic — an asymmetric two-image composition (cover leading, larger; logo trailing, smaller)
  *  when both exist, a single full-bleed band when only one does. Never a symmetric grid. */
 export function CinematicGallery({ restaurant }: GalleryProps) {
+  const preview = usePreviewMode();
   const primary = restaurant?.coverImage;
   const secondary = restaurant?.logo;
   if (!primary && !secondary) return null;
   if (primary && secondary) {
     return (
-      <section aria-label="Gallery" className="-mx-4 grid grid-cols-1 gap-1 sm:-mx-6 sm:grid-cols-[2fr_1fr]">
+      <section aria-label="Gallery" className={cn(fullBleedClass(preview), "grid grid-cols-1 gap-1 sm:grid-cols-[2fr_1fr]")}>
         <Reveal variant="mask" className="aspect-[16/10] overflow-hidden bg-secondary">
           <img src={primary} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
         </Reveal>
@@ -61,7 +71,7 @@ export function CinematicGallery({ restaurant }: GalleryProps) {
     );
   }
   return (
-    <Reveal variant="mask" as="section" aria-label="Gallery" className="-mx-4 aspect-[21/9] overflow-hidden bg-secondary sm:-mx-6">
+    <Reveal variant="mask" as="section" aria-label="Gallery" className={cn(fullBleedClass(preview), "aspect-[21/9] overflow-hidden bg-secondary")}>
       <img src={primary ?? secondary} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
     </Reveal>
   );
@@ -70,9 +80,10 @@ export function CinematicGallery({ restaurant }: GalleryProps) {
 /** Cinematic — the closing statement is its own full-bleed dark section, not a card, matching the
  *  hero's visual register so the page feels bookended. */
 export function CinematicCta({ restaurant, hasCategories, orderingOpen, onStartOrder }: CtaProps) {
+  const preview = usePreviewMode();
   if (!hasCategories || !orderingOpen) return null;
   return (
-    <section className="-mx-4 flex flex-col items-center gap-5 bg-secondary px-6 py-24 text-center sm:-mx-6 sm:py-32">
+    <section className={cn(fullBleedClass(preview), "flex flex-col items-center gap-5 bg-secondary px-6 py-24 text-center sm:py-32")}>
       <span className="h-px w-14 bg-accent/70" aria-hidden />
       <h2 className="max-w-lg font-heading text-3xl font-semibold leading-tight tracking-tight text-secondary-foreground sm:text-5xl">
         {restaurant?.name ? `${restaurant.name} is ready when you are.` : "Ready when you are."}

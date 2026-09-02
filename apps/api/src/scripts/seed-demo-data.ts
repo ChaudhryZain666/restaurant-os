@@ -153,6 +153,19 @@ async function main() {
   restaurant.logo = "/restaurant-images/demo-restaurant-logo.svg";
   restaurant.coverImage = "/restaurant-images/demo-restaurant-cover.jpg";
   if (!restaurant.settings.brandColor) restaurant.settings.brandColor = "#c2410c";
+
+  // --- 1a-i. Backfill street address/state/postalCode (Phase 42) — seed.ts's original restaurant
+  // creation only ever set city/country/lat-lng, never a real street address. That's not just an
+  // empty-looking field: it silently degrades every theme's footer (all 8 build their address line
+  // from `[address, city, state].filter(Boolean)`, so it was rendering as a bare "Springfield") and
+  // the storefront's real schema.org/Restaurant SEO structured data (PostalAddress.streetAddress/
+  // addressRegion/postalCode all came through undefined). Same Springfield, IL address already used
+  // as DEMO_DELIVERY_ADDRESS below for order-seeding, for internal consistency. Preserve-if-set, same
+  // as brandColor — an owner could plausibly have entered their own address in Settings. ---
+  if (!restaurant.address) restaurant.address = DEMO_DELIVERY_ADDRESS.line1;
+  if (!restaurant.state) restaurant.state = DEMO_DELIVERY_ADDRESS.state;
+  if (!restaurant.postalCode) restaurant.postalCode = DEMO_DELIVERY_ADDRESS.postalCode;
+
   await restaurant.save();
   console.log("[backfill] set demo-restaurant's logo/coverImage, and brandColor if unset");
 
@@ -698,8 +711,10 @@ async function main() {
     slug: "spice-route",
     name: "Spice Route",
     description: "Modern Indian small plates and curries, made to order.",
+    address: "410 E 6th St",
     city: "Austin",
     state: "TX",
+    postalCode: "78701",
     country: "USA",
     ownerName: "Amara Osei",
     ownerEmail: "amara@spice-route.local",
@@ -719,8 +734,10 @@ async function main() {
     slug: "bella-vista",
     name: "Bella Vista Trattoria",
     description: "Family-run Italian trattoria — handmade pasta, wood-fired mains.",
+    address: "88 Salem St",
     city: "Boston",
     state: "MA",
+    postalCode: "02113",
     country: "USA",
     ownerName: "Marco Rossi",
     ownerEmail: "marco@bella-vista.local",
@@ -744,8 +761,10 @@ interface SecondaryRestaurantSpec {
   slug: string;
   name: string;
   description: string;
+  address: string;
   city: string;
   state: string;
+  postalCode: string;
   country: string;
   ownerName: string;
   ownerEmail: string;
@@ -771,6 +790,20 @@ async function ensureSecondaryRestaurant(spec: SecondaryRestaurantSpec) {
 
   if (restaurant) {
     menuItems = await MenuItem.find({ restaurantId: restaurant._id }).sort({ sortOrder: 1 });
+    // Phase 42 — backfill for restaurants created before `address`/`postalCode` were part of this
+    // spec (same gap as the primary demo-restaurant: seed data had city/state but no real street
+    // address, which every theme's footer and the SEO structured data both render as visibly
+    // incomplete). Preserve-if-set, same reasoning as demo-restaurant's own backfill above.
+    let addressChanged = false;
+    if (!restaurant.address) {
+      restaurant.address = spec.address;
+      addressChanged = true;
+    }
+    if (!restaurant.postalCode) {
+      restaurant.postalCode = spec.postalCode;
+      addressChanged = true;
+    }
+    if (addressChanged) await restaurant.save();
   } else {
     let owner = await User.findOne({ email: spec.ownerEmail });
     if (!owner) {
@@ -791,8 +824,10 @@ async function ensureSecondaryRestaurant(spec: SecondaryRestaurantSpec) {
       name: spec.name,
       slug: spec.slug,
       description: spec.description,
+      address: spec.address,
       city: spec.city,
       state: spec.state,
+      postalCode: spec.postalCode,
       country: spec.country,
       ownerId: owner._id,
       businessId: business._id,
