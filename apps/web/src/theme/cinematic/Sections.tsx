@@ -12,7 +12,7 @@ export function CinematicFeatured({ restaurant, items, currency }: FeaturedProps
     <section aria-label="Featured items" className="grid grid-cols-1 gap-0 sm:grid-cols-2">
       <Reveal variant="mask" className="aspect-[4/3] overflow-hidden bg-secondary sm:aspect-auto sm:min-h-[420px]">
         {pick.imageUrl ? (
-          <img src={pick.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <img src={pick.imageUrl} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-secondary-foreground/20">
             <PlateIcon className="h-16 w-16" />
@@ -51,17 +51,17 @@ export function CinematicGallery({ restaurant }: GalleryProps) {
     return (
       <section aria-label="Gallery" className="-mx-4 grid grid-cols-1 gap-1 sm:-mx-6 sm:grid-cols-[2fr_1fr]">
         <Reveal variant="mask" className="aspect-[16/10] overflow-hidden bg-secondary">
-          <img src={primary} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <img src={primary} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
         </Reveal>
         <Reveal variant="mask" index={1} className="aspect-[16/10] overflow-hidden bg-secondary sm:aspect-auto">
-          <img src={secondary} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <img src={secondary} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
         </Reveal>
       </section>
     );
   }
   return (
     <Reveal variant="mask" as="section" aria-label="Gallery" className="-mx-4 aspect-[21/9] overflow-hidden bg-secondary sm:-mx-6">
-      <img src={primary ?? secondary} alt="" loading="lazy" className="h-full w-full object-cover" />
+      <img src={primary ?? secondary} alt="" loading="lazy" className="cinematic-grade h-full w-full object-cover" />
     </Reveal>
   );
 }

@@ -33,12 +33,12 @@ export function CinematicHero({ restaurant, availability, orderingOpen, directio
       }`}
     >
       {restaurant?.coverImage && (
-        <img src={restaurant.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={restaurant.coverImage} alt="" className="cinematic-grade absolute inset-0 h-full w-full object-cover" />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-secondary via-secondary/30 to-secondary/10" style={{ opacity: overlay + 0.15 }} />
       <div className="absolute inset-0 bg-gradient-to-b from-secondary/50 via-transparent to-transparent" style={{ opacity: overlay }} />
 
-      <div className="relative flex flex-col gap-6 px-6 pb-16 pt-40 sm:px-14 sm:pb-24 sm:pt-56">
+      <div className="relative flex flex-col gap-7 px-6 pb-20 pt-40 sm:px-16 sm:pb-32 sm:pt-56">
         <Reveal variant="fade" className="flex items-center gap-3 text-secondary-foreground/70">
           <span className={`h-1.5 w-1.5 rounded-full ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
           <span className="text-xs font-medium uppercase tracking-[0.3em]">
@@ -46,9 +46,16 @@ export function CinematicHero({ restaurant, availability, orderingOpen, directio
           </span>
         </Reveal>
 
-        <Reveal as="h1" className="max-w-4xl font-heading text-5xl font-semibold leading-[0.95] text-secondary-foreground sm:text-7xl lg:text-8xl">
+        <Reveal
+          as="h1"
+          className="max-w-4xl font-heading text-5xl font-semibold leading-[0.9] tracking-tight text-secondary-foreground sm:text-7xl lg:text-8xl"
+        >
           {restaurant?.name}
         </Reveal>
+
+        {/* Stage 2B — a thin editorial rule (the flagship's restrained-typography signature),
+            colored with the theme's own accent token rather than a hardcoded color. */}
+        <span className="h-px w-14 bg-accent/70" aria-hidden />
 
         {restaurant?.description && (
           <Reveal variant="fade" index={1} className="max-w-lg text-sm leading-relaxed text-secondary-foreground/75 sm:text-base">

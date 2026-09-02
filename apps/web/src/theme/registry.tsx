@@ -75,13 +75,16 @@ export const THEME_REGISTRY: Record<string, ThemeDefinition> = {
     description: "Immersive and dramatic — a viewport-height photographic hero, typography sitting directly on the image, a transparent nav that solidifies on scroll. A restaurant-film register, not an app.",
     styleTags: ["Immersive", "Dramatic", "Image-led"],
     motion: { intensity: "expressive" },
+    // Phase 42 Stage 2B — recolored toward the marketing site's own warm ember/amber identity for
+    // brand continuity (primary was already a close amber-gold match; accent moves from a cool
+    // wine-red to a warmer burnt-ember so every accent moment reads as the same brand, not two).
     defaultTokens: {
       colors: {
         primary: "#c8933e",
         primaryForeground: "#1a1614",
         secondary: "#15130f",
         secondaryForeground: "#f7f3ec",
-        accent: "#7a2e2e",
+        accent: "#b8541f",
         accentForeground: "#f7f3ec",
         background: "#faf8f4",
         surface: "#ffffff",

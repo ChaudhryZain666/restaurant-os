@@ -13,7 +13,7 @@ function RowImage({ item }: { item: MenuItem }) {
           alt=""
           loading="lazy"
           decoding="async"
-          className="h-full w-full object-cover transition-transform duration-slow ease-premium group-hover:scale-[1.06]"
+          className="cinematic-grade h-full w-full object-cover transition-transform duration-slow ease-premium group-hover:scale-[1.06]"
         />
       </div>
     );

@@ -187,6 +187,15 @@ h3 {
   transform: scale(1);
 }
 
+/* Phase 42 Stage 2B — Cinematic's consistent photo color grade: a restrained, warm desaturate
+   applied to every photo the theme renders (hero, menu rows, featured, gallery), not just the
+   hero — the point is that every image reads as shot by the same cinematographer, not a mix of
+   whatever was uploaded. Deliberately subtle (this is a warm restaurant register, not a heavy
+   Instagram filter): a touch less saturation, a touch more contrast, a faint warm cast. */
+.cinematic-grade {
+  filter: saturate(0.86) contrast(1.05) sepia(0.06) brightness(0.97);
+}
+
 /* Branded loading shimmer, used by Skeleton in packages/ui — subtler and more "premium" than a
    flat pulse, still just background-position + opacity (cheap to animate). */
 .skeleton-shimmer {
