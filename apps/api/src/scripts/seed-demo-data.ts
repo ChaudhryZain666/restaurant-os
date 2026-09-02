@@ -39,21 +39,28 @@ const DEMO_DELIVERY_ADDRESS = {
 };
 
 // Phase 42 — real photography replacing the original flat SVG placeholders, sourced via web search
-// against Unsplash only (free Unsplash License, not Unsplash+ paid) and confirmed individually
-// before download. Shipped as .jpg rather than .webp: no image-conversion tooling (cwebp/
-// ImageMagick/sharp) was available in the implementation environment to produce webp output, so jpg
-// was used instead — still a reasonable, broadly-supported format at the sizes here. BBQ Chicken
-// Pizza reuses the Margherita photo (no distinct free BBQ-chicken-pizza photo was found in a
-// reasonable search effort) — a known, documented limitation, not an oversight.
-//   Margherita Pizza / BBQ Chicken Pizza — Lottie Griffiths
-//   Pepperoni Pizza — Aldward Castillo
-//   Classic Burger — amirali mirhashemian
-//   Crispy Chicken Burger — Eiliv Aceron
-//   Caesar Salad — Imad 786
-//   Loaded Fries — Jason Leung
-//   Tiramisu — Laura Peruchi
-//   Chocolate Cake — Louis Hansel
-//   Coke — Sidral Mundet
+// against Unsplash/Pexels only (free license tiers — Unsplash License / Pexels License, never a paid
+// Unsplash+ photo) and confirmed individually before download. Shipped as .jpg rather than .webp: no
+// image-conversion tooling (cwebp/ImageMagick/sharp) was available in the implementation environment
+// to produce webp output, so jpg was used instead — still a reasonable, broadly-supported format at
+// the sizes here.
+//
+// Phase 42 follow-up — a direct visual re-audit of every sourced photo (prompted by a user report of
+// "image mistakes") found 5 of the original 10 were mislabeled/mismatched at the sourcing step: the
+// original Margherita Pizza/BBQ Chicken Pizza file was actually a quesadilla, Caesar Salad was a
+// chickpea salad, Crispy Chicken Burger was a beef patty burger, and Coke was a bottle of Sidral
+// Mundet apple soda. All 5 re-sourced and re-verified by direct visual inspection, not just license
+///filename checks. BBQ Chicken Pizza now has its own distinct photo instead of reusing Margherita's.
+//   Margherita Pizza — Marco Breier (Unsplash)
+//   Pepperoni Pizza — Aldward Castillo (Unsplash)
+//   BBQ Chicken Pizza — Snappr (Pexels)
+//   Classic Burger — amirali mirhashemian (Unsplash)
+//   Crispy Chicken Burger — Bilal Rana (Unsplash)
+//   Caesar Salad — Cliffer Rebelo (Unsplash)
+//   Loaded Fries — Jason Leung (Unsplash)
+//   Tiramisu — Laura Peruchi (Unsplash)
+//   Chocolate Cake — Louis Hansel (Unsplash)
+//   Coke — Taras Chernus (Unsplash)
 // The original .svg files are left in place (unreferenced, not deleted) so nothing 404s mid-rollout.
 const IMAGE_BY_NAME: Record<string, string> = {
   "Margherita Pizza": "/menu-images/margherita-pizza.jpg",

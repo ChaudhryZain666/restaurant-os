@@ -14,7 +14,7 @@ function fullBleedClass(preview: boolean) {
 /** Urban — a tight grid strip (not Modern's horizontal scroll, not Cinematic's single oversized
  *  mask-reveal dish): up to three items on a full-bleed near-black band, each with a huge faint
  *  index number behind the image and a solid color chip (never a gradient scrim) carrying
- *  name+price flush to the bottom edge. */
+ *  name+price directly below the photo, never printed over it. */
 export function UrbanFeatured({ restaurant, items, currency }: FeaturedProps) {
   const preview = usePreviewMode();
   const picks = items.slice(0, 3);
@@ -30,26 +30,28 @@ export function UrbanFeatured({ restaurant, items, currency }: FeaturedProps) {
       </div>
       <ul className="grid grid-cols-1 gap-0.5 sm:grid-cols-3">
         {picks.map((item, i) => (
-          <Reveal as="li" index={i} key={item.id} className="group relative aspect-square overflow-hidden bg-secondary">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute left-2 top-1 select-none font-heading text-7xl font-black leading-none text-background/10"
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            {item.imageUrl ? (
-              <img
-                src={item.imageUrl}
-                alt=""
-                loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-slow ease-premium group-hover:scale-[1.06]"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-background/20">
-                <PlateIcon className="h-12 w-12" />
-              </div>
-            )}
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-primary px-3 py-2.5">
+          <Reveal as="li" index={i} key={item.id} className="group flex flex-col bg-secondary">
+            <div className="relative aspect-square overflow-hidden">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-2 top-1 select-none font-heading text-7xl font-black leading-none text-background/10"
+              >
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              {item.imageUrl ? (
+                <img
+                  src={item.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-slow ease-premium group-hover:scale-[1.06]"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-background/20">
+                  <PlateIcon className="h-12 w-12" />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2 bg-primary px-3 py-2.5">
               <span className="truncate text-sm font-black uppercase tracking-tight text-primary-foreground">{item.name}</span>
               <span className="shrink-0 text-sm font-black text-primary-foreground">{formatCurrency(item.price, currency ?? restaurant?.settings.currency)}</span>
             </div>
