@@ -1,17 +1,29 @@
-import { Reveal } from "@restaurant/ui";
+import { Reveal, cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { AboutProps, CtaProps, FeaturedProps, GalleryProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon, PlateIcon } from "../icons";
+
+// See index.css's .full-bleed doc comment — escapes MenuPage's max-w-5xl wrapper to the real
+// viewport, but must fall back to a plain margin-cancel inside the Theme Studio playground's own
+// bounded device-frame, or it would blow straight past the frame into the surrounding page.
+function fullBleedClass(preview: boolean) {
+  return preview ? "-mx-4 sm:-mx-6" : "full-bleed";
+}
 
 /** Urban — a tight grid strip (not Modern's horizontal scroll, not Cinematic's single oversized
  *  mask-reveal dish): up to three items on a full-bleed near-black band, each with a huge faint
  *  index number behind the image and a solid color chip (never a gradient scrim) carrying
  *  name+price flush to the bottom edge. */
 export function UrbanFeatured({ restaurant, items, currency }: FeaturedProps) {
+  const preview = usePreviewMode();
   const picks = items.slice(0, 3);
   if (picks.length === 0) return null;
   return (
-    <section aria-label="Featured items" className="-mx-4 flex flex-col gap-6 bg-foreground px-6 py-14 sm:-mx-6 sm:px-14 sm:py-20">
+    <section
+      aria-label="Featured items"
+      className={cn(fullBleedClass(preview), "flex flex-col gap-6 bg-foreground px-6 py-14 sm:px-14 sm:py-20")}
+    >
       <div className="flex items-center gap-3">
         <span className="h-6 w-2.5 shrink-0 bg-primary" aria-hidden />
         <h2 className="font-heading text-2xl font-black uppercase tracking-tight text-background sm:text-3xl">Crowd favorites</h2>
@@ -52,9 +64,10 @@ export function UrbanFeatured({ restaurant, items, currency }: FeaturedProps) {
  *  centered/italicized like a magazine pull-quote): a vertical primary rule anchors a large,
  *  uppercase, high-contrast paragraph on a dark full-bleed band. */
 export function UrbanAbout({ restaurant }: AboutProps) {
+  const preview = usePreviewMode();
   if (!restaurant?.description) return null;
   return (
-    <section className="-mx-4 flex bg-secondary px-6 py-16 sm:-mx-6 sm:px-14 sm:py-24">
+    <section className={cn(fullBleedClass(preview), "flex bg-secondary px-6 py-16 sm:px-14 sm:py-24")}>
       <div className="mx-auto flex max-w-4xl gap-6 sm:gap-10">
         <span className="w-2 shrink-0 bg-primary" aria-hidden />
         <div className="flex flex-col gap-4">
@@ -72,13 +85,17 @@ export function UrbanAbout({ restaurant }: AboutProps) {
  *  its corner, hard-bordered like a cutout pinned on top rather than tiled beside it. Falls back to
  *  a single sharp-cropped band (angled corner cut) when only one image exists. */
 export function UrbanGallery({ restaurant }: GalleryProps) {
+  const preview = usePreviewMode();
   const primary = restaurant?.coverImage;
   const secondary = restaurant?.logo;
   if (!primary && !secondary) return null;
 
   if (primary && secondary) {
     return (
-      <section aria-label="Gallery" className="-mx-4 relative aspect-[16/9] overflow-hidden bg-secondary sm:-mx-6 sm:aspect-[21/9]">
+      <section
+        aria-label="Gallery"
+        className={cn(fullBleedClass(preview), "relative aspect-[16/9] overflow-hidden bg-secondary sm:aspect-[21/9]")}
+      >
         <Reveal variant="scale" className="h-full w-full">
           <img src={primary} alt="" loading="lazy" className="h-full w-full object-cover" />
         </Reveal>
@@ -101,7 +118,7 @@ export function UrbanGallery({ restaurant }: GalleryProps) {
       variant="scale"
       as="section"
       aria-label="Gallery"
-      className="-mx-4 aspect-[21/9] overflow-hidden bg-secondary sm:-mx-6"
+      className={cn(fullBleedClass(preview), "aspect-[21/9] overflow-hidden bg-secondary")}
       style={{ clipPath: "polygon(0 0, 100% 0, 100% 88%, 88% 100%, 0 100%)" }}
     >
       <img src={primary ?? secondary} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -113,9 +130,10 @@ export function UrbanGallery({ restaurant }: GalleryProps) {
  *  Modern's CTAs), the theme's most energetic single moment: huge dark-on-bright type and a
  *  hand-rolled inverted block button. */
 export function UrbanCta({ restaurant, hasCategories, orderingOpen, onStartOrder }: CtaProps) {
+  const preview = usePreviewMode();
   if (!hasCategories || !orderingOpen) return null;
   return (
-    <section className="-mx-4 flex flex-col items-start gap-6 bg-primary px-6 py-16 sm:-mx-6 sm:px-14 sm:py-24">
+    <section className={cn(fullBleedClass(preview), "flex flex-col items-start gap-6 bg-primary px-6 py-16 sm:px-14 sm:py-24")}>
       <h2 className="max-w-xl font-heading text-3xl font-black uppercase leading-[0.95] tracking-tight text-primary-foreground sm:text-5xl">
         {restaurant?.name ? `${restaurant.name} is firing up your order.` : "Let's get your order going."}
       </h2>

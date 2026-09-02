@@ -1,6 +1,7 @@
-import { Reveal } from "@restaurant/ui";
+import { Reveal, cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon } from "../icons";
 
 /** Urban — a grounded, asymmetric two-block composition (never centered, never a viewport-height
@@ -10,6 +11,7 @@ import { ArrowRightIcon } from "../icons";
  *  in front of it, with real-data corner tags (pickup/delivery/min-order) floating over the seam
  *  between photo and color block. Nothing centered, nothing rounded, nothing soft. */
 export function UrbanHero({ restaurant, availability, orderingOpen, directionsQuery, hasCategories, onStartOrder }: HeroProps) {
+  const preview = usePreviewMode();
   const statusLabel = orderingOpen
     ? "Open now"
     : availability?.status === "paused"
@@ -17,7 +19,12 @@ export function UrbanHero({ restaurant, availability, orderingOpen, directionsQu
       : "Closed";
 
   return (
-    <section className="-mx-4 -mt-6 grid grid-cols-1 bg-secondary sm:-mx-6 sm:-mt-8 lg:grid-cols-[1.15fr_1fr]">
+    <section
+      className={cn(
+        "-mt-6 grid grid-cols-1 bg-secondary sm:-mt-8 lg:grid-cols-[1.15fr_1fr]",
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      )}
+    >
       <div className="flex min-w-0 flex-col justify-end gap-6 px-6 py-12 sm:px-14 sm:py-16 lg:py-20">
         <Reveal variant="fade" className="flex w-fit items-center gap-2 bg-primary px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-primary-foreground">
           <span className={`h-1.5 w-1.5 shrink-0 ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />

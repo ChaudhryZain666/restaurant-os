@@ -19,8 +19,10 @@ const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frid
 export function ContemporaryFooter({ restaurant, hideBranding }: FooterProps) {
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 
+  // Phase 42 — see Cinematic's Footer.tsx: rendered as a sibling of <main>, already full-width,
+  // -mx-4/-mx-6 had nothing to cancel and was pure overshoot.
   return (
-    <footer className="-mx-4 mt-20 border-t-2 border-foreground bg-background px-6 py-14 sm:-mx-6 sm:px-14">
+    <footer className="mt-20 border-t-2 border-foreground bg-background px-6 py-14 sm:px-14">
       <div className="grid grid-cols-1 gap-10 sm:grid-cols-12">
         <div className="flex flex-col gap-3 sm:col-span-5">
           <span className="font-heading text-2xl font-black uppercase leading-none text-foreground">{restaurant?.name ?? "Restaurant"}</span>

@@ -1,13 +1,20 @@
-import { Button } from "@restaurant/ui";
+import { Button, cn } from "@restaurant/ui";
 import type { HeroProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 
 /** Editorial — a full-bleed, viewport-edge-to-edge immersive banner (breaks out of the shared page
- *  container via negative margins) with large centered serif display type over the image, unlike
- *  Classic's bordered/rounded card or Modern's split composition. */
+ *  container via `.full-bleed`, not a plain negative margin — see index.css's doc comment: MenuPage's
+ *  `max-w-5xl mx-auto` wrapper means canceling only <main>'s own padding stops short of the real
+ *  viewport at wider widths) with large centered serif display type over the image, unlike Classic's
+ *  bordered/rounded card or Modern's split composition. */
 export function EditorialHero({ restaurant, availability, orderingOpen, directionsQuery, hasCategories, onStartOrder }: HeroProps) {
+  const preview = usePreviewMode();
   return (
     <section
-      className="relative -mx-4 flex min-h-[52svh] flex-col items-center justify-center overflow-hidden px-6 py-16 text-center sm:-mx-6 sm:min-h-[60svh]"
+      className={cn(
+        "relative flex min-h-[52svh] flex-col items-center justify-center overflow-hidden px-6 py-16 text-center sm:min-h-[60svh]",
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      )}
       style={
         restaurant?.coverImage
           ? {

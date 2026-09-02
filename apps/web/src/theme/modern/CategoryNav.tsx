@@ -1,12 +1,18 @@
+import { cn } from "@restaurant/ui";
 import type { CategoryNavProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 
 /** Modern — underlined text tabs, bold uppercase, no pill backgrounds. */
 export function ModernCategoryNav({ categories, activeCategoryId, onSelect }: CategoryNavProps) {
+  const preview = usePreviewMode();
   if (categories.length <= 1) return null;
   return (
     <nav
       aria-label="Menu categories"
-      className="sticky top-[61px] z-30 -mx-4 flex gap-6 overflow-x-auto border-b-2 border-foreground bg-background px-4 py-3 sm:-mx-6 sm:px-6"
+      className={cn(
+        "sticky top-[61px] z-30 flex gap-6 overflow-x-auto border-b-2 border-foreground bg-background px-4 py-3 sm:px-6",
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      )}
     >
       {categories.map((category) => (
         <button

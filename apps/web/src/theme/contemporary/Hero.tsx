@@ -1,17 +1,22 @@
-import { Reveal } from "@restaurant/ui";
+import { Reveal, cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon } from "../icons";
 
 /** Contemporary — a genuinely split viewport: a 60%-wide text column whose content is deliberately
  *  NOT stacked as one centered block (the eyebrow status sits at the TOP of the column while the
  *  oversized left-aligned headline is pinned to the BOTTOM, an intentional off-grid stagger), beside
  *  a 40%-wide full-bleed photograph. Asymmetric 3:2, not a plain 50/50 split. The header stays solid
- *  (see Header.tsx), so this section only needs to cancel <main>'s own horizontal padding
- *  (`-mx-4 sm:-mx-6`, from Layout.tsx) to reach the viewport edge — no vertical pull-up hack needed. */
+ *  (see Header.tsx), so this section only needs the horizontal full-bleed escape — no vertical
+ *  pull-up hack needed. Uses `.full-bleed` (see index.css) rather than a plain `-mx-4 sm:-mx-6`:
+ *  MenuPage wraps the whole page in a `max-w-5xl mx-auto` column, so canceling only <main>'s own
+ *  padding used to leave real gutters at wider viewports — full-bleed escapes every ancestor
+ *  constraint regardless of nesting depth. */
 export function ContemporaryHero({ restaurant, availability, orderingOpen, directionsQuery, hasCategories, onStartOrder }: HeroProps) {
+  const preview = usePreviewMode();
   return (
-    <section className="-mx-4 grid grid-cols-1 sm:-mx-6 lg:grid-cols-[3fr_2fr]">
+    <section className={cn("grid grid-cols-1 lg:grid-cols-[3fr_2fr]", preview ? "-mx-4 sm:-mx-6" : "full-bleed")}>
       <div className="flex min-h-[56vh] flex-col justify-between gap-10 bg-background px-6 py-10 sm:px-10 sm:py-14 lg:min-h-[82vh] lg:py-16">
         <Reveal variant="fade" className="flex items-center gap-3">
           <span className={`h-2 w-2 shrink-0 ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />

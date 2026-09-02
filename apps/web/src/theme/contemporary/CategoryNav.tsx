@@ -1,14 +1,20 @@
+import { cn } from "@restaurant/ui";
 import type { CategoryNavProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 
 /** Contemporary — a numbered, horizontal-scrolling strip, never a wrapping pill row: each category
  *  carries its own index number stacked above its name, and the active one is set apart with a solid
  *  foreground block rather than a soft pill or a simple underline. */
 export function ContemporaryCategoryNav({ categories, activeCategoryId, onSelect }: CategoryNavProps) {
+  const preview = usePreviewMode();
   if (categories.length <= 1) return null;
   return (
     <nav
       aria-label="Menu categories"
-      className="sticky top-[73px] z-30 -mx-4 flex gap-px overflow-x-auto border-b-2 border-foreground bg-background sm:-mx-6 sm:top-[106px]"
+      className={cn(
+        "sticky top-[73px] z-30 flex gap-px overflow-x-auto border-b-2 border-foreground bg-background sm:top-[106px]",
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      )}
     >
       {categories.map((category, i) => {
         const active = activeCategoryId === category.id;

@@ -1,12 +1,18 @@
+import { cn } from "@restaurant/ui";
 import type { CategoryNavProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 
 /** Classic — a sticky horizontal row of pill buttons, scroll-spy highlighted. */
 export function ClassicCategoryNav({ categories, activeCategoryId, onSelect }: CategoryNavProps) {
+  const preview = usePreviewMode();
   if (categories.length <= 1) return null;
   return (
     <nav
       aria-label="Menu categories"
-      className="sticky top-[65px] z-30 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6"
+      className={cn(
+        "sticky top-[65px] z-30 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:px-6",
+        preview ? "-mx-4 sm:-mx-6" : "full-bleed"
+      )}
     >
       {categories.map((category) => (
         <button

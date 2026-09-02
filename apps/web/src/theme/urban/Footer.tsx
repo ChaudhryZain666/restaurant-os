@@ -20,8 +20,10 @@ export function UrbanFooter({ restaurant, hideBranding }: FooterProps) {
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 
+  // Phase 42 — see Cinematic's Footer.tsx: rendered as a sibling of <main>, already full-width,
+  // -mx-4/-mx-6 had nothing to cancel and was pure overshoot.
   return (
-    <footer className="-mx-4 mt-16 border-t-4 border-primary bg-secondary text-secondary-foreground sm:-mx-6">
+    <footer className="mt-16 border-t-4 border-primary bg-secondary text-secondary-foreground">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 py-14 sm:grid-cols-3 sm:px-14">
         <div className="flex flex-col gap-3">
           <span className="font-heading text-xl font-black uppercase tracking-tight text-secondary-foreground">{restaurant?.name ?? "Restaurant"}</span>

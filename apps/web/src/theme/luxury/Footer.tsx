@@ -21,8 +21,12 @@ export function LuxuryFooter({ restaurant, hideBranding }: FooterProps) {
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 
+  // Phase 42 — footer is rendered by Layout.tsx as a sibling of <main>, not nested inside
+  // MenuPage's max-w-5xl wrapper, so it's already full-width with nothing to cancel; the old
+  // -mx-4/-mx-6 had no matching padding to escape and was pure overshoot. See Cinematic's
+  // Footer.tsx for the identical fix and full reasoning.
   return (
-    <footer className="-mx-4 mt-20 border-t border-border px-5 py-14 sm:-mx-6 sm:px-10 sm:py-18">
+    <footer className="mt-20 border-t border-border px-5 py-14 sm:px-10 sm:py-18">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 sm:grid-cols-[1.3fr_1fr_1.2fr] sm:gap-12">
         <div className="flex flex-col gap-3">
           <span className="font-heading text-xl font-normal text-foreground">{restaurant?.name ?? "Restaurant"}</span>

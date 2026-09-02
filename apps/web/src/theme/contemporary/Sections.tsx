@@ -1,7 +1,15 @@
-import { Reveal } from "@restaurant/ui";
+import { Reveal, cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { AboutProps, CtaProps, FeaturedProps, GalleryProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon, PlateIcon } from "../icons";
+
+// See index.css's .full-bleed doc comment — escapes MenuPage's max-w-5xl wrapper to the real
+// viewport, but must fall back to a plain margin-cancel inside the Theme Studio playground's own
+// bounded device-frame, or it would blow straight past the frame into the surrounding page.
+function fullBleedClass(preview: boolean) {
+  return preview ? "-mx-4 sm:-mx-6" : "full-bleed";
+}
 
 /** Contemporary — the dish photo and its text card intentionally OVERLAP: the card is pulled up over
  *  the image's bottom edge with a negative margin and set off-left (never centered), the theme's
@@ -58,12 +66,13 @@ export function ContemporaryAbout({ restaurant }: AboutProps) {
  *  full height while the smaller one is pushed down with its own top margin, breaking the shared
  *  baseline the way a plain 2fr/1fr split alone wouldn't. */
 export function ContemporaryGallery({ restaurant }: GalleryProps) {
+  const preview = usePreviewMode();
   const primary = restaurant?.coverImage;
   const secondary = restaurant?.logo;
   if (!primary && !secondary) return null;
   if (primary && secondary) {
     return (
-      <section aria-label="Gallery" className="-mx-4 grid grid-cols-1 gap-1 sm:-mx-6 sm:grid-cols-12">
+      <section aria-label="Gallery" className={cn(fullBleedClass(preview), "grid grid-cols-1 gap-1 sm:grid-cols-12")}>
         <Reveal variant="mask" className="aspect-[4/3] overflow-hidden bg-secondary sm:col-span-8 sm:aspect-auto sm:min-h-[26rem]">
           <img src={primary} alt="" loading="lazy" className="h-full w-full object-cover" />
         </Reveal>
@@ -74,7 +83,7 @@ export function ContemporaryGallery({ restaurant }: GalleryProps) {
     );
   }
   return (
-    <Reveal variant="mask" as="section" aria-label="Gallery" className="-mx-4 aspect-[21/9] overflow-hidden bg-secondary sm:-mx-6">
+    <Reveal variant="mask" as="section" aria-label="Gallery" className={cn(fullBleedClass(preview), "aspect-[21/9] overflow-hidden bg-secondary")}>
       <img src={primary ?? secondary} alt="" loading="lazy" className="h-full w-full object-cover" />
     </Reveal>
   );
@@ -84,9 +93,10 @@ export function ContemporaryGallery({ restaurant }: GalleryProps) {
  *  left-aligned headline occupying most of its width and a detached button pinned to the
  *  bottom-right, an eyebrow index tag running the full width above both for visual rhythm. */
 export function ContemporaryCta({ restaurant, hasCategories, orderingOpen, onStartOrder }: CtaProps) {
+  const preview = usePreviewMode();
   if (!hasCategories || !orderingOpen) return null;
   return (
-    <section className="-mx-4 grid grid-cols-1 gap-10 bg-foreground px-6 py-16 sm:-mx-6 sm:grid-cols-12 sm:px-14 sm:py-24">
+    <section className={cn(fullBleedClass(preview), "grid grid-cols-1 gap-10 bg-foreground px-6 py-16 sm:grid-cols-12 sm:px-14 sm:py-24")}>
       <span className="text-xs font-bold uppercase tracking-[0.28em] text-background/50 sm:col-span-12">— Ready to order</span>
       <h2 className="font-heading text-4xl font-black uppercase leading-[0.95] text-background sm:col-span-8 sm:text-6xl">
         {restaurant?.name ? `${restaurant.name} is plating up.` : "The kitchen is ready."}

@@ -1,5 +1,7 @@
+import { cn } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import type { AboutProps, CtaProps, FeaturedProps, GalleryProps } from "../types";
+import { usePreviewMode } from "../PreviewContext";
 
 /** Editorial — a single large "editor's pick" spotlight rather than a grid/strip, a centered
  *  pull-quote for About, one full-width image band for Gallery, and a quiet text-link CTA. */
@@ -37,10 +39,11 @@ export function EditorialAbout({ restaurant }: AboutProps) {
 }
 
 export function EditorialGallery({ restaurant }: GalleryProps) {
+  const preview = usePreviewMode();
   const image = restaurant?.coverImage ?? restaurant?.logo;
   if (!image) return null;
   return (
-    <section aria-label="Gallery" className="-mx-4 sm:-mx-6">
+    <section aria-label="Gallery" className={cn(preview ? "-mx-4 sm:-mx-6" : "full-bleed")}>
       <img src={image} alt="" loading="lazy" className="h-64 w-full object-cover sm:h-80" />
     </section>
   );
