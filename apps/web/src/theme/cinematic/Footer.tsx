@@ -48,7 +48,7 @@ export function CinematicFooter({ restaurant, hideBranding }: FooterProps) {
             const day = restaurant?.settings.businessHours.find((d) => d.day === key);
             if (!day) return null;
             return (
-              <span key={key} className={key === TODAY_KEY ? "text-secondary-foreground" : undefined}>
+              <span key={key} className={key === TODAY_KEY ? "text-accent" : undefined}>
                 {WEEKDAY_LABELS[key]} {day.isClosed ? "closed" : `${day.open}–${day.close}`}
               </span>
             );

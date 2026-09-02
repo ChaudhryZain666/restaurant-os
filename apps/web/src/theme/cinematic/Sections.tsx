@@ -21,7 +21,8 @@ export function CinematicFeatured({ restaurant, items, currency }: FeaturedProps
       </Reveal>
       <div className="flex flex-col justify-center gap-4 bg-secondary px-8 py-14 text-secondary-foreground sm:px-14">
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-secondary-foreground/50">Signature dish</span>
-        <h2 className="font-heading text-4xl font-semibold leading-tight text-secondary-foreground sm:text-5xl">{pick.name}</h2>
+        <span className="h-px w-14 bg-accent/70" aria-hidden />
+        <h2 className="font-heading text-4xl font-semibold leading-tight tracking-tight text-secondary-foreground sm:text-5xl">{pick.name}</h2>
         {pick.description && <p className="max-w-sm text-sm leading-relaxed text-secondary-foreground/70">{pick.description}</p>}
         <span className="font-heading text-2xl">{formatCurrency(pick.price, currency ?? restaurant?.settings.currency)}</span>
       </div>
@@ -71,8 +72,9 @@ export function CinematicGallery({ restaurant }: GalleryProps) {
 export function CinematicCta({ restaurant, hasCategories, orderingOpen, onStartOrder }: CtaProps) {
   if (!hasCategories || !orderingOpen) return null;
   return (
-    <section className="-mx-4 flex flex-col items-center gap-5 bg-secondary px-6 py-20 text-center sm:-mx-6 sm:py-28">
-      <h2 className="max-w-lg font-heading text-3xl font-semibold leading-tight text-secondary-foreground sm:text-5xl">
+    <section className="-mx-4 flex flex-col items-center gap-5 bg-secondary px-6 py-24 text-center sm:-mx-6 sm:py-32">
+      <span className="h-px w-14 bg-accent/70" aria-hidden />
+      <h2 className="max-w-lg font-heading text-3xl font-semibold leading-tight tracking-tight text-secondary-foreground sm:text-5xl">
         {restaurant?.name ? `${restaurant.name} is ready when you are.` : "Ready when you are."}
       </h2>
       <button

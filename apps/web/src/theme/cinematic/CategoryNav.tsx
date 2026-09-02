@@ -15,7 +15,7 @@ export function CinematicCategoryNav({ categories, activeCategoryId, onSelect }:
           onClick={() => onSelect(category.id)}
           className={`shrink-0 whitespace-nowrap border-b-2 pb-1 text-xs font-medium uppercase tracking-[0.2em] transition-colors duration-fast ${
             activeCategoryId === category.id
-              ? "border-secondary-foreground text-secondary-foreground"
+              ? "border-accent text-secondary-foreground"
               : "border-transparent text-secondary-foreground/50 hover:text-secondary-foreground/80"
           }`}
         >
