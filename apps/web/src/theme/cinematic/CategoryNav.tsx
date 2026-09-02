@@ -7,14 +7,16 @@ export function CinematicCategoryNav({ categories, activeCategoryId, onSelect }:
   return (
     <nav
       aria-label="Menu categories"
-      className="sticky top-[76px] z-30 -mx-4 flex gap-7 overflow-x-auto border-b border-white/10 bg-secondary px-6 py-4 sm:-mx-6 sm:px-14"
+      className="sticky top-[76px] z-30 -mx-4 flex gap-7 overflow-x-auto border-b border-secondary-foreground/10 bg-secondary px-6 py-4 sm:-mx-6 sm:px-14"
     >
       {categories.map((category) => (
         <button
           key={category.id}
           onClick={() => onSelect(category.id)}
           className={`shrink-0 whitespace-nowrap border-b-2 pb-1 text-xs font-medium uppercase tracking-[0.2em] transition-colors duration-fast ${
-            activeCategoryId === category.id ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80"
+            activeCategoryId === category.id
+              ? "border-secondary-foreground text-secondary-foreground"
+              : "border-transparent text-secondary-foreground/50 hover:text-secondary-foreground/80"
           }`}
         >
           {category.name}

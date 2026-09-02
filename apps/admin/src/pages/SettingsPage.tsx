@@ -560,8 +560,9 @@ export function SettingsPage() {
             </label>
           </div>
           <ComingSoon>
-            Timezone is stored and shown here, but order timestamps, reports, and availability windows are still
-            computed in UTC — full timezone-aware scheduling is a larger change than this phase covers.
+            Order times and reports already use this timezone. What's still missing: the Business Hours tab is
+            informational only — orders aren't automatically closed outside them, and "closes in 5 minutes"-style
+            scheduling isn't built yet. Use the Ordering tab's manual open/pause toggle until then.
           </ComingSoon>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { Button } from "@restaurant/ui";
+import { Button, Logo } from "@restaurant/ui";
 import { ADMIN_LOGIN_URL } from "../lib/links";
 
 interface DropdownLink {
@@ -138,11 +138,8 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link to="/" className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-            T
-          </span>
-          <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+        <Link to="/">
+          <Logo />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">

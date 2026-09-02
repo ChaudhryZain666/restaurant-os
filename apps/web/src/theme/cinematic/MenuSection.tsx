@@ -19,7 +19,7 @@ function RowImage({ item }: { item: MenuItem }) {
     );
   }
   return (
-    <div className="flex aspect-[16/10] w-full items-center justify-center bg-secondary text-white/20 sm:w-64">
+    <div className="flex aspect-[16/10] w-full items-center justify-center bg-secondary text-secondary-foreground/20 sm:w-64">
       <PlateIcon className="h-10 w-10" />
     </div>
   );

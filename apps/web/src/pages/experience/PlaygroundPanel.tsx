@@ -5,6 +5,7 @@ import { Badge, Button, HEX_COLOR_PATTERN } from "@restaurant/ui";
 import { useRestaurant } from "../../context/RestaurantContext";
 import { useThemeOverride } from "../../theme/ThemeOverrideContext";
 import { THEME_REGISTRY } from "../../theme/registry";
+import { PreviewModeProvider } from "../../theme/PreviewContext";
 import { MenuPage } from "../MenuPage";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -213,7 +214,9 @@ export function PlaygroundPanel() {
           className="max-h-[80vh] w-full overflow-y-auto rounded-xl border border-border bg-background shadow-sm transition-[max-width] duration-300 motion-reduce:transition-none"
           style={{ maxWidth: activeDevice.maxWidth }}
         >
-          <MenuPage />
+          <PreviewModeProvider value={true}>
+            <MenuPage />
+          </PreviewModeProvider>
         </div>
       </div>
     </div>

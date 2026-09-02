@@ -2,6 +2,7 @@ export * from "./cn.js";
 export * from "./Button.js";
 export * from "./Badge.js";
 export * from "./Card.js";
+export * from "./Logo.js";
 export * from "./Skeleton.js";
 export * from "./Alert.js";
 export * from "./EmptyState.js";

@@ -52,4 +52,19 @@ describe("resolveThemeTokens", () => {
     expect(tokens.radius).toBe("rounded");
     expect(tokens.density).toBe("spacious");
   });
+
+  it("passes a theme's overlayOpacity through untouched (cinematic sets it, not restaurant-overridable)", () => {
+    const tokens = resolveThemeTokens(THEME_REGISTRY.cinematic, defaultRestaurantThemeConfig());
+    expect(tokens.overlayOpacity).toBe(THEME_REGISTRY.cinematic.defaultTokens.overlayOpacity);
+    expect(tokens.overlayOpacity).toBe(0.5);
+  });
+
+  it("resolves overlayOpacity to undefined for a theme that doesn't set one", () => {
+    // themeA (luxury) has no overlayOpacity in its defaultTokens — resolveThemeTokens must not
+    // invent one, leaving each theme's own component to apply its own fallback (e.g. Cinematic's
+    // Hero uses `tokens.overlayOpacity ?? 0.55`).
+    expect(themeA.defaultTokens.overlayOpacity).toBeUndefined();
+    const tokens = resolveThemeTokens(themeA, defaultRestaurantThemeConfig());
+    expect(tokens.overlayOpacity).toBeUndefined();
+  });
 });

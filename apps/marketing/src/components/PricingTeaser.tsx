@@ -17,11 +17,14 @@ export function PricingTeaser() {
         .filter((p): p is NonNullable<typeof p> => Boolean(p))
         .map((plan, i) => (
           <Reveal key={plan.code} index={i}>
-            <Card className="flex flex-col gap-2">
-              <p className="font-heading text-sm font-medium text-foreground">{plan.name}</p>
-              <p className="font-heading text-2xl font-semibold text-foreground">
+            {/* Fixed light "paper" tones — see FeatureCard.tsx's identical note: bg-surface itself
+                turns dark under the Home page's .theme-obsidian palette, which would silently lose the
+                "light card on dark canvas" pattern. A no-op on every other (already-light) page. */}
+            <Card className="flex flex-col gap-2 border-[#e7e2dc] bg-[#fdfbf7]">
+              <p className="font-heading text-sm font-medium text-[#1c1917]">{plan.name}</p>
+              <p className="font-heading text-2xl font-semibold text-[#1c1917]">
                 {formatPlanPrice(plan.pricing, "monthly") ?? "Contact us"}
-                {formatPlanPrice(plan.pricing, "monthly") && <span className="text-sm font-normal text-muted">/mo</span>}
+                {formatPlanPrice(plan.pricing, "monthly") && <span className="text-sm font-normal text-[#78716c]">/mo</span>}
               </p>
               {plan.trialDays && <Badge tone="warning">{plan.trialDays}-day free trial</Badge>}
             </Card>

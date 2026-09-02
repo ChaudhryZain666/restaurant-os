@@ -23,7 +23,13 @@ export function FeatureCard({
   return (
     <Reveal as="div" index={index} id={id} className="scroll-mt-24">
       <Link to={to} className="group block h-full focus-visible:outline-none">
-        <Card className="flex h-full flex-col gap-3 transition-all duration-normal group-hover:-translate-y-1 group-hover:shadow-elevated group-focus-visible:-translate-y-1 group-focus-visible:shadow-elevated">
+        {/* Fixed light "paper" tones rather than the token-driven bg-surface/text-foreground: this
+            card is meant to read as a light, physical card in BOTH the normal light pages and the
+            dark .theme-obsidian Home hero — under the dark palette, bg-surface itself turns dark, which
+            would silently lose the "light cards floating on a dark canvas" premium pattern the
+            redesign relies on. On every light page these values already match bg-surface/foreground
+            exactly, so this is a no-op there. */}
+        <Card className="flex h-full flex-col gap-3 border-[#e7e2dc] bg-[#fdfbf7] text-[#1c1917] shadow-sm transition-all duration-normal group-hover:-translate-y-1 group-hover:shadow-elevated group-focus-visible:-translate-y-1 group-focus-visible:shadow-elevated">
           <div className="flex items-start justify-between gap-2">
             <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors duration-normal group-hover:bg-primary group-hover:text-primary-foreground">
               {icon}
@@ -34,8 +40,8 @@ export function FeatureCard({
               </Badge>
             )}
           </div>
-          <h3 className="font-heading text-lg font-semibold text-foreground">{title}</h3>
-          <p className="text-sm text-muted">{description}</p>
+          <h3 className="font-heading text-lg font-semibold text-[#1c1917]">{title}</h3>
+          <p className="text-sm text-[#78716c]">{description}</p>
           <span className="mt-auto flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity duration-normal group-hover:opacity-100 group-focus-visible:opacity-100">
             Learn more <IconArrowRight className="h-3.5 w-3.5" />
           </span>

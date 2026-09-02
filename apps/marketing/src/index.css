@@ -114,6 +114,74 @@ h3 {
   transform: translateY(0);
 }
 
+/* Phase 42 — mirrors apps/web/src/index.css's reveal-fade/mask/scale variant pairs verbatim
+   (packages/ui/src/theme/Reveal.tsx's `variant` prop expects the consuming app to define these; only
+   the default fade-up pair existed here before the Home redesign started using `variant="mask"`/
+   `"scale"`). Same GPU-cheap opacity/transform/clip-path-only discipline, neutralized the same way
+   under reduced motion below. */
+.reveal-fade {
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--motion-easing);
+}
+.reveal-fade-visible {
+  opacity: 1;
+}
+.reveal-mask {
+  opacity: 0;
+  clip-path: inset(0 0 100% 0);
+  transition:
+    opacity var(--motion-slow) var(--motion-easing),
+    clip-path var(--motion-slow) var(--motion-easing);
+}
+.reveal-mask-visible {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+}
+.reveal-scale {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity var(--motion-slow) var(--motion-easing),
+    transform var(--motion-slow) var(--motion-easing);
+}
+.reveal-scale-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Phase 42 — the dark, cinematic treatment for the Home landing page only (see HomePage.tsx's root
+   wrapper). Additive and class-scoped rather than a change to :root: every OTHER marketing route
+   (Pricing/Product/Solutions/...) shares that :root block directly and must stay on the existing
+   light palette untouched. Re-balances the SAME two brand hues (#c2410c/#b45309-family) for a dark
+   canvas rather than introducing a new brand — deliberately not the generic near-black+cyan/purple
+   "AI SaaS" gradient look. */
+.theme-obsidian {
+  --color-primary: #e08a3e;
+  --color-primary-foreground: #1a1310;
+  --color-secondary: #0f0d0c;
+  --color-secondary-foreground: #f5efe6;
+  --color-accent: #c2410c;
+  --color-accent-foreground: #fff7ee;
+  --color-background: #0f0d0c;
+  --color-surface: #171310;
+  --color-surface-elevated: #1e1815;
+  --color-foreground: #f5efe6;
+  --color-muted: #a89a8c;
+  --color-border: #2a231d;
+  --color-success: #4ade80;
+  --color-warning: #e08a3e;
+  --color-danger: #f87171;
+  --font-heading-obsidian: "Instrument Serif", "Didot", Georgia, serif;
+  --font-body-obsidian: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+  font-family: var(--font-body-obsidian);
+}
+.theme-obsidian h1,
+.theme-obsidian h2,
+.theme-obsidian h3 {
+  font-family: var(--font-heading-obsidian);
+}
+
 .skeleton-shimmer {
   background: linear-gradient(
     100deg,
@@ -158,8 +226,12 @@ h3 {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .reveal {
+  .reveal,
+  .reveal-fade,
+  .reveal-mask,
+  .reveal-scale {
     opacity: 1;
     transform: none;
+    clip-path: none;
   }
 }

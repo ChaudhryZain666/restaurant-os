@@ -1,16 +1,18 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Order, Paginated, RestaurantCustomerSummary } from "@restaurant/types";
 import { Alert, Badge, Card, EmptyState, Pagination } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { formatCurrency, formatRestaurantDateTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
+import { useRestaurantTimezone } from "../hooks/useRestaurantTimezone";
 import { STATUS_LABELS, STATUS_TONE } from "../lib/orderStatusFlow";
+import { OrderLineItems } from "../components/OrderLineItems";
 
 const PAGE_SIZE = 20;
 const ORDERS_PAGE_SIZE = 10;
 
-function CustomerOrdersRow({ restaurantId, customerId }: { restaurantId: string; customerId: string }) {
+function CustomerOrdersRow({ restaurantId, customerId, timezone }: { restaurantId: string; customerId: string; timezone: string | undefined }) {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Paginated<Order> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,11 +46,16 @@ function CustomerOrdersRow({ restaurantId, customerId }: { restaurantId: string;
           <div className="flex flex-col gap-2">
             <ul className="flex flex-col divide-y divide-border">
               {orders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                  <span className="font-medium text-foreground">{o.orderNumber}</span>
-                  <span className="text-muted">{new Date(o.createdAt).toLocaleString()}</span>
-                  <Badge tone={STATUS_TONE[o.status]}>{STATUS_LABELS[o.status]}</Badge>
-                  <span className="text-foreground">{formatCurrency(o.total, o.currency)}</span>
+                <li key={o.id} className="flex flex-col gap-1.5 py-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">{o.orderNumber}</span>
+                    <span className="text-muted">{formatRestaurantDateTime(o.createdAt, timezone)}</span>
+                    <Badge tone={STATUS_TONE[o.status]}>{STATUS_LABELS[o.status]}</Badge>
+                    <span className="text-foreground">{formatCurrency(o.total, o.currency)}</span>
+                  </div>
+                  <div className="pl-1 text-xs text-muted">
+                    <OrderLineItems items={o.items} currency={o.currency} />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -72,6 +79,7 @@ function CustomerOrdersRow({ restaurantId, customerId }: { restaurantId: string;
 export function CustomersPage() {
   const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
+  const timezone = useRestaurantTimezone();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -168,10 +176,10 @@ export function CustomersPage() {
                     </td>
                     <td className="px-4 py-2.5 font-medium text-foreground">{formatCurrency(c.totalSpent, currency)}</td>
                     <td className="px-4 py-2.5 text-muted">{formatCurrency(c.avgOrderValue, currency)}</td>
-                    <td className="px-4 py-2.5 text-muted">{new Date(c.lastOrderAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-2.5 text-muted">{formatRestaurantDateTime(c.lastOrderAt, timezone)}</td>
                   </tr>
                   {expandedCustomerId === c.customerId && (
-                    <CustomerOrdersRow restaurantId={restaurantId} customerId={c.customerId} />
+                    <CustomerOrdersRow restaurantId={restaurantId} customerId={c.customerId} timezone={timezone} />
                   )}
                 </Fragment>
               ))}

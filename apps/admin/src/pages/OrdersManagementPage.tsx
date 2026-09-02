@@ -4,6 +4,7 @@ import { Badge, Button, Card } from "@restaurant/ui";
 import { formatCurrency, formatRestaurantDateTime, formatRestaurantTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
+import { OrderLineItems } from "../components/OrderLineItems";
 import { OrderPaymentAdmin } from "../components/OrderPaymentAdmin";
 import { OrderNotesAndActivity } from "../components/OrderNotesAndActivity";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
@@ -73,18 +74,7 @@ function OrderCard({
             {order.orderType === "dine_in" && order.tableName && <span>Table: {order.tableName}</span>}
           </div>
           {order.customerNotes && <span>Notes: {order.customerNotes}</span>}
-          <ul className="flex flex-col gap-1">
-            {order.items.map((item, i) => (
-              <li key={i}>
-                {item.quantity} x {item.name}
-                {item.selectedModifiers.length > 0 && (
-                  <span className="text-muted"> ({item.selectedModifiers.map((m) => m.optionName).join(", ")})</span>
-                )}{" "}
-                — {formatCurrency(item.lineTotal, order.currency)}
-                {item.specialInstructions && <span className="block italic">"{item.specialInstructions}"</span>}
-              </li>
-            ))}
-          </ul>
+          <OrderLineItems items={order.items} currency={order.currency} />
           <div>
             Subtotal {formatCurrency(order.subtotal, order.currency)} · Tax {formatCurrency(order.taxAmount, order.currency)} ·
             Delivery {formatCurrency(order.deliveryFee, order.currency)}

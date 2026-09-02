@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Logo } from "@restaurant/ui";
 import { Container } from "./Container";
 import { ADMIN_LOGIN_URL, STOREFRONT_URL } from "../lib/links";
 
@@ -47,11 +48,8 @@ export function Footer() {
     <footer className="border-t border-border bg-surface">
       <Container className="grid grid-cols-2 gap-8 py-12 sm:grid-cols-3 lg:grid-cols-5">
         <div className="col-span-2 flex flex-col gap-3 sm:col-span-3 lg:col-span-1">
-          <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-sm font-bold text-primary-foreground">
-              T
-            </span>
-            <span className="font-heading text-base font-semibold text-foreground">Tablecloth</span>
+          <Link to="/">
+            <Logo size="sm" />
           </Link>
           <p className="max-w-xs text-sm text-muted">
             Online ordering built for independent restaurants — your menu, your brand, your customer relationship.

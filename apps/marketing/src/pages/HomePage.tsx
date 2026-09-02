@@ -46,10 +46,13 @@ export function HomePage() {
       "Launch your own branded online ordering experience. Menu, orders, delivery, loyalty and analytics — one platform, no commission-hungry marketplace.",
   });
   return (
-    <>
+    <div className="theme-obsidian bg-background">
       {/* Hero */}
       <Section className="relative overflow-hidden pt-14 sm:pt-20">
-        <div className="bg-grid pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black,transparent)]" aria-hidden />
+        <div
+          className="bg-grid pointer-events-none absolute inset-0 origin-center animate-kenburns opacity-40 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black,transparent)]"
+          aria-hidden
+        />
         <div className="relative grid items-center gap-12 lg:grid-cols-2">
           <Reveal className="flex flex-col items-start gap-6">
             <Badge tone="warning" className="animate-fade-up">
@@ -82,7 +85,7 @@ export function HomePage() {
             </div>
           </Reveal>
 
-          <Reveal index={1} className="relative">
+          <Reveal index={1} variant="mask" className="relative">
             <div className="animate-float overflow-hidden rounded-2xl border border-border bg-surface shadow-elevated">
               <div className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-2.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-danger/60" />
@@ -111,7 +114,7 @@ export function HomePage() {
       </Section>
 
       {/* What we offer */}
-      <Section id="offer" tone="surface">
+      <Section id="offer" tone="dark">
         <SectionHeading
           eyebrow="What we offer"
           title="Everything a restaurant needs to sell online"
@@ -149,7 +152,7 @@ export function HomePage() {
       </Section>
 
       {/* How it works teaser */}
-      <Section tone="surface">
+      <Section tone="dark">
         <SectionHeading eyebrow="How it works" title="From signup to your first order" />
         <div className="mt-14">
           <StepList compact />
@@ -164,7 +167,7 @@ export function HomePage() {
       </Section>
 
       {/* Pricing teaser */}
-      <Section tone="surface">
+      <Section tone="dark">
         <SectionHeading eyebrow="Pricing" title="One plan for owners, one for agencies" />
         <div className="mt-10">
           <PricingTeaser />
@@ -189,11 +192,11 @@ export function HomePage() {
       </Section>
 
       {/* Mini FAQ */}
-      <Section tone="surface">
+      <Section>
         <SectionHeading eyebrow="Questions" title="Quick answers" />
         <div className="mx-auto mt-10 grid max-w-3xl gap-3">
           {FAQS.slice(0, 4).map((item, i) => (
-            <Reveal key={item.q} index={i} className="rounded-xl border border-border bg-background p-5">
+            <Reveal key={item.q} index={i} className="rounded-xl border border-border bg-surface-elevated p-5">
               <p className="font-medium text-foreground">{item.q}</p>
               <p className="mt-1 text-sm text-muted">{item.a}</p>
             </Reveal>
@@ -210,7 +213,7 @@ export function HomePage() {
 
       {/* Final CTA */}
       <Section>
-        <Reveal className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-gradient-to-br from-primary to-accent p-10 text-center sm:p-16">
+        <Reveal variant="scale" className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-gradient-to-br from-primary to-accent p-10 text-center sm:p-16">
           <h2 className="font-heading text-3xl font-semibold text-primary-foreground sm:text-4xl">
             Ready to own your ordering experience?
           </h2>
@@ -231,6 +234,6 @@ export function HomePage() {
           </div>
         </Reveal>
       </Section>
-    </>
+    </div>
   );
 }

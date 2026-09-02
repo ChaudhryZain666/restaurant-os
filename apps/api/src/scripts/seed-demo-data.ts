@@ -38,17 +38,34 @@ const DEMO_DELIVERY_ADDRESS = {
   longitude: -89.6501,
 };
 
+// Phase 42 — real photography replacing the original flat SVG placeholders, sourced via web search
+// against Unsplash only (free Unsplash License, not Unsplash+ paid) and confirmed individually
+// before download. Shipped as .jpg rather than .webp: no image-conversion tooling (cwebp/
+// ImageMagick/sharp) was available in the implementation environment to produce webp output, so jpg
+// was used instead — still a reasonable, broadly-supported format at the sizes here. BBQ Chicken
+// Pizza reuses the Margherita photo (no distinct free BBQ-chicken-pizza photo was found in a
+// reasonable search effort) — a known, documented limitation, not an oversight.
+//   Margherita Pizza / BBQ Chicken Pizza — Lottie Griffiths
+//   Pepperoni Pizza — Aldward Castillo
+//   Classic Burger — amirali mirhashemian
+//   Crispy Chicken Burger — Eiliv Aceron
+//   Caesar Salad — Imad 786
+//   Loaded Fries — Jason Leung
+//   Tiramisu — Laura Peruchi
+//   Chocolate Cake — Louis Hansel
+//   Coke — Sidral Mundet
+// The original .svg files are left in place (unreferenced, not deleted) so nothing 404s mid-rollout.
 const IMAGE_BY_NAME: Record<string, string> = {
-  "Margherita Pizza": "/menu-images/margherita-pizza.svg",
-  "Pepperoni Pizza": "/menu-images/pepperoni-pizza.svg",
-  "BBQ Chicken Pizza": "/menu-images/bbq-chicken-pizza.svg",
-  "Classic Burger": "/menu-images/classic-burger.svg",
-  "Crispy Chicken Burger": "/menu-images/crispy-chicken-burger.svg",
-  "Caesar Salad": "/menu-images/caesar-salad.svg",
-  "Loaded Fries": "/menu-images/loaded-fries.svg",
-  Tiramisu: "/menu-images/tiramisu.svg",
-  "Chocolate Cake": "/menu-images/chocolate-cake.svg",
-  Coke: "/menu-images/coke.svg",
+  "Margherita Pizza": "/menu-images/margherita-pizza.jpg",
+  "Pepperoni Pizza": "/menu-images/pepperoni-pizza.jpg",
+  "BBQ Chicken Pizza": "/menu-images/bbq-chicken-pizza.jpg",
+  "Classic Burger": "/menu-images/classic-burger.jpg",
+  "Crispy Chicken Burger": "/menu-images/crispy-chicken-burger.jpg",
+  "Caesar Salad": "/menu-images/caesar-salad.jpg",
+  "Loaded Fries": "/menu-images/loaded-fries.jpg",
+  Tiramisu: "/menu-images/tiramisu.jpg",
+  "Chocolate Cake": "/menu-images/chocolate-cake.jpg",
+  Coke: "/menu-images/coke.jpg",
 };
 
 function daysAgo(n: number, hour = 18): Date {
@@ -125,14 +142,19 @@ async function main() {
 
   // --- 1a. Backfill logo/cover/brand color on the primary demo-restaurant (Phase 32 — needed for
   // the public storefront-playground demo to look like a real, branded business; the two
-  // secondary demo restaurants below already get a brandColor, this one never did). ---
-  if (!restaurant.logo || !restaurant.coverImage || !restaurant.settings.brandColor) {
-    restaurant.logo = restaurant.logo || "/restaurant-images/demo-restaurant-logo.svg";
-    restaurant.coverImage = restaurant.coverImage || "/restaurant-images/demo-restaurant-cover.svg";
-    restaurant.settings.brandColor = restaurant.settings.brandColor || "#c2410c";
-    await restaurant.save();
-    console.log("[backfill] set demo-restaurant's logo/coverImage/brandColor");
-  }
+  // secondary demo restaurants below already get a brandColor, this one never did).
+  //
+  // logo/coverImage force-overwrite unconditionally (Phase 42) rather than preserve-if-set: they're
+  // pure demo cosmetics, not user data, and this is the only way a re-run actually picks up new
+  // sourced photography (the original preserve-if-set guard meant re-running this script after
+  // updating the .svg->.jpg image set below would silently keep the old cover image forever).
+  // brandColor keeps its preserve-if-set guard — unlike logo/cover, it's plausible someone
+  // intentionally changed it while testing Theme Studio, and this script shouldn't clobber that. ---
+  restaurant.logo = "/restaurant-images/demo-restaurant-logo.svg";
+  restaurant.coverImage = "/restaurant-images/demo-restaurant-cover.jpg";
+  if (!restaurant.settings.brandColor) restaurant.settings.brandColor = "#c2410c";
+  await restaurant.save();
+  console.log("[backfill] set demo-restaurant's logo/coverImage, and brandColor if unset");
 
   // --- 1b. Backfill add-on/size modifier groups on items that don't have any yet ---
   // (seed.ts only creates the Size/toppings groups on the two pizzas; this backfills the burger

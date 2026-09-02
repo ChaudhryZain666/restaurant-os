@@ -113,4 +113,26 @@ test.describe("storefront demo playground", () => {
       await freshContext.close();
     }
   });
+
+  // Phase 42 — Cinematic's hero used real browser-viewport `min-h-[88vh]`/`92vh` units, which
+  // ignore the device-frame's own `max-h-[80vh]` ancestor constraint (a `vh` unit never resolves
+  // against an ancestor's max-height), so the hero alone used to exceed the frame before any menu
+  // content was visible — worst on the narrow "mobile" preset, where width shrinks but the
+  // viewport-relative height doesn't. Hero.tsx now reads PreviewContext and caps itself at
+  // `min-h-[70vh]` inside the playground. Bounding-box assertion, not a pixel snapshot, so it
+  // survives incidental visual tweaks.
+  test("Cinematic hero stays within the playground frame's bounds on the mobile preset", async ({ page }) => {
+    await page.goto("http://localhost:5173/r/demo-restaurant/experience");
+    const heroHeading = page.getByRole("heading", { name: /This is Demo Restaurant/ });
+    await expect(heroHeading).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: "Mobile", exact: true }).click();
+
+    const frame = page.getByTestId("device-frame");
+    const frameBox = await frame.boundingBox();
+    const heroBox = await heroHeading.locator("xpath=ancestor::section[1]").boundingBox();
+    expect(frameBox).not.toBeNull();
+    expect(heroBox).not.toBeNull();
+    expect(heroBox!.height).toBeLessThanOrEqual(frameBox!.height);
+  });
 });

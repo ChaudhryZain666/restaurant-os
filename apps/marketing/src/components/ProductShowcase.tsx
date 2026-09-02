@@ -32,7 +32,7 @@ export function ProductShowcase() {
   const activeTab = TABS.find((t) => t.id === active)!;
 
   return (
-    <Reveal className="flex flex-col gap-4">
+    <Reveal variant="scale" className="flex flex-col gap-4">
       <div className="flex flex-wrap justify-center gap-2">
         {TABS.map((tab) => (
           <button

@@ -65,6 +65,10 @@ export default {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
         },
+        kenburns: {
+          "0%": { transform: "scale(1)" },
+          "100%": { transform: "scale(1.08)" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
@@ -72,6 +76,9 @@ export default {
         pop: "pop 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-up": "slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both",
         float: "float 6s ease-in-out infinite",
+        // Home hero's decorative background layer only (see .theme-obsidian in index.css) — a slow,
+        // continuous drift, neutralized like every other animation under prefers-reduced-motion.
+        kenburns: "kenburns 20s ease-in-out infinite alternate",
       },
     },
   },

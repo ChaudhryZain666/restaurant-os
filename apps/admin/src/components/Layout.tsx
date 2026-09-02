@@ -1,7 +1,7 @@
 import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { agencyRoleGrantsPermission, roleHasPermission, type AgencyMembershipRole, type Permission, type UserRole } from "@restaurant/types";
-import { useToast } from "@restaurant/ui";
+import { Logo, useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useAgency } from "../context/AgencyContext";
@@ -344,9 +344,7 @@ function LayoutContent() {
   const sidebarContent = (
     <>
       <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-          T
-        </span>
+        <Logo hideText />
         <div className="min-w-0">
           <p className="truncate font-heading text-sm font-semibold text-foreground">Tablecloth</p>
           <p className="truncate text-xs text-muted">

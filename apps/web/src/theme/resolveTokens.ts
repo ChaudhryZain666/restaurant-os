@@ -33,5 +33,8 @@ export function resolveThemeTokens(definition: ThemeDefinition, config: Restaura
     },
     radius: config.radius ?? base.radius,
     density: config.density ?? base.density,
+    // Not restaurant-overridable (see ThemeTokens' own doc comment) — a straight pass-through from
+    // the theme definition's own defaults, not a merge.
+    overlayOpacity: base.overlayOpacity,
   };
 }

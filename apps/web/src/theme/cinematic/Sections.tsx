@@ -14,7 +14,7 @@ export function CinematicFeatured({ restaurant, items, currency }: FeaturedProps
         {pick.imageUrl ? (
           <img src={pick.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-white/20">
+          <div className="flex h-full w-full items-center justify-center text-secondary-foreground/20">
             <PlateIcon className="h-16 w-16" />
           </div>
         )}
