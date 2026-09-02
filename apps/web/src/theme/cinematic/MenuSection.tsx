@@ -64,7 +64,7 @@ export function CinematicMenuSection({
                 {item.description && <p className="max-w-md text-sm leading-relaxed text-muted">{item.description}</p>}
 
                 {expanded ? (
-                  <div className="mt-3 flex flex-col gap-4 border-t border-border pt-4">
+                  <div className="mt-3 flex animate-slide-up flex-col gap-4 border-t border-border pt-4">
                     {groups.map((group) => (
                       <fieldset key={group.id} className="flex flex-col gap-2">
                         <legend className="mb-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
@@ -118,9 +118,12 @@ export function CinematicMenuSection({
                   </div>
                 ) : (
                   <button
+                    key={justAddedId === item.id ? "added" : "idle"}
                     onClick={() => onStartAdding(item)}
                     disabled={!orderingOpen}
-                    className="mt-1 w-fit text-xs font-semibold uppercase tracking-[0.2em] text-primary underline-offset-4 transition-opacity duration-fast hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
+                    className={`mt-1 w-fit text-xs font-semibold uppercase tracking-[0.2em] underline-offset-4 transition-opacity duration-fast hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline ${
+                      justAddedId === item.id ? "animate-scale-in text-success" : "text-primary"
+                    }`}
                   >
                     {justAddedId === item.id ? "Added ✓" : "Add to order"}
                   </button>
