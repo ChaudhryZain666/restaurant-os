@@ -6,8 +6,8 @@ import { FeatureCard } from "../components/FeatureCard";
 import { ProductShowcase } from "../components/ProductShowcase";
 import { StepList } from "../components/StepList";
 import { PricingTeaser } from "../components/PricingTeaser";
+import { HeroScene } from "../components/HeroScene";
 import { OFFER_FEATURES, BENEFITS, FAQS } from "../lib/content";
-import { STOREFRONT_URL } from "../lib/links";
 import {
   IconArrowRight,
   IconCart,
@@ -59,13 +59,29 @@ export function HomePage() {
               Built for independent restaurants
             </Badge>
             <h1 className="animate-fade-up font-heading text-4xl font-semibold leading-[1.1] text-foreground sm:text-5xl">
-              Launch your restaurant's <span className="text-gradient">own online ordering</span> experience
+              Your restaurant. <span className="text-gradient">Running on your terms.</span>
             </h1>
             <p className="max-w-lg animate-fade-up text-lg text-muted" style={{ animationDelay: "60ms" }}>
               Tablecloth gives your restaurant a branded ordering page, a real order-management dashboard, and the
               customer data a marketplace app never hands back to you.
             </p>
-            <div className="flex animate-fade-up flex-wrap items-center gap-3" style={{ animationDelay: "120ms" }}>
+
+            <div className="flex animate-fade-up flex-col gap-2 border-l-2 border-primary/30 py-1 pl-4" style={{ animationDelay: "90ms" }}>
+              <p className="text-sm">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">Best for</span>{" "}
+                <span className="text-muted">independent restaurants who want their own ordering page, not a listing</span>
+              </p>
+              <p className="text-sm">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">Best at</span>{" "}
+                <span className="text-muted">ordering, menu, delivery, loyalty and analytics — one platform, not a bare form</span>
+              </p>
+              <p className="text-sm">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">Replaces</span>{" "}
+                <span className="text-muted">the marketplace app that charges commission and keeps your customer data</span>
+              </p>
+            </div>
+
+            <div className="flex animate-fade-up flex-wrap items-center gap-3" style={{ animationDelay: "150ms" }}>
               <Link to="/start-trial">
                 <Button size="lg">Start Free Trial</Button>
               </Link>
@@ -75,7 +91,7 @@ export function HomePage() {
                 </Button>
               </Link>
             </div>
-            <div className="flex animate-fade-up items-center gap-6 pt-2 text-sm text-muted" style={{ animationDelay: "180ms" }}>
+            <div className="flex animate-fade-up items-center gap-6 pt-2 text-sm text-muted" style={{ animationDelay: "210ms" }}>
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" /> No commission on direct orders
               </span>
@@ -86,29 +102,7 @@ export function HomePage() {
           </Reveal>
 
           <Reveal index={1} variant="mask" className="relative">
-            <div className="animate-float overflow-hidden rounded-2xl border border-border bg-surface shadow-elevated">
-              <div className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-2.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-danger/60" />
-                <span className="h-2.5 w-2.5 rounded-full bg-warning/60" />
-                <span className="h-2.5 w-2.5 rounded-full bg-success/60" />
-                <span className="ml-3 truncate text-xs text-muted">{STOREFRONT_URL.replace("http://", "")}</span>
-              </div>
-              <iframe
-                src={STOREFRONT_URL}
-                title="Live demo restaurant preview"
-                className="h-[420px] w-full border-0"
-                loading="lazy"
-              />
-            </div>
-            <div className="absolute -bottom-5 -left-5 hidden rounded-xl border border-border bg-surface p-3 shadow-lg sm:flex sm:items-center sm:gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success/15 text-success">
-                <IconChart className="h-[18px] w-[18px]" />
-              </span>
-              <div>
-                <p className="text-xs text-muted">Revenue this week</p>
-                <p className="font-heading text-sm font-semibold text-foreground">$8,420</p>
-              </div>
-            </div>
+            <HeroScene />
           </Reveal>
         </div>
       </Section>
