@@ -1,9 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
 import { FAQS } from "../lib/content";
 import { usePageMeta } from "../hooks/usePageMeta";
+
+/** FAQPage structured data makes this page eligible for a rich-result FAQ listing in search —
+ *  built straight from the same FAQS content the page renders, never a separate copy. */
+function useFaqStructuredData() {
+  useEffect(() => {
+    const data = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQS.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: { "@type": "Answer", text: item.a },
+      })),
+    };
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.textContent = JSON.stringify(data);
+    document.head.appendChild(script);
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+}
 
 function FaqItem({ q, a, index }: { q: string; a: string; index: number }) {
   const [open, setOpen] = useState(false);
@@ -36,10 +59,11 @@ export function FaqPage() {
     title: "FAQ — Tablecloth",
     description: "Answers to common questions about setting up and running online ordering with Tablecloth.",
   });
+  useFaqStructuredData();
   return (
     <>
       <Section className="pt-14 sm:pt-20">
-        <SectionHeading eyebrow="FAQs" title="Frequently asked questions" description="Everything restaurant owners ask before signing up." />
+        <SectionHeading as="h1" eyebrow="FAQs" title="Frequently asked questions" description="Everything restaurant owners ask before signing up." />
       </Section>
 
       <Section tone="surface">

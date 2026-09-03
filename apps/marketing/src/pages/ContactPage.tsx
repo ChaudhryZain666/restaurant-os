@@ -60,6 +60,7 @@ export function ContactPage() {
     <>
       <Section className="pt-14 sm:pt-20">
         <SectionHeading
+          as="h1"
           eyebrow="Company"
           title="Let's build a better ordering experience for your restaurant"
           description="Whether you're just curious, ready to start, or already a customer with a question — tell us what you need and the right person will get back to you."

@@ -336,6 +336,33 @@ export function SupportMock() {
   );
 }
 
+export function AgencyMock() {
+  const businesses = [
+    { name: "Ember & Oak", locations: 2, status: "Active" },
+    { name: "Riverside Deli", locations: 1, status: "Active" },
+    { name: "Casa Marisol", locations: 1, status: "Needs setup" },
+  ];
+  return (
+    <div className="flex flex-col gap-3 p-5">
+      <div className="rounded-lg border border-border bg-surface p-3">
+        <p className="text-xs text-muted">Businesses</p>
+        <p className="font-heading text-xl font-semibold text-foreground">3 / 5</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        {businesses.map((b) => (
+          <div key={b.name} className="flex items-center justify-between rounded-lg border border-border bg-surface p-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">{b.name}</p>
+              <p className="text-xs text-muted">{b.locations} location{b.locations > 1 ? "s" : ""}</p>
+            </div>
+            <Badge tone={b.status === "Active" ? "success" : "warning"}>{b.status}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CheckoutMock() {
   return (
     <div className="flex flex-col gap-3 p-5">

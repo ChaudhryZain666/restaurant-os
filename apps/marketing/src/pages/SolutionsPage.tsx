@@ -1,108 +1,132 @@
 import { Link } from "react-router-dom";
-import type { ReactNode } from "react";
-import { Button, Card, Reveal } from "@restaurant/ui";
+import type { ComponentType } from "react";
+import { Button, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
-import { IconArrowRight, IconMapPin, IconMenuBook, IconStore, IconTruck, IconUsers } from "../components/icons";
+import {
+  MockFrame,
+  AgencyMock,
+  CheckoutMock,
+  DeliveryMock,
+  ModifierMock,
+  OrdersMock,
+} from "../components/FeatureMocks";
+import { IconArrowRight } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 
-interface Solution {
+interface Scenario {
   id: string;
+  tag: string;
   title: string;
-  description: string;
+  body: string;
   highlights: string[];
-  icon: (p: { className?: string }) => ReactNode;
+  visual: ComponentType;
 }
 
-const SOLUTIONS: Solution[] = [
+const SCENARIOS: Scenario[] = [
   {
     id: "independent",
-    title: "Independent Restaurants",
-    description: "You built the restaurant. You shouldn't have to rent your customer relationship back from a marketplace to sell to them online.",
+    tag: "Independent restaurants",
+    title: "Own the relationship, not just the recipe",
+    body: "You built the restaurant. You shouldn't have to rent your customer relationship back from a marketplace to sell to them online. Every order lands on a page that looks like yours — your logo, your colors, your menu — and every customer who orders becomes yours, not a platform's.",
     highlights: ["Your own branded ordering page", "Direct customer relationships and order history", "No per-order commission on direct sales"],
-    icon: IconStore,
+    visual: CheckoutMock,
   },
   {
-    id: "cafes",
-    title: "Cafés",
-    description: "Fast counter ordering with a menu that's simple to scan and quick to reorder from.",
-    highlights: ["Lightweight menu, quick checkout", "Modifiers for milk, size, extras", "QR ordering for table service"],
-    icon: IconMenuBook,
+    id: "counter-service",
+    tag: "Cafés & fast food",
+    title: "Built for a queue that moves fast",
+    body: "Counter service lives or dies on speed — a menu that's quick to scan, modifiers that don't slow the line, and an order queue your staff can run on autopilot during a rush. QR codes at the table skip the app-download friction entirely.",
+    highlights: ["Lightweight menu, quick checkout", "Modifiers for size, extras and add-ons", "QR ordering for table or counter service"],
+    visual: ModifierMock,
   },
   {
-    id: "takeaways",
-    title: "Takeaways",
-    description: "Built around pickup speed — customers order ahead, you prep, they grab it and go.",
-    highlights: ["Pickup-first ordering flow", "Live order status so timing stays predictable", "Order-again for repeat regulars"],
-    icon: IconTruck,
-  },
-  {
-    id: "fast-food",
-    title: "Fast Food",
-    description: "High order volume needs a queue that's fast to operate, not just fast to look at.",
-    highlights: ["Clear, single-tap status transitions", "Availability toggles for sold-out items", "Analytics on your busiest hours"],
-    icon: IconUsers,
-  },
-  {
-    id: "pizzerias",
-    title: "Pizzerias",
-    description: "Modifier groups built for exactly this — sizes, crusts, toppings, without spreadsheet-style menus.",
-    highlights: ["Required and optional modifier groups", "Per-option price adjustments", "Combos and multi-topping items"],
-    icon: IconMenuBook,
-  },
-  {
-    id: "multi-location",
-    title: "Multiple Locations",
-    description: "Each location keeps its own menu and orders, under one account you can actually keep track of.",
-    highlights: ["Per-location menus and settings", "Centralized account access", "Full location switcher on our roadmap"],
-    icon: IconMapPin,
+    id: "pickup-heavy",
+    tag: "Takeaways & pizzerias",
+    title: "Order ahead, prep on schedule, hand it off",
+    body: "Pickup-first businesses need timing to be predictable on both ends — customers ordering ahead, staff prepping to a queue they can see. Modifier groups built for real complexity (sizes, crusts, toppings) replace spreadsheet-style menus that break under real order volume.",
+    highlights: ["Pickup-first ordering flow with live status", "Required and optional modifier groups", "Order-again for repeat regulars"],
+    visual: OrdersMock,
   },
   {
     id: "growing",
-    title: "Growing Restaurant Businesses",
-    description: "Start with one location and a simple menu — the same platform scales as the business does.",
-    highlights: ["No re-platforming as you add locations", "Analytics that grow with your order volume", "Loyalty points live today, promotions on our roadmap"],
-    icon: IconStore,
+    tag: "Multi-location & growing businesses",
+    title: "The same platform, from one location to many",
+    body: "Start with one location and a simple menu — the architecture underneath already keeps each location's menu, orders and settings separate under one account, so growth doesn't force a re-platform later. A full location-switcher dashboard is on our roadmap, not a promise we're making early.",
+    highlights: ["Per-location menus and settings today", "Centralized account access", "Full location switcher on our roadmap"],
+    visual: DeliveryMock,
+  },
+  {
+    id: "agencies",
+    tag: "Agencies",
+    title: "One login, every client's business",
+    body: "Managing ordering for several restaurants shouldn't mean juggling separate logins and separate bills. An agency account oversees every business it manages — each with its own locations, staff and owner — from a single dashboard, with consolidated billing behind it.",
+    highlights: ["One dashboard across every managed business", "Each business keeps its own storefront and staff", "Consolidated agency billing"],
+    visual: AgencyMock,
   },
 ];
+
+function ScenarioChapter({ scenario, index }: { scenario: Scenario; index: number }) {
+  const reversed = index % 2 === 1;
+  return (
+    <Section id={scenario.id} tone={index % 2 === 0 ? "default" : "surface"} className="scroll-mt-24">
+      <div className="grid items-center gap-10 lg:grid-cols-2">
+        <Reveal className={reversed ? "lg:order-2" : ""}>
+          <div className="flex flex-col items-start gap-4">
+            <span className="text-sm font-semibold uppercase tracking-wide text-primary">{scenario.tag}</span>
+            <h2 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">{scenario.title}</h2>
+            <p className="text-muted">{scenario.body}</p>
+            <ul className="flex flex-col gap-2">
+              {scenario.highlights.map((h) => (
+                <li key={h} className="flex items-start gap-2 text-sm text-foreground/80">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Reveal>
+        <Reveal index={1} className={reversed ? "lg:order-1" : ""}>
+          <div className="aspect-[4/3]">
+            <MockFrame>
+              <scenario.visual />
+            </MockFrame>
+          </div>
+        </Reveal>
+      </div>
+    </Section>
+  );
+}
 
 export function SolutionsPage() {
   usePageMeta({
     title: "Solutions — Tablecloth",
-    description: "Online ordering built for independent restaurants, cafés, pizzerias and takeaway spots — whatever kind of food business you run.",
+    description: "How different restaurants — independents, counter service, pickup-heavy kitchens, growing multi-location businesses and agencies — use Tablecloth.",
   });
   return (
     <>
       <Section className="pt-14 sm:pt-20">
         <SectionHeading
+          as="h1"
           eyebrow="Solutions"
-          title="Built for how your restaurant actually operates"
-          description="Different restaurants order differently. Here's how Tablecloth fits yours."
+          title="How different restaurants use the system"
+          description="Same platform underneath — but a café's rush hour, a pizzeria's modifier list, and an agency's client roster don't look anything alike. Here's how each one actually uses it."
         />
+        <Reveal className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
+          {SCENARIOS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="rounded-pill border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              {s.tag}
+            </a>
+          ))}
+        </Reveal>
       </Section>
 
-      <Section tone="surface">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {SOLUTIONS.map((solution, i) => (
-            <Reveal key={solution.id} id={solution.id} index={i} className="scroll-mt-24">
-              <Card className="flex h-full flex-col gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <solution.icon className="h-5 w-5" />
-                </span>
-                <h3 className="font-heading text-lg font-semibold text-foreground">{solution.title}</h3>
-                <p className="text-sm text-muted">{solution.description}</p>
-                <ul className="mt-auto flex flex-col gap-1.5 pt-2">
-                  {solution.highlights.map((h) => (
-                    <li key={h} className="flex items-start gap-2 text-xs text-foreground/80">
-                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-primary" />
-                      {h}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </Reveal>
-          ))}
-        </div>
-      </Section>
+      {SCENARIOS.map((scenario, i) => (
+        <ScenarioChapter key={scenario.id} scenario={scenario} index={i} />
+      ))}
 
       <Section>
         <Reveal className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-10 text-center shadow-md">

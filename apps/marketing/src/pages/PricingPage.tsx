@@ -58,6 +58,7 @@ export function PricingPage() {
     <>
       <Section className="pt-14 sm:pt-20">
         <SectionHeading
+          as="h1"
           eyebrow="Pricing"
           title="Simple pricing, built to grow with you"
           description="No credit card required to start your 14-day trial — cancel anytime before it ends."

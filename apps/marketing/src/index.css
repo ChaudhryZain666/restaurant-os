@@ -3,29 +3,36 @@
 @tailwind utilities;
 
 /**
- * Design tokens — deliberately identical to apps/web/src/index.css so the marketing site and the
- * product it's selling share one visual language. Each Vite app needs its own copy (Tailwind's
- * static config can't share a runtime CSS file across workspace packages without extra tooling
- * this project doesn't otherwise need) — see packages/ui/src/theme/tokens.ts for the typed shape
- * both are meant to satisfy.
+ * Design tokens — this is the marketing site's OWN identity (apps/web, the real product, keeps its
+ * separate copy of this file untouched; editing here only affects marketing).
+ *
+ * "The Restaurant, In Motion" — established across the homepage rebuild (Hero's neutral blueprint,
+ * Offer's operations board, Showcase's control-room blue, Journey's route, Pricing's warm
+ * parchment/wine growth chapter) and now promoted to the SITE-WIDE base palette so every other
+ * marketing page (Product, Solutions, Pricing, FAQ, Demo, About, Contact, Start Trial) inherits the
+ * same brand through the shared Section/Card/Button/SectionHeading primitives, rather than each
+ * page carrying the old orange identity on its own. Wine (matching Pricing's --color-wine) is now
+ * the one signature accent across light pages; near-black/blueprint/info-blue stay scoped to
+ * .theme-obsidian (the Home hero's dark chapters) — see that block below for the "same brand,
+ * different atmosphere" split.
  */
 :root {
-  --color-primary: #c2410c;
-  --color-primary-foreground: #fffaf5;
-  --color-secondary: #292524;
-  --color-secondary-foreground: #fafaf9;
-  --color-accent: #b45309;
-  --color-accent-foreground: #fffaf5;
-  --color-background: #fbf9f7;
-  --color-surface: #ffffff;
+  --color-primary: #611b28;
+  --color-primary-foreground: #f8f4ea;
+  --color-secondary: #2b2116;
+  --color-secondary-foreground: #f8f4ea;
+  --color-accent: #7a4550;
+  --color-accent-foreground: #fffdf8;
+  --color-background: #f6f0e2;
+  --color-surface: #fdfbf5;
   --color-surface-elevated: #ffffff;
-  --color-foreground: #1c1917;
-  --color-muted: #78716c;
-  --color-border: #e7e2dc;
+  --color-foreground: #2b2116;
+  --color-muted: #6b5d48;
+  --color-border: #d9cdb0;
   --color-success: #15803d;
   --color-warning: #b45309;
   --color-danger: #dc2626;
-  --color-info: #2563eb;
+  --color-info: #3d6fd6;
 
   --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -36,10 +43,10 @@
   --radius-xl: 1.5rem;
   --radius-pill: 9999px;
 
-  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.06);
-  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.08);
-  --shadow-lg: 0 12px 32px rgba(28, 25, 23, 0.12);
-  --shadow-elevated: 0 20px 48px rgba(28, 25, 23, 0.18);
+  --shadow-sm: 0 1px 2px rgba(43, 33, 22, 0.07);
+  --shadow-md: 0 4px 12px rgba(43, 33, 22, 0.09);
+  --shadow-lg: 0 12px 32px rgba(61, 15, 22, 0.14);
+  --shadow-elevated: 0 20px 48px rgba(61, 15, 22, 0.2);
 
   --motion-fast: 120ms;
   --motion-normal: 220ms;

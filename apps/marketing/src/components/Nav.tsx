@@ -36,12 +36,10 @@ const SOLUTIONS: NavDropdown = {
   label: "Solutions",
   links: [
     { label: "Independent Restaurants", to: "/solutions#independent", description: "Your own ordering channel" },
-    { label: "Cafés", to: "/solutions#cafes", description: "Fast, simple counter ordering" },
-    { label: "Takeaways", to: "/solutions#takeaways", description: "Built for pickup speed" },
-    { label: "Fast Food", to: "/solutions#fast-food", description: "High volume, low friction" },
-    { label: "Pizzerias", to: "/solutions#pizzerias", description: "Modifiers built for topping choices" },
-    { label: "Multiple Locations", to: "/solutions#multi-location", description: "Manage every branch centrally" },
-    { label: "Growing Businesses", to: "/solutions#growing", description: "Scale without losing your brand" },
+    { label: "Cafés & Fast Food", to: "/solutions#counter-service", description: "Fast, simple counter ordering" },
+    { label: "Takeaways & Pizzerias", to: "/solutions#pickup-heavy", description: "Built for pickup speed" },
+    { label: "Multi-location & Growing", to: "/solutions#growing", description: "Scale without losing your brand" },
+    { label: "Agencies", to: "/solutions#agencies", description: "One login, every client's business" },
   ],
 };
 

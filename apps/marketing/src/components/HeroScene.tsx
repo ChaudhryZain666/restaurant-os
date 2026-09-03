@@ -1,82 +1,88 @@
 import { useScrollProgress } from "../lib/useScrollProgress";
 import { AnimatedNumber } from "./AnimatedNumber";
-import { MenuMock } from "./FeatureMocks";
-import { IconChart } from "./icons";
+import { IconChart, IconClipboard } from "./icons";
+import { STOREFRONT_URL } from "../lib/links";
 
 /**
- * The hero's right-side visual — same slot the old static browser-chrome mockup occupied, replaced
- * with a layered CSS 3D scene (perspective + translateZ, no WebGL/3D library) dramatizing
- * physical-restaurant → digital-order → revenue in one glance: a wood-grain "table" back plane, a
- * kitchen order ticket mid-plane, and the real MenuMock front-and-center as the phone the order
- * came from. Scroll-linked via useScrollProgress — the planes part further as the hero scrolls
- * through view, settling to their resting pose immediately under reduced motion (the hook's own
- * contract), so nothing here needs a separate reduced-motion branch.
+ * THE REAL LIVE DEMO IFRAME IS PROTECTED. This renders it as one physical object sitting inside
+ * the hero's environment (a screen placed on a table, not a card floating in a layout grid) — a
+ * small paper ticket rests beside it, two operational-data labels sit clear of its box. The iframe
+ * itself gets only a light resting tilt (a couple of degrees, easing toward flat on scroll) so it
+ * reads as "a real screen at an angle," never distorted enough to hurt legibility or trust.
+ * Reduced motion collapses everything to its resting, untilted state via useScrollProgress's own
+ * contract — no separate branch needed here.
  */
 export function HeroScene() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>();
-  const p = Math.min(1, progress * 1.6); // reach full separation a little before the section fully passes
+  const p = Math.min(1, progress * 1.6);
 
   return (
-    <div ref={ref} className="relative" style={{ perspective: "1400px" }}>
-      <div
-        className="relative h-[420px] sm:h-[460px]"
-        style={{ transformStyle: "preserve-3d", transform: `rotateX(${4 - p * 4}deg) rotateY(${-3 + p * 3}deg)` }}
-      >
-        {/* back plane — the physical table */}
+    <div ref={ref} className="relative mx-auto w-full max-w-[620px]" style={{ perspective: "1600px" }}>
+      <div className="relative" style={{ transformStyle: "preserve-3d" }}>
+        {/* paper kitchen ticket — a physical object resting beside the screen */}
         <div
-          className="absolute inset-4 rounded-2xl border border-border/60"
+          className="absolute -left-4 -top-10 z-10 w-44 rounded-sm p-3.5 sm:-left-10"
           style={{
-            transform: `translateZ(-70px) scale(1.06)`,
-            background:
-              "repeating-linear-gradient(100deg, color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)) 0px, color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)) 2px, var(--color-surface) 2px, var(--color-surface) 26px), radial-gradient(ellipse 70% 60% at 30% 20%, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 70%)",
-            boxShadow: "inset 0 0 60px rgba(0,0,0,0.12)",
+            transform: `translateZ(30px) rotate(${-9 + p * 2}deg)`,
+            background: "linear-gradient(155deg, #f6efdf, #ece2ca)",
+            borderTop: "2px solid #b8763f",
+            boxShadow: "0 20px 36px -14px rgba(0,0,0,0.6)",
           }}
           aria-hidden
-        />
-
-        {/* mid plane — a kitchen order ticket, drifting into place */}
-        <div
-          className="absolute left-6 top-8 w-56 rounded-lg border border-border bg-surface p-4 shadow-lg sm:left-10 sm:top-10"
-          style={{
-            transform: `translateZ(${-10 + p * 30}px) rotate(${-6 + p * 2}deg)`,
-            opacity: 0.55 + p * 0.45,
-            transition: "transform 120ms linear, opacity 120ms linear",
-          }}
         >
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted">Order #214 · 12:04pm</p>
-          <p className="mt-2 text-sm font-semibold text-foreground">Margherita Pizza ×2</p>
-          <p className="text-sm text-foreground/80">Loaded Fries ×1</p>
-          <span className="mt-2 inline-block rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-primary">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a7550]">Order #214</p>
+          <p className="mt-1.5 text-xs font-semibold text-[#2a2013]">Margherita Pizza ×2</p>
+          <span
+            className="mt-1.5 inline-block rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-[#8a4a1f]"
+            style={{ background: "rgba(184,118,63,0.22)" }}
+          >
             New
           </span>
         </div>
 
-        {/* front plane — the real customer menu (actual MenuMock, not invented UI) */}
+        {/* THE REAL SCREEN — same iframe, same src, same title as the original hero */}
         <div
-          className="absolute bottom-2 right-2 w-[240px] overflow-hidden rounded-2xl border border-border bg-surface shadow-elevated sm:w-[260px]"
-          style={{ transform: `translateZ(${50 + p * 40}px) rotate(${5 - p * 5}deg)` }}
+          className="relative overflow-hidden rounded-xl border border-white/10 bg-surface shadow-[0_50px_100px_-30px_rgba(0,0,0,0.85)]"
+          style={{ transform: `rotateX(${3 - p * 3}deg) rotateY(${-4 + p * 4}deg) translateZ(10px)`, transformOrigin: "center bottom" }}
         >
-          <div className="flex items-center gap-1.5 border-b border-border bg-background px-3 py-2">
-            <span className="h-2 w-2 rounded-full bg-danger/60" />
-            <span className="h-2 w-2 rounded-full bg-warning/60" />
-            <span className="h-2 w-2 rounded-full bg-success/60" />
-            <span className="ml-1.5 truncate text-[10px] text-muted">yourrestaurant.tablecloth.app</span>
+          <div className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-danger/60" />
+            <span className="h-2.5 w-2.5 rounded-full bg-warning/60" />
+            <span className="h-2.5 w-2.5 rounded-full bg-success/60" />
+            <span className="ml-3 truncate text-xs text-muted">{STOREFRONT_URL.replace("http://", "")}</span>
           </div>
-          <MenuMock />
+          <iframe src={STOREFRONT_URL} title="Live demo restaurant preview" className="h-[340px] w-full border-0 sm:h-[380px]" loading="lazy" />
         </div>
 
-        {/* revenue chip — same content as before, now counting up */}
+        {/* operational data — kept clear of the iframe's own box (iframes composite above CSS
+            z-ordering unpredictably across browsers, so "in front of" has to mean "not
+            overlapping," not "a higher translateZ"). */}
         <div
-          className="absolute bottom-2 left-0 hidden items-center gap-3 rounded-xl border border-border bg-surface p-3 shadow-lg sm:flex"
-          style={{ transform: `translateZ(${90 + p * 20}px)` }}
+          className="absolute -bottom-6 -right-3 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[#171310]/95 px-3.5 py-2.5 shadow-lg backdrop-blur sm:flex"
+          style={{ transform: `translateZ(60px)` }}
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success/15 text-success">
-            <IconChart className="h-[18px] w-[18px]" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-success/15 text-success">
+            <IconChart className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-xs text-muted">Revenue this week</p>
-            <p className="font-heading text-sm font-semibold text-foreground">
+            <p className="text-[10px] text-white/50">Revenue this week</p>
+            <p className="font-heading text-sm font-semibold text-white">
               <AnimatedNumber value={8420} format={(n) => `$${Math.round(n).toLocaleString()}`} />
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="absolute -right-6 top-8 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[#171310]/95 px-3.5 py-2.5 shadow-lg backdrop-blur lg:flex"
+          style={{ transform: `translateZ(60px)` }}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-info/15 text-info">
+            <IconClipboard className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[10px] text-white/50">Orders today</p>
+            <p className="font-heading text-sm font-semibold text-white">
+              <AnimatedNumber value={47} />
             </p>
           </div>
         </div>

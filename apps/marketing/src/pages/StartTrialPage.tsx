@@ -32,6 +32,7 @@ export function StartTrialPage() {
   return (
     <Section className="pt-14 sm:pt-20">
       <SectionHeading
+        as="h1"
         eyebrow="Start Free"
         title="Get your restaurant online without the complexity"
         description="Tell us a bit about your restaurant — our team will follow up to finish setting up your ordering page."
@@ -70,7 +71,7 @@ export function StartTrialPage() {
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
             <h3 className="font-heading text-sm font-semibold text-foreground">About pricing &amp; trial length</h3>
             <p className="text-sm text-muted">
-              No credit card required to start a trial. Pricing below is proposed and not yet finalized — see{" "}
+              No credit card required to start a trial. See{" "}
               <Link to="/pricing" className="font-medium text-primary hover:underline">
                 Pricing
               </Link>{" "}

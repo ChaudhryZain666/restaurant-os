@@ -18,10 +18,10 @@ const COLUMNS = [
     title: "Solutions",
     links: [
       { label: "Independent Restaurants", to: "/solutions#independent" },
-      { label: "Cafés", to: "/solutions#cafes" },
-      { label: "Fast Food", to: "/solutions#fast-food" },
-      { label: "Pizzerias", to: "/solutions#pizzerias" },
-      { label: "Multiple Locations", to: "/solutions#multi-location" },
+      { label: "Cafés & Fast Food", to: "/solutions#counter-service" },
+      { label: "Takeaways & Pizzerias", to: "/solutions#pickup-heavy" },
+      { label: "Multi-location & Growing", to: "/solutions#growing" },
+      { label: "Agencies", to: "/solutions#agencies" },
     ],
   },
   {

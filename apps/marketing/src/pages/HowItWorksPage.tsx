@@ -14,6 +14,7 @@ export function HowItWorksPage() {
     <>
       <Section className="pt-14 sm:pt-20">
         <SectionHeading
+          as="h1"
           eyebrow="How it works"
           title="From signup to your first order"
           description="Six steps. No developer required, no separate website to maintain."

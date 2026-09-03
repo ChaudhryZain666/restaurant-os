@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Static sitemap for the 10 fixed marketing routes (this is a client-rendered SPA with no
+  server-side route generation, unlike apps/api's dynamic per-restaurant sitemap.routes.ts).
+
+  NOTE: <loc> uses https://www.tablecloth.app as a placeholder production origin — no real
+  production domain is registered yet (this project is pre-launch). Replace every <loc> host
+  with the real domain before this is deployed; do not ship this file as-is.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.tablecloth.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://www.tablecloth.app/product</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.tablecloth.app/solutions</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.tablecloth.app/how-it-works</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.tablecloth.app/pricing</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.tablecloth.app/faq</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.tablecloth.app/demo</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://www.tablecloth.app/about</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.tablecloth.app/contact</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://www.tablecloth.app/start-trial</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+</urlset>
