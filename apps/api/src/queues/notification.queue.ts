@@ -63,6 +63,10 @@ export type NotificationJobPayload =
 export const notificationQueue = new Queue<NotificationJobPayload>("notifications", {
   connection: queueConnection,
 });
+// BullMQ's Queue wraps the connection and re-emits its own 'error' events independently of
+// queueConnection's own listener (connection.ts) — needs its own guard for the same reason, or a
+// connection-level failure (e.g. an incompatible Redis version) crashes the whole API process.
+notificationQueue.on("error", (err: Error) => logger.error("[queue] notification queue error", { error: err.message }));
 
 function formatOrderTotal(amount: number, currency: string): string {
   try {
@@ -286,6 +290,10 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
   worker.on("failed", (job, err) => {
     logger.error("notification job failed", { jobId: job?.id, error: err.message });
   });
+  // Same reasoning as notificationQueue's listener above — a Worker is a separate EventEmitter
+  // from both queueConnection and the Queue, and needs its own guard against the same class of
+  // connection-level failure crashing the process.
+  worker.on("error", (err: Error) => logger.error("[queue] notification worker error", { error: err.message }));
 
   return worker;
 }

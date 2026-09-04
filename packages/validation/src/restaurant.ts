@@ -96,6 +96,8 @@ export const restaurantSettingsSchema = z.object({
   // dineInEnabled above.
   kitchenEnabled: z.boolean().optional(),
   staffEnabled: z.boolean().optional(),
+  // POS phase — same contract as kitchenEnabled/staffEnabled above.
+  posEnabled: z.boolean().optional(),
 });
 export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 

@@ -19,6 +19,7 @@ import {
   IconLogout,
   IconMenuBook,
   IconPalette,
+  IconRegister,
   IconSettings,
   IconSliders,
   IconStar,
@@ -46,7 +47,7 @@ interface NavItem {
   /** Phase 28 — hidden when the active location's restaurant.settings[flag] is explicitly false.
    *  Undefined (not yet loaded, or the field predates this phase) is treated as visible — this only
    *  ever HIDES something a permission check already allowed, never grants extra access. */
-  settingsFlag?: "kitchenEnabled" | "staffEnabled";
+  settingsFlag?: "kitchenEnabled" | "staffEnabled" | "posEnabled";
   /** Phase 23 — hidden entirely at a single location, matching Locations/domain-switcher's own
    *  established gating: a single-location owner's one location already IS the business, so
    *  business-wide analytics/promotions would just be a confusing duplicate of the page they
@@ -84,6 +85,7 @@ const RESTAURANT_GROUPS: NavGroup[] = [
       // to prevent.
       { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage", settingsFlag: "kitchenEnabled" },
       { to: "/tables", label: "Tables", icon: IconTable, permission: "restaurant.tables.manage" },
+      { to: "/pos", label: "POS", icon: IconRegister, permission: "restaurant.pos.operate", settingsFlag: "posEnabled" },
     ],
   },
   { label: "Menu", items: [{ to: "/menu", label: "Menu", icon: IconMenuBook, permission: "restaurant.menu.read" }] },
@@ -223,7 +225,7 @@ function itemVisible(
   role: UserRole,
   isMultiLocation: boolean,
   agencyRole: AgencyMembershipRole | null,
-  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean }
+  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean; posEnabled?: boolean }
 ): boolean {
   if (item.multiLocationOnly && !isMultiLocation) return false;
   if (item.settingsFlag && restaurantSettings?.[item.settingsFlag] === false) return false;
@@ -249,8 +251,9 @@ function NavGroupList({
    *  visibility for RESTAURANT_GROUPS matches exactly what that agency role can reach there (the
    *  same AGENCY_ROLE_GRANTS the server's requireBusinessPermission/requireTenantPermission check). */
   agencyRole?: AgencyMembershipRole | null;
-  /** Phase 28 — the active location's settings, for kitchenEnabled/staffEnabled-gated items. */
-  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean };
+  /** Phase 28 — the active location's settings, for kitchenEnabled/staffEnabled-gated items.
+   *  posEnabled added for the POS nav item, same pattern. */
+  restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean; posEnabled?: boolean };
   onNavigate?: () => void;
 }) {
   // Filtering here (rather than trusting each NavGroup array to already be role-correct) is what

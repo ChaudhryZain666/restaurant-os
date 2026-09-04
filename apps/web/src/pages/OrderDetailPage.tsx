@@ -240,9 +240,11 @@ export function OrderDetailPage() {
         )}
         <div className="flex justify-between">
           <span>Payment method</span>
-          <span className="capitalize">{order.paymentMethod === "online" ? "Online" : "Cash"}</span>
+          <span className="capitalize">
+            {order.paymentMethod === "online" ? "Online" : order.paymentMethod === "card" ? "Card" : "Cash"}
+          </span>
         </div>
-        {order.paymentMethod === "cash" && (
+        {order.paymentMethod !== "online" && (
           <div className="flex justify-between">
             <span>Payment</span>
             <span className="capitalize">{order.paymentStatus}</span>

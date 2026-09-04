@@ -123,6 +123,11 @@ const restaurantSettingsSchema = new Schema(
     // either back on restores full functionality immediately — nothing is destroyed when disabled.
     kitchenEnabled: { type: Boolean, default: true },
     staffEnabled: { type: Boolean, default: true },
+    // POS phase — same opt-in-off-by-default precedent as dineInEnabled above: a restaurant must
+    // explicitly turn the staff POS terminal on before restaurant.pos.operate-permitted staff can
+    // ring up an order with it, even though the permission alone would otherwise allow it. See
+    // docs/pos-architecture.md.
+    posEnabled: { type: Boolean, default: false },
     // Phase 31 — the PUBLISHED theme configuration; always present (defaults to plain "classic",
     // no overrides) so every existing restaurant gets a real, valid theme with zero migration.
     theme: { type: themeConfigSchema, default: () => ({}) },

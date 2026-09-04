@@ -93,7 +93,11 @@ export function PrintReceiptPage() {
       </div>
       <hr className="my-2 border-dashed border-black" />
       <p className="capitalize">
-        {order.paymentMethod === "online" ? `Paid online · ${order.paymentStatus}` : `Cash · ${order.paymentStatus}`}
+        {order.paymentMethod === "online"
+          ? `Paid online · ${order.paymentStatus}`
+          : order.paymentMethod === "card"
+            ? `Card · ${order.paymentStatus}`
+            : `Cash · ${order.paymentStatus}`}
       </p>
       <p className="mt-4 text-center text-xs">Thank you!</p>
     </div>

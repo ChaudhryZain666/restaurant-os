@@ -81,6 +81,11 @@ const orderSchema = new Schema(
     status: { type: String, enum: ORDER_STATUSES, default: "pending", index: true },
     statusHistory: { type: [statusHistoryEntrySchema], default: [] },
     orderType: { type: String, enum: ["pickup", "delivery", "dine_in"], required: true },
+    // POS phase — which surface created this order, orthogonal to orderType (see types/order.ts's
+    // OrderChannel doc comment: a dine-in order can be self-ordered via QR just as easily as rung
+    // up by staff for a walk-in table). Defaults to "online" so the entire pre-POS dataset is
+    // correctly, implicitly online with zero migration required.
+    channel: { type: String, enum: ["online", "pos"], default: "online" },
     // Live reference (for admin/KDS "show me this table's orders" queries) plus a snapshotted
     // name (for display without a join, and so a later table rename/deletion never changes how
     // a historical order reads — the same snapshot-over-live-reference reasoning as orderItemSchema
@@ -93,7 +98,13 @@ const orderSchema = new Schema(
     // and refunds/provider-refs are meaningless for a transaction this app never touches. "online"
     // orders are instead backed by the Payment collection (apps/api/src/models/Payment.ts), which
     // is the only source of truth allowed to move this field to "paid" for that payment method.
-    paymentMethod: { type: String, enum: ["cash", "online"], default: "cash" },
+    // "card" (added for POS, see docs/pos-architecture.md) is a THIRD staff-recorded method that
+    // reuses the exact same manual paid/unpaid flip as "cash" — a restaurant's own physical card
+    // reader isn't integrated with this platform, so a card payment collected at the register is,
+    // from this system's point of view, identical to cash: staff confirms it happened, nothing is
+    // charged or refunded through this app. updateOrderPaymentStatus already generalizes to "any
+    // non-online method" and needed zero changes to support this.
+    paymentMethod: { type: String, enum: ["cash", "card", "online"], default: "cash" },
     paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid" },
     // Snapshotted from Restaurant.settings.currency at order creation time — the same
     // snapshot-over-live-reference principle as orderItemSchema's price fields above. Without

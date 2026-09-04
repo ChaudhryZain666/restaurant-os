@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import mongoose, { type HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
 import type {
   CreateOrderInput,
   ListMyOrdersQueryInput,
@@ -11,20 +11,17 @@ import { paginateQuery } from "../utils/pagination.js";
 import { roleHasPermission } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
 import { Order, type OrderDoc } from "../models/Order.js";
-import { Table, type TableDoc } from "../models/Table.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
-import { earnPoints, redeemPoints, reverseLoyaltyForOrderIfNeeded } from "../services/loyalty.service.js";
+import { reverseLoyaltyForOrderIfNeeded } from "../services/loyalty.service.js";
 import { priceOrderItems, type PricedOrderItem } from "../services/orderPricing.service.js";
-import { recordPromoUsage, validatePromoCode } from "../services/promotion.service.js";
-import { nextOrderNumber } from "../services/orderNumber.service.js";
 import { isValidStatusTransition } from "../services/orderStateMachine.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
 import { emitOrderEvent, statusToEventType } from "../events/orderEvents.js";
 import { recordAuditEvent } from "../services/audit.service.js";
-import { checkDeliveryEligibility } from "../services/delivery.service.js";
 import { resolveTenantAccess } from "../middleware/tenant.js";
+import { createOrderForCustomer } from "../services/orderCreation.service.js";
 
 /** Never sent to a customer — staff-only field. Applied right before every customer-facing
  *  response (listMyOrders, getOrder-as-owner, cancelMyOrder) rather than relying on callers to
@@ -32,10 +29,6 @@ import { resolveTenantAccess } from "../middleware/tenant.js";
 function stripInternalFields<T extends Record<string, unknown>>(order: T): Omit<T, "internalNote"> {
   const { internalNote: _internalNote, ...rest } = order;
   return rest;
-}
-
-function roundCurrency(amount: number): number {
-  return Math.round(amount * 100) / 100;
 }
 
 /**
@@ -66,152 +59,25 @@ export async function createOrder(req: Request, res: Response) {
     redeemPoints: pointsToRedeem,
     promoCode,
   } = req.body as CreateOrderInput;
-  const customerId = req.user!.id;
 
-  const restaurant = await Restaurant.findOne({ _id: restaurantId, status: "active" });
-  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  const order = await createOrderForCustomer({
+    restaurantId,
+    customerId: req.user!.id,
+    channel: "online",
+    items,
+    orderType,
+    paymentMethod,
+    deliveryAddress,
+    tableToken,
+    customerNotes,
+    redeemPoints: pointsToRedeem,
+    promoCode,
+    // Phase 32 — re-derived from the authenticated session, never trusted from the request body
+    // (which has no isDemo field at all — see createOrderSchema).
+    isDemoAccount: req.user!.isDemoAccount === true,
+  });
 
-  const { settings } = restaurant;
-  const availability = computeAvailability(settings);
-  if (availability.status === "closed") {
-    throw ApiError.badRequest("This restaurant is not accepting orders right now");
-  }
-  if (availability.status === "paused") {
-    throw ApiError.badRequest(availability.reason || "This restaurant has temporarily paused ordering");
-  }
-  if (orderType === "pickup" && !settings.pickupEnabled) throw ApiError.badRequest("Pickup is not available");
-  if (orderType === "dine_in" && !settings.dineInEnabled) throw ApiError.badRequest("Dine-in ordering is not available");
-  // Delivery's own deliveryEnabled check happens inside checkDeliveryEligibility below (with a
-  // more specific reason) rather than being duplicated here.
-
-  // The selected payment method is independently re-checked against the restaurant's own
-  // settings, never trusted from the client just because the checkout UI happened to offer it.
-  if (paymentMethod === "cash" && !settings.cashEnabled) throw ApiError.badRequest("Cash payment is not available");
-  if (paymentMethod === "online" && !settings.onlinePaymentEnabled) throw ApiError.badRequest("Online payment is not available");
-
-  // The client only ever supplies the opaque token it resolved when the QR was scanned — never a
-  // tableId. Re-resolved and re-validated from scratch here (active, belongs to THIS restaurant)
-  // exactly like promo codes below; nothing about the earlier client-side resolution is trusted.
-  let table: HydratedDocument<TableDoc> | null = null;
-  if (orderType === "dine_in") {
-    table = await Table.findOne({ restaurantId, qrToken: tableToken, isActive: true });
-    if (!table) throw ApiError.badRequest("This table is no longer valid — please scan the QR code again");
-  }
-
-  // Delivery eligibility/fee/distance are entirely re-derived here from the restaurant's own
-  // stored coordinates and settings — checkDeliveryEligibility never trusts the client for any of
-  // deliveryEnabled, the restaurant's location, the delivery radius, the distance, or the fee. The
-  // client's ONLY contribution is which lat/lng it's asking about (already required by
-  // createOrderSchema for orderType "delivery"). See docs/delivery-architecture.md.
-  let deliveryDistanceKm: number | undefined;
-  let resolvedDeliveryFee = 0;
-  if (orderType === "delivery") {
-    // deliveryAddress.latitude/longitude are required by createOrderSchema's refine — deliveryAddress
-    // itself is guaranteed present here.
-    const eligibility = checkDeliveryEligibility(restaurant, deliveryAddress!.latitude, deliveryAddress!.longitude);
-    if (!eligibility.eligible) {
-      throw ApiError.badRequest(eligibility.reason ?? "Delivery is not available to this address");
-    }
-    deliveryDistanceKm = eligibility.distanceKm;
-    resolvedDeliveryFee = eligibility.deliveryFee ?? settings.deliveryFee;
-  }
-
-  // Prices, names, and modifier selections are entirely re-derived from the database here —
-  // nothing about what this order costs comes from the request body except which menu items
-  // and modifier options the customer picked.
-  const { items: pricedItems, subtotal } = await priceOrderItems(restaurantId, items);
-
-  if (subtotal < settings.minOrderAmount) {
-    throw ApiError.badRequest(`Minimum order amount is ${settings.minOrderAmount}`);
-  }
-
-  // A promo code is re-validated here from scratch — the same check the cart's "preview" call
-  // already ran, but nothing from that earlier call (including its discount amount) is trusted.
-  // businessId is passed through so a business-wide promotion (Phase 23) can resolve too, scoped
-  // to exactly this restaurant being in that promotion's own locationIds — never "any location of
-  // the same business."
-  const appliedPromo = promoCode
-    ? await validatePromoCode(restaurantId, promoCode, subtotal, restaurant.businessId?.toString())
-    : null;
-  const promoDiscount = appliedPromo?.discount ?? 0;
-
-  // 1 point = 1 currency unit discount, applied before tax
-  const loyaltyDiscount = Math.min(pointsToRedeem, subtotal);
-  const taxableAmount = Math.max(0, subtotal - loyaltyDiscount - promoDiscount);
-  const taxAmount = roundCurrency(taxableAmount * settings.taxRate);
-  const deliveryFee = orderType === "delivery" ? resolvedDeliveryFee : 0;
-  const total = roundCurrency(taxableAmount + taxAmount + deliveryFee);
-
-  const session = await mongoose.startSession();
-  try {
-    let createdOrder;
-    await session.withTransaction(async () => {
-      const orderNumber = await nextOrderNumber(restaurant._id, session);
-
-      const [order] = await Order.create(
-        [
-          {
-            restaurantId,
-            customerId,
-            orderNumber,
-            items: pricedItems,
-            orderType,
-            paymentMethod,
-            currency: settings.currency,
-            subtotal,
-            taxAmount,
-            deliveryFee,
-            discount: loyaltyDiscount,
-            promoCode: appliedPromo?.promotion.code,
-            promoDiscount,
-            total,
-            loyaltyPointsRedeemed: loyaltyDiscount,
-            loyaltyPointsEarned: 0,
-            deliveryAddress: orderType === "delivery" ? deliveryAddress : undefined,
-            deliveryDistanceKm: orderType === "delivery" ? deliveryDistanceKm : undefined,
-            tableId: table?._id,
-            tableName: table?.name,
-            customerNotes,
-            statusHistory: [{ status: "pending", at: new Date() }],
-            // Phase 32 — re-derived from the authenticated session, never trusted from the
-            // request body (which has no isDemo field at all — see createOrderSchema).
-            isDemo: req.user!.isDemoAccount === true,
-          },
-        ],
-        { session }
-      );
-
-      if (loyaltyDiscount > 0) {
-        await redeemPoints(restaurantId, customerId, loyaltyDiscount, order.id, session);
-      }
-      if (appliedPromo) {
-        // Re-checked atomically at write time, not just trusted from validatePromoCode's earlier
-        // read (see promotion.service.ts's recordPromoUsage) — a concurrent order that reached the
-        // usage limit first aborts this whole transaction rather than oversubscribing the promo.
-        const recorded = await recordPromoUsage(appliedPromo.promotion.id, session);
-        if (!recorded) {
-          throw ApiError.conflict("This promo code just reached its usage limit — please remove it and try again");
-        }
-      }
-
-      const earned = await earnPoints(restaurantId, customerId, order.id, total, session);
-      order.loyaltyPointsEarned = earned;
-      await order.save({ session });
-      createdOrder = order.toJSON();
-    });
-
-    sendSuccess(res, { order: createdOrder }, 201);
-    const created = createdOrder as unknown as { id: string; orderNumber: string };
-    emitOrderEvent("order.created", {
-      orderId: created.id,
-      orderNumber: created.orderNumber,
-      restaurantId,
-      customerId,
-      status: "pending",
-    });
-  } finally {
-    await session.endSession();
-  }
+  sendSuccess(res, { order }, 201);
 }
 
 export async function listMyOrders(req: Request, res: Response) {

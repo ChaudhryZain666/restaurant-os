@@ -13,9 +13,18 @@ export type OrderType = "pickup" | "delivery" | "dine_in";
 
 export type PaymentStatus = "unpaid" | "paid";
 
-/** "cash" keeps the original staff-marks-it-collected lifecycle; "online" is backed by the
- *  Payment domain (see types/payment.ts) and can only become "paid" via a verified provider event. */
-export type OrderPaymentMethod = "cash" | "online";
+/** "cash" keeps the original staff-marks-it-collected lifecycle; "card" (POS only) is a second
+ *  staff-recorded method with the identical manual paid/unpaid lifecycle as "cash" — this platform
+ *  has no live card-terminal integration, so a card payment collected at the register is recorded
+ *  the same way cash is; "online" is backed by the Payment domain (see types/payment.ts) and can
+ *  only become "paid" via a verified provider event. */
+export type OrderPaymentMethod = "cash" | "card" | "online";
+
+/** Which surface created this order — orthogonal to orderType (a dine-in order can be
+ *  self-ordered via QR (`"online"`) or rung up by staff for a walk-in table (`"pos"`)). Defaults
+ *  to "online" so every pre-POS order (the entire existing dataset) is correctly, implicitly
+ *  online with zero migration. */
+export type OrderChannel = "online" | "pos";
 
 export interface OrderItem {
   menuItemId: string;
@@ -66,6 +75,7 @@ export interface Order {
   /** Every status this order has passed through, in order — powers the tracking timeline. */
   statusHistory: OrderStatusHistoryEntry[];
   orderType: OrderType;
+  channel: OrderChannel;
   paymentMethod: OrderPaymentMethod;
   paymentStatus: PaymentStatus;
   /** Snapshotted from the restaurant's configured currency at order creation — see

@@ -165,9 +165,92 @@ export const IconPalette = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const IconRegister = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="3" y="10" width="18" height="10" rx="1.5" />
+    <path d="M6 10V7a6 6 0 0 1 12 0v3" />
+    <path d="M8 15h3M13 15h3" />
+    <circle cx="12" cy="10" r="0.5" fill="currentColor" stroke="none" />
+  </Icon>
+);
+
 export const IconLogout = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
     <path d="M16 17l5-5-5-5M21 12H9" />
+  </Icon>
+);
+
+export const IconSearch = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.3-4.3" />
+  </Icon>
+);
+
+export const IconPlus = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </Icon>
+);
+
+export const IconX = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </Icon>
+);
+
+export const IconArrowLeft = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </Icon>
+);
+
+export const IconCreditCard = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="2" />
+    <path d="M2.5 10h19" />
+    <path d="M6 15h4" />
+  </Icon>
+);
+
+export const IconBanknote = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="2.5" y="6" width="19" height="12" rx="2" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M6 9v0M18 15v0" />
+  </Icon>
+);
+
+export const IconClock = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
+  </Icon>
+);
+
+export const IconCheck = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M20 6 9 17l-5-5" />
+  </Icon>
+);
+
+export const IconMinus = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M5 12h14" />
+  </Icon>
+);
+
+export const IconChevronDown = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </Icon>
+);
+
+export const IconImage = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+    <path d="m21 15-5-5L5 21" />
   </Icon>
 );

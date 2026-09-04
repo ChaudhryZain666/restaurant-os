@@ -127,7 +127,11 @@ export function PrintOrderPage() {
           </div>
           <hr className="my-2 border-dashed border-black" />
           <p className="capitalize">
-            {order.paymentMethod === "online" ? `Paid online · ${order.paymentStatus}` : `Cash · ${order.paymentStatus}`}
+            {order.paymentMethod === "online"
+              ? `Paid online · ${order.paymentStatus}`
+              : order.paymentMethod === "card"
+                ? `Card · ${order.paymentStatus}`
+                : `Cash · ${order.paymentStatus}`}
           </p>
         </>
       )}

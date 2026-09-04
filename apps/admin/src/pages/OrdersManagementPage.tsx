@@ -52,8 +52,8 @@ function OrderCard({
               ? `Dine-in · ${order.tableName ?? "Table"}`
               : order.orderType === "delivery"
                 ? `Delivery${order.deliveryDistanceKm != null ? ` · ${order.deliveryDistanceKm}km` : ""}`
-                : order.orderType}{" "}
-            · {formatRestaurantTime(order.createdAt, timezone)}
+                : order.orderType}
+            {order.channel === "pos" && " · POS"} · {formatRestaurantTime(order.createdAt, timezone)}
           </p>
         </div>
         <Badge tone={order.paymentStatus === "paid" ? "success" : "neutral"}>

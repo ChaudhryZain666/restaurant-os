@@ -129,6 +129,10 @@ describe("order pricing (server-authoritative)", () => {
     expect(order.items[0].unitPrice).toBe(10);
     expect(order.items[0].selectedModifiers[0].priceAdjustment).toBe(2);
     expect(order.orderNumber).toMatch(/^ORD-\d+$/);
+    // POS phase — the customer-facing checkout must still default to channel "online" now that
+    // createOrder is a thin wrapper around the shared createOrderForCustomer service (see
+    // orderCreation.service.ts and pos.controller.test.ts's "channel: pos" equivalent).
+    expect(order.channel).toBe("online");
   });
 
   it("rejects a selection count outside a modifier group's min/max", async () => {

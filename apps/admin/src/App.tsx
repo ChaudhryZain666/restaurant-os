@@ -17,6 +17,11 @@ import { BusinessPromotionsPage } from "./pages/BusinessPromotionsPage";
 import { OrdersManagementPage } from "./pages/OrdersManagementPage";
 import { KitchenPage } from "./pages/KitchenPage";
 import { TablesPage } from "./pages/TablesPage";
+import { POSLayout } from "./pos/POSLayout";
+import { RegisterPage as PosRegisterPage } from "./pos/RegisterPage";
+import { PosTablesPage } from "./pos/TablesPage";
+import { PosCustomersPage } from "./pos/CustomersPage";
+import { PosOrdersPage } from "./pos/OrdersPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -103,6 +108,23 @@ export function App() {
           </RequireAuth>
         }
       />
+      {/* Dedicated POS application — deliberately its own shell (POSLayout), not nested under
+          <Layout />. Same auth/permission/location/business context (AuthProvider/BusinessProvider/
+          LocationProvider are all mounted above <App/> in main.tsx, so they're already available
+          here with zero extra wiring), same restaurant.pos.operate permission the old in-Layout
+          /pos route used — only the visual shell and page structure changed. */}
+      <Route
+        element={
+          <RequireAuth permission="restaurant.pos.operate">
+            <POSLayout />
+          </RequireAuth>
+        }
+      >
+        <Route path="/pos" element={<PosRegisterPage />} />
+        <Route path="/pos/tables" element={<PosTablesPage />} />
+        <Route path="/pos/customers" element={<PosCustomersPage />} />
+        <Route path="/pos/orders" element={<PosOrdersPage />} />
+      </Route>
       <Route element={<Layout />}>
         <Route
           path="/"

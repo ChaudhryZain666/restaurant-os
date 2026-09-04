@@ -21,6 +21,7 @@ import { restaurantPaymentAccountRouter } from "./restaurantPaymentAccount.route
 import { paymentWebhookRouter } from "./paymentWebhook.routes.js";
 import { auditLogRouter } from "./auditLog.routes.js";
 import { tableRouter } from "./table.routes.js";
+import { posRouter } from "./pos.routes.js";
 import { deliveryRouter } from "./delivery.routes.js";
 import { geocodingRouter } from "./geocoding.routes.js";
 import { customerRouter } from "./customer.routes.js";
@@ -82,6 +83,7 @@ apiRouter.use("/restaurants/:restaurantId/payment-account", restaurantPaymentAcc
 apiRouter.use("/webhooks/payments", paymentWebhookRouter);
 apiRouter.use("/restaurants/:restaurantId/audit-log", auditLogRouter);
 apiRouter.use("/restaurants/:restaurantId/tables", tableRouter);
+apiRouter.use("/restaurants/:restaurantId/pos", posRouter);
 apiRouter.use("/restaurants/:restaurantId/delivery", deliveryRouter);
 apiRouter.use("/geocoding", geocodingRouter);
 apiRouter.use("/restaurants/:restaurantId/loyalty", loyaltyRouter);

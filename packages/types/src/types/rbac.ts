@@ -37,6 +37,7 @@ export type Permission =
   | "restaurant.audit.read"
   | "restaurant.analytics.read"
   | "restaurant.tables.manage"
+  | "restaurant.pos.operate"
   | "billing.read"
   | "billing.manage"
   | "platform.restaurants.manage"
@@ -82,6 +83,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.audit.read",
     "restaurant.analytics.read",
     "restaurant.tables.manage",
+    "restaurant.pos.operate",
     "billing.read",
     "billing.manage",
     "support.tickets.read",
@@ -99,10 +101,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.audit.read",
     "restaurant.analytics.read",
     "restaurant.tables.manage",
+    "restaurant.pos.operate",
     "billing.read",
     "support.tickets.read",
   ],
-  restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage"],
+  // Front-of-house staff — the role that actually runs a register, unlike kitchen_staff below.
+  restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage", "restaurant.pos.operate"],
   kitchen_staff: ["restaurant.orders.read", "restaurant.orders.manage"],
   customer: [],
   // Phase 25 — a coarse top-level identity only (person whose primary identity is agency

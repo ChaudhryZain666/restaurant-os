@@ -57,6 +57,10 @@ export interface RestaurantSettings {
    *  corresponding functionality; never delete any underlying data — re-enabling restores it. */
   kitchenEnabled?: boolean;
   staffEnabled?: boolean;
+  /** POS phase — same opt-in-off-by-default pattern as dineInEnabled. Hides the POS nav item and
+   *  is independently re-checked server-side (POST .../pos/orders), same as every other settings
+   *  gate here. */
+  posEnabled?: boolean;
   /**
    * Phase 28 — optional distance-tiered delivery fee. The tier with the smallest maxDistanceKm
    * that still covers the order's actual distance applies (entry order doesn't matter); if none

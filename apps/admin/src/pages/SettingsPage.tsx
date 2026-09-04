@@ -130,6 +130,7 @@ export function SettingsPage() {
               brandColor: restaurant.settings.brandColor || undefined,
               kitchenEnabled: restaurant.settings.kitchenEnabled,
               staffEnabled: restaurant.settings.staffEnabled,
+              posEnabled: restaurant.settings.posEnabled,
               businessHours:
                 restaurant.settings.businessHours.length > 0 ? restaurant.settings.businessHours : defaultHours(),
             },
@@ -438,6 +439,27 @@ export function SettingsPage() {
               Off by default. Manage your tables and print their QR codes on the{" "}
               <Link to="/tables" className="text-primary hover:underline">
                 Tables page
+              </Link>
+              .
+            </p>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
+            <legend className="px-1 text-sm font-medium">Point of sale</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={restaurant.settings.posEnabled ?? false}
+                onChange={(e) =>
+                  setRestaurant({ ...restaurant, settings: { ...restaurant.settings, posEnabled: e.target.checked } })
+                }
+              />
+              Enable the staff POS terminal
+            </label>
+            <p className="text-xs text-muted">
+              Off by default. Once on, owners/managers/staff can ring up walk-in orders on the{" "}
+              <Link to="/pos" className="text-primary hover:underline">
+                POS page
               </Link>
               .
             </p>

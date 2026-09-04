@@ -45,7 +45,9 @@ export async function listRestaurantCustomers(req: Request, res: Response) {
 
   if (search) {
     const re = new RegExp(escapeRegex(search), "i");
-    pipeline.push({ $match: { $or: [{ "customer.name": re }, { "customer.email": re }] } });
+    // Phone added (POS phase) — a walk-in customer is far more often searched for by phone number
+    // than name or email at a register.
+    pipeline.push({ $match: { $or: [{ "customer.name": re }, { "customer.email": re }, { "customer.phone": re }] } });
   }
 
   pipeline.push(

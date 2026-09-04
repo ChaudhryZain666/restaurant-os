@@ -44,7 +44,7 @@ export async function createPaymentForOrder(
   if (!order) throw ApiError.notFound("Order not found");
   if (order.customerId.toString() !== customerId) throw ApiError.forbidden();
   if (order.paymentMethod !== "online") {
-    throw ApiError.badRequest('This order was placed with paymentMethod "cash" and has no online payment to create.');
+    throw ApiError.badRequest(`This order was placed with paymentMethod "${order.paymentMethod}" and has no online payment to create.`);
   }
   if (order.paymentStatus === "paid") throw ApiError.conflict("This order is already paid");
 
