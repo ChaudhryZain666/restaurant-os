@@ -155,6 +155,14 @@ const envSchema = z.object({
   // (see docs/commercial-decisions.md's "Failed-payment policy" section) — this is a working,
   // documented-non-final default, mirroring TRIAL_PERIOD_DAYS's exact precedent.
   PAST_DUE_GRACE_PERIOD_DAYS: z.coerce.number().int().min(0).default(7),
+
+  // Phase 43 — read only by scripts/bootstrapPlatformAdmin.ts, the sole production-safe way to
+  // provision a platform_admin account. Deliberately no default of any kind (not even a dev one):
+  // scripts/seed.ts (the production-safe commercial-catalog seed) never creates a platform_admin at
+  // all, so there is nothing here for a missing value to silently fall back to. Password bound to
+  // the same 8-128 char range auth.ts's registerSchema already enforces for every other account.
+  PLATFORM_ADMIN_EMAIL: z.string().email().optional(),
+  PLATFORM_ADMIN_PASSWORD: z.string().min(8).max(128).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

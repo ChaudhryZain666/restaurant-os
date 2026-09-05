@@ -38,14 +38,18 @@ Why things are built this way: **[docs/architecture.md](docs/architecture.md)**.
 ```
 cp .env.example .env
 docker compose up -d --build
-docker compose exec api npm run seed -w apps/api
+docker compose exec api npm run seed -w apps/api        # commercial Plan catalog only
+docker compose exec api npm run seed:demo -w apps/api    # demo restaurant + accounts (dev/demo only)
 ```
 - Storefront: http://localhost:5173
 - Admin: http://localhost:5174
 - API: http://localhost:4000 · Docs: http://localhost:4000/api/docs
 
-Seeded accounts: `platform-admin@restaurant.local` / `Admin123!` and
-`owner@demo-restaurant.local` / `Owner123!` (owns the seeded `demo-restaurant`).
+Seeded accounts (from `npm run seed:demo` — never run this against production):
+`platform-admin@restaurant.local` / `Admin123!` and
+`owner@demo-restaurant.local` / `Owner123!` (owns the seeded `demo-restaurant`). `npm run seed`
+alone only populates the real commercial Plan catalog and creates no accounts — see
+[docs/development-setup.md](docs/development-setup.md) for the production-safe admin bootstrap path.
 
 ## Status
 

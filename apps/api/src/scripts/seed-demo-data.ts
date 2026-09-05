@@ -1,9 +1,17 @@
 /**
- * Run after `npm run seed` (which only creates the restaurant/users/menu skeleton) to fill in
- * realistic demo content: menu item images, order history, loyalty activity, a knowledge base,
- * and support tickets — everything a fresh install needs to look like a real operating
- * restaurant rather than an empty shell. Every section is idempotent (guarded by a count check),
- * so re-running this is always safe.
+ * DEVELOPMENT / DEMO ONLY — never run this against a production database.
+ *
+ * Phase 43 — now fully self-sufficient: creates the platform-admin login and the demo-restaurant
+ * skeleton (owner, business, menu) itself if they don't already exist, then fills in realistic demo
+ * content on top — menu item images, order history, loyalty activity, a knowledge base, and support
+ * tickets — everything a fresh install needs to look like a real operating restaurant rather than an
+ * empty shell. Every section is idempotent (guarded by a count/existence check), so re-running this
+ * is always safe.
+ *
+ * This is deliberately the ONLY place these known-password dev fixtures
+ * (platform-admin@restaurant.local / owner@demo-restaurant.local) are created — the production
+ * commercial seed (`npm run seed`, scripts/seed.ts) creates neither. Run `npm run seed` first if you
+ * also want the real Plan catalog in your local database (not required for anything in this file).
  */
 import bcrypt from "bcryptjs";
 import mongoose, { Types } from "mongoose";
@@ -128,13 +136,282 @@ async function ensureCustomer(name: string, email: string) {
 async function main() {
   await connectDB();
 
-  const restaurant = await Restaurant.findOne({ slug: "demo-restaurant" });
+  // --- 0a. Platform admin (moved from scripts/seed.ts in Phase 43 — see this file's own header
+  // comment for why: the production-safe commercial seed must never create any account). ---
+  const platformAdminEmail = "platform-admin@restaurant.local";
+  const existingPlatformAdmin = await User.findOne({ email: platformAdminEmail });
+  if (!existingPlatformAdmin) {
+    await User.create({
+      name: "Platform Admin",
+      email: platformAdminEmail,
+      passwordHash: await bcrypt.hash("Admin123!", 12),
+      role: "platform_admin",
+    });
+    console.log(`[backfill] created platform admin: ${platformAdminEmail} / Admin123!`);
+  }
+
+  // --- 0b. Demo restaurant skeleton (owner, business, restaurant) — also moved from
+  // scripts/seed.ts. The menu (categories/items/modifier groups) is seeded separately below,
+  // guarded by its own independent count check, matching ensureSecondaryRestaurant's existing
+  // "every step independently guarded" resumability convention elsewhere in this file. ---
+  let restaurant = await Restaurant.findOne({ slug: "demo-restaurant" });
   if (!restaurant) {
-    console.log("[backfill] no demo-restaurant found, nothing to do");
-    await mongoose.disconnect();
-    return;
+    const ownerEmail = "owner@demo-restaurant.local";
+    let owner = await User.findOne({ email: ownerEmail });
+    if (!owner) {
+      owner = await User.create({
+        name: "Demo Restaurant Owner",
+        email: ownerEmail,
+        passwordHash: await bcrypt.hash("Owner123!", 12),
+        role: "customer", // upgraded to restaurant_owner below, once the restaurant exists
+      });
+    }
+
+    // Phase 21 — seeded restaurants get a Business + canonical (businessId-scoped) menu directly,
+    // matching real post-migration shape, rather than the legacy restaurantId-only shape the old
+    // write endpoints (now retired for migrated businesses) used to produce. Keeps local dev data
+    // consistent with what the real migration actually leaves behind.
+    const business = await Business.create({
+      name: "Demo Restaurant",
+      slug: "demo-restaurant",
+      ownerId: owner._id,
+      status: "active",
+    });
+
+    restaurant = await Restaurant.create({
+      name: "Demo Restaurant",
+      slug: "demo-restaurant",
+      businessId: business._id,
+      description: "Wood-fired pizza, smash burgers, and made-from-scratch sides — a neighborhood spot serving Springfield since day one.",
+      phone: "+1-555-0100",
+      email: "hello@demo-restaurant.local",
+      city: "Springfield",
+      country: "USA",
+      // Real Springfield, IL coordinates — the reference point delivery-radius eligibility is
+      // calculated from (see services/delivery.service.ts).
+      latitude: 39.7817,
+      longitude: -89.6501,
+      ownerId: owner._id,
+      status: "active",
+      settings: {
+        currency: "USD",
+        timezone: "America/Chicago",
+        orderingEnabled: true,
+        pickupEnabled: true,
+        deliveryEnabled: true,
+        dineInEnabled: true,
+        cashEnabled: true,
+        onlinePaymentEnabled: true,
+        minOrderAmount: 0,
+        taxRate: 0.08,
+        deliveryFee: 3.99,
+        deliveryRadiusKm: 8,
+        businessHours: [
+          { day: "monday", isClosed: false, open: "09:00", close: "22:00" },
+          { day: "tuesday", isClosed: false, open: "09:00", close: "22:00" },
+          { day: "wednesday", isClosed: false, open: "09:00", close: "22:00" },
+          { day: "thursday", isClosed: false, open: "09:00", close: "22:00" },
+          { day: "friday", isClosed: false, open: "09:00", close: "23:00" },
+          { day: "saturday", isClosed: false, open: "10:00", close: "23:00" },
+          { day: "sunday", isClosed: true },
+        ],
+      },
+    });
+    owner.role = "restaurant_owner";
+    owner.restaurantId = restaurant._id;
+    // Phase 18's Business/Location model needs this too — BusinessContext (apps/admin) resolves
+    // activeBusinessId from here, and every restaurant-scoped nav item depends on that being set.
+    owner.businessId = business._id;
+    await owner.save();
+    console.log(`[backfill] created restaurant "demo-restaurant" owned by ${ownerEmail} / Owner123!`);
   }
   const restaurantId = restaurant._id;
+
+  // --- 0c. Base menu (categories/items/modifier groups) — independently guarded so a restaurant
+  // that already existed (e.g. from before this Phase 43 change) but was somehow left with no menu
+  // still gets one on a re-run, same reasoning as every other step in this file. ---
+  const categoryCount = await Category.countDocuments({ restaurantId: restaurant._id });
+  if (categoryCount === 0) {
+    const withBusinessId = <T extends object>(docs: T[]) => docs.map((doc) => ({ ...doc, businessId: restaurant!.businessId }));
+
+    const [pizza, burgers, salad, sides, dessert, drinks] = await Category.insertMany(
+      withBusinessId([
+        { restaurantId: restaurant._id, name: "Pizza", sortOrder: 0 },
+        { restaurantId: restaurant._id, name: "Burgers", sortOrder: 1 },
+        { restaurantId: restaurant._id, name: "Salad", sortOrder: 2 },
+        { restaurantId: restaurant._id, name: "Sides", sortOrder: 3 },
+        { restaurantId: restaurant._id, name: "Dessert", sortOrder: 4 },
+        { restaurantId: restaurant._id, name: "Drinks", sortOrder: 5 },
+      ])
+    );
+
+    const seededMenuItems = await MenuItem.insertMany(withBusinessId([
+      {
+        restaurantId: restaurant._id,
+        categoryId: pizza._id,
+        name: "Margherita Pizza",
+        description: "Tomato, mozzarella, basil",
+        price: 12.5,
+        imageUrl: "/menu-images/margherita-pizza.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: pizza._id,
+        name: "Pepperoni Pizza",
+        description: "Tomato, mozzarella, pepperoni",
+        price: 14,
+        imageUrl: "/menu-images/pepperoni-pizza.svg",
+        sortOrder: 1,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: pizza._id,
+        name: "BBQ Chicken Pizza",
+        description: "BBQ sauce, grilled chicken, red onion, mozzarella",
+        price: 15.5,
+        imageUrl: "/menu-images/bbq-chicken-pizza.svg",
+        sortOrder: 2,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: burgers._id,
+        name: "Classic Burger",
+        description: "Beef patty, cheddar, lettuce, tomato, house sauce",
+        price: 10.5,
+        imageUrl: "/menu-images/classic-burger.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: burgers._id,
+        name: "Crispy Chicken Burger",
+        description: "Buttermilk-fried chicken, pickles, slaw, spicy mayo",
+        price: 11,
+        imageUrl: "/menu-images/crispy-chicken-burger.svg",
+        sortOrder: 1,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: salad._id,
+        name: "Caesar Salad",
+        description: "Romaine, parmesan, croutons",
+        price: 8.5,
+        imageUrl: "/menu-images/caesar-salad.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: sides._id,
+        name: "Loaded Fries",
+        description: "Crispy fries, cheese sauce, bacon bits, scallions",
+        price: 7,
+        imageUrl: "/menu-images/loaded-fries.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: dessert._id,
+        name: "Tiramisu",
+        description: "Classic Italian dessert",
+        price: 6,
+        imageUrl: "/menu-images/tiramisu.svg",
+        sortOrder: 0,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: dessert._id,
+        name: "Chocolate Cake",
+        description: "Rich layered chocolate cake, chocolate ganache",
+        price: 6.5,
+        imageUrl: "/menu-images/chocolate-cake.svg",
+        sortOrder: 1,
+      },
+      {
+        restaurantId: restaurant._id,
+        categoryId: drinks._id,
+        name: "Coke",
+        description: "330ml can",
+        price: 2,
+        imageUrl: "/menu-images/coke.svg",
+        sortOrder: 0,
+      },
+    ]));
+
+    const margherita = seededMenuItems.find((i) => i.name === "Margherita Pizza")!;
+    const pepperoni = seededMenuItems.find((i) => i.name === "Pepperoni Pizza")!;
+    const classicBurgerItem = seededMenuItems.find((i) => i.name === "Classic Burger")!;
+    const cokeItem = seededMenuItems.find((i) => i.name === "Coke")!;
+
+    await ModifierGroup.insertMany(withBusinessId([
+      {
+        restaurantId: restaurant._id,
+        menuItemId: margherita._id,
+        name: "Size",
+        minSelect: 1,
+        maxSelect: 1,
+        sortOrder: 0,
+        options: [
+          { name: "Small", priceAdjustment: 0, sortOrder: 0 },
+          { name: "Medium", priceAdjustment: 2, sortOrder: 1 },
+          { name: "Large", priceAdjustment: 4, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: margherita._id,
+        name: "Extra toppings",
+        minSelect: 0,
+        maxSelect: 3,
+        sortOrder: 1,
+        options: [
+          { name: "Extra cheese", priceAdjustment: 1.5, sortOrder: 0 },
+          { name: "Mushrooms", priceAdjustment: 1, sortOrder: 1 },
+          { name: "Olives", priceAdjustment: 1, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: pepperoni._id,
+        name: "Size",
+        minSelect: 1,
+        maxSelect: 1,
+        sortOrder: 0,
+        options: [
+          { name: "Small", priceAdjustment: 0, sortOrder: 0 },
+          { name: "Medium", priceAdjustment: 2, sortOrder: 1 },
+          { name: "Large", priceAdjustment: 4, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: classicBurgerItem._id,
+        name: "Add-ons",
+        minSelect: 0,
+        maxSelect: 3,
+        sortOrder: 0,
+        options: [
+          { name: "Extra patty", priceAdjustment: 3, sortOrder: 0 },
+          { name: "Extra cheese", priceAdjustment: 1, sortOrder: 1 },
+          { name: "Bacon", priceAdjustment: 2, sortOrder: 2 },
+        ],
+      },
+      {
+        restaurantId: restaurant._id,
+        menuItemId: cokeItem._id,
+        name: "Size",
+        minSelect: 1,
+        maxSelect: 1,
+        sortOrder: 0,
+        options: [
+          { name: "Regular", priceAdjustment: 0, sortOrder: 0 },
+          { name: "Large", priceAdjustment: 1, sortOrder: 1 },
+        ],
+      },
+    ]));
+
+    console.log("[backfill] inserted categories, menu items, and modifier groups for demo-restaurant");
+  }
 
   // --- 1. Backfill food images on existing menu items ---
   const items = await MenuItem.find({ restaurantId });
