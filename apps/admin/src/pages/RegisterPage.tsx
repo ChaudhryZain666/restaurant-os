@@ -6,9 +6,11 @@ import { useAuth } from "../context/AuthContext";
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
 /**
- * Phase 25 — the admin app's only self-serve signup, and only for one reason: starting an agency.
- * Every other admin identity is always invited by someone already in the system. Lands directly on
- * /agency, where a fresh "customer"-role account sees the create-agency form.
+ * Phase 25 — a plain account-creation form for starting an agency. Lands directly on /agency,
+ * where a fresh "customer"-role account sees the create-agency form. Phase 44 added a second
+ * self-serve entry point, OwnerSignupWizardPage (/signup), for an independent restaurant owner —
+ * every other admin identity besides those two is still always invited by someone already in the
+ * system.
  */
 export function RegisterPage() {
   const { register } = useAuth();

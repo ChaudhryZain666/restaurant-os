@@ -44,5 +44,5 @@ export const FAQS = [
   { q: "Can I see restaurant analytics?", a: "Yes, a dashboard shows revenue, order volume, average order value and your best-selling items." },
   { q: "Can I manage multiple locations?", a: "Multi-location management is on our roadmap — the platform's architecture is already built to support it." },
   { q: "Can I offer promotions and loyalty?", a: "Yes — both are available today. Loyalty points accrue automatically, and you can create your own percentage or fixed-amount discount codes." },
-  { q: "Is there a free trial?", a: "Yes — tell us about your restaurant and our team will get you set up. See the Start Free Trial page for exactly what that includes." },
+  { q: "Is there a free trial?", a: "Yes — a 14-day trial, no credit card required. Create your account on the Start Free Trial page and your restaurant is ready to set up immediately." },
 ] as const;

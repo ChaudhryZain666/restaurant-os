@@ -5,7 +5,9 @@
 export const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL ?? "http://localhost:5173";
 export const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? "http://localhost:5174";
 export const ADMIN_LOGIN_URL = `${ADMIN_URL}/login`;
-// Phase 28 — the real plan-first agency signup wizard (AgencySignupWizardPage.tsx). Owners don't
-// self-serve signup (they're always invited by an agency or platform admin — see RegisterPage.tsx's
-// doc comment), so this is specifically "start an agency," not a generic "start a trial" link.
+// Phase 28 — the real plan-first agency signup wizard (AgencySignupWizardPage.tsx). Specifically
+// "start an agency," not a generic "start a trial" link.
 export const ADMIN_START_URL = `${ADMIN_URL}/start`;
+// Phase 44 — the owner counterpart (OwnerSignupWizardPage.tsx): an independent restaurant owner's
+// real self-serve entry point, wired to StartTrialPage's "Running a single restaurant?" CTA.
+export const ADMIN_SIGNUP_URL = `${ADMIN_URL}/signup`;

@@ -1,10 +1,9 @@
 import { Link } from "react-router-dom";
 import { Button, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
-import { LeadForm } from "../components/LeadForm";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { ADMIN_START_URL } from "../lib/links";
+import { ADMIN_START_URL, ADMIN_SIGNUP_URL } from "../lib/links";
 
 const INCLUDED = [
   "Your own branded restaurant storefront",
@@ -35,7 +34,7 @@ export function StartTrialPage() {
         as="h1"
         eyebrow="Start Free"
         title="Get your restaurant online without the complexity"
-        description="Tell us a bit about your restaurant — our team will follow up to finish setting up your ordering page."
+        description="Create your account and your restaurant goes live in minutes — no sales call, no credit card."
       />
       <div className="mx-auto mt-12 grid max-w-5xl gap-10 lg:grid-cols-2">
         <Reveal className="flex flex-col gap-8">
@@ -89,27 +88,25 @@ export function StartTrialPage() {
         </Reveal>
         <Reveal index={1} className="flex flex-col gap-8">
           <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-5">
-            <h3 className="font-heading text-lg font-semibold text-foreground">Running an agency?</h3>
+            <h3 className="font-heading text-lg font-semibold text-foreground">Running a single restaurant?</h3>
             <p className="text-sm text-muted">
-              Start your agency's trial directly — choose a plan, create your account, and you're in. No waiting on
-              our team.
+              Create your account, name your restaurant, and start your 14-day trial — no waiting on our team, no
+              card required.
             </p>
-            <a href={ADMIN_START_URL}>
-              <Button className="w-full">Start agency trial</Button>
+            <a href={ADMIN_SIGNUP_URL}>
+              <Button className="w-full">Start my restaurant's trial</Button>
             </a>
           </div>
           <div className="flex flex-col gap-3">
-            <h3 className="font-heading text-lg font-semibold text-foreground">Running a single restaurant?</h3>
+            <h3 className="font-heading text-lg font-semibold text-foreground">Running an agency?</h3>
             <p className="text-sm text-muted">
-              Restaurant accounts are set up by our team or by the agency managing your account — tell us a bit
-              about your restaurant below and we'll follow up to get you set up.
+              Start your agency's trial directly — choose a plan, create your account, and you're in.
             </p>
-            <LeadForm
-              submitLabel="Request Setup"
-              successTitle="Thanks"
-              successBody="Our team will be in touch shortly to finish setting up your restaurant's ordering page."
-              qualification
-            />
+            <a href={ADMIN_START_URL}>
+              <Button variant="outline" className="w-full">
+                Start agency trial
+              </Button>
+            </a>
           </div>
         </Reveal>
       </div>

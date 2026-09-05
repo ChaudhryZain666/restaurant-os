@@ -46,6 +46,8 @@ import { PlatformAnalyticsPage } from "./pages/PlatformAnalyticsPage";
 import { SystemConfigPage } from "./pages/SystemConfigPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { AgencySignupWizardPage } from "./pages/AgencySignupWizardPage";
+import { OwnerSignupWizardPage } from "./pages/OwnerSignupWizardPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { AcceptAgencyInvitePage } from "./pages/AcceptAgencyInvitePage";
 import { AgencyDashboardPage } from "./pages/AgencyDashboardPage";
 import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
@@ -82,6 +84,10 @@ export function App() {
       {/* Phase 28 — the plan-first agency signup wizard, additive to /register (unchanged, still
           exercised directly by e2e/agency-management.spec.ts). */}
       <Route path="/start" element={<AgencySignupWizardPage />} />
+      {/* Phase 44 — the owner counterpart: marketing's "Start Free Trial" -> single-restaurant path
+          lands here (see apps/marketing's StartTrialPage + lib/links.ts ADMIN_SIGNUP_URL). */}
+      <Route path="/signup" element={<OwnerSignupWizardPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
       {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
           BILLING_PROVIDER=mock (the API returns this path only from the mock provider). */}

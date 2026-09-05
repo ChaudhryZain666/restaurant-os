@@ -42,8 +42,11 @@ interface AuthContextValue {
    *  possible, but accepting while ALREADY authenticated as the invited account is) — every claim
    *  in this app (businessId, locationIds, and now agencyMemberships) is only ever re-derived at
    *  login/refresh, never live, so the frontend must explicitly ask for a refresh rather than
-   *  expect one to happen automatically. */
-  refreshUser: () => Promise<void>;
+   *  expect one to happen automatically. Returns the freshly-fetched user (or null if the session
+   *  turned out to be gone) — Phase 44's owner signup wizard reads this directly to decide whether
+   *  emailVerifiedAt has actually flipped yet, rather than reading the pre-update `user` a
+   *  same-render read of context state would still show. */
+  refreshUser: () => Promise<PublicUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -146,9 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function refreshUser() {
     const refreshed = await apiClient.tryRefresh();
-    if (!refreshed) return;
+    if (!refreshed) return null;
     const { user } = await apiClient.request<{ user: PublicUser }>("/auth/me");
     setUser(user);
+    return user;
   }
 
   return (

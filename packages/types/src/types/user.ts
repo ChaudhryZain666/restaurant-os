@@ -31,6 +31,10 @@ export interface PublicUser {
   /** Phase 32 — true only for a throwaway account created by POST /auth/demo-session (the public
    *  storefront playground). Never true for a real registered or invited account. */
   isDemoAccount?: boolean;
+  /** Phase 37 — true once emailVerifiedAt is set (auth.controller.ts's toPublicUser already sent
+   *  this; Phase 44 adds it to the shared type so the owner self-serve signup wizard can read it
+   *  to know whether it's safe to proceed past the verify-email step). */
+  emailVerified: boolean;
 }
 
 export interface AuthTokens {
