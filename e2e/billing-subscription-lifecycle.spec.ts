@@ -238,8 +238,16 @@ test.describe.serial("owner Basic/Pro tier selection and upgrade (Phase 34)", ()
     await expect(page.getByText("Trial", { exact: true })).toBeVisible();
 
     // --- Change plan to Pro (plan code "owner_pro") — a real changeSubscriptionPlan call, not a
-    // re-subscribe. ---
+    // re-subscribe. Portal UX safety phase: selecting a plan now opens a confirmation dialog
+    // (current plan/new plan/price/scope, and a location-limit conflict check) instead of
+    // mutating immediately — confirming it is what actually calls change-plan. ---
     await page.getByLabel("Change plan:").selectOption({ value: "owner_pro" });
+    await expect(page.getByRole("heading", { name: "Change your plan?" })).toBeVisible();
+    await page.getByRole("button", { name: "Change plan" }).click();
+    // Wait for the dialog to actually close (the change-plan request + reload landing) before
+    // checking the plan name elsewhere on the page — otherwise this can transiently race the
+    // dialog's own "New plan" line, which shows the same text.
+    await expect(page.getByRole("heading", { name: "Change your plan?" })).toHaveCount(0);
     await expect(page.getByText("Pro", { exact: false })).toBeVisible({ timeout: 10_000 });
   });
 });

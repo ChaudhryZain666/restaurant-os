@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
-import { Alert, Badge, Button, Card } from "@restaurant/ui";
+import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 import { useAuth } from "../context/AuthContext";
+import { useLocation as useActiveLocation } from "../context/LocationContext";
+import { useCan } from "../hooks/useCan";
 
 const STATUS_TONE: Record<Subscription["status"], "success" | "neutral" | "warning" | "danger"> = {
   trialing: "warning",
@@ -55,6 +57,8 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
 export function BillingPage() {
   const { user } = useAuth();
   const businessId = user!.businessId!;
+  const { locations } = useActiveLocation();
+  const canManage = useCan("billing.manage");
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -66,6 +70,12 @@ export function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Change-plan confirmation — selecting a plan no longer mutates the subscription directly (see
+  // changePlan below); it only opens the confirmation dialog. selectResetKey remounts the
+  // uncontrolled <select> back to its placeholder after cancel/confirm, since the browser would
+  // otherwise keep showing the just-picked (not-yet-applied) option as selected.
+  const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
+  const [selectResetKey, setSelectResetKey] = useState(0);
 
   async function reload() {
     const [subRes, plansRes, historyRes] = await Promise.all([
@@ -189,6 +199,18 @@ export function BillingPage() {
     }
   }
 
+  async function confirmChangePlan() {
+    if (!pendingPlanCode) return;
+    await changePlan(pendingPlanCode);
+    setPendingPlanCode(null);
+    setSelectResetKey((k) => k + 1);
+  }
+
+  function cancelChangePlan() {
+    setPendingPlanCode(null);
+    setSelectResetKey((k) => k + 1);
+  }
+
   // Dev/test-only — no real billing provider is integrated (see MockBillingProvider.ts), so
   // there's no real trial-conversion event to wait for. Drives the same signature-verified event
   // path a genuine webhook would (billingMockDriver.controller.ts), not a shortcut around it. Only
@@ -267,51 +289,56 @@ export function BillingPage() {
             )}
           </dl>
 
-          <div className="flex flex-wrap gap-3">
-            {subscription.status === "cancelling" && (
-              <Button size="sm" onClick={reactivate} disabled={busy}>
-                Reactivate
-              </Button>
-            )}
-            {subscription.status === "trialing" && (
-              <Button size="sm" onClick={simulateTrialConversion} disabled={busy}>
-                Simulate trial conversion (dev)
-              </Button>
-            )}
-            {["trialing", "active", "past_due"].includes(subscription.status) && (
-              <button
-                type="button"
-                onClick={cancel}
-                disabled={busy}
-                className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
-              >
-                Cancel subscription
-              </button>
-            )}
-            {["trialing", "active", "past_due"].includes(subscription.status) &&
-              availablePlans.filter((p) => p.code !== plan.code).length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted">
-                  Change plan:
-                  <select
-                    disabled={busy}
-                    defaultValue=""
-                    onChange={(e) => e.target.value && changePlan(e.target.value)}
-                    className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
-                  >
-                    <option value="" disabled>
-                      Select a plan
-                    </option>
-                    {availablePlans
-                      .filter((p) => p.code !== plan.code)
-                      .map((p) => (
-                        <option key={p.code} value={p.code}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+          {canManage ? (
+            <div className="flex flex-wrap gap-3">
+              {subscription.status === "cancelling" && (
+                <Button size="sm" onClick={reactivate} disabled={busy}>
+                  Reactivate
+                </Button>
               )}
-          </div>
+              {subscription.status === "trialing" && (
+                <Button size="sm" onClick={simulateTrialConversion} disabled={busy}>
+                  Simulate trial conversion (dev)
+                </Button>
+              )}
+              {["trialing", "active", "past_due"].includes(subscription.status) && (
+                <button
+                  type="button"
+                  onClick={cancel}
+                  disabled={busy}
+                  className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                >
+                  Cancel subscription
+                </button>
+              )}
+              {["trialing", "active", "past_due"].includes(subscription.status) &&
+                availablePlans.filter((p) => p.code !== plan.code).length > 0 && (
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    Change plan:
+                    <select
+                      key={selectResetKey}
+                      disabled={busy}
+                      defaultValue=""
+                      onChange={(e) => e.target.value && setPendingPlanCode(e.target.value)}
+                      className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
+                    >
+                      <option value="" disabled>
+                        Select a plan
+                      </option>
+                      {availablePlans
+                        .filter((p) => p.code !== plan.code)
+                        .map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Only the restaurant owner can change or cancel this subscription.</p>
+          )}
         </Card>
       ) : (
         <Card className="flex flex-col gap-4">
@@ -378,16 +405,67 @@ export function BillingPage() {
             );
           })()}
 
-          <div className="flex flex-wrap gap-3">
-            <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
-              {busy ? "Starting..." : "Start subscription"}
-            </Button>
-            <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
-              Subscribe now
-            </Button>
-          </div>
+          {canManage ? (
+            <div className="flex flex-wrap gap-3">
+              <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
+                {busy ? "Starting..." : "Start subscription"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
+                Subscribe now
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Only the restaurant owner can start a subscription.</p>
+          )}
         </Card>
       )}
+
+      {pendingPlanCode && plan && subscription && (() => {
+        const newPlan = availablePlans.find((p) => p.code === pendingPlanCode);
+        if (!newPlan) return null;
+        const newMaxLocations = newPlan.entitlements.find((e) => e.key === "max_locations")?.value;
+        const conflict = typeof newMaxLocations === "number" && locations.length > newMaxLocations;
+        return (
+          <ConfirmDialog
+            open
+            title="Change your plan?"
+            tone={conflict ? "danger" : "default"}
+            confirmLabel="Change plan"
+            busy={busy}
+            confirmDisabled={conflict}
+            onCancel={cancelChangePlan}
+            onConfirm={confirmChangePlan}
+          >
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              <dt className="text-muted">Current plan</dt>
+              <dd className="text-foreground">
+                {plan.name} · {formatPrice(plan.pricing, subscription.billingInterval) ?? "—"}
+              </dd>
+              <dt className="text-muted">New plan</dt>
+              <dd className="text-foreground">
+                {newPlan.name} · {formatPrice(newPlan.pricing, subscription.billingInterval) ?? "—"}
+              </dd>
+              <dt className="text-muted">Billing interval</dt>
+              <dd className="text-foreground">{subscription.billingInterval === "monthly" ? "Monthly" : "Yearly"}</dd>
+              {typeof newMaxLocations === "number" && (
+                <>
+                  <dt className="text-muted">Included locations</dt>
+                  <dd className="text-foreground">{newMaxLocations}</dd>
+                </>
+              )}
+            </dl>
+            <p className="mt-3 text-sm text-muted">
+              This applies to your whole business — every location, not just the one you're currently viewing.
+            </p>
+            {conflict && (
+              <p className="mt-2 text-sm font-medium text-danger">
+                You currently have {locations.length} location{locations.length === 1 ? "" : "s"}, but {newPlan.name} only
+                includes {newMaxLocations}. Remove a location first, or choose a plan with a higher limit.
+              </p>
+            )}
+          </ConfirmDialog>
+        );
+      })()}
 
       <Card className="flex flex-col gap-3">
         <h2 className="font-heading text-lg font-medium text-foreground">Billing history</h2>

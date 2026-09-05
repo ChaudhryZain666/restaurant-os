@@ -3,6 +3,7 @@ import type { AgencyMembershipRole } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
+import { useAgencyPermission } from "../hooks/useAgencyPermission";
 
 interface AgencyMemberRow {
   id: string;
@@ -29,6 +30,7 @@ const STATUS_TONE: Record<AgencyMemberRow["status"], "success" | "warning" | "ne
 
 export function AgencyMembersPage() {
   const { activeAgencyId } = useAgency();
+  const canManage = useAgencyPermission("agency.members.manage");
   const [members, setMembers] = useState<AgencyMemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,9 +121,11 @@ export function AgencyMembersPage() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Team</h1>
           <p className="text-sm text-muted">Who can manage this agency and the businesses it manages.</p>
         </div>
-        <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Cancel" : "Invite member"}
-        </Button>
+        {canManage && (
+          <Button size="sm" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "Cancel" : "Invite member"}
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -130,7 +134,9 @@ export function AgencyMembersPage() {
         </Alert>
       )}
 
-      {showForm && (
+      {!canManage && <Alert tone="neutral">Only an agency owner or admin can manage the team.</Alert>}
+
+      {showForm && canManage && (
         <Card>
           <form onSubmit={handleInvite} className="grid gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-1 text-sm">
@@ -185,17 +191,21 @@ export function AgencyMembersPage() {
                   </p>
                   <p className="text-xs text-muted">{m.email}</p>
                 </div>
-                <select
-                  value={m.role}
-                  disabled={busyId === m.id}
-                  onChange={(e) => changeRole(m, e.target.value as AgencyMembershipRole)}
-                  className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
-                >
-                  <option value="agency_staff">{ROLE_LABELS.agency_staff}</option>
-                  <option value="agency_admin">{ROLE_LABELS.agency_admin}</option>
-                  <option value="agency_owner">{ROLE_LABELS.agency_owner}</option>
-                </select>
-                {m.status === "invited" && (
+                {canManage ? (
+                  <select
+                    value={m.role}
+                    disabled={busyId === m.id}
+                    onChange={(e) => changeRole(m, e.target.value as AgencyMembershipRole)}
+                    className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
+                  >
+                    <option value="agency_staff">{ROLE_LABELS.agency_staff}</option>
+                    <option value="agency_admin">{ROLE_LABELS.agency_admin}</option>
+                    <option value="agency_owner">{ROLE_LABELS.agency_owner}</option>
+                  </select>
+                ) : (
+                  <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
+                )}
+                {canManage && m.status === "invited" && (
                   <button
                     onClick={() => resendInvite(m)}
                     disabled={busyId === m.id}
@@ -204,13 +214,15 @@ export function AgencyMembersPage() {
                     Resend invite
                   </button>
                 )}
-                <button
-                  onClick={() => revoke(m)}
-                  disabled={busyId === m.id}
-                  className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
-                >
-                  Remove
-                </button>
+                {canManage && (
+                  <button
+                    onClick={() => revoke(m)}
+                    disabled={busyId === m.id}
+                    className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>

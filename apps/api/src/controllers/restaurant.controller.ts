@@ -19,6 +19,8 @@ import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
+import { getPaymentProvider } from "../payments/index.js";
+import { canProcessOnlinePayments, hasActiveRestaurantPaymentAccount } from "../payments/restaurantProvider.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
@@ -431,6 +433,18 @@ function buildRestaurantUpdateOps(input: UpdateRestaurantInput): { set: Record<s
 export async function updateRestaurant(req: Request, res: Response) {
   const { restaurantId } = req.params;
   const updates = req.body as UpdateRestaurantInput;
+
+  // Phase 42 — production safety gate: only checked (one extra query) when a request actually
+  // tries to turn online payments ON. Never blocks turning it off, never blocks any other setting,
+  // and never blocks a deployment still running the mock provider (dev/test/demo) — see
+  // docs/payment-provider-decision.md's "BYOC required" update and canProcessOnlinePayments' own
+  // doc comment for the full rule this mirrors at payment-creation time.
+  if (updates.settings?.onlinePaymentEnabled === true) {
+    const hasAccount = await hasActiveRestaurantPaymentAccount(restaurantId);
+    if (!canProcessOnlinePayments(hasAccount, getPaymentProvider().name)) {
+      throw ApiError.badRequest("Connect a payment account before enabling online payments.");
+    }
+  }
 
   const { set, unset } = buildRestaurantUpdateOps(updates);
 

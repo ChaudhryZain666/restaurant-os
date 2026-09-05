@@ -6,6 +6,7 @@ import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { IconTag } from "../components/icons";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -115,7 +116,10 @@ export function PromotionsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Promotions</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-foreground">Promotions</h1>
+            <ScopeBadge scope="location" />
+          </div>
           <p className="text-sm text-muted">
             Create discount codes customers can apply at checkout. Every code is validated and priced server-side —
             nothing here can be tricked into applying a discount your rules don't actually allow.

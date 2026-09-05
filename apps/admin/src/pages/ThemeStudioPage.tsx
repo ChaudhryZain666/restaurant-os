@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { RestaurantThemeConfig, ThemeDensity, ThemeRadiusScale, ThemeSectionKey } from "@restaurant/types";
 import { THEME_DENSITIES, THEME_RADIUS_SCALES, normalizeThemeConfig } from "@restaurant/types";
-import { Alert, Badge, Button, HEX_COLOR_PATTERN, useToast } from "@restaurant/ui";
+import { Alert, Badge, Button, ConfirmDialog, HEX_COLOR_PATTERN, useToast } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { THEME_CATALOG } from "../lib/themeCatalog";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -57,6 +58,8 @@ export function ThemeStudioPage() {
   const [publishing, setPublishing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [confirmingRollback, setConfirmingRollback] = useState(false);
 
   useEffect(() => {
     if (!restaurant) return;
@@ -181,7 +184,10 @@ export function ThemeStudioPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Theme Studio</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-foreground">Theme Studio</h1>
+            <ScopeBadge scope="location" />
+          </div>
           <p className="text-sm text-muted">Choose how your storefront looks. Changes only go live when you publish.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -336,7 +342,7 @@ export function ThemeStudioPage() {
           {saving ? "Saving…" : "Save draft"}
         </Button>
         {themeData.hasUnpublishedChanges && (
-          <Button type="button" variant="ghost" onClick={handleDiscardDraft} disabled={saving || publishing || discarding}>
+          <Button type="button" variant="ghost" onClick={() => setConfirmingDiscard(true)} disabled={saving || publishing || discarding}>
             {discarding ? "Discarding…" : "Discard draft"}
           </Button>
         )}
@@ -344,13 +350,41 @@ export function ThemeStudioPage() {
           <Button
             type="button"
             variant="ghost"
-            onClick={handleRollback}
+            onClick={() => setConfirmingRollback(true)}
             disabled={saving || publishing || discarding || rollingBack}
           >
             {rollingBack ? "Rolling back…" : "Rollback to previous theme"}
           </Button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingDiscard}
+        title="Discard your draft?"
+        description="Your unpublished theme changes will be discarded. This doesn't affect what's currently published — your live storefront won't change."
+        tone="danger"
+        confirmLabel="Discard draft"
+        busy={discarding}
+        onCancel={() => setConfirmingDiscard(false)}
+        onConfirm={async () => {
+          await handleDiscardDraft();
+          setConfirmingDiscard(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmingRollback}
+        title="Roll back to the previous theme?"
+        description="This changes what customers see on your storefront right away, restoring the theme that was published before your most recent publish — one step back, not a full history. Any in-progress draft is unaffected."
+        tone="danger"
+        confirmLabel="Roll back"
+        busy={rollingBack}
+        onCancel={() => setConfirmingRollback(false)}
+        onConfirm={async () => {
+          await handleRollback();
+          setConfirmingRollback(false);
+        }}
+      />
     </div>
   );
 }

@@ -94,7 +94,14 @@ export function DomainSettingsPanel() {
     }
   }
 
-  async function handleRemove(id: string) {
+  async function handleRemove(id: string, hostname: string) {
+    if (
+      !window.confirm(
+        `Remove ${hostname}? If it's active, customers using this address to reach your storefront will no longer be able to — the platform's own URL keeps working either way.`
+      )
+    ) {
+      return;
+    }
     setBusyId(id);
     setError(null);
     try {
@@ -187,7 +194,7 @@ export function DomainSettingsPanel() {
                 {busyId === d.id ? "Deactivating..." : "Deactivate"}
               </Button>
             )}
-            <Button type="button" size="sm" variant="destructive" disabled={busyId === d.id} onClick={() => handleRemove(d.id)}>
+            <Button type="button" size="sm" variant="destructive" disabled={busyId === d.id} onClick={() => handleRemove(d.id, d.hostname)}>
               Remove
             </Button>
           </div>

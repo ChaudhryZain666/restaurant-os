@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import type { BusinessAnalyticsOverview, BusinessAnalyticsProducts, BusinessAnalyticsTrends } from "@restaurant/types";
-import { Badge, Card, Skeleton } from "@restaurant/ui";
+import { Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
+import { ScopeBadge } from "../components/ScopeBadge";
+import { IconChart } from "../components/icons";
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
@@ -129,9 +131,12 @@ export function BusinessAnalyticsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Business Analytics</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Business Analytics</h1>
+          <ScopeBadge scope="business" />
+        </div>
         <p className="text-sm text-muted">
-          Across every location. {multiCurrency ? "Locations use different currencies — revenue is shown per currency, never blended into one misleading total." : "Revenue reflects orders staff have marked as paid."}
+          Compares every location in your business over the range below. {multiCurrency ? "Locations use different currencies — revenue is shown per currency, never blended into one misleading total." : "Revenue reflects orders staff have marked as paid."}
         </p>
       </div>
 
@@ -146,11 +151,26 @@ export function BusinessAnalyticsPage() {
         </label>
       </div>
 
+      {overview.totalOrders === 0 && (
+        <EmptyState
+          icon={<IconChart className="h-6 w-6" />}
+          title="No sales in this range yet"
+          description="Once any location takes an order in this date range, results will show up here."
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <MetricCard label="Total orders" value={String(overview.totalOrders)} />
-        {overview.revenueByCurrency.map((c) => (
-          <MetricCard key={c.currency} label={`Revenue (${c.currency})`} value={formatCurrency(c.amount, c.currency)} />
-        ))}
+        {overview.revenueByCurrency.length > 0 ? (
+          overview.revenueByCurrency.map((c) => (
+            <MetricCard key={c.currency} label={`Revenue (${c.currency})`} value={formatCurrency(c.amount, c.currency)} />
+          ))
+        ) : (
+          // No location has recorded a paid order yet, so there's no currency to label the tile
+          // with — rendered as an explicit "no revenue yet" tile rather than omitted entirely, so
+          // this doesn't read as a missing feature.
+          <MetricCard label="Revenue" value="No sales yet" />
+        )}
         {overview.averageOrderValueByCurrency.map((c) => (
           <MetricCard key={c.currency} label={`Avg order value (${c.currency})`} value={formatCurrency(c.amount, c.currency)} />
         ))}
@@ -225,14 +245,14 @@ export function BusinessAnalyticsPage() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted">No order data in this range yet.</p>
+          <p className="text-sm text-muted">No orders in this range yet — once you have some, they'll chart here.</p>
         )}
       </Card>
 
       <Card>
         <h2 className="mb-2 font-heading font-medium text-foreground">Top-selling items (business-wide)</h2>
         {!products || products.items.length === 0 ? (
-          <p className="text-sm text-muted">No sales yet in this range.</p>
+          <p className="text-sm text-muted">No sales in this range yet.</p>
         ) : (
           <ol className="flex flex-col gap-1 text-sm">
             {products.items.map((item) => (

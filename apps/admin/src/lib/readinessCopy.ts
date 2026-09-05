@@ -28,7 +28,7 @@ export const READY_CHECK_COPY: Record<string, { title: string; why: string; to: 
   location: {
     title: "Restaurant location",
     why: "Delivery needs your restaurant's coordinates to know who's in range.",
-    to: "/settings",
+    to: "/settings?tab=location",
     linkLabel: "Set location",
   },
 };
@@ -37,13 +37,13 @@ export const EXTENDED_CHECK_COPY: Record<string, { title: string; why: string; t
   branding: {
     title: "Branding",
     why: "Add a logo, cover photo, or brand color so your storefront looks like your restaurant, not a template.",
-    to: "/settings",
+    to: "/settings?tab=storefront",
     linkLabel: "Add branding",
   },
   hours: {
     title: "Business hours",
     why: "Let customers know when you're open, and stop new orders automatically outside those hours.",
-    to: "/settings",
+    to: "/settings?tab=hours",
     linkLabel: "Set hours",
   },
   tables: {
@@ -73,8 +73,14 @@ export const EXTENDED_CHECK_COPY: Record<string, { title: string; why: string; t
   domain: {
     title: "Custom domain",
     why: "Use your own web address instead of the default one.",
-    to: "/settings",
+    to: "/settings?tab=domain",
     linkLabel: "Connect a domain",
+  },
+  payment: {
+    title: "Payment account",
+    why: "Connect your own payment account to accept online payments. Cash-only works fine without it.",
+    to: "/settings?tab=payment",
+    linkLabel: "Connect payment account",
   },
   seo: {
     title: "Search engine metadata",

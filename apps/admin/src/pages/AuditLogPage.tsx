@@ -5,6 +5,7 @@ import { Alert, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AUDIT_ACTION_LABELS } from "../lib/auditLog";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const PAGE_SIZE = 30;
 
@@ -96,11 +97,15 @@ export function AuditLogPage() {
   }, [restaurantId, page, targetType, action, actorUserId, startDate, endDate]);
 
   const entries = result?.items ?? [];
+  const filtersActive = targetType !== "all" || action !== "all" || actorUserId !== "all" || Boolean(startDate) || Boolean(endDate);
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Audit log</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Audit log</h1>
+          <ScopeBadge scope="location" />
+        </div>
         <p className="text-sm text-muted">A record of status changes, cancellations, refunds, and staff/restaurant changes.</p>
       </div>
       {error && (
@@ -173,7 +178,14 @@ export function AuditLogPage() {
       {loading ? (
         <p className="text-muted">Loading audit log...</p>
       ) : entries.length === 0 ? (
-        <EmptyState title="No activity found" description="No audit events match these filters." />
+        filtersActive ? (
+          <EmptyState title="No matching activity" description="No audit events match these filters." />
+        ) : (
+          <EmptyState
+            title="No activity yet"
+            description="Actions like status changes, cancellations, and setting changes will show up here as they happen."
+          />
+        )
       ) : (
         <Card className="overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-left text-sm">

@@ -5,6 +5,7 @@ import { apiClient } from "../lib/api";
 import { useActiveLocationId, useLocation as useActiveLocation } from "../context/LocationContext";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { IconIdBadge } from "../components/icons";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -167,7 +168,10 @@ export function StaffPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Staff</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-foreground">Staff</h1>
+            <ScopeBadge scope="location" />
+          </div>
           <p className="text-sm text-muted">
             Give your team their own logins with the right level of access — no more sharing one owner account.
           </p>

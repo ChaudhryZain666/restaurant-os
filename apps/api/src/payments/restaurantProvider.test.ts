@@ -3,7 +3,12 @@ import { connectDB } from "../config/db.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import { StripeProvider } from "./StripeProvider.js";
 import { SafepayProvider } from "./SafepayProvider.js";
-import { buildProviderFromAccount, resolveRestaurantPaymentProvider } from "./restaurantProvider.js";
+import {
+  buildProviderFromAccount,
+  canProcessOnlinePayments,
+  hasActiveRestaurantPaymentAccount,
+  resolveRestaurantPaymentProvider,
+} from "./restaurantProvider.js";
 import { encryptCredentials } from "../utils/credentialEncryption.js";
 import { closeTestConnections } from "../test-utils/fixtures.js";
 import mongoose from "mongoose";
@@ -102,5 +107,60 @@ describe("resolveRestaurantPaymentProvider", () => {
 
     const result = await resolveRestaurantPaymentProvider(restaurantId.toString());
     expect(result).toBeNull();
+  });
+});
+
+describe("hasActiveRestaurantPaymentAccount (Phase 42)", () => {
+  it("returns false when the restaurant has no active account", async () => {
+    expect(await hasActiveRestaurantPaymentAccount(new mongoose.Types.ObjectId().toString())).toBe(false);
+  });
+
+  it("returns true when an active account exists, without needing STRIPE_SECRET_KEY or decrypting anything", async () => {
+    const restaurantId = new mongoose.Types.ObjectId();
+    const account = await RestaurantPaymentAccount.create({
+      restaurantId,
+      businessId: new mongoose.Types.ObjectId(),
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      status: "active",
+      connectedAccountId: "acct_unit_test_active",
+      connectedByUserId: new mongoose.Types.ObjectId(),
+    });
+    accountIds.push(account.id as string);
+
+    expect(await hasActiveRestaurantPaymentAccount(restaurantId.toString())).toBe(true);
+  });
+
+  it("returns false for a disconnected account, same as the payment-resolution path", async () => {
+    const restaurantId = new mongoose.Types.ObjectId();
+    const account = await RestaurantPaymentAccount.create({
+      restaurantId,
+      businessId: new mongoose.Types.ObjectId(),
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      status: "disconnected",
+      connectedAccountId: "acct_unit_test_disconnected",
+      connectedByUserId: new mongoose.Types.ObjectId(),
+    });
+    accountIds.push(account.id as string);
+
+    expect(await hasActiveRestaurantPaymentAccount(restaurantId.toString())).toBe(false);
+  });
+});
+
+describe("canProcessOnlinePayments (Phase 42 — the BYOC-required safety rule)", () => {
+  it("blocks a restaurant with no own account once the pooled default is a real provider", () => {
+    expect(canProcessOnlinePayments(false, "stripe")).toBe(false);
+    expect(canProcessOnlinePayments(false, "safepay")).toBe(false);
+  });
+
+  it("allows a restaurant with no own account while the pooled default is still the mock provider (dev/test/demo)", () => {
+    expect(canProcessOnlinePayments(false, "mock")).toBe(true);
+  });
+
+  it("always allows a restaurant that has its own connected account, regardless of the pooled default", () => {
+    expect(canProcessOnlinePayments(true, "stripe")).toBe(true);
+    expect(canProcessOnlinePayments(true, "safepay")).toBe(true);
+    expect(canProcessOnlinePayments(true, "mock")).toBe(true);
   });
 });

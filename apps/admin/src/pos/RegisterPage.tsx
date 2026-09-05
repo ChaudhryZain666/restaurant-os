@@ -282,6 +282,10 @@ export function RegisterPage() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
+        <div className="border-b border-border px-4 py-2.5">
+          <h1 className="text-sm font-semibold text-foreground">Register</h1>
+          <p className="text-xs text-muted">Start an in-person sale, take payment, and send the order to the kitchen.</p>
+        </div>
         <MenuBrowser
           categories={menu?.categories ?? []}
           items={menu?.items ?? []}

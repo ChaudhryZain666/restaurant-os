@@ -1,11 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Promotion, PromotionType } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
+import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
+import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { IconTag } from "../components/icons";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -41,6 +44,7 @@ export function BusinessPromotionsPage() {
   const { user } = useAuth();
   const businessId = user!.businessId!;
   const { locations } = useActiveLocation();
+  const fallbackCurrency = useRestaurantCurrency();
   const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);
   const canView = has("business_promotions");
 
@@ -165,7 +169,10 @@ export function BusinessPromotionsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Business Promotions</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-foreground">Business Promotions</h1>
+            <ScopeBadge scope="business" />
+          </div>
           <p className="text-sm text-muted">
             One code, applied at exactly the locations you select — never at any other location, even one of your
             own. Every code is validated and priced server-side.
@@ -291,6 +298,13 @@ export function BusinessPromotionsPage() {
               const targetNames = (promo.locationIds ?? [])
                 .map((id) => locations.find((l) => l.id === id)?.name ?? id)
                 .join(", ");
+              // A fixed-amount discount has no single currency of its own — it's whichever
+              // currency the promo's first targeted location uses (locations in the same
+              // business can use different currencies, same reasoning Business Analytics
+              // already applies to revenue). Falls back to the active location's currency only
+              // if that lookup comes up empty.
+              const promoCurrency =
+                locations.find((l) => l.id === promo.locationIds?.[0])?.settings.currency ?? fallbackCurrency;
               return (
                 <li key={promo.id} className="flex flex-wrap items-center gap-3 py-3">
                   <div className="min-w-[10rem] flex-1">
@@ -302,7 +316,7 @@ export function BusinessPromotionsPage() {
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </p>
                     <p className="text-xs text-muted">
-                      {promo.type === "percentage" ? `${promo.value}% off` : `${promo.value} off`}
+                      {promo.type === "percentage" ? `${promo.value}% off` : `${formatCurrency(promo.value, promoCurrency)} off`}
                       {" · "}
                       {promo.usageCount} use{promo.usageCount === 1 ? "" : "s"}
                       {promo.usageLimit ? ` of ${promo.usageLimit}` : ""}

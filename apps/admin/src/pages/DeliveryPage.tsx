@@ -6,6 +6,7 @@ import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { MapPreview } from "../components/MapPreview";
 import { DeliveryProviderAccountSettingsPanel } from "../components/DeliveryProviderAccountSettingsPanel";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -66,7 +67,10 @@ export function DeliveryPage() {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Delivery</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Delivery</h1>
+          <ScopeBadge scope="location" />
+        </div>
         <p className="text-sm text-muted">Control how customers can receive their order.</p>
       </div>
       {error && (
@@ -96,7 +100,17 @@ export function DeliveryPage() {
           <input
             type="checkbox"
             checked={restaurant.settings.deliveryEnabled}
-            onChange={(e) => setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryEnabled: e.target.checked } })}
+            onChange={(e) => {
+              if (
+                !e.target.checked &&
+                !window.confirm(
+                  "Turn off delivery? Customers won't be able to place new delivery orders at this location until you turn it back on."
+                )
+              ) {
+                return;
+              }
+              setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryEnabled: e.target.checked } });
+            }}
           />
         </label>
         {restaurant.settings.deliveryEnabled && (

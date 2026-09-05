@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import type { DailyAnalyticsPoint, RestaurantAnalytics } from "@restaurant/types";
-import { Card, Skeleton } from "@restaurant/ui";
+import { Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
+import { ScopeBadge } from "../components/ScopeBadge";
+import { IconChart } from "../components/icons";
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
@@ -106,24 +108,37 @@ export function AnalyticsPage() {
 
   if (!analytics) return null;
 
+  const hasAnyActivity = analytics.ordersThisWeek > 0;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Analytics</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Analytics</h1>
+          <ScopeBadge scope="location" />
+        </div>
         <p className="text-sm text-muted">
-          Revenue reflects orders staff have marked as paid — this platform doesn't process payments directly, so
-          unpaid order totals aren't counted.
+          How this location is doing. Revenue reflects orders staff have marked as paid — this platform doesn't
+          process payments directly, so unpaid order totals aren't counted.
         </p>
       </div>
 
+      {!hasAnyActivity && (
+        <EmptyState
+          icon={<IconChart className="h-6 w-6" />}
+          title="No sales yet"
+          description="Sales data will appear here once customers start placing orders — check back after your first one comes in."
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <MetricCard label="Orders today" value={String(analytics.ordersToday)} />
-        <MetricCard label="Orders this week" value={String(analytics.ordersThisWeek)} />
+        <MetricCard label="Orders (last 7 days)" value={String(analytics.ordersThisWeek)} />
         <MetricCard label="Revenue today" value={formatCurrency(analytics.revenueToday, currency)} />
-        <MetricCard label="Revenue this week" value={formatCurrency(analytics.revenueThisWeek, currency)} />
+        <MetricCard label="Revenue (last 7 days)" value={formatCurrency(analytics.revenueThisWeek, currency)} />
         <MetricCard label="Avg order value" value={formatCurrency(analytics.averageOrderValue, currency)} />
-        <MetricCard label="Completed this week" value={String(analytics.completedOrdersThisWeek)} />
-        <MetricCard label="Cancelled this week" value={String(analytics.cancelledOrdersThisWeek)} />
+        <MetricCard label="Completed (last 7 days)" value={String(analytics.completedOrdersThisWeek)} />
+        <MetricCard label="Cancelled (last 7 days)" value={String(analytics.cancelledOrdersThisWeek)} />
       </div>
 
       <Card>
@@ -163,14 +178,14 @@ export function AnalyticsPage() {
         ) : series && series.length > 0 ? (
           <TrendChart series={series} metric={metric} currency={currency} />
         ) : (
-          <p className="text-sm text-muted">No order data in this range yet.</p>
+          <p className="text-sm text-muted">No orders in this range yet — once you have some, they'll chart here.</p>
         )}
       </Card>
 
       <Card>
-        <h2 className="mb-2 font-heading font-medium text-foreground">Top-selling items (this week)</h2>
+        <h2 className="mb-2 font-heading font-medium text-foreground">Top-selling items (last 7 days)</h2>
         {analytics.topSellingItems.length === 0 ? (
-          <p className="text-sm text-muted">No sales yet this week.</p>
+          <p className="text-sm text-muted">No sales in the last 7 days yet.</p>
         ) : (
           <ol className="flex flex-col gap-1 text-sm">
             {analytics.topSellingItems.map((item) => (

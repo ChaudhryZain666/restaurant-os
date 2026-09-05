@@ -72,4 +72,30 @@ export async function resolveRestaurantPaymentProvider(
   return { provider: buildProviderFromAccount(account), accountId: account._id.toString() };
 }
 
+/**
+ * Phase 42 — a cheap existence check for the production-safety gate below and the settings-update
+ * gate (restaurant.controller.ts). Deliberately does NOT go through resolveRestaurantPaymentProvider/
+ * buildProviderFromAccount: those decrypt credentials and (for platform_connect) require
+ * STRIPE_SECRET_KEY to be configured just to answer a yes/no existence question, which is wasted
+ * work and a wrong failure mode for a plain "is this restaurant connected" check.
+ */
+export async function hasActiveRestaurantPaymentAccount(restaurantId: string): Promise<boolean> {
+  return (await RestaurantPaymentAccount.exists({ restaurantId, status: "active" })) !== null;
+}
+
+/**
+ * Phase 42 — the single safety rule behind "BYOC required before real online payments": a
+ * restaurant may accept a real online payment when it has its own connected account, OR when the
+ * platform-wide pooled default is still the mock provider (dev/test/demo — never real money). Once
+ * a deployment configures a REAL pooled default (PAYMENT_PROVIDER=stripe/safepay), a restaurant
+ * with no account of its own must be blocked rather than silently routed through the platform's
+ * pooled credentials — see docs/payment-provider-decision.md's "BYOC required" update for why. Pure
+ * and parameterized (no env/DB access) so both call sites (payment.service.ts at the point money
+ * actually moves, restaurant.controller.ts at the point a restaurant tries to enable the setting)
+ * share one tested rule instead of two copies that could drift.
+ */
+export function canProcessOnlinePayments(hasOwnAccount: boolean, pooledProviderName: string): boolean {
+  return hasOwnAccount || pooledProviderName === "mock";
+}
+
 export type { StripeCredentials, SafepayCredentials };

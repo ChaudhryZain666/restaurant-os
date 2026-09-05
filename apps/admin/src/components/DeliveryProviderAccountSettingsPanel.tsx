@@ -85,6 +85,13 @@ export function DeliveryProviderAccountSettingsPanel({
   }
 
   async function handleDisconnect() {
+    if (
+      !window.confirm(
+        "Disconnect Uber Direct? Future delivery orders will fall back to manual dispatch (your staff handle them by hand) until you reconnect."
+      )
+    ) {
+      return;
+    }
     setError(null);
     setBusy("disconnect");
     try {

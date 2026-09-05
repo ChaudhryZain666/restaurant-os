@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { BusinessHoursDay, GeocodeResult, Restaurant, Weekday } from "@restaurant/types";
 import { WEEKDAYS } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
@@ -33,6 +33,19 @@ function withUpdatedHours(restaurant: Restaurant, day: Weekday, patch: Partial<B
 const TABS = ["General", "Location", "Ordering", "Payment", "Business Hours", "Storefront", "Domain"] as const;
 type Tab = (typeof TABS)[number];
 
+/** Portal UX safety phase — Setup/Dashboard's checklist links (readinessCopy.ts) point here with a
+ *  `?tab=` slug so "Set location"/"Add branding"/etc. actually land on the tab they promised,
+ *  instead of always opening on General regardless of which check sent the owner here. */
+const TAB_SLUGS: Record<string, Tab> = {
+  general: "General",
+  location: "Location",
+  ordering: "Ordering",
+  payment: "Payment",
+  hours: "Business Hours",
+  storefront: "Storefront",
+  domain: "Domain",
+};
+
 /** Intl.supportedValuesOf is available in every browser this admin app already targets (Chrome
  *  99+/Firefox 102+/Safari 15.4+) — no timezone-data package needed for a plain select list. */
 function timezoneOptions(): string[] {
@@ -62,7 +75,9 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<Tab>("General");
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>((requestedTab && TAB_SLUGS[requestedTab]) || "General");
   const [manualCoords, setManualCoords] = useState(false);
   const [uploading, setUploading] = useState<"logo" | "coverImage" | null>(null);
 
@@ -546,9 +561,8 @@ export function SettingsPage() {
               </Badge>
             </div>
             <p className="text-xs text-muted">
-              Online payments run through this platform's shared payment provider by default — connect your own
-              account below if you'd rather orders settle directly into it. Card/wallet details never touch this
-              platform's servers either way.
+              Turning on online payment requires a connected payment account — see Online Payments below. Card/wallet
+              details never touch this platform's servers either way.
             </p>
           </fieldset>
 

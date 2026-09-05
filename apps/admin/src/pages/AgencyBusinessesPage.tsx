@@ -4,6 +4,7 @@ import type { Paginated } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
+import { useAgencyPermission } from "../hooks/useAgencyPermission";
 import { IconStore } from "../components/icons";
 
 interface AgencyBusinessSummary {
@@ -34,6 +35,7 @@ function emptyDraft() {
  */
 export function AgencyBusinessesPage() {
   const { activeAgencyId } = useAgency();
+  const canManage = useAgencyPermission("agency.businesses.manage");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<Paginated<AgencyBusinessSummary> | null>(null);
   const [usage, setUsage] = useState<{ maxBusinesses: number; businessCount: number } | null>(null);
@@ -105,9 +107,11 @@ export function AgencyBusinessesPage() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Businesses</h1>
           <p className="text-sm text-muted">Every business this agency manages.</p>
         </div>
-        <Button size="sm" onClick={() => setShowForm((v) => !v)} disabled={!showForm && atBusinessLimit}>
-          {showForm ? "Cancel" : "New business"}
-        </Button>
+        {canManage && (
+          <Button size="sm" onClick={() => setShowForm((v) => !v)} disabled={!showForm && atBusinessLimit}>
+            {showForm ? "Cancel" : "New business"}
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -116,7 +120,11 @@ export function AgencyBusinessesPage() {
         </Alert>
       )}
 
-      {atBusinessLimit && !showForm && (
+      {!canManage && (
+        <Alert tone="neutral">Only an agency owner or admin can create a new business.</Alert>
+      )}
+
+      {atBusinessLimit && !showForm && canManage && (
         <Alert tone="warning">
           You've used {usage!.businessCount} of {usage!.maxBusinesses} businesses included on your plan. Upgrade to
           add another.
@@ -153,7 +161,7 @@ export function AgencyBusinessesPage() {
         </Alert>
       )}
 
-      {showForm && (
+      {showForm && canManage && (
         <Card>
           <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Create a business</h2>
           <p className="mb-3 text-sm text-muted">

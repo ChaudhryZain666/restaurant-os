@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
-import { Alert, Badge, Button, Card } from "@restaurant/ui";
+import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
+import { useAgencyPermission } from "../hooks/useAgencyPermission";
 
 const STATUS_TONE: Record<Subscription["status"], "success" | "neutral" | "warning" | "danger"> = {
   trialing: "warning",
@@ -54,6 +55,7 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
  */
 export function AgencyBillingPage() {
   const { activeAgencyId } = useAgency();
+  const canManage = useAgencyPermission("agency.billing.manage");
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -69,6 +71,8 @@ export function AgencyBillingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingPlanCode, setPendingPlanCode] = useState<string | null>(null);
+  const [selectResetKey, setSelectResetKey] = useState(0);
 
   const HISTORY_PAGE_SIZE = 10;
 
@@ -211,6 +215,18 @@ export function AgencyBillingPage() {
     }
   }
 
+  async function confirmChangePlan() {
+    if (!pendingPlanCode) return;
+    await changePlan(pendingPlanCode);
+    setPendingPlanCode(null);
+    setSelectResetKey((k) => k + 1);
+  }
+
+  function cancelChangePlan() {
+    setPendingPlanCode(null);
+    setSelectResetKey((k) => k + 1);
+  }
+
   if (!activeAgencyId) return null;
   if (loading) return <p className="text-muted">Loading billing...</p>;
 
@@ -290,86 +306,142 @@ export function AgencyBillingPage() {
             )}
           </dl>
 
-          <div className="flex flex-wrap gap-3">
-            {subscription.status === "cancelling" && (
-              <Button size="sm" onClick={reactivate} disabled={busy}>
-                Reactivate
-              </Button>
-            )}
-            {["trialing", "active", "past_due"].includes(subscription.status) && (
-              <button
-                type="button"
-                onClick={cancel}
-                disabled={busy}
-                className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
-              >
-                Cancel subscription
-              </button>
-            )}
-            {["trialing", "active", "past_due"].includes(subscription.status) &&
-              availablePlans.filter((p) => p.code !== plan.code).length > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted">
-                  Change plan:
-                  <select
-                    disabled={busy}
-                    defaultValue=""
-                    onChange={(e) => e.target.value && changePlan(e.target.value)}
-                    className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
-                  >
-                    <option value="" disabled>
-                      Select a plan
-                    </option>
-                    {availablePlans
-                      .filter((p) => p.code !== plan.code)
-                      .map((p) => (
-                        <option key={p.code} value={p.code}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+          {canManage ? (
+            <div className="flex flex-wrap gap-3">
+              {subscription.status === "cancelling" && (
+                <Button size="sm" onClick={reactivate} disabled={busy}>
+                  Reactivate
+                </Button>
               )}
-          </div>
+              {["trialing", "active", "past_due"].includes(subscription.status) && (
+                <button
+                  type="button"
+                  onClick={cancel}
+                  disabled={busy}
+                  className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                >
+                  Cancel subscription
+                </button>
+              )}
+              {["trialing", "active", "past_due"].includes(subscription.status) &&
+                availablePlans.filter((p) => p.code !== plan.code).length > 0 && (
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    Change plan:
+                    <select
+                      key={selectResetKey}
+                      disabled={busy}
+                      defaultValue=""
+                      onChange={(e) => e.target.value && setPendingPlanCode(e.target.value)}
+                      className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
+                    >
+                      <option value="" disabled>
+                        Select a plan
+                      </option>
+                      {availablePlans
+                        .filter((p) => p.code !== plan.code)
+                        .map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Only an agency owner can change or cancel this subscription.</p>
+          )}
         </Card>
       ) : (
         <Card className="flex flex-col gap-4">
           <p className="text-sm text-muted">No subscription yet.</p>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              Plan
-              <select
-                value={selectedPlanCode}
-                onChange={(e) => setSelectedPlanCode(e.target.value)}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              >
-                {availablePlans.map((p) => (
-                  <option key={p.code} value={p.code}>
-                    {p.name}
-                    {formatPrice(p.pricing, billingInterval) ? ` — ${formatPrice(p.pricing, billingInterval)}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Billing interval
-              <select
-                value={billingInterval}
-                onChange={(e) => setBillingInterval(e.target.value as "monthly" | "yearly")}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              >
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            </label>
-            <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
-              {busy ? "Starting..." : "Start subscription"}
-            </Button>
-            <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
-              Subscribe now
-            </Button>
-          </div>
+          {canManage ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                Plan
+                <select
+                  value={selectedPlanCode}
+                  onChange={(e) => setSelectedPlanCode(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                >
+                  {availablePlans.map((p) => (
+                    <option key={p.code} value={p.code}>
+                      {p.name}
+                      {formatPrice(p.pricing, billingInterval) ? ` — ${formatPrice(p.pricing, billingInterval)}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Billing interval
+                <select
+                  value={billingInterval}
+                  onChange={(e) => setBillingInterval(e.target.value as "monthly" | "yearly")}
+                  className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </label>
+              <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
+                {busy ? "Starting..." : "Start subscription"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
+                Subscribe now
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Only an agency owner can start a subscription.</p>
+          )}
         </Card>
       )}
+
+      {pendingPlanCode && plan && subscription && (() => {
+        const newPlan = availablePlans.find((p) => p.code === pendingPlanCode);
+        if (!newPlan) return null;
+        const newMaxBusinesses = newPlan.entitlements.find((e) => e.key === "max_businesses")?.value;
+        const conflict = typeof newMaxBusinesses === "number" && Boolean(usage) && usage!.businessCount > newMaxBusinesses;
+        return (
+          <ConfirmDialog
+            open
+            title="Change your plan?"
+            tone={conflict ? "danger" : "default"}
+            confirmLabel="Change plan"
+            busy={busy}
+            confirmDisabled={conflict}
+            onCancel={cancelChangePlan}
+            onConfirm={confirmChangePlan}
+          >
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              <dt className="text-muted">Current plan</dt>
+              <dd className="text-foreground">
+                {plan.name} · {formatPrice(plan.pricing, subscription.billingInterval) ?? "—"}
+              </dd>
+              <dt className="text-muted">New plan</dt>
+              <dd className="text-foreground">
+                {newPlan.name} · {formatPrice(newPlan.pricing, subscription.billingInterval) ?? "—"}
+              </dd>
+              <dt className="text-muted">Billing interval</dt>
+              <dd className="text-foreground">{subscription.billingInterval === "monthly" ? "Monthly" : "Yearly"}</dd>
+              {typeof newMaxBusinesses === "number" && (
+                <>
+                  <dt className="text-muted">Included businesses</dt>
+                  <dd className="text-foreground">{newMaxBusinesses}</dd>
+                </>
+              )}
+            </dl>
+            <p className="mt-3 text-sm text-muted">
+              This applies to your whole agency account, not just the business you're currently viewing.
+            </p>
+            {conflict && (
+              <p className="mt-2 text-sm font-medium text-danger">
+                You're currently managing {usage!.businessCount} businesses, but {newPlan.name} only includes{" "}
+                {newMaxBusinesses}. Remove a business first, or choose a plan with a higher limit.
+              </p>
+            )}
+          </ConfirmDialog>
+        );
+      })()}
 
       <Card className="flex flex-col gap-3">
         <h2 className="font-heading text-lg font-medium text-foreground">Billing history</h2>

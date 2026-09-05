@@ -105,7 +105,8 @@ test.describe.serial("custom domain management (Phase 22)", () => {
     const afterDeactivate = await request.get(`http://localhost:4000/api/v1/restaurants/by-domain/${hostname}`);
     expect(afterDeactivate.status()).toBe(404);
 
-    // --- Remove. ---
+    // --- Remove. Portal UX safety phase: now confirms before removing. ---
+    page.once("dialog", (dialog) => dialog.accept());
     await domainCard.getByRole("button", { name: "Remove" }).click();
     await expect(domainCard).toHaveCount(0, { timeout: 10_000 });
 

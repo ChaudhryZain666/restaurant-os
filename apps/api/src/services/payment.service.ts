@@ -8,7 +8,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { getPaymentProvider, type PaymentProviderName } from "../payments/index.js";
 import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
-import { buildProviderFromAccount, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
+import { buildProviderFromAccount, canProcessOnlinePayments, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import type { ProviderWebhookEvent } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
@@ -94,6 +94,15 @@ export async function createPaymentForOrder(
     }
     provider = getPaymentProvider(eligible.providerName);
   }
+
+  // Phase 42 — production safety gate: a restaurant with no connected payment account of its own
+  // must never have a real online payment processed through the platform's pooled credentials.
+  // The mock provider is exempt (dev/test/demo default, never real money), so this is a no-op for
+  // every existing environment that hasn't configured a real platform-wide provider.
+  if (!canProcessOnlinePayments(Boolean(restaurantPaymentAccountId), provider.name)) {
+    throw ApiError.badRequest("This restaurant hasn't connected a payment account yet — please pay with cash.");
+  }
+
   // Same order-detail page the customer already lands on after checkout (CartPage.tsx) — a real
   // provider's hosted checkout sends them right back to it, success or cancel alike, where the
   // existing "Unpaid"/"Paid" panel state (driven by the webhook-confirmed order, not this redirect)

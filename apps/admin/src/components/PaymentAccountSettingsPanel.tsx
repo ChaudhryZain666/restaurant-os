@@ -1,32 +1,20 @@
 import { useEffect, useState } from "react";
-import type { RestaurantPaymentAccount, RestaurantPaymentAccountStatus } from "@restaurant/types";
-import { Alert, Badge, Button } from "@restaurant/ui";
+import type { RestaurantPaymentAccount } from "@restaurant/types";
+import { Alert, Badge, Button, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
-const STATUS_TONE: Record<RestaurantPaymentAccountStatus, "warning" | "info" | "success" | "danger"> = {
-  pending_verification: "info",
-  active: "success",
-  action_required: "warning",
-  invalid: "danger",
-  disconnected: "info",
-};
-
 /**
- * Phase 37 — restaurant-owned payment accounts (BYOC), redesigned around a provider-native
- * connection for Stripe (Connect + Account Links hosted onboarding — never asks for a secret key
- * or an internal webhook URL) with Safepay's manual credential form kept as a clearly-labeled
- * fallback, since Safepay's current docs confirm no provider-native connection mechanism exists
- * for them at all. Mounted in SettingsPage's "Payment" tab, same as before this redesign.
- *
- * "Connected" and "payments enabled" are always shown as separate facts (Phase 35's own precedent
- * for merchant_credentials' webhook-confirmation distinction, extended here to platform_connect's
- * charges_enabled distinction) — never collapsed into one reassuring badge that could overstate
- * readiness. See restaurantPaymentAccount.controller.ts's syncStripeConnectStatus doc comment: per
- * Stripe's own docs, completing the redirect back from onboarding "doesn't mean... there are no
- * outstanding requirements," so this component never infers success from the redirect alone.
+ * Phase 42 — rebuilt around a plain "connected / not connected" merchant experience: online
+ * payments now REQUIRE a connected account before they can be turned on at all (see
+ * restaurant.controller.ts's settings gate and payment.service.ts's payment-creation gate), so
+ * this panel no longer talks about a "platform shared account" fallback that production
+ * restaurants can no longer actually rely on. Technical detail (provider IDs, requirements-due
+ * lists, last-verified timestamps) lives behind "Manage connection", never in the primary view.
+ * The underlying connect/sync/disconnect calls are unchanged from Phase 37 — this is a copy and
+ * layout pass, not a new architecture.
  */
 export function PaymentAccountSettingsPanel() {
   const restaurantId = useActiveLocationId();
@@ -36,6 +24,8 @@ export function PaymentAccountSettingsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"connect-stripe" | "sync" | "disconnect" | "connect-safepay" | null>(null);
   const [showSafepayForm, setShowSafepayForm] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [safepayDraft, setSafepayDraft] = useState({ apiKey: "", secretKey: "", webhookSecret: "", env: "sandbox" as "sandbox" | "production" });
 
   async function reload() {
@@ -138,6 +128,8 @@ export function PaymentAccountSettingsPanel() {
     setBusy("disconnect");
     try {
       await apiClient.request(`/restaurants/${restaurantId}/payment-account/disconnect`, { method: "POST" });
+      setConfirmingDisconnect(false);
+      setShowManage(false);
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -149,14 +141,19 @@ export function PaymentAccountSettingsPanel() {
   if (loading) return <p className="text-muted">Loading payment account...</p>;
 
   const isStripeConnect = account?.provider === "stripe" && account.connectionMode === "platform_connect";
+  const isConnected = account?.status === "active";
+  const needsAttention = account && (account.status === "action_required" || account.status === "pending_verification");
+  const isDisconnectable = account && ["active", "action_required", "pending_verification"].includes(account.status);
 
   return (
-    <fieldset className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-4">
-      <legend className="px-1 text-sm font-medium">Your own payment account</legend>
-      <p className="text-xs text-muted">
-        By default, online payments run through this platform's shared account. Connect your own account instead, and
-        your orders' money settles directly into it.
-      </p>
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
+      <div>
+        <h3 className="text-sm font-medium text-foreground">Online Payments</h3>
+        <p className="mt-1 text-xs text-muted">
+          Accept online payments from your customers. Payments go directly to your connected account — we don't take
+          a commission on your direct restaurant orders.
+        </p>
+      </div>
 
       {error && (
         <Alert tone="danger" role="alert">
@@ -164,119 +161,120 @@ export function PaymentAccountSettingsPanel() {
         </Alert>
       )}
 
-      {account && account.status !== "disconnected" && (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+      {isConnected && (
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium capitalize">{account.provider}</span>
-            {isStripeConnect ? (
-              <>
-                <Badge tone={account.status === "action_required" || account.status === "pending_verification" ? "info" : STATUS_TONE[account.status]}>
-                  {account.status === "invalid" ? "Not connected" : "Connected"}
-                </Badge>
-                {account.status === "active" || account.status === "action_required" ? (
-                  <Badge tone={account.chargesEnabled ? "success" : "warning"}>
-                    {account.chargesEnabled ? "Payments enabled" : "Payments not yet enabled"}
-                  </Badge>
-                ) : null}
-              </>
-            ) : (
-              <Badge tone={STATUS_TONE[account.status]}>
-                {account.status === "invalid"
-                  ? "Verification failed"
-                  : account.status === "pending_verification"
-                    ? "Verifying..."
-                    : "Active"}
-              </Badge>
-            )}
+            <Badge tone="success">✓ Payment account connected</Badge>
+            {isStripeConnect && !account.chargesEnabled && <Badge tone="warning">Finish setup to start accepting payments</Badge>}
           </div>
+          <p className="text-xs text-muted">Your account is connected and ready to accept online payments.</p>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setShowManage((s) => !s)} className="self-start">
+            {showManage ? "Hide details" : "Manage connection"}
+          </Button>
 
-          {isStripeConnect ? (
-            <>
-              {account.connectedAccountId && <p className="text-xs text-muted">Account: {account.connectedAccountId}</p>}
-              {account.status === "action_required" && account.requirementsDue && account.requirementsDue.length > 0 && (
-                <div className="rounded-lg border border-dashed border-border bg-background p-3 text-xs">
-                  <p className="font-medium text-foreground">Action required — Stripe needs more information</p>
-                  <p className="mt-1 text-muted">Continue setup to finish onboarding and start accepting payments.</p>
-                </div>
+          {showManage && (
+            <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background p-3 text-xs">
+              {isStripeConnect ? (
+                <>
+                  {!account.chargesEnabled && (
+                    <p className="text-foreground">
+                      Stripe still needs a bit more information from you before payments are fully enabled.
+                    </p>
+                  )}
+                  {account.lastVerifiedAt && <p className="text-muted">Last checked: {new Date(account.lastVerifiedAt).toLocaleString()}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {!account.chargesEnabled && (
+                      <Button type="button" size="sm" disabled={busy === "connect-stripe"} onClick={handleConnectStripe}>
+                        {busy === "connect-stripe" ? "Redirecting..." : "Continue setup"}
+                      </Button>
+                    )}
+                    <Button type="button" size="sm" variant="secondary" disabled={busy === "sync"} onClick={handleSyncStatus}>
+                      {busy === "sync" ? "Checking..." : "Refresh status"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {webhookUrl && !account.firstWebhookReceivedAt && (
+                    <div className="flex flex-col gap-2">
+                      <p className="font-medium text-foreground">One step left — payments won't be confirmed until this is done</p>
+                      <p className="text-muted">
+                        This platform only learns a customer actually paid once your provider sends a notification back.
+                        Until then, paid orders may appear unpaid here.
+                      </p>
+                      <ol className="list-decimal space-y-1 pl-4 text-muted">
+                        <li>Open your provider's dashboard settings and add a notification endpoint using the URL below.</li>
+                        <li>Enable payment status events.</li>
+                        <li>Copy the signing secret it gives you back the next time you reconnect.</li>
+                      </ol>
+                      <code className="max-w-full truncate rounded bg-surface px-1.5 py-0.5">{webhookUrl}</code>
+                    </div>
+                  )}
+                  {account.firstWebhookReceivedAt && <p className="text-muted">Notifications confirmed — payments are tracked automatically.</p>}
+                </>
               )}
-              {account.status === "invalid" && account.lastVerificationError && (
-                <p className="text-xs text-danger">{account.lastVerificationError}</p>
-              )}
-              {account.lastVerifiedAt && <p className="text-xs text-muted">Last verified: {new Date(account.lastVerifiedAt).toLocaleString()}</p>}
-              <div className="flex flex-wrap gap-2">
-                {(account.status === "action_required" || account.status === "pending_verification") && (
-                  <Button type="button" size="sm" disabled={busy === "connect-stripe"} onClick={handleConnectStripe}>
-                    {busy === "connect-stripe" ? "Redirecting..." : "Continue setup"}
-                  </Button>
-                )}
-                {account.status === "active" && (
-                  <Button type="button" size="sm" variant="secondary" disabled={busy === "sync"} onClick={handleSyncStatus}>
-                    {busy === "sync" ? "Checking..." : "Refresh status"}
-                  </Button>
-                )}
-                <Button type="button" size="sm" variant="destructive" disabled={busy === "disconnect"} onClick={handleDisconnect}>
-                  {busy === "disconnect" ? "Disconnecting..." : "Disconnect"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              {account.credentialFingerprint && <p className="text-xs text-muted">Key: {account.credentialFingerprint}</p>}
-              {account.status === "invalid" && account.lastVerificationError && (
-                <p className="text-xs text-danger">{account.lastVerificationError}</p>
-              )}
-              {account.status === "active" && webhookUrl && !account.firstWebhookReceivedAt && (
-                <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background p-3 text-xs">
-                  <p className="font-medium text-foreground">One step left — payments won't be confirmed until this is done</p>
-                  <p className="text-muted">
-                    Your key is valid, but this platform only learns a customer actually paid once Safepay sends it a
-                    webhook. Until then, paid orders may appear unpaid here.
-                  </p>
-                  <ol className="list-decimal space-y-1 pl-4 text-muted">
-                    <li>Open your Safepay dashboard's webhook settings and add an endpoint using the URL below.</li>
-                    <li>Enable payment status events.</li>
-                    <li>Copy the signing secret it gives you back into the "Webhook secret" field when connecting.</li>
-                  </ol>
-                  <span className="flex flex-wrap items-center gap-2">
-                    <code className="max-w-full truncate rounded bg-surface px-1.5 py-0.5">{webhookUrl}</code>
-                  </span>
-                </div>
-              )}
-              {account.status === "active" && account.firstWebhookReceivedAt && (
-                <p className="text-xs text-muted">Webhook confirmed — payments will be tracked automatically.</p>
-              )}
-              {account.status === "active" && (
-                <Button type="button" size="sm" variant="destructive" disabled={busy === "disconnect"} onClick={handleDisconnect} className="self-start">
-                  {busy === "disconnect" ? "Disconnecting..." : "Disconnect"}
+              {isDisconnectable && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy === "disconnect"}
+                  onClick={() => setConfirmingDisconnect(true)}
+                  className="self-start"
+                >
+                  Disconnect
                 </Button>
               )}
-            </>
+            </div>
           )}
+        </div>
+      )}
+
+      {needsAttention && (
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background p-3">
+          <p className="text-sm font-medium text-foreground">Almost there — finish connecting your account</p>
+          <p className="text-xs text-muted">
+            {isStripeConnect
+              ? "Pick up where you left off to start accepting online payments."
+              : "We couldn't verify those details. Check them and try again."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {isStripeConnect && (
+              <Button type="button" size="sm" disabled={busy === "connect-stripe"} onClick={handleConnectStripe}>
+                {busy === "connect-stripe" ? "Redirecting..." : "Continue setup"}
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="destructive" disabled={busy === "disconnect"} onClick={() => setConfirmingDisconnect(true)}>
+              Cancel connection
+            </Button>
+          </div>
         </div>
       )}
 
       {(!account || account.status === "disconnected" || account.status === "invalid") && (
         <div className="flex flex-col gap-3">
+          {account?.status === "invalid" && account.lastVerificationError && (
+            <Alert tone="danger">{account.lastVerificationError}</Alert>
+          )}
           <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
-            <p className="text-sm font-medium text-foreground">Connect Stripe</p>
+            <p className="text-sm font-medium text-foreground">Connect payment account</p>
             <p className="text-xs text-muted">
               The fastest, most secure option. You'll be taken to Stripe to set up your account — we never see or
-              store your Stripe credentials.
+              store your credentials.
             </p>
             <Button type="button" size="sm" disabled={busy === "connect-stripe"} onClick={handleConnectStripe} className="self-start">
-              {busy === "connect-stripe" ? "Redirecting..." : "Connect Stripe"}
+              {busy === "connect-stripe" ? "Redirecting..." : "Connect payment account"}
             </Button>
           </div>
 
           {!showSafepayForm ? (
             <button type="button" onClick={() => setShowSafepayForm(true)} className="self-start text-xs font-medium text-primary hover:underline">
-              Use Safepay instead
+              Use a Safepay account instead
             </button>
           ) : (
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
-              <p className="text-xs font-medium text-foreground">
-                Connect Safepay — Safepay doesn't offer a connection flow like Stripe's, so this is API-key entry.
-              </p>
+              <p className="text-xs font-medium text-foreground">Enter your Safepay account details</p>
+              <p className="text-xs text-muted">These are stored encrypted and used only to process your payments.</p>
               <label className="flex flex-col gap-1 text-sm">
                 API key
                 <input
@@ -308,14 +306,14 @@ export function PaymentAccountSettingsPanel() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                Environment
+                Account type
                 <select
                   value={safepayDraft.env}
                   onChange={(e) => setSafepayDraft({ ...safepayDraft, env: e.target.value as "sandbox" | "production" })}
                   className={inputClass}
                 >
-                  <option value="sandbox">Sandbox</option>
-                  <option value="production">Production</option>
+                  <option value="sandbox">Test (sandbox)</option>
+                  <option value="production">Live (production)</option>
                 </select>
               </label>
               <div className="flex gap-2">
@@ -330,6 +328,21 @@ export function PaymentAccountSettingsPanel() {
           )}
         </div>
       )}
-    </fieldset>
+
+      <ConfirmDialog
+        open={confirmingDisconnect}
+        title={isConnected ? "Disconnect payment account?" : "Cancel this connection?"}
+        description={
+          isConnected
+            ? "Online payments will stop working until you connect another account. Cash orders aren't affected, and orders you've already been paid for aren't changed."
+            : "This cancels the connection you started. You can start over any time — nothing has been charged."
+        }
+        tone="danger"
+        confirmLabel={isConnected ? "Disconnect" : "Cancel connection"}
+        busy={busy === "disconnect"}
+        onConfirm={handleDisconnect}
+        onCancel={() => setConfirmingDisconnect(false)}
+      />
+    </div>
   );
 }

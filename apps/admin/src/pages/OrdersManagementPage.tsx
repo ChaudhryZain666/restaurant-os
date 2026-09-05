@@ -137,7 +137,20 @@ function OrderCard({
           </Button>
         )}
         {isCancellable(order.status) && (
-          <Button size="sm" variant="ghost" onClick={() => onSetStatus(order, "cancelled")} className="text-danger">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Cancel order ${order.orderNumber}? This does not automatically refund the customer — if they already paid, use "Issue refund" separately afterward.`
+                )
+              ) {
+                onSetStatus(order, "cancelled");
+              }
+            }}
+            className="text-danger"
+          >
             Cancel
           </Button>
         )}

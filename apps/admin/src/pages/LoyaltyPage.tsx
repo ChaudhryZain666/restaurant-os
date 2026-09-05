@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, EmptyState, Skeleton } from "@restaurant/ui
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { IconStar } from "../components/icons";
+import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -222,7 +223,10 @@ export function LoyaltyPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Loyalty</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Loyalty</h1>
+          <ScopeBadge scope="location" />
+        </div>
         <p className="text-sm text-muted">
           Customers earn 1 point per currency unit spent and can redeem points for a discount at checkout. Tiers:
           Bronze from the start, Silver at 500 points, Gold at 2,000.

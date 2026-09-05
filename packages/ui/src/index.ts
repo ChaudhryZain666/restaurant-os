@@ -6,6 +6,7 @@ export * from "./Logo.js";
 export * from "./Skeleton.js";
 export * from "./Alert.js";
 export * from "./EmptyState.js";
+export * from "./ConfirmDialog.js";
 export * from "./ErrorBoundary.js";
 export * from "./Spinner.js";
 export * from "./Toast.js";

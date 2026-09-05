@@ -7,6 +7,7 @@ import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useSocketStatus } from "../hooks/useSocketStatus";
+import { ScopeBadge } from "../components/ScopeBadge";
 import {
   actionLabel,
   isAwaitingOnlinePayment,
@@ -16,6 +17,18 @@ import {
 } from "../lib/orderStatusFlow";
 
 const KDS_COLUMNS: OrderStatus[] = ["pending", "confirmed", "preparing", "ready", "out_for_delivery"];
+
+/** Portal UX safety phase — one line per column explaining what an empty column actually means,
+ *  instead of five identical "Nothing here." repeats on a brand-new restaurant's first look. */
+const EMPTY_COLUMN_COPY: Record<OrderStatus, string> = {
+  pending: "New orders will appear here as customers place them.",
+  confirmed: "Accepted orders waiting to start cooking will appear here.",
+  preparing: "Orders being cooked right now will appear here.",
+  ready: "Orders ready for pickup or dispatch will appear here.",
+  out_for_delivery: "Orders currently out for delivery will appear here.",
+  completed: "",
+  cancelled: "",
+};
 
 function KitchenOrderCard({ order, now, onSetStatus }: { order: Order; now: Date; onSetStatus: (order: Order, status: OrderStatus) => void }) {
   const awaitingPayment = isAwaitingOnlinePayment(order);
@@ -160,7 +173,13 @@ export function KitchenPage() {
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Kitchen</h1>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-foreground">Kitchen</h1>
+            <ScopeBadge scope="location" />
+          </div>
+          <p className="text-sm text-muted">Keep every order moving from new to ready.</p>
+        </div>
         {socketStatus !== "connected" && <span className="text-xs text-muted">Reconnecting live updates…</span>}
       </div>
       {error && (
@@ -183,7 +202,7 @@ export function KitchenPage() {
                 <span>({group.length})</span>
               </h2>
               <div className="flex flex-col gap-3">
-                {group.length === 0 && <p className="text-xs text-muted">Nothing here.</p>}
+                {group.length === 0 && <p className="text-xs text-muted">{EMPTY_COLUMN_COPY[status]}</p>}
                 {group.map((order) => (
                   <KitchenOrderCard key={order.id} order={order} now={now} onSetStatus={setStatus} />
                 ))}

@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
+import mongoose from "mongoose";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import { User } from "../models/User.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import {
@@ -554,6 +556,36 @@ describe("restaurant settings update (OWNER-only operation)", () => {
       .patch(`/api/v1/restaurants/${restaurantA.id}`)
       .set("Authorization", `Bearer ${ownerAToken}`)
       .send({ settings: { onlinePaymentEnabled: true } });
+  });
+
+  it("Phase 42 — owner can enable online payments for a restaurant with an active connected payment account", async () => {
+    const restaurant = await createTestRestaurant({ settings: { onlinePaymentEnabled: false, cashEnabled: true } });
+    const owner = await createTestUser("restaurant_owner", restaurant._id);
+    const account = await RestaurantPaymentAccount.create({
+      restaurantId: restaurant._id,
+      businessId: new mongoose.Types.ObjectId(),
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      status: "active",
+      connectedAccountId: "acct_settings_gate_test",
+      connectedByUserId: owner._id,
+    });
+
+    try {
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${restaurant.id}`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ settings: { onlinePaymentEnabled: true } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.restaurant.settings.onlinePaymentEnabled).toBe(true);
+    } finally {
+      await Promise.all([
+        RestaurantPaymentAccount.deleteOne({ _id: account._id }),
+        Restaurant.deleteOne({ _id: restaurant._id }),
+        User.deleteOne({ _id: owner._id }),
+      ]);
+    }
   });
 
   it("rejects disabling the only remaining enabled payment method", async () => {

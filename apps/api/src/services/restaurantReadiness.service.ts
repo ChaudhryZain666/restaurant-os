@@ -7,6 +7,7 @@ import { Table } from "../models/Table.js";
 import { User } from "../models/User.js";
 import { DomainMapping } from "../models/DomainMapping.js";
 import { LoyaltyReward } from "../models/LoyaltyReward.js";
+import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import { businessHasCanonicalMenu, resolveMenuForLocation } from "./menuResolution.service.js";
 
 /**
@@ -85,13 +86,14 @@ export async function computeSetupChecklist(restaurant: HydratedDocument<Restaur
   const kitchenEnabled = settings.kitchenEnabled !== false;
   const staffEnabled = settings.staffEnabled !== false;
 
-  const [staffCount, tableCount, activeDomain, rewardCount] = await Promise.all([
+  const [staffCount, tableCount, activeDomain, rewardCount, paymentAccount] = await Promise.all([
     staffEnabled
       ? User.countDocuments({ restaurantId: restaurant._id, role: { $in: ["restaurant_manager", "restaurant_staff", "kitchen_staff"] } })
       : Promise.resolve(0),
     settings.dineInEnabled ? Table.countDocuments({ restaurantId: restaurant._id }) : Promise.resolve(0),
     DomainMapping.findOne({ locationId: restaurant._id }).sort({ createdAt: -1 }),
     LoyaltyReward.countDocuments({ restaurantId: restaurant._id }),
+    RestaurantPaymentAccount.findOne({ restaurantId: restaurant._id, status: { $ne: "disconnected" } }).sort({ createdAt: -1 }),
   ]);
 
   const items: SetupChecklistItem[] = [
@@ -124,6 +126,15 @@ export async function computeSetupChecklist(restaurant: HydratedDocument<Restaur
       key: "loyalty",
       label: "Loyalty rewards",
       status: rewardCount > 0 ? "complete" : "optional",
+    },
+    // Phase 42 — always "optional": cash-only is a fully supported, permanent choice, never
+    // blocking anything else. Reflects whether a payment account is connected, not whether online
+    // payments happen to be enabled right now (the two are the same thing going forward, since
+    // enabling online payments now requires an active account — see restaurant.controller.ts).
+    {
+      key: "payment",
+      label: "Payment account connected",
+      status: paymentAccount?.status === "active" ? "complete" : paymentAccount ? "in_progress" : "optional",
     },
     {
       key: "domain",

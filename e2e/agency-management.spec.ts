@@ -221,10 +221,18 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await expect(page.getByText(/used 1 of 1 business/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: "New business" })).toBeDisabled();
 
-    // --- Upgrade to the higher-limit plan via the real Billing UI change-plan action. ---
+    // --- Upgrade to the higher-limit plan via the real Billing UI change-plan action. Portal UX
+    // safety phase: selecting a plan now opens a confirmation dialog instead of mutating
+    // immediately — confirming it is what actually calls change-plan. ---
     await page.getByRole("link", { name: "Billing", exact: true }).click();
     await expect(page.getByText("E2E Low Limit")).toBeVisible({ timeout: 10_000 });
     await page.getByLabel("Change plan:").selectOption({ label: "E2E High Limit" });
+    await expect(page.getByRole("heading", { name: "Change your plan?" })).toBeVisible();
+    await page.getByRole("button", { name: "Change plan" }).click();
+    // Wait for the dialog to actually close (the change-plan request + reload landing) before
+    // checking the plan name elsewhere on the page — otherwise this can transiently race the
+    // dialog's own "New plan" line, which shows the same text.
+    await expect(page.getByRole("heading", { name: "Change your plan?" })).toHaveCount(0);
     await expect(page.getByText("E2E High Limit")).toBeVisible({ timeout: 10_000 });
 
     // --- The same second business now succeeds. ---
