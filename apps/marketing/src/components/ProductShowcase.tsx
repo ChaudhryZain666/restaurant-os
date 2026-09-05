@@ -109,15 +109,32 @@ export function ProductShowcase() {
                 )}
               </div>
 
-              <div className="relative h-[calc(100%-33px)] bg-white">
+              <div className="relative h-[calc(100%-33px)] overflow-hidden bg-white">
                 {tab.id === "storefront" ? (
                   <iframe src={STOREFRONT_URL} title="Live demo restaurant storefront" className="h-full w-full border-0" loading="lazy" />
-                ) : tab.id === "dashboard" ? (
-                  <DashboardMock />
-                ) : tab.id === "menu" ? (
-                  <MenuMock />
                 ) : (
-                  <OrdersMock />
+                  // The Dashboard/Menu/Orders mocks are laid out for their full "big screen" size
+                  // (real padding, fixed-pixel thumbnails) — at a small preview slot's actual pixel
+                  // width, that same markup doesn't reflow gracefully, it overflows and clips mid-row
+                  // (most visible in MenuMock's 44px image thumbnails). Rather than give the mocks a
+                  // second, simplified variant (breaking this component's own "same four screens
+                  // stay mounted, only resized" design), the preview slots render the SAME content
+                  // scaled down as a unit — a standard "shrink a fixed-size UI to fit a thumbnail"
+                  // technique, matching the ~28-32%-of-active-slot ratio `layoutFor` already uses.
+                  <div
+                    style={
+                      isActive
+                        ? undefined
+                        : {
+                            width: `${100 / (mobile ? 0.32 : 0.4)}%`,
+                            height: `${100 / (mobile ? 0.32 : 0.4)}%`,
+                            transform: `scale(${mobile ? 0.32 : 0.4})`,
+                            transformOrigin: "top left",
+                          }
+                    }
+                  >
+                    {tab.id === "dashboard" ? <DashboardMock /> : tab.id === "menu" ? <MenuMock /> : <OrdersMock />}
+                  </div>
                 )}
               </div>
 

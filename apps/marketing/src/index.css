@@ -224,6 +224,22 @@ h3 {
   background-size: 40px 40px;
 }
 
+/* Hero's blueprint grid — barely-perceptible drift so a "technical drawing" reads as live
+   rather than a static texture. Deliberately slow (40s) and small (one grid cell's worth of
+   travel) — reinforcement, not a distraction from the actual content sitting on top of it.
+   Neutralized for free by the prefers-reduced-motion block above (animation-duration -> 0.01ms). */
+.bg-grid-drift {
+  animation: gridDrift 40s linear infinite;
+}
+@keyframes gridDrift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 88px 88px;
+  }
+}
+
 .text-gradient {
   background: linear-gradient(100deg, var(--color-primary), var(--color-accent));
   -webkit-background-clip: text;

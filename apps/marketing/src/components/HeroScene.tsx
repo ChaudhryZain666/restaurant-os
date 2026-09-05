@@ -1,7 +1,19 @@
+import { useEffect, useState } from "react";
+import { useReducedMotion } from "@restaurant/ui";
 import { useScrollProgress } from "../lib/useScrollProgress";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { IconChart, IconClipboard } from "./icons";
 import { STOREFRONT_URL } from "../lib/links";
+
+/** A restaurant that's actually busy has tickets constantly coming in — one static "Order #214"
+ *  forever reads as a prop, not a live kitchen. Cycles through a few real-feeling orders instead;
+ *  frozen on the first one under reduced motion, same contract as every other motion piece here. */
+const TICKETS = [
+  { number: "214", item: "Margherita Pizza ×2" },
+  { number: "215", item: "Loaded Fries ×1" },
+  { number: "216", item: "Caesar Salad ×1" },
+];
+const TICKET_INTERVAL_MS = 3200;
 
 /**
  * THE REAL LIVE DEMO IFRAME IS PROTECTED. This renders it as one physical object sitting inside
@@ -15,23 +27,44 @@ import { STOREFRONT_URL } from "../lib/links";
 export function HeroScene() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>();
   const p = Math.min(1, progress * 1.6);
+  const reducedMotion = useReducedMotion();
+  const [ticketIndex, setTicketIndex] = useState(0);
+  const [ticketVisible, setTicketVisible] = useState(true);
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    // Fades the current ticket out, swaps it, then fades the next one in — a torn-off-and-replaced
+    // feel rather than a plain crossfade, matching a real kitchen printer's rhythm.
+    const interval = setInterval(() => {
+      setTicketVisible(false);
+      setTimeout(() => {
+        setTicketIndex((i) => (i + 1) % TICKETS.length);
+        setTicketVisible(true);
+      }, 260);
+    }, TICKET_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [reducedMotion]);
+
+  const ticket = TICKETS[ticketIndex];
 
   return (
     <div ref={ref} className="relative mx-auto w-full max-w-[620px]" style={{ perspective: "1600px" }}>
       <div className="relative" style={{ transformStyle: "preserve-3d" }}>
-        {/* paper kitchen ticket — a physical object resting beside the screen */}
+        {/* paper kitchen ticket — a physical object resting beside the screen, cycling through a
+            few real-feeling orders (see TICKETS above) rather than sitting on one forever. */}
         <div
-          className="absolute -left-4 -top-10 z-10 w-44 rounded-sm p-3.5 sm:-left-10"
+          className="absolute -left-4 -top-10 z-10 w-44 rounded-sm p-3.5 transition-[opacity,transform] duration-300 ease-out sm:-left-10"
           style={{
-            transform: `translateZ(30px) rotate(${-9 + p * 2}deg)`,
+            transform: `translateZ(30px) rotate(${-9 + p * 2}deg) translateY(${ticketVisible ? 0 : -6}px)`,
+            opacity: ticketVisible ? 1 : 0,
             background: "linear-gradient(155deg, #f6efdf, #ece2ca)",
             borderTop: "2px solid #b8763f",
             boxShadow: "0 20px 36px -14px rgba(0,0,0,0.6)",
           }}
           aria-hidden
         >
-          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a7550]">Order #214</p>
-          <p className="mt-1.5 text-xs font-semibold text-[#2a2013]">Margherita Pizza ×2</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a7550]">Order #{ticket.number}</p>
+          <p className="mt-1.5 text-xs font-semibold text-[#2a2013]">{ticket.item}</p>
           <span
             className="mt-1.5 inline-block rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-[#8a4a1f]"
             style={{ background: "rgba(184,118,63,0.22)" }}

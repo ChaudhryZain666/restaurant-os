@@ -248,9 +248,23 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               </text>
             </g>
 
-            {/* analytics sparkline — only if the real plan includes business_analytics */}
+            {/* analytics sparkline — only if the real plan includes business_analytics. The line
+                itself draws in (stroke-dashoffset, ~230 units ≈ the polyline's real length) rather
+                than just fading in already-complete, matching the "revenue drawing itself" motion
+                already used for the real chart moments elsewhere (OperationsBoard's DeliveryMoment,
+                MiniLineChart) — the label still fades in on the same group so both read as one
+                reveal, not two competing ones. */}
             <g opacity={hasAnalytics ? 1 : 0} style={{ transition: "opacity 500ms ease 260ms" }}>
-              <polyline points="90,290 130,278 170,284 210,266 250,272 310,255" fill="none" stroke="#611b28" strokeWidth="1.6" strokeLinecap="round" />
+              <polyline
+                points="90,290 130,278 170,284 210,266 250,272 310,255"
+                fill="none"
+                stroke="#611b28"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeDasharray="230"
+                strokeDashoffset={t(hasAnalytics ? 0 : 230, 0)}
+                style={{ transition: reducedMotion ? "none" : "stroke-dashoffset 900ms cubic-bezier(0.16,1,0.3,1) 260ms" }}
+              />
               <text x="90" y="305" fontSize="7" fill="#7a4550">
                 Revenue trending up
               </text>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Skeleton } from "@restaurant/ui";
 import type { HeaderProps } from "../types";
 import { CartIcon, CloseGlyphIcon, MenuGlyphIcon } from "../icons";
@@ -11,11 +11,23 @@ import { useScrolled } from "../useScrolled";
  *  viewport edge from the photograph). Wordmark left, a handful of uppercase tracked links right,
  *  cart reduced to a bare icon+count (no pill/border). Stays `sticky` (in-flow), not `fixed` — a
  *  fixed/overlaid header would need Layout.tsx (shared across every theme) to reserve clearance for
- *  it on every non-hero page (Cart/Orders/Account/...), which a single theme must never require. */
+ *  it on every non-hero page (Cart/Orders/Account/...), which a single theme must never require.
+ *
+ *  Transparent-over-hero only makes sense on the one route that actually renders a hero behind it
+ *  (`menuHref`, matching `CinematicHero`'s own route). On every other page — Cart/Checkout/Support/
+ *  Login/Account/Orders, and any demo/marketing page rendered under this theme — there is no photo
+ *  behind the header, just the plain page background, and `text-secondary-foreground` (chosen to
+ *  read on a dark photo) becomes a near-invisible ghost on it. Real bug, found by actually looking
+ *  at those pages, not a hypothetical: confirmed via direct DOM/class inspection, not a scroll- or
+ *  screenshot-timing artifact. Luxury/Contemporary already avoid this same pitfall (solid from the
+ *  first pixel); this brings Cinematic in line with them everywhere but its own hero route, where
+ *  the transparent-then-solidifies behavior is unchanged. */
 export function CinematicHeader({ restaurant, restaurantLoading, menuHref, cartHref, links, itemCount, cartPopping, userName, onLogout }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const scrolled = useScrolled(60);
-  const solid = scrolled || mobileOpen;
+  const location = useLocation();
+  const hasHeroBehindIt = location.pathname === menuHref;
+  const solid = scrolled || mobileOpen || !hasHeroBehindIt;
 
   return (
     <header

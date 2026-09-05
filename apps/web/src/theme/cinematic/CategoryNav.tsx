@@ -26,7 +26,21 @@ export function CinematicCategoryNav({ categories, activeCategoryId, onSelect }:
       ref={navRef}
       aria-label="Menu categories"
       className={cn(
-        "sticky top-[76px] z-30 relative flex gap-7 overflow-x-auto border-b border-secondary-foreground/10 bg-secondary px-6 py-4 sm:px-14",
+        // `sticky` alone already establishes a positioned containing block for the absolutely-
+        // positioned active-tab indicator below — a redundant `relative` here previously CONFLICTED
+        // with `sticky` (both set the `position` CSS property; Tailwind's cascade let `relative` win),
+        // which silently broke the intended "pins below the header on scroll" behavior and, combined
+        // with `top-[76px]` then applying as a `position:relative` offset instead of a sticky one,
+        // visually pushed this nav down while leaving its natural flow slot empty — the real cause of
+        // a visible gap between the hero and this nav. Confirmed via computed-style inspection.
+        //
+        // `-mt-10` cancels MenuPage.tsx's shared `gap-10` flex spacing (between Hero/Alert/
+        // CategoryNav/sections — every theme's Hero sits in that same flow) so this nav sits flush
+        // against the hero, matching Hero.tsx's own established technique of cancelling ancestor
+        // spacing via a negative margin rather than changing the shared cross-theme layout. Assumes
+        // the availability Alert banner (shown only when the restaurant is paused/closed) isn't
+        // rendered between them — an already-rare, lower-stakes path not chased further here.
+        "sticky top-[76px] z-30 -mt-10 flex gap-7 overflow-x-auto border-b border-secondary-foreground/10 bg-secondary px-6 py-4 sm:px-14",
         preview ? "-mx-4 sm:-mx-6" : "full-bleed"
       )}
     >

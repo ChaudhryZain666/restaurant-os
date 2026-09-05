@@ -34,7 +34,7 @@ export function HomePage() {
             the one functional brand/action moment in this whole section (the Start Free Trial
             button) rather than washing the entire environment in the brand color. */}
         <div
-          className="absolute inset-0 opacity-[0.1]"
+          className="bg-grid-drift absolute inset-0 opacity-[0.1]"
           style={{
             backgroundImage: "linear-gradient(rgba(255,255,255,0.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.7) 1px, transparent 1px)",
             backgroundSize: "88px 88px",

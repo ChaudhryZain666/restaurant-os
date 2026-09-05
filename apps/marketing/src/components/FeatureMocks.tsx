@@ -1,4 +1,5 @@
 import { Badge } from "@restaurant/ui";
+import { AnimatedNumber } from "./AnimatedNumber";
 
 /**
  * Realistic, clearly-illustrative UI mockups for the Product page — built from the actual admin
@@ -23,14 +24,16 @@ export function DashboardMock() {
     <div className="flex flex-col gap-4 p-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Revenue today", value: "$1,284" },
-          { label: "Orders today", value: "47" },
-          { label: "Avg. order value", value: "$27.30" },
-          { label: "Active orders", value: "6" },
+          { label: "Revenue today", value: 1284, format: (n: number) => `$${Math.round(n).toLocaleString()}` },
+          { label: "Orders today", value: 47 },
+          { label: "Avg. order value", value: 27.3, format: (n: number) => `$${n.toFixed(2)}` },
+          { label: "Active orders", value: 6 },
         ].map((stat) => (
           <div key={stat.label} className="rounded-lg border border-border bg-surface p-3">
             <p className="text-xs text-muted">{stat.label}</p>
-            <p className="font-heading text-xl font-semibold text-foreground">{stat.value}</p>
+            <p className="font-heading text-xl font-semibold text-foreground">
+              <AnimatedNumber value={stat.value} format={stat.format} />
+            </p>
           </div>
         ))}
       </div>
@@ -49,6 +52,31 @@ export function DashboardMock() {
                 <div className="h-full rounded-full bg-primary" style={{ width: `${(row.value / 37) * 100}%` }} />
               </div>
               <span className="w-5 shrink-0 text-right font-medium text-foreground">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Fills out the rest of this screen's box (previously left as bare empty space below the
+          two cards above) with genuinely distinct content — a live-feeling recent-activity ticker,
+          denser/differently formatted than OrdersMock's own card list so the two don't read as
+          the same screen when shown side by side in ProductShowcase's preview thumbnails. */}
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <p className="mb-3 text-xs font-medium text-muted">Recent activity</p>
+        <div className="flex flex-col divide-y divide-border">
+          {[
+            { number: "ORD-1042", detail: "New pickup order", total: "$19.50", time: "just now" },
+            { number: "ORD-1041", detail: "Delivery order accepted", total: "$24.00", time: "4 min ago" },
+            { number: "ORD-1039", detail: "Order completed", total: "$31.20", time: "12 min ago" },
+          ].map((row) => (
+            <div key={row.number} className="flex items-center justify-between gap-3 py-2 text-xs first:pt-0 last:pb-0">
+              <div className="min-w-0">
+                <span className="font-medium text-foreground">{row.number}</span>{" "}
+                <span className="text-muted">— {row.detail}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-medium text-foreground">{row.total}</span>
+                <span className="text-muted">{row.time}</span>
+              </div>
             </div>
           ))}
         </div>

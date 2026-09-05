@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Button, Logo } from "@restaurant/ui";
 import { ADMIN_LOGIN_URL } from "../lib/links";
+import { useScrolled } from "../hooks/useScrolled";
 
 interface DropdownLink {
   label: string;
@@ -132,10 +133,24 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
 
 export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The one piece of chrome every page shares — a small scroll-reactive tightening (shorter
+  // padding, a real shadow instead of just the always-on border) so the header reads as reacting
+  // to the page rather than sitting on top of it, without changing its actual translucent-blur
+  // treatment (already present at rest, unlike the storefront's Cinematic header, which had no
+  // background at all until scrolled — a different problem this isn't fixing).
+  const scrolled = useScrolled(10);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <header
+      className={`sticky top-0 z-40 border-b bg-surface/90 backdrop-blur transition-[box-shadow,border-color] duration-300 supports-[backdrop-filter]:bg-surface/70 ${
+        scrolled ? "border-border shadow-sm" : "border-transparent"
+      }`}
+    >
+      <div
+        className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 transition-[padding] duration-300 sm:px-6 ${
+          scrolled ? "py-2.5" : "py-3"
+        }`}
+      >
         <Link to="/">
           <Logo />
         </Link>
