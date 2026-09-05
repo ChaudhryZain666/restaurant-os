@@ -61,7 +61,7 @@ test.describe.serial("owner billing lifecycle via the mock provider (Phase 24)",
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("BillingOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // --- Billing: no subscription yet. ---
     await page.getByRole("link", { name: "Billing" }).click();
@@ -141,7 +141,7 @@ test.describe.serial("owner checkout — payment-method-up-front path (Phase 27)
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("CheckoutOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     await page.getByRole("link", { name: "Billing" }).click();
     await expect(page.getByText("No subscription yet.")).toBeVisible({ timeout: 10_000 });
@@ -223,7 +223,7 @@ test.describe.serial("owner Basic/Pro tier selection and upgrade (Phase 34)", ()
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("TierOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     await page.getByRole("link", { name: "Billing" }).click();
     await expect(page.getByText("No subscription yet.")).toBeVisible({ timeout: 10_000 });

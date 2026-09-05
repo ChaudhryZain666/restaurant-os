@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Order, OrderDeliveryAddress, OrderStatus, OrderType, PaymentStatus } from "@restaurant/types";
-import { Badge, Button, Card } from "@restaurant/ui";
+import { Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { formatCurrency, formatRestaurantDateTime, formatRestaurantTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
+import { previewUrl } from "../lib/links";
+import { IconClipboard } from "../components/icons";
 import { OrderLineItems } from "../components/OrderLineItems";
 import { OrderPaymentAdmin } from "../components/OrderPaymentAdmin";
 import { OrderNotesAndActivity } from "../components/OrderNotesAndActivity";
@@ -159,6 +162,7 @@ const PAYMENT_FILTER_OPTIONS: Array<{ value: "all" | PaymentStatus; label: strin
 export function OrdersManagementPage() {
   const restaurantId = useActiveLocationId();
   const timezone = useRestaurantTimezone();
+  const { restaurant } = useRestaurantSettings();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -288,7 +292,20 @@ export function OrdersManagementPage() {
       )}
 
       {orders.length === 0 ? (
-        <Card className="text-center text-muted">No orders yet.</Card>
+        <Card>
+          <EmptyState
+            icon={<IconClipboard className="h-5 w-5" />}
+            title="Your first order is waiting to happen"
+            description="Once your restaurant is live and a customer checks out, their order shows up here — new, then preparing, ready, and completed."
+            action={
+              restaurant ? (
+                <a href={previewUrl(restaurant.slug)} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">
+                  Preview your online restaurant ↗
+                </a>
+              ) : undefined
+            }
+          />
+        </Card>
       ) : activeCount === 0 ? (
         <Card className="text-center text-muted">
           {filtersActive ? "No active orders match these filters." : "No active orders right now."}

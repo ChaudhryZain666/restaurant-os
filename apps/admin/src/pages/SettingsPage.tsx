@@ -177,7 +177,14 @@ export function SettingsPage() {
   return (
     <form onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-4">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Settings</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Settings</h1>
+          {/* Portal UX phase — every field on this page is per-location (unlike Billing, or the
+              Business Analytics/Promotions pages), and the page's own "Location" tab name made
+              that easy to mistake for one tab among several rather than the whole page's scope.
+              Same Badge/tone convention PromotionsPage.tsx already uses for "Business-wide". */}
+          <Badge tone="info">Applies to this location only</Badge>
+        </div>
         <p className="text-sm text-muted">Ongoing configuration for a restaurant that's already up and running.</p>
       </div>
       {restaurant.status !== "active" && (

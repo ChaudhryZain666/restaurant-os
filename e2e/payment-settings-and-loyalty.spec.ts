@@ -67,7 +67,7 @@ test.describe.serial("payment method gating and loyalty redemption (Phase 15)", 
       await adminPage.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
       await adminPage.locator('input[type="password"]').fill("PaymentsOwner123!");
       await adminPage.getByRole("button", { name: "Accept invitation" }).click();
-      await expect(adminPage).toHaveURL(/\/setup$/, { timeout: 10_000 });
+      await expect(adminPage).toHaveURL(/\/$/, { timeout: 10_000 });
 
       // --- Build a minimal menu and publish. ---
       await adminPage.getByRole("link", { name: "Menu", exact: true }).click();

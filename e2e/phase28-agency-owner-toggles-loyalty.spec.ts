@@ -155,7 +155,8 @@ test.describe.serial("Kitchen / Staff feature toggles (Phase 28)", () => {
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("TogglesOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    // Portal UX phase: Dashboard's in-place "get ready" state, not a /setup redirect.
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // Both nav items are visible by default (kitchenEnabled/staffEnabled default true).
     await expect(page.getByRole("link", { name: "Kitchen", exact: true })).toBeVisible();
@@ -246,7 +247,7 @@ test.describe.serial("loyalty reward redemption (Phase 28)", () => {
       await adminPage.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
       await adminPage.locator('input[type="password"]').fill("RewardOwner123!");
       await adminPage.getByRole("button", { name: "Accept invitation" }).click();
-      await expect(adminPage).toHaveURL(/\/setup$/, { timeout: 10_000 });
+      await expect(adminPage).toHaveURL(/\/$/, { timeout: 10_000 });
 
       await adminPage.getByRole("link", { name: "Menu", exact: true }).click();
       await adminPage.getByPlaceholder("New category name").fill(categoryName);

@@ -8,6 +8,8 @@ import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { useRestaurantTimezone } from "../hooks/useRestaurantTimezone";
 import { STATUS_LABELS, STATUS_TONE } from "../lib/orderStatusFlow";
 import { OrderLineItems } from "../components/OrderLineItems";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
+import { previewUrl } from "../lib/links";
 
 const PAGE_SIZE = 20;
 const ORDERS_PAGE_SIZE = 10;
@@ -80,6 +82,7 @@ export function CustomersPage() {
   const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   const timezone = useRestaurantTimezone();
+  const { restaurant } = useRestaurantSettings();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -137,11 +140,18 @@ export function CustomersPage() {
         <p className="text-muted">Loading customers...</p>
       ) : customers.length === 0 ? (
         <EmptyState
-          title={debouncedSearch ? "No matching customers" : "No customers yet"}
+          title={debouncedSearch ? "No matching customers" : "Your first customers will appear here"}
           description={
             debouncedSearch
               ? "No customer's name or email matches that search."
-              : "Once customers start ordering, they'll show up here."
+              : "Customers are added automatically the moment someone orders from your restaurant."
+          }
+          action={
+            !debouncedSearch && restaurant ? (
+              <a href={previewUrl(restaurant.slug)} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">
+                Preview your online restaurant ↗
+              </a>
+            ) : undefined
           }
         />
       ) : (

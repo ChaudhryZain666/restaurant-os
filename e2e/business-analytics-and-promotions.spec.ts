@@ -66,7 +66,7 @@ test.describe.serial("business-wide analytics and promotions (Phase 23)", () => 
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("BizOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // --- Build one canonical menu item — shared automatically across every future location. ---
     await page.getByRole("link", { name: "Menu", exact: true }).click();

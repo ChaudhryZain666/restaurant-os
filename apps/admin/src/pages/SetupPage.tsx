@@ -5,23 +5,7 @@ import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { previewUrl, storefrontUrl } from "../lib/links";
-
-const CHECK_LINKS: Record<string, { label: string; to: string }> = {
-  profile: { label: "Restaurant profile", to: "/settings" },
-  menu: { label: "Menu", to: "/menu" },
-  orderType: { label: "Ordering & delivery", to: "/delivery" },
-  location: { label: "Location", to: "/settings" },
-};
-
-const EXTENDED_LINKS: Record<string, { label: string; to: string }> = {
-  branding: { label: "Storefront", to: "/settings" },
-  hours: { label: "Business hours", to: "/settings" },
-  tables: { label: "Tables", to: "/tables" },
-  kitchen: { label: "Kitchen", to: "/kitchen" },
-  staff: { label: "Staff", to: "/staff" },
-  loyalty: { label: "Loyalty", to: "/loyalty" },
-  domain: { label: "Domain", to: "/settings" },
-};
+import { EXTENDED_CHECK_COPY, READY_CHECK_COPY } from "../lib/readinessCopy";
 
 function CheckIcon({ complete }: { complete: boolean }) {
   return (
@@ -119,13 +103,15 @@ export function SetupPage() {
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Setup</h1>
+        <h1 className="font-heading text-2xl font-semibold text-foreground">
+          {isLive ? "Setup" : "Get your restaurant ready"}
+        </h1>
         <p className="text-sm text-muted">
           {isSuspended
             ? "Your restaurant has been suspended and is not visible to customers."
             : isLive
               ? "Your restaurant is live and visible to customers."
-              : "Finish these before your restaurant can go live."}
+              : "Finish these before your restaurant can go live — then round it out with the optional items below."}
         </p>
       </div>
 
@@ -187,18 +173,23 @@ export function SetupPage() {
                 </Badge>
                 <ul className="mt-2 flex flex-col divide-y divide-border">
                   {readiness.checks.map((check) => {
-                    const link = CHECK_LINKS[check.key];
+                    const copy = READY_CHECK_COPY[check.key];
                     return (
-                      <li key={check.key} className="flex items-center justify-between gap-3 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <CheckIcon complete={check.complete} />
-                          <span className={`text-sm ${check.complete ? "text-foreground" : "text-foreground/80"}`}>
-                            {check.label}
+                      <li key={check.key} className="flex items-start justify-between gap-3 py-2.5">
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5">
+                            <CheckIcon complete={check.complete} />
                           </span>
+                          <div>
+                            <p className={`text-sm ${check.complete ? "text-foreground" : "text-foreground/80"}`}>
+                              {copy?.title ?? check.label}
+                            </p>
+                            {copy && <p className="text-xs text-muted">{copy.why}</p>}
+                          </div>
                         </div>
-                        {!check.complete && link && (
-                          <Link to={link.to} className="text-sm font-medium text-primary hover:underline">
-                            {link.label} →
+                        {!check.complete && copy && (
+                          <Link to={copy.to} className="shrink-0 text-sm font-medium text-primary hover:underline">
+                            {copy.linkLabel} →
                           </Link>
                         )}
                       </li>
@@ -234,17 +225,22 @@ export function SetupPage() {
             </p>
             <ul className="flex flex-col divide-y divide-border">
               {extended.map((item) => {
-                const link = EXTENDED_LINKS[item.key];
+                const copy = EXTENDED_CHECK_COPY[item.key];
                 const badge = EXTENDED_STATUS_BADGE[item.status];
                 return (
-                  <li key={item.key} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <Badge tone={badge.tone}>{badge.label}</Badge>
-                      <span className="text-sm text-foreground/80">{item.label}</span>
+                  <li key={item.key} className="flex items-start justify-between gap-3 py-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <Badge tone={badge.tone} className="mt-0.5 shrink-0">
+                        {badge.label}
+                      </Badge>
+                      <div>
+                        <p className="text-sm text-foreground/80">{copy?.title ?? item.label}</p>
+                        {copy && <p className="text-xs text-muted">{copy.why}</p>}
+                      </div>
                     </div>
-                    {item.status !== "complete" && item.status !== "optional" && link && (
-                      <Link to={link.to} className="text-sm font-medium text-primary hover:underline">
-                        {link.label} →
+                    {item.status !== "complete" && item.status !== "optional" && copy && (
+                      <Link to={copy.to} className="shrink-0 text-sm font-medium text-primary hover:underline">
+                        {copy.linkLabel} →
                       </Link>
                     )}
                   </li>

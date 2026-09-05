@@ -57,26 +57,47 @@ interface NavItem {
 
 interface NavGroup {
   label: string;
+  /** Portal UX phase — a short, muted subtitle rendered under the group label, so the grouping
+   *  itself teaches what it's for at a glance (not just a category name). Optional: KITCHEN_GROUPS/
+   *  PLATFORM_GROUPS/AGENCY_GROUPS below don't need the same explanatory weight as the main
+   *  restaurant-owner nav, so they're left without one rather than forcing filler text. */
+  description?: string;
   items: NavItem[];
 }
 
+// Portal UX phase — regrouped from the previous feature-taxonomy layout (Overview/Orders/Menu/
+// Customers/Operations/Marketing/Insights/Support/Settings) into task-oriented groups matching how
+// an owner actually thinks about running a restaurant, not how the codebase's own domains are
+// organized. Every item below is the exact same route/permission/settingsFlag/multiLocationOnly
+// gate as before — only which group an already-gated item appears under, its order, and its label
+// changed. Setup stays its own top-level group (not nested under Business/Settings) since it's the
+// deliberate entry point for a not-yet-ready restaurant and needs to stay one click from Home.
 const RESTAURANT_GROUPS: NavGroup[] = [
   {
-    label: "Overview",
+    label: "Home",
+    items: [{ to: "/", label: "Dashboard", icon: IconGrid, end: true }],
+  },
+  {
+    label: "Get ready",
+    description: "Set up your restaurant to start taking orders",
     items: [
-      { to: "/", label: "Dashboard", icon: IconGrid, end: true },
       { to: "/setup", label: "Setup", icon: IconSliders, permission: "restaurant.settings.manage" },
-      // Phase 19 — same gating as Settings/Delivery (restaurant.settings.manage is owner-only,
-      // not manager). Always shown to an owner even with just one location today, so there's a
-      // discoverable way to ever reach a second one — the page itself stays minimal at 1 location
-      // rather than presenting management complexity by default (see LocationsPage.tsx).
-      { to: "/locations", label: "Locations", icon: IconStore, permission: "restaurant.settings.manage" },
     ],
   },
   {
-    label: "Orders",
+    label: "Sell",
+    description: "What customers see and order",
     items: [
+      { to: "/menu", label: "Menu", icon: IconMenuBook, permission: "restaurant.menu.read" },
       { to: "/orders", label: "Orders", icon: IconClipboard, permission: "restaurant.orders.read" },
+      { to: "/customers", label: "Customers", icon: IconUsers, permission: "restaurant.orders.read" },
+    ],
+  },
+  {
+    label: "Run",
+    description: "Day-to-day service",
+    items: [
+      { to: "/pos", label: "POS", icon: IconRegister, permission: "restaurant.pos.operate", settingsFlag: "posEnabled" },
       // Phase 26 — explicitly permission-gated now (mirrors the route itself, converted the same
       // phase): previously ungated here since every real restaurant role happened to have
       // restaurant.orders.manage, but an agency_staff acting inside a business does NOT (read-only
@@ -85,23 +106,13 @@ const RESTAURANT_GROUPS: NavGroup[] = [
       // to prevent.
       { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage", settingsFlag: "kitchenEnabled" },
       { to: "/tables", label: "Tables", icon: IconTable, permission: "restaurant.tables.manage" },
-      { to: "/pos", label: "POS", icon: IconRegister, permission: "restaurant.pos.operate", settingsFlag: "posEnabled" },
-    ],
-  },
-  { label: "Menu", items: [{ to: "/menu", label: "Menu", icon: IconMenuBook, permission: "restaurant.menu.read" }] },
-  {
-    label: "Customers",
-    items: [{ to: "/customers", label: "Customers", icon: IconUsers, permission: "restaurant.orders.read" }],
-  },
-  {
-    label: "Operations",
-    items: [
       { to: "/delivery", label: "Delivery", icon: IconTruck, permission: "restaurant.settings.manage" },
       { to: "/staff", label: "Staff", icon: IconIdBadge, permission: "restaurant.staff.manage", settingsFlag: "staffEnabled" },
     ],
   },
   {
-    label: "Marketing",
+    label: "Grow",
+    description: "Bring customers back and track results",
     items: [
       { to: "/promotions", label: "Promotions", icon: IconTag, permission: "restaurant.promotions.manage" },
       {
@@ -112,11 +123,6 @@ const RESTAURANT_GROUPS: NavGroup[] = [
         multiLocationOnly: true,
       },
       { to: "/loyalty", label: "Loyalty", icon: IconStar, permission: "restaurant.analytics.read" },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [
       { to: "/analytics", label: "Analytics", icon: IconChart, permission: "restaurant.analytics.read" },
       {
         to: "/business-analytics",
@@ -125,23 +131,29 @@ const RESTAURANT_GROUPS: NavGroup[] = [
         permission: "restaurant.analytics.read",
         multiLocationOnly: true,
       },
-      { to: "/audit-log", label: "Audit log", icon: IconClipboard, permission: "restaurant.audit.read" },
     ],
   },
   {
-    label: "Support",
-    items: [{ to: "/support", label: "Support", icon: IconHeadset, permission: "support.tickets.read" }],
-  },
-  {
-    label: "Settings",
+    label: "Business",
+    description: "Locations, billing and account-wide settings",
     items: [
-      { to: "/settings", label: "Settings", icon: IconSettings, permission: "restaurant.settings.manage" },
-      { to: "/theme-studio", label: "Theme Studio", icon: IconPalette, permission: "restaurant.settings.manage" },
+      // Phase 19 — same gating as Settings/Delivery (restaurant.settings.manage is owner-only,
+      // not manager). Always shown to an owner even with just one location today, so there's a
+      // discoverable way to ever reach a second one — the page itself stays minimal at 1 location
+      // rather than presenting management complexity by default (see LocationsPage.tsx).
+      { to: "/locations", label: "Locations", icon: IconStore, permission: "restaurant.settings.manage" },
       // Phase 24 — business-level regardless of location count (unlike Business Analytics/
       // Promotions above), so this is never multiLocationOnly: every business has exactly one
       // subscription whether it has one location or several.
       { to: "/billing", label: "Billing", icon: IconWallet, permission: "billing.read" },
+      { to: "/settings", label: "Settings", icon: IconSettings, permission: "restaurant.settings.manage" },
+      { to: "/theme-studio", label: "Theme Studio", icon: IconPalette, permission: "restaurant.settings.manage" },
+      { to: "/audit-log", label: "Audit log", icon: IconClipboard, permission: "restaurant.audit.read" },
     ],
+  },
+  {
+    label: "Help",
+    items: [{ to: "/support", label: "Support", icon: IconHeadset, permission: "support.tickets.read" }],
   },
 ];
 
@@ -273,7 +285,10 @@ function NavGroupList({
     <nav className="flex flex-col gap-4">
       {visibleGroups.map((group) => (
         <div key={group.label} className="flex flex-col gap-0.5">
-          <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
+          <div className="px-3 pb-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
+            {group.description && <p className="text-[11px] text-muted/70">{group.description}</p>}
+          </div>
           {group.items.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass} onClick={onNavigate}>
               <item.icon className="h-[18px] w-[18px] shrink-0" />
@@ -369,6 +384,44 @@ function LayoutContent() {
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-4">
+        {/* Portal UX phase — the location/agency switchers used to only exist in the desktop
+            header (sm:flex-gated, Layout.tsx's header block below), so a multi-location owner or
+            multi-agency user on a phone had no way at all to switch. Mirrored here, lg:hidden since
+            the header's own copies already cover desktop/tablet — same selects, same handlers. */}
+        {isRestaurantScoped && locations.length > 1 && (
+          <label className="mb-3 flex flex-col gap-1 text-sm lg:hidden">
+            <span className="text-xs font-medium text-muted">Location</span>
+            <select
+              value={activeLocationId ?? ""}
+              onChange={(e) => switchLocation(e.target.value)}
+              aria-label="Active location"
+              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {isAgencyScoped && agencies.length > 1 && (
+          <label className="mb-3 flex flex-col gap-1 text-sm lg:hidden">
+            <span className="text-xs font-medium text-muted">Agency</span>
+            <select
+              value={activeAgencyId ?? ""}
+              onChange={(e) => switchAgency(e.target.value)}
+              aria-label="Active agency"
+              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+            >
+              {agencies.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {isActingAsAgency && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
             <p className="font-medium text-foreground">Managing {activeBusinessName}</p>

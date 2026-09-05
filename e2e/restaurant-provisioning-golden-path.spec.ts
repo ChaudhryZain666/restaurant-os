@@ -102,10 +102,11 @@ test.describe.serial("restaurant provisioning golden path (Phase 14)", () => {
       await adminPage.locator('input[type="password"]').fill("GoldenOwner123!");
       await adminPage.getByRole("button", { name: "Accept invitation" }).click();
 
-      // A pending restaurant's owner lands on Setup, not the analytics Dashboard (Phase 14 —
-      // DashboardPage.tsx redirects here for exactly this case).
-      await expect(adminPage).toHaveURL(/\/setup$/, { timeout: 10_000 });
-      await expect(adminPage.getByText("Not published yet")).toBeVisible();
+      // A pending restaurant's owner lands on Dashboard, which renders the "get ready" checklist
+      // in place (Portal UX phase — previously redirected straight to /setup instead; Setup itself
+      // still exists and still works, exercised explicitly further down via the Setup nav link).
+      await expect(adminPage).toHaveURL(/\/$/, { timeout: 10_000 });
+      await expect(adminPage.getByText("Welcome to your restaurant")).toBeVisible();
       await expect(adminPage.getByRole("button", { name: "Publish restaurant" })).toBeDisabled();
 
       // --- Owner builds a menu through the real Menu page. ---

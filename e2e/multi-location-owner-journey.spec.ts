@@ -80,7 +80,10 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
     await page.locator('input[type="password"]').fill("MultiLocOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    // Portal UX phase: a pending restaurant's owner now lands on Dashboard's in-place "get ready"
+    // state instead of being redirected to /setup (Setup itself is unaffected, reached below via
+    // the nav "Locations"/"Menu" links exactly as before).
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // --- Single location: no switcher anywhere, Locations page stays minimal. ---
     await expect(page.getByRole("combobox", { name: "Active location" })).toHaveCount(0);

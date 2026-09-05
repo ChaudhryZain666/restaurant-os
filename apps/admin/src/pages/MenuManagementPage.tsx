@@ -7,7 +7,7 @@ import {
   type MenuItem,
   type MenuItemLocationOverride,
 } from "@restaurant/types";
-import { Badge, Button, Card } from "@restaurant/ui";
+import { Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +15,7 @@ import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { ModifierGroupsEditor } from "../components/ModifierGroupsEditor";
 import { uploadRestaurantImage } from "../lib/uploads";
+import { IconMenuBook } from "../components/icons";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 const rowActionClass = "text-sm font-medium text-foreground/70 transition-colors duration-fast hover:text-foreground";
@@ -530,10 +531,13 @@ export function MenuManagementPage() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Menu</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-foreground">Menu</h1>
+            <Badge tone="info">Applies to every location</Badge>
+          </div>
           <p className="text-sm text-muted">
-            This is your business's shared menu. Changes here apply to every location, unless a location has its own
-            override.
+            This is what customers see when they browse your restaurant online. Changes here apply everywhere, unless
+            a location sets its own override below.
           </p>
         </div>
         {canWrite && (
@@ -552,6 +556,24 @@ export function MenuManagementPage() {
 
       <Card>
         <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Categories</h2>
+        {categories.length === 0 && (
+          <EmptyState
+            icon={<IconMenuBook className="h-5 w-5" />}
+            title="Start with a category"
+            description="Categories group your menu the way customers browse it — like Pizza, Burgers, or Drinks. Add one below, then add items to it."
+            className="mb-4"
+            action={
+              canWrite ? (
+                <Button
+                  size="sm"
+                  onClick={() => document.getElementById("new-category-input")?.focus()}
+                >
+                  Add a category
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
         <ul className="mb-4 flex flex-col divide-y divide-border">
           {categories.map((c) => {
             const override = categoryOverrideById.get(c.id);
@@ -632,6 +654,7 @@ export function MenuManagementPage() {
         {canWrite && (
           <form onSubmit={handleCreateCategory} className="flex gap-2">
             <input
+              id="new-category-input"
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="New category name (all locations)"
@@ -648,7 +671,7 @@ export function MenuManagementPage() {
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-heading text-lg font-medium text-foreground">Menu items</h2>
-          {canWrite && (
+          {canWrite && items.length > 0 && (
             <Button size="sm" onClick={openCreatePanel} disabled={expandedItemId === CREATING}>
               + Add menu item
             </Button>
@@ -678,6 +701,20 @@ export function MenuManagementPage() {
           </div>
         )}
 
+        {items.length === 0 && (
+          <EmptyState
+            icon={<IconMenuBook className="h-5 w-5" />}
+            title="Add the food customers can order"
+            description="This is what shows up on your online menu. Customers can't check out until at least one item is available."
+            action={
+              canWrite ? (
+                <Button size="sm" onClick={openCreatePanel} disabled={expandedItemId === CREATING}>
+                  + Add menu item
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
         <ul className="flex flex-col divide-y divide-border">
           {items.map((item) => {
             const override = itemOverrideById.get(item.id);

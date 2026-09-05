@@ -61,7 +61,8 @@ test.describe.serial("multi-location staff isolation (Phase 19)", () => {
     await page.goto(`http://localhost:5174/accept-invite?token=${ownerToken}`);
     await page.locator('input[type="password"]').fill("StaffIsoOwner123!");
     await page.getByRole("button", { name: "Accept invitation" }).click();
-    await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+    // Portal UX phase: lands on Dashboard's in-place "get ready" state, not a /setup redirect.
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // --- Owner creates Location B. ---
     await page.getByRole("link", { name: "Locations" }).click();
