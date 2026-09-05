@@ -51,6 +51,15 @@ export const AUDIT_ACTIONS = [
   // AuditLog.ts already holds every other action to.
   "payment_account.connected",
   "payment_account.disconnected",
+  // Phase 40 — restaurant-owned courier-provider accounts (BYOC — see
+  // RestaurantDeliveryProviderAccount.ts), same metadata-shape rule as payment_account above.
+  "delivery_account.connected",
+  "delivery_account.disconnected",
+  // Staff-initiated delivery actions — provider-webhook-driven status changes deliberately do NOT
+  // write an audit entry (see orderTransition.service.ts's applyOrderStatusTransition doc comment
+  // on why: no real user to attribute it to). Only an explicit staff action does.
+  "delivery.cancelled",
+  "delivery.status_updated",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = [
@@ -63,6 +72,8 @@ export const AUDIT_TARGET_TYPES = [
   "subscription",
   "menu_import",
   "payment_account",
+  "delivery_account",
+  "delivery",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

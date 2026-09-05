@@ -91,6 +91,11 @@ export function PosOrdersPage() {
                   {o.customerName ?? "—"} ·{" "}
                   {o.orderType === "dine_in" ? `Dine-in · ${o.tableName ?? "Table"}` : o.orderType} · {formatRestaurantTime(o.createdAt, timezone)}
                 </p>
+                {o.orderType === "delivery" && o.deliveryAddress && (
+                  <p className="truncate text-xs text-muted">
+                    {[o.deliveryAddress.line1, o.deliveryAddress.city].filter(Boolean).join(", ")}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <span className="text-sm font-semibold text-foreground">{formatCurrency(o.total, o.currency ?? currency)}</span>

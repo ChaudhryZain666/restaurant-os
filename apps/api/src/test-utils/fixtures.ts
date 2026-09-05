@@ -17,6 +17,7 @@ import { AgencyMembership } from "../models/AgencyMembership.js";
 import { signAccessToken } from "../services/token.service.js";
 import { generateTableToken } from "../services/tableToken.service.js";
 import { redis } from "../config/redis.js";
+import { queueConnection } from "../queues/connection.js";
 
 /**
  * ioredis's `quit()` resolves once the QUIT command is acknowledged, but the underlying socket
@@ -25,11 +26,19 @@ import { redis } from "../config/redis.js";
  * file's environment, surfacing as a spurious "Cannot log after tests are done" suite failure
  * even though every assertion passed. Dropping the listener right before quitting is safe here:
  * it only removes it at teardown, after all real test assertions have already run.
+ *
+ * queueConnection (BullMQ's own separate Redis connection — see queues/connection.ts) needs the
+ * exact same treatment: any test that imports something which transitively touches
+ * notification.queue.ts (order status changes, since Phase 40's delivery dispatch trigger — see
+ * orderTransition.service.ts) opens this connection too, and leaving it open is what Jest's own
+ * "did not exit one second after the test run has completed" warning is about.
  */
 export async function closeTestConnections(): Promise<void> {
   await mongoose.disconnect();
   redis.removeAllListeners("error");
   await redis.quit();
+  queueConnection.removeAllListeners("error");
+  await queueConnection.quit();
 }
 
 let counter = 0;

@@ -117,10 +117,13 @@ export function ThemeStudioPage() {
     if (!ok || !restaurant) return;
     setPublishing(true);
     try {
-      const res = await apiClient.request<{ theme: RestaurantThemeConfig }>(`/restaurants/${restaurant.id}/theme/publish`, {
-        method: "POST",
-      });
-      setThemeData({ published: res.theme, draft: null, hasUnpublishedChanges: false });
+      await apiClient.request<{ theme: RestaurantThemeConfig }>(`/restaurants/${restaurant.id}/theme/publish`, { method: "POST" });
+      // Re-fetched rather than assembled locally: whether a rollback point is now available
+      // (`canRollback`) depends on a deep comparison against the theme that was just superseded —
+      // logic the server already does for GET .../theme (theme.controller.ts's getThemeConfig) and
+      // that shouldn't be duplicated (and risk drifting) here.
+      const refreshed = await apiClient.request<ThemeResponse>(`/restaurants/${restaurant.id}/theme`);
+      setThemeData(refreshed);
       showToast({ title: "Theme published", description: "Your storefront is now live with these changes." });
     } catch (err) {
       setError((err as Error).message);

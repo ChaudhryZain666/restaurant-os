@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { MapPreview } from "../components/MapPreview";
+import { DeliveryProviderAccountSettingsPanel } from "../components/DeliveryProviderAccountSettingsPanel";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -167,6 +168,10 @@ export function DeliveryPage() {
           {saving ? "Saving..." : "Save delivery settings"}
         </Button>
       </Card>
+
+      {restaurant.settings.deliveryEnabled && (
+        <DeliveryProviderAccountSettingsPanel restaurant={restaurant} onRestaurantChange={setRestaurant} />
+      )}
 
       {restaurant.settings.deliveryEnabled && (
         <Card className="flex flex-col gap-3">

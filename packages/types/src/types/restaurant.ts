@@ -61,6 +61,10 @@ export interface RestaurantSettings {
    *  is independently re-checked server-side (POST .../pos/orders), same as every other settings
    *  gate here. */
   posEnabled?: boolean;
+  /** Which courier dispatches a delivery order — independent of deliveryEnabled/deliveryFee (which
+   *  govern the customer-facing charge, not who shows up). Defaults to "manual" (the restaurant's
+   *  own fleet). See docs/delivery-integrations.md. */
+  deliveryProvider?: "manual" | "uber_direct";
   /**
    * Phase 28 — optional distance-tiered delivery fee. The tier with the smallest maxDistanceKm
    * that still covers the order's actual distance applies (entry order doesn't matter); if none

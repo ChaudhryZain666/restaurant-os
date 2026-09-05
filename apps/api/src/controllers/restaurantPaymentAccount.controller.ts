@@ -77,18 +77,19 @@ export async function connectRestaurantPaymentAccount(req: Request, res: Respons
     return;
   }
 
-  account.status = "active";
-  account.lastVerifiedAt = new Date();
-  await account.save();
-  // Deliberately AFTER the new row is saved, not a single atomic multi-document transaction: the
-  // partial unique index on {restaurantId, status:"active"} is what actually prevents two active
-  // rows from ever being readable at once — if this second write were to fail, the worst case is a
-  // dangling old "active" row a subsequent connect attempt would immediately hit the index conflict
-  // on, not a silent double-active state.
+  // Disconnect any existing active account for this restaurant BEFORE saving the new one as active
+  // — not after. The partial unique index on {restaurantId, status:"active"} enforces at most one
+  // active row at any instant it's actually checked; saving a second active row while the first is
+  // still active is a genuine E11000 duplicate-key conflict, not something the index waits around
+  // for a following updateMany to resolve (this exact ordering bug was caught and fixed the same
+  // way in restaurantDeliveryProviderAccount.controller.ts's connect flow — see Phase 40).
   await RestaurantPaymentAccount.updateMany(
     { restaurantId: restaurant._id, status: "active", _id: { $ne: account._id } },
     { $set: { status: "disconnected" } }
   );
+  account.status = "active";
+  account.lastVerifiedAt = new Date();
+  await account.save();
 
   await recordAuditEvent({
     restaurantId: restaurant._id,
@@ -193,13 +194,20 @@ export async function syncStripeConnectStatus(req: Request, res: Response) {
   if (account.status === "invalid") {
     account.lastVerificationError = "Stripe rejected this account — see your Stripe dashboard for details.";
   }
-  await account.save();
 
+  // Disconnect any other active account BEFORE saving this one as active — not after. See
+  // connectRestaurantPaymentAccount's identical fix above for why the ordering matters: the
+  // partial unique index on {restaurantId, status:"active"} rejects this save outright if another
+  // row is still active at the moment it's persisted.
   if (account.status === "active" && !wasActive) {
     await RestaurantPaymentAccount.updateMany(
       { restaurantId: account.restaurantId, status: "active", _id: { $ne: account._id } },
       { $set: { status: "disconnected" } }
     );
+  }
+  await account.save();
+
+  if (account.status === "active" && !wasActive) {
     await recordAuditEvent({
       restaurantId: account.restaurantId!,
       actorUserId: req.user!.id,

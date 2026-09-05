@@ -98,6 +98,8 @@ export const restaurantSettingsSchema = z.object({
   staffEnabled: z.boolean().optional(),
   // POS phase — same contract as kitchenEnabled/staffEnabled above.
   posEnabled: z.boolean().optional(),
+  // Delivery-integrations phase — which courier dispatches a delivery order.
+  deliveryProvider: z.enum(["manual", "uber_direct"]).optional(),
 });
 export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 

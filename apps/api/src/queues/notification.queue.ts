@@ -47,10 +47,19 @@ export type NotificationJobName =
   | TicketEventType
   | "billing.lifecycle"
   | "billing.trial_reminder_tick"
-  | "payment.reconciliation_tick";
+  | "payment.reconciliation_tick"
+  | "delivery.dispatch_create";
 
 export interface DemoPingPayload {
   message: string;
+}
+
+/** Phase 40 — enqueued by orderTransition.service.ts when an order reaches "ready" (delivery
+ *  orders only), so requesting a courier never blocks the staff-facing status-update response. See
+ *  services/deliveryDispatch.service.ts's createDeliveryForOrder, which this job simply calls. */
+export interface DeliveryDispatchCreatePayload {
+  orderId: string;
+  restaurantId: string;
 }
 
 export type NotificationJobPayload =
@@ -58,6 +67,7 @@ export type NotificationJobPayload =
   | OrderEventPayload
   | TicketEventPayload
   | BillingLifecycleNotificationPayload
+  | DeliveryDispatchCreatePayload
   | Record<string, never>;
 
 export const notificationQueue = new Queue<NotificationJobPayload>("notifications", {
@@ -282,6 +292,15 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
         } catch (err) {
           logger.error("payment reconciliation sweep failed", { jobId: job.id, error: (err as Error).message });
         }
+      } else if (job.name === "delivery.dispatch_create") {
+        // Dynamic import — deliveryDispatch.service.ts imports applyOrderStatusTransition from
+        // orderTransition.service.ts, which enqueues THIS job; a static top-level import here would
+        // create a circular module dependency. createDeliveryForOrder itself never throws for an
+        // ordinary provider-side failure (it lands the Delivery in "failed" with a retryable
+        // internal state instead) — a throw here means a genuine bug (bad orderId/restaurantId).
+        const { createDeliveryForOrder } = await import("../services/deliveryDispatch.service.js");
+        const { orderId, restaurantId } = job.data as DeliveryDispatchCreatePayload;
+        await createDeliveryForOrder(orderId, restaurantId);
       }
     },
     { connection: queueConnection }

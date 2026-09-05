@@ -128,6 +128,13 @@ const restaurantSettingsSchema = new Schema(
     // ring up an order with it, even though the permission alone would otherwise allow it. See
     // docs/pos-architecture.md.
     posEnabled: { type: Boolean, default: false },
+    // Delivery-integrations phase — which courier DISPATCHES a delivery order, independent of
+    // deliveryEnabled/deliveryFee above (those govern whether/how much a CUSTOMER is charged;
+    // this governs who actually shows up to carry the food — see docs/delivery-integrations.md).
+    // Defaults to "manual" (the restaurant's own fleet) so every existing restaurant keeps working
+    // exactly as before with zero migration and zero required setup — connecting a third-party
+    // courier is opt-in.
+    deliveryProvider: { type: String, enum: ["manual", "uber_direct"], default: "manual" },
     // Phase 31 — the PUBLISHED theme configuration; always present (defaults to plain "classic",
     // no overrides) so every existing restaurant gets a real, valid theme with zero migration.
     theme: { type: themeConfigSchema, default: () => ({}) },

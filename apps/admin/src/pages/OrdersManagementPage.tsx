@@ -7,6 +7,7 @@ import { useActiveLocationId } from "../context/LocationContext";
 import { OrderLineItems } from "../components/OrderLineItems";
 import { OrderPaymentAdmin } from "../components/OrderPaymentAdmin";
 import { OrderNotesAndActivity } from "../components/OrderNotesAndActivity";
+import { DeliveryStatusPanel } from "../components/DeliveryStatusPanel";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import { useRestaurantTimezone } from "../hooks/useRestaurantTimezone";
 import {
@@ -73,6 +74,7 @@ function OrderCard({
             {order.deliveryAddress?.instructions && <span>Instructions: {order.deliveryAddress.instructions}</span>}
             {order.orderType === "dine_in" && order.tableName && <span>Table: {order.tableName}</span>}
           </div>
+          <DeliveryStatusPanel order={order} />
           {order.customerNotes && <span>Notes: {order.customerNotes}</span>}
           <OrderLineItems items={order.items} currency={order.currency} />
           <div>

@@ -16,8 +16,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { reverseLoyaltyForOrderIfNeeded } from "../services/loyalty.service.js";
 import { priceOrderItems, type PricedOrderItem } from "../services/orderPricing.service.js";
-import { isValidStatusTransition } from "../services/orderStateMachine.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
+import { applyOrderStatusTransition } from "../services/orderTransition.service.js";
 import { emitOrderEvent, statusToEventType } from "../events/orderEvents.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { resolveTenantAccess } from "../middleware/tenant.js";
@@ -163,47 +163,18 @@ export async function updateOrderStatus(req: Request, res: Response) {
   const { restaurantId, id } = req.params;
   const { status: nextStatus } = req.body as UpdateOrderStatusInput;
 
-  const order = await Order.findOne({ _id: id, restaurantId });
-  if (!order) throw ApiError.notFound("Order not found");
-
-  if (!isValidStatusTransition(order.status, nextStatus, order.orderType)) {
-    throw ApiError.badRequest(`Cannot move an order from "${order.status}" to "${nextStatus}"`);
-  }
-  // An online order that hasn't actually been paid yet must not be accepted into the kitchen
-  // workflow — cancelling out of "pending" is still allowed either way (nothing to protect there).
-  if (order.paymentMethod === "online" && order.paymentStatus !== "paid" && nextStatus !== "cancelled") {
-    throw ApiError.badRequest("This order's online payment has not completed yet — it cannot be accepted");
-  }
-
-  const previousStatus = order.status;
-  order.status = nextStatus;
-  order.statusHistory.push({ status: nextStatus, at: new Date() });
-  await order.save();
-
-  // Phase 17 product decision — cancelling a paid order does NOT auto-refund it. Loyalty points
-  // reverse automatically (an accounting correction with no external side effect), but a refund is
-  // a real-money action against an external payment provider: auto-firing it as a side effect of
-  // every cancellation would remove the restaurant's ability to withhold a refund (e.g. a
-  // no-show/late cancellation fee, suspected fraud) and would mix an external provider network call
-  // into this request's synchronous path for no operational benefit. Refunds stay an explicit,
-  // separate staff action (payment.service.ts's refundPayment / the admin "Issue refund" button),
-  // which the admin UI now flags prominently when a cancelled order's payment is still unrefunded
-  // (see OrderPaymentAdmin.tsx's needsRefundAttention) so this is never a silent gap in practice.
-  if (nextStatus === "cancelled") {
-    await reverseLoyaltyForOrderIfNeeded(order);
-  }
-
   // Awaited BEFORE the response is sent: a caller that immediately reads the audit log after
   // getting a 200 back must already see this entry — recordAuditEvent still swallows its own
   // errors (see audit.service.ts), so this can't turn a real status change into a failed request.
-  await recordAuditEvent({
+  // Refunds are never auto-fired on cancellation (Phase 17 product decision — see
+  // orderTransition.service.ts's applyOrderStatusTransition for the full rationale); that stays an
+  // explicit, separate staff action (payment.service.ts's refundPayment / the admin "Issue refund"
+  // button), flagged by OrderPaymentAdmin.tsx's needsRefundAttention when still unresolved.
+  const { order } = await applyOrderStatusTransition({
+    orderId: id,
     restaurantId,
-    actorUserId: req.user!.id,
-    actorRole: req.user!.role,
-    action: nextStatus === "cancelled" ? "order.cancelled" : "order.status_changed",
-    targetType: "order",
-    targetId: order.id,
-    metadata: { from: previousStatus, to: nextStatus },
+    nextStatus,
+    actor: { userId: req.user!.id, role: req.user!.role },
   });
 
   sendSuccess(res, { order: order.toJSON() });
