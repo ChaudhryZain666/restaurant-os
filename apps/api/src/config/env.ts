@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 
-const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(4000),
   MONGO_URI: z.string().min(1, "MONGO_URI is required"),
@@ -163,6 +163,69 @@ const envSchema = z.object({
   // the same 8-128 char range auth.ts's registerSchema already enforces for every other account.
   PLATFORM_ADMIN_EMAIL: z.string().email().optional(),
   PLATFORM_ADMIN_PASSWORD: z.string().min(8).max(128).optional(),
+});
+
+/**
+ * Phase 45 — production-only cross-field requirement, same fail-at-boot mechanism as every other
+ * check in this file (a bad value here means `main()` in index.ts never runs at all: `env` is
+ * imported and parsed at module-load time, before connectDB()/httpServer.listen()). Deliberately
+ * narrower than PAYMENT_PROVIDER/BILLING_PROVIDER's "mock is a permanently-supported production
+ * choice" precedent: cash-only online-payment-off is a real, documented, indefinitely-supported
+ * launch state (docs/development-setup.md), but there is no equivalent "email-off" launch state —
+ * owner signup (Phase 44's createBusinessSelfServe) hard-requires a verified email before it will
+ * create a business at all, so a production deployment silently stuck on the console provider
+ * cannot let a single real owner or customer through password-reset/staff-invite/order-notification
+ * either. getEmailService() (email/index.ts) already throws clearly the first time EMAIL_PROVIDER=
+ * smtp is selected without SMTP_HOST/PORT/EMAIL_FROM — this only adds the "still console at all in
+ * production" case, plus surfacing the SAME missing-smtp-config problem at boot instead of on the
+ * first real email a customer would otherwise silently never receive.
+ */
+/** Exported (Phase 45) purely so env.test.ts can exercise the production cross-field rules below
+ *  directly against a fabricated candidate object — never against the real process.env, and never
+ *  triggering the process.exit(1) below (that only ever runs against the module's own top-level
+ *  parse of the real process.env). */
+export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
+  if (data.NODE_ENV !== "production") return;
+  if (data.EMAIL_PROVIDER !== "smtp") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EMAIL_PROVIDER"],
+      message:
+        "Production requires EMAIL_PROVIDER=smtp. The console provider only logs emails server-side — it never delivers " +
+        "owner-signup verification, password-reset, staff-invite, order, or trial-reminder emails to a real inbox.",
+    });
+    return;
+  }
+  if (!data.SMTP_HOST || !data.SMTP_PORT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SMTP_HOST"],
+      message: "Production EMAIL_PROVIDER=smtp requires SMTP_HOST and SMTP_PORT to be set.",
+    });
+  }
+  if (!data.EMAIL_FROM) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EMAIL_FROM"],
+      message: "Production EMAIL_PROVIDER=smtp requires EMAIL_FROM to be set to a real, deliverable sender address.",
+    });
+  }
+  // Section 7's own concern: every verification/reset/invite email link is built from CLIENT_ORIGIN
+  // or ADMIN_ORIGIN (resolveAppOrigin in auth.controller.ts, or a direct env.ADMIN_ORIGIN read in
+  // staff/agency/restaurant invite flows) — both default to a localhost dev port when unset. A real
+  // recipient clicking a link that resolves to someone's own laptop is exactly the failure mode this
+  // whole phase exists to close, and nothing previously caught "operator forgot to override these
+  // in production" the way it already catches a forgotten SMTP_HOST.
+  for (const key of ["CLIENT_ORIGIN", "ADMIN_ORIGIN"] as const) {
+    const value = data[key];
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `Production ${key} is still a localhost address (${value}) — every emailed link uses this to build a real, clickable URL. Set it to the real deployed frontend origin.`,
+      });
+    }
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -95,11 +95,20 @@ Beyond the JWT/Mongo/Redis basics above, a real deployment intending to accept r
 needs to make two explicit decisions the dev/test defaults deliberately don't make for it:
 
 - **Email**: set `EMAIL_PROVIDER=smtp` plus `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` and
-  `EMAIL_FROM`. Leaving `EMAIL_PROVIDER` unset (the default, `console`) means owner-invite,
-  password-reset, and email-change-verification emails are only ever logged server-side, never
-  actually delivered — fine for local dev, not survivable in production. See
-  `apps/api/src/email/SmtpEmailService.ts` — real code, but never exercised against a live mailbox
-  in this environment; test a real send before depending on it.
+  `EMAIL_FROM` (a real, deliverable address on a domain you control — never a placeholder like the
+  `.local` addresses this repo's own seed/fixture data uses). `NODE_ENV=production` now **enforces**
+  this at boot (`apps/api/src/config/env.ts`) rather than only documenting it: the server refuses to
+  start if `EMAIL_PROVIDER` is still `console`, if `EMAIL_PROVIDER=smtp` is missing `SMTP_HOST`/
+  `SMTP_PORT`/`EMAIL_FROM`, or if `CLIENT_ORIGIN`/`ADMIN_ORIGIN` are still their localhost dev
+  defaults — every verification/reset/invite email link is built from those two origins, so a
+  forgotten override there means real recipients click a link to someone's own laptop. Leaving
+  `EMAIL_PROVIDER` unset (the default, `console`) means owner-signup verification, password-reset,
+  staff/owner-invite, order, and trial-reminder emails are only ever logged server-side, never
+  actually delivered — fine for local dev (and required for this repo's own tests), not survivable in
+  production; owner self-serve signup (`POST /businesses/self-serve`) specifically **requires** a
+  verified email before it will create a business at all, so this isn't optional the way cash-only
+  payments are. See `apps/api/src/email/SmtpEmailService.ts` — real code, but never exercised against
+  a live mailbox in this environment; test a real send before depending on it.
 - **Payments**: leaving `PAYMENT_PROVIDER` unset (the default, `mock`) means no real money ever
   moves — customers can still order and pay with cash, but "Pay online" would be backed by fake
   money. Setting `PAYMENT_PROVIDER=safepay` (plus `SAFEPAY_API_KEY`/`SAFEPAY_SECRET_KEY`/

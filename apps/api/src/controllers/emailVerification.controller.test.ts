@@ -1,10 +1,12 @@
 // Phase 37 — deliberately its own file, not appended to auth.controller.test.ts: that file's own
 // comment (around its accept-invite block) already documents sitting close to authLimiter's
 // 30-per-15-min cap within one test-file process, and /auth/verify-email is also authLimiter-gated.
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
+import { env } from "../config/env.js";
+import { logger } from "../common/logger.js";
 import { User } from "../models/User.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { closeTestConnections, createTestUser, tokenFor } from "../test-utils/fixtures.js";
@@ -171,5 +173,59 @@ describe("acceptInvite also satisfies email verification (Phase 37)", () => {
 
     const stored = await User.findById(staff.id);
     expect(stored!.emailVerifiedAt).toBeTruthy();
+  });
+});
+
+// Phase 45 — a real, previously-untested gap: resolveAppOrigin (auth.controller.ts) picks the
+// verification link's frontend origin from the REQUEST's own Origin header, not a hardcoded one.
+// This is exactly what makes Phase 44's owner self-serve wizard (apps/admin, /verify-email) and
+// apps/web's customer registration each get a link back to the CORRECT app rather than always the
+// same one — nothing before this asserted that behavior actually holds. Spies on logger.info
+// rather than mocking the email module: EMAIL_PROVIDER defaults to "console" in tests, and
+// ConsoleEmailProvider.send() logs the fully-rendered message (including the verify URL) through
+// logger.info specifically for this kind of inspection — see its own doc comment.
+describe("register — the verification link's origin follows the calling frontend (Phase 45)", () => {
+  it("uses ADMIN_ORIGIN when the request comes from the admin app (e.g. the owner self-serve signup wizard)", async () => {
+    const infoSpy = jest.spyOn(logger, "info").mockImplementation(() => undefined);
+    try {
+      const email = `origin-check-admin-${Date.now()}@test.local`;
+      const res = await request(app)
+        .post("/api/v1/auth/register")
+        .set("Origin", env.ADMIN_ORIGIN)
+        .send({ name: "Origin Check Admin", email, password: "Password123!" });
+      expect(res.status).toBe(201);
+      track(res.body.data.user.id);
+
+      const call = infoSpy.mock.calls.find(
+        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your Tablecloth email address")
+      );
+      expect(call).toBeTruthy();
+      const loggedText = (call![1] as { text: string }).text;
+      expect(loggedText).toContain(`${env.ADMIN_ORIGIN}/verify-email?token=`);
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it("uses CLIENT_ORIGIN when the request comes from anywhere else (e.g. the customer storefront)", async () => {
+    const infoSpy = jest.spyOn(logger, "info").mockImplementation(() => undefined);
+    try {
+      const email = `origin-check-customer-${Date.now()}@test.local`;
+      const res = await request(app)
+        .post("/api/v1/auth/register")
+        .set("Origin", env.CLIENT_ORIGIN)
+        .send({ name: "Origin Check Customer", email, password: "Password123!" });
+      expect(res.status).toBe(201);
+      track(res.body.data.user.id);
+
+      const call = infoSpy.mock.calls.find(
+        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your Tablecloth email address")
+      );
+      expect(call).toBeTruthy();
+      const loggedText = (call![1] as { text: string }).text;
+      expect(loggedText).toContain(`${env.CLIENT_ORIGIN}/verify-email?token=`);
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 });

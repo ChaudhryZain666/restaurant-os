@@ -10,6 +10,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ConfirmEmailChangePage } from "./pages/ConfirmEmailChangePage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
 import { AccountPage } from "./pages/AccountPage";
@@ -145,6 +146,10 @@ export function App() {
             auth.controller.ts's confirmEmailChange). The link is sent to the NEW inbox, which
             isn't necessarily the same device/browser the user is currently logged in on. */}
         <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+        {/* Phase 45 — same public, token-is-the-credential shape as /confirm-email-change above.
+            Where /auth/register's verification email actually points for any account created
+            here (resolveAppOrigin defaults to CLIENT_ORIGIN for a non-admin request). */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route
           path="/orders"
           element={
