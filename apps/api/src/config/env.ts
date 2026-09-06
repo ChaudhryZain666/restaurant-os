@@ -10,6 +10,18 @@ const baseEnvSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 chars"),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL: z.string().default("30d"),
+  // Phase 46 — a test-infrastructure escape hatch, NOT a security control. authLimiter
+  // (auth.routes.ts) is keyed by IP, and every Playwright spec in this suite logs in at least
+  // once against the SAME long-lived dev server from the SAME machine — a full local run's
+  // aggregate login traffic can exceed 30/15min even though no single real client ever would
+  // (confirmed live: a full local E2E run genuinely exhausts the default). Defaults to the exact
+  // production/dev value (30) everywhere this isn't explicitly overridden, so a deployment that
+  // never sets this sees no change at all. Only ever raise it in a local .env for running the full
+  // E2E suite — never in a real deployment. Reminder for `npm run dev -w apps/api` (tsx watch): it
+  // only restarts on changes to files in its own module graph, never on a bare .env edit — after
+  // changing this value, touch a watched .ts file (or restart the dev server directly) or the
+  // running process keeps enforcing whatever value it started with.
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
   CLIENT_ORIGIN: z.string().default("http://localhost:5173"),
   ADMIN_ORIGIN: z.string().default("http://localhost:5174"),
   // Phase 28 — the marketing site (apps/marketing) is a separate, unauthenticated frontend. It only

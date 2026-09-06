@@ -78,9 +78,50 @@ simplest) rather than an incompatible native install.
 ## Tests
 
 ```
-npm run test:api      # Jest — unit tests (RBAC/tenant middleware, TTL parsing) + envelope/route tests, no DB required
-npm run test:e2e       # Playwright — requires apps/web running at http://localhost:5173
+npm run test:api      # Jest — unit + service/controller/integration tests
+npm run test:e2e       # Playwright — requires apps/api/apps/web/apps/admin/apps/marketing all running
 ```
+
+### Jest — isolated test database (Phase 46)
+
+`apps/api/src/test-utils/fixtures.ts`'s helpers (`createTestRestaurant`, `createTestPlan`, etc.) create
+real documents against whatever `MONGO_URI`/`REDIS_URL` the test run resolves to. Jest's own
+`setupFiles` (`jest.setup.env.ts`) loads `.env` first, then re-applies `apps/api/.env.test` with
+override — so **Jest always runs against `restaurant_platform_test` / Redis DB index 1**, never the
+shared dev database `.env` points at, regardless of what a developer's own `.env` says. `.env.test`
+carries no real secrets (only a database name and a Redis index) and is committed, so this is
+zero-setup for every developer and CI.
+
+This is what makes `npm run test:api` safe to run repeatedly without polluting the database the dev
+servers and `GET /public/plans` read from — a stray `isActive:true`, empty-pricing `Plan` document
+created by `createTestPlan()` (used by ~13 test files, several without their own cleanup) used to
+land permanently in the shared dev database; it now lands in a database nothing else ever reads.
+The isolated test database/Redis index are created automatically on first use (MongoDB/Redis both
+create a database/logical DB lazily) — expect the very first test file that touches either after a
+fresh isolation setup to take a few seconds longer than normal; every run after that is fast.
+
+A handful of pre-existing tests (`agencyEntitlementInheritance.service.test.ts`) already guard with
+`if (!plan) return` for "the real commercial catalog isn't present in this database" — under full
+isolation that guard now always applies (the isolated database never has `npm run seed`'s catalog
+unless a test creates it itself), so those specific bonus assertions consistently skip rather than
+run. They were written to tolerate exactly this; nothing regresses.
+
+`jest.config.js` also caps `maxWorkers` at 50% — this dev machine (and possibly yours) has few CPU
+cores already busy running the dev servers; too many parallel Jest workers each opening their own
+MongoDB connection at once was the repeated, reproducible cause of `beforeAll` hooks occasionally
+exceeding their default 5000ms timeout under contention, not any real slowness in the code under
+test. Raise it back on a beefier CI runner if full-suite wall-clock time matters more there.
+
+### Playwright — full-suite login-throttle note (Phase 46)
+
+Every Playwright spec that reaches an authenticated page calls `/auth/login` at least once, and
+`authLimiter` (auth.routes.ts) is keyed by IP — so a full local run's aggregate login traffic (every
+spec, from this one machine) can exceed the 30/15min throttle even though no single real client
+ever would (confirmed live during Phase 46). If you hit `429`/"Too many requests" partway through a
+full local run, set `AUTH_RATE_LIMIT_MAX=1000` (or similar) in `apps/api/.env` before starting the
+dev API server — **never** in a real deployment; the default (30) is unchanged everywhere this
+isn't explicitly overridden. This doesn't make individual specs more reliable by itself, only removes
+a whole-suite-only failure mode; each spec still succeeds or fails on its own merits.
 
 ## Linting & formatting
 

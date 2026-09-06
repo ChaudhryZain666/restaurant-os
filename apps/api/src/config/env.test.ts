@@ -96,3 +96,22 @@ describe("envSchema — production email safety (Phase 45)", () => {
     expect(envSchema.safeParse({ ...REQUIRED_BASE }).success).toBe(true);
   });
 });
+
+describe("envSchema — AUTH_RATE_LIMIT_MAX (Phase 46)", () => {
+  it("defaults to 30 (today's production/dev value) when unset", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.AUTH_RATE_LIMIT_MAX).toBe(30);
+  });
+
+  it("accepts an explicit override for local full-E2E-suite runs", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE, AUTH_RATE_LIMIT_MAX: "1000" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.AUTH_RATE_LIMIT_MAX).toBe(1000);
+  });
+
+  it("rejects a non-positive value", () => {
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, AUTH_RATE_LIMIT_MAX: "0" }).success).toBe(false);
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, AUTH_RATE_LIMIT_MAX: "-5" }).success).toBe(false);
+  });
+});

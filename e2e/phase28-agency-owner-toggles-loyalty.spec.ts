@@ -22,7 +22,14 @@ test.describe.serial("agency signup wizard (Phase 28)", () => {
 
     await page.goto("http://localhost:5174/start");
     await expect(page.getByRole("heading", { name: "Choose your plan" })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Agency", { exact: true })).toBeVisible();
+    // Phase 46 — was `getByText("Agency", { exact: true })`, which only ever matched a plan
+    // literally named "Agency". Phase 34's tiered-pricing rename (reconfirmed by Phase 43's
+    // production-safe catalog seed) means the active AGENCY plan is now named "Agency — Growth" —
+    // a real, intentional product change this stale assertion never caught up with, so it failed
+    // on every run regardless of environment. A plain (non-exact) "Agency" match is itself
+    // ambiguous (the step list's own "Agency info" label and the plan description paragraph both
+    // also contain the substring "Agency"), so this targets the plan name text specifically.
+    await expect(page.getByText("Agency — Growth")).toBeVisible();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();

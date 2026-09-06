@@ -52,7 +52,15 @@ test("owner can view the restaurant audit log, and a real status change appears 
     // Scoped to the table specifically — Phase 15 added a filter dropdown above it whose options
     // share this same text ("Order status changed"), which a page-wide getByText would also match.
     await expect(ownerPage.locator("table").getByText("Order status changed").first()).toBeVisible({ timeout: 10_000 });
-    await expect(ownerPage.getByText(/\d+ events?/)).toBeVisible();
+    // Phase 46 — the "N events" label lives inside packages/ui's Pagination component, which
+    // renders nothing at all (`if (totalPages <= 1) return null`) whenever this restaurant's total
+    // audit-log count is at or under one page (30 — AuditLogPage.tsx's PAGE_SIZE). That's correct,
+    // deliberate production behavior (no point showing disabled Prev/Next controls for one page),
+    // but it means this assertion's pass/fail previously rode on how much incidental history this
+    // shared demo restaurant happened to have accumulated at run time — exactly the kind of
+    // fixture/boundary nondeterminism this phase exists to remove. The table assertion above
+    // already proves the fresh entry is really there; asserting a total-count label that's
+    // legitimately sometimes absent tests an incidental UI detail, not this spec's actual subject.
 
     // Phase 15 added more filter dropdowns (Action, Actor) alongside this one — named explicitly
     // now that getByRole("combobox") alone would be ambiguous.

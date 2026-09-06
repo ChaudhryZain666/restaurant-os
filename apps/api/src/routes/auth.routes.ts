@@ -15,6 +15,7 @@ import {
 } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
+import { env } from "../config/env.js";
 import { jsonRateLimitHandler } from "../middleware/rateLimitHandler.js";
 import { inviteResendLimiter } from "../middleware/inviteResendLimiter.js";
 import { validateBody } from "../middleware/validate.js";
@@ -41,10 +42,14 @@ export const authRouter = Router();
 
 // Tighter than the app-wide limiter (app.ts) — these are the classic brute-force/enumeration
 // targets (credential guessing, reset-spam). 30/15min is generous enough for normal use and
-// repeated local testing while still meaningfully throttling automated abuse.
+// repeated local testing while still meaningfully throttling automated abuse. The limit itself is
+// env.AUTH_RATE_LIMIT_MAX (defaults to this exact 30) — see its own doc comment in config/env.ts
+// for why: a full local Playwright run's aggregate login traffic can exceed this from a single
+// shared IP even though no real client ever would, and that's a test-infrastructure concern to
+// override locally, never a reason to change what a real deployment enforces.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 30,
+  limit: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   handler: jsonRateLimitHandler,
