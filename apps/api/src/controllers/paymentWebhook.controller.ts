@@ -10,6 +10,16 @@ import { PaymentWebhookEvent } from "../models/PaymentWebhookEvent.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 
+/** Phase 48 — an invalid webhook signature was previously only a 400 to the caller (the provider
+ *  itself), never a log line: the global error handler only logs 500+ responses, so a
+ *  misconfigured secret or a genuine forged request was completely invisible in our own logs. Not
+ *  logged as .error (it's a correctly-handled rejection, not a server fault) — .warn, since a
+ *  RECURRING one is worth an operator's attention (rotated/misconfigured secret) without being
+ *  noisy for the rare one-off. Never logs the signature header or raw body. */
+function logInvalidSignature(provider: string, extra?: Record<string, unknown>) {
+  logger.warn("webhook signature verification failed", { provider, ...extra });
+}
+
 /**
  * POST /webhooks/payments/:provider — no requireAuth: a webhook is authenticated by its
  * signature, not a session. req.rawBody is the raw request-body Buffer captured by app.ts's
@@ -46,7 +56,10 @@ export async function handleProviderWebhook(req: Request, res: Response) {
   const signatureHeader = req.header(provider.signatureHeaderName);
 
   const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
-  if (!event) throw ApiError.badRequest("Invalid webhook signature");
+  if (!event) {
+    logInvalidSignature(provider.name);
+    throw ApiError.badRequest("Invalid webhook signature");
+  }
 
   await processProviderEvent(provider.name, event);
 
@@ -86,7 +99,10 @@ export async function handleRestaurantAccountWebhook(req: Request, res: Response
   const signatureHeader = req.header(provider.signatureHeaderName);
 
   const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
-  if (!event) throw ApiError.badRequest("Invalid webhook signature");
+  if (!event) {
+    logInvalidSignature(provider.name, { restaurantPaymentAccountId: account.id });
+    throw ApiError.badRequest("Invalid webhook signature");
+  }
 
   // Phase 35 audit fix — the first successfully-verified real event for this account is the only
   // genuine proof the owner actually finished configuring their provider dashboard's webhook, as
@@ -127,7 +143,10 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
   const rawBody = (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
   const signatureHeader = req.header("stripe-signature");
   const parsed = verifyStripeSignatureRaw(rawBody, signatureHeader, env.STRIPE_CONNECT_WEBHOOK_SECRET) as StripeConnectEventPayload | null;
-  if (!parsed) throw ApiError.badRequest("Invalid webhook signature");
+  if (!parsed) {
+    logInvalidSignature("stripe-connect");
+    throw ApiError.badRequest("Invalid webhook signature");
+  }
 
   const { id: eventId, type: eventType, account: connectedAccountId } = parsed;
   if (!eventId || !eventType || !connectedAccountId) {

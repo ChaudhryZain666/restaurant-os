@@ -9,6 +9,7 @@ import { createSocketServer } from "./realtime/socket.js";
 import { registerOrderEventListeners } from "./events/orderEventListeners.js";
 import { registerTicketEventListeners } from "./events/ticketEventListeners.js";
 import { logger } from "./common/logger.js";
+import { createShutdownHandler } from "./shutdown.js";
 
 /**
  * A narrow, last-resort safety net — NOT a general "ignore all crashes" handler (that would be
@@ -64,14 +65,30 @@ async function main() {
     logger.info("server listening", { port: env.PORT });
   });
 
-  const shutdown = async (signal: string) => {
-    logger.info("shutting down", { signal });
-    httpServer.close();
-    await notificationWorker.close();
-    await redis.quit();
-    await queueConnection.quit();
-    process.exit(0);
-  };
+  // Phase 48 — hardened in three ways, all narrow: (1) a re-entrancy guard, since a platform can
+  // send SIGTERM more than once (or SIGTERM followed by an operator's own SIGINT) and the old
+  // version would run this whole sequence twice concurrently — a second httpServer.close()/
+  // redis.quit()/etc. racing the first; (2) httpServer.close() is now actually awaited via its
+  // callback instead of fire-and-forget, so "stop accepting new work" genuinely happens before
+  // dependent connections are torn down, not just requested; (3) a hard deadline, since a hung
+  // in-flight job (notificationWorker.close() waits for the current job to finish) previously had
+  // no bound — a genuinely stuck job would keep the process alive forever instead of exiting so the
+  // deployment platform's own supervisor can restart it. The sequencing itself lives in shutdown.ts
+  // as a testable, dependency-injected factory — see shutdown.test.ts.
+  const shutdown = createShutdownHandler({
+    closeServer: () => new Promise<void>((resolvePromise) => httpServer.close(() => resolvePromise())),
+    closeWorker: async () => {
+      await notificationWorker.close();
+    },
+    closeRedis: async () => {
+      await redis.quit();
+    },
+    closeQueueConnection: async () => {
+      await queueConnection.quit();
+    },
+    logger,
+    exit: (code) => process.exit(code),
+  });
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));

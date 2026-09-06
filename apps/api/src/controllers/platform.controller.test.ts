@@ -518,6 +518,24 @@ describe("GET /platform/config (Phase 28) — read-only diagnostics, never secre
     expect(serialized).not.toContain("api_key");
     expect(serialized).not.toContain("password");
   });
+
+  it("(Phase 48) includes notification queue job counts when reachable, and never fails the request when the queue can't be reached", async () => {
+    const res = await request(app).get("/api/v1/platform/config").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(res.status).toBe(200);
+    const { notificationQueueHealth } = res.body.data;
+    // Some local/CI Redis instances are below BullMQ's minimum supported version (see
+    // isKnownNonFatalQueueError in index.ts) — getJobCounts fails there, and this endpoint must
+    // degrade to null rather than take the whole /platform/config response down with it. Assert
+    // the real contract (never throws; correct shape when it does succeed) rather than assuming a
+    // BullMQ-compatible Redis is available in every environment this suite runs in.
+    if (notificationQueueHealth !== null) {
+      expect(typeof notificationQueueHealth.waiting).toBe("number");
+      expect(typeof notificationQueueHealth.active).toBe("number");
+      expect(typeof notificationQueueHealth.delayed).toBe("number");
+      expect(typeof notificationQueueHealth.failed).toBe("number");
+      expect(typeof notificationQueueHealth.completed).toBe("number");
+    }
+  });
 });
 
 describe("GET /platform/analytics (Phase 28) — new platform-wide aggregations", () => {

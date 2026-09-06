@@ -30,6 +30,7 @@ import { generateSecureToken } from "../services/secureToken.service.js";
 import { computeReadiness } from "../services/restaurantReadiness.service.js";
 import { getRestaurantAnalytics } from "../services/analytics.service.js";
 import { sumAmountsByCurrency } from "../services/businessAnalytics.service.js";
+import { notificationQueue } from "../queues/notification.queue.js";
 
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -480,6 +481,26 @@ export async function getPlatformAnalytics(_req: Request, res: Response) {
  * keys/webhook secrets are never included, by construction — this function doesn't even read them.
  */
 export async function getPlatformConfig(_req: Request, res: Response) {
+  // Phase 48 — a lightweight BullMQ health signal reusing this existing, already
+  // platform_admin-gated diagnostics endpoint rather than a new admin dashboard. Job COUNTS only
+  // (BullMQ's own getJobCounts) — never job payloads/data, which could carry order/customer detail
+  // this endpoint has no business exposing. A query failure (e.g. Redis briefly down) degrades to
+  // null rather than failing the whole /platform/config response — this is diagnostics-on-top-of-
+  // diagnostics, it must never itself become a reason this endpoint goes down.
+  let queueHealth: { waiting: number; active: number; delayed: number; failed: number; completed: number } | null = null;
+  try {
+    const counts = await notificationQueue.getJobCounts("waiting", "active", "delayed", "failed", "completed");
+    queueHealth = {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+    };
+  } catch (err) {
+    logger.warn("[platform.config] could not read notification queue job counts", { error: (err as Error).message });
+  }
+
   sendSuccess(res, {
     config: {
       environment: env.NODE_ENV,
@@ -493,6 +514,7 @@ export async function getPlatformConfig(_req: Request, res: Response) {
       trialPeriodDays: env.TRIAL_PERIOD_DAYS,
       pastDueGracePeriodDays: env.PAST_DUE_GRACE_PERIOD_DAYS,
     },
+    notificationQueueHealth: queueHealth,
   });
 }
 

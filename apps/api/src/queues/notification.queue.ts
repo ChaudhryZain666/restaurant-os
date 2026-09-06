@@ -72,6 +72,16 @@ export type NotificationJobPayload =
 
 export const notificationQueue = new Queue<NotificationJobPayload>("notifications", {
   connection: queueConnection,
+  // Phase 48 — previously unset, meaning BullMQ's own default (keep every completed/failed job in
+  // Redis forever) applied. That made failed jobs permanently inspectable, which is genuinely
+  // useful, but also meant unbounded growth over a real production lifetime. Keeping a bounded
+  // recent window preserves the same debuggability for anything an operator would actually go
+  // looking for, without an ever-growing Redis footprint. Counts, not ages, since job volume (not
+  // wall-clock time) is what actually drives Redis memory here.
+  defaultJobOptions: {
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
 });
 // BullMQ's Queue wraps the connection and re-emits its own 'error' events independently of
 // queueConnection's own listener (connection.ts) — needs its own guard for the same reason, or a
@@ -307,12 +317,20 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
   );
 
   worker.on("failed", (job, err) => {
-    logger.error("notification job failed", { jobId: job?.id, error: err.message });
+    logger.error("notification job failed", { jobId: job?.id, name: job?.name, error: err.message });
   });
   // Same reasoning as notificationQueue's listener above — a Worker is a separate EventEmitter
   // from both queueConnection and the Queue, and needs its own guard against the same class of
   // connection-level failure crashing the process.
   worker.on("error", (err: Error) => logger.error("[queue] notification worker error", { error: err.message }));
+  // Phase 48 — a stalled job (BullMQ's own lock on it expired mid-processing, almost always because
+  // the worker process crashed or was killed while holding it) previously produced no signal of its
+  // own at all: it would eventually surface as a "failed" job once BullMQ's retry budget for
+  // stalling was exhausted, but the intermediate "this worker looks like it's dying/hanging" signal
+  // — the thing an operator actually wants to catch first — was invisible. This is a real, distinct
+  // BullMQ event (`stalled`), not synthesized here; logging it doesn't change retry/failure behavior
+  // at all, it only makes an already-happening condition observable.
+  worker.on("stalled", (jobId: string) => logger.warn("[queue] notification job stalled", { jobId }));
 
   return worker;
 }

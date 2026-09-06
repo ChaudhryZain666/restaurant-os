@@ -15,6 +15,14 @@ interface PlatformConfig {
   pastDueGracePeriodDays: number;
 }
 
+interface NotificationQueueHealth {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+}
+
 function ConfigRow({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
@@ -38,13 +46,17 @@ function ConfigRow({ label, value, note }: { label: string; value: string; note?
  */
 export function SystemConfigPage() {
   const [config, setConfig] = useState<PlatformConfig | null>(null);
+  const [queueHealth, setQueueHealth] = useState<NotificationQueueHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     apiClient
-      .request<{ config: PlatformConfig }>("/platform/config")
-      .then((res) => setConfig(res.config))
+      .request<{ config: PlatformConfig; notificationQueueHealth: NotificationQueueHealth | null }>("/platform/config")
+      .then((res) => {
+        setConfig(res.config);
+        setQueueHealth(res.notificationQueueHealth);
+      })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
   }, []);
@@ -114,6 +126,28 @@ export function SystemConfigPage() {
                 value={config.emailProvider}
                 note={config.emailProvider === "console" ? "Emails are logged, not actually sent" : undefined}
               />
+            </Card>
+
+            <Card>
+              <h2 className="mb-2 font-heading text-sm font-medium text-foreground">Background jobs</h2>
+              {queueHealth ? (
+                <>
+                  <ConfigRow label="Waiting" value={String(queueHealth.waiting)} />
+                  <ConfigRow label="Active" value={String(queueHealth.active)} />
+                  <ConfigRow label="Delayed" value={String(queueHealth.delayed)} />
+                  <ConfigRow
+                    label="Failed"
+                    value={String(queueHealth.failed)}
+                    note={queueHealth.failed > 0 ? "Inspect via BullMQ/Redis directly for details" : undefined}
+                  />
+                  <ConfigRow label="Completed (recent)" value={String(queueHealth.completed)} />
+                </>
+              ) : (
+                <p className="text-sm text-muted">
+                  Notification queue counts are unavailable right now — the queue backend (Redis) may be unreachable
+                  or incompatible. This does not necessarily mean background jobs have stopped processing.
+                </p>
+              )}
             </Card>
 
             <Card>

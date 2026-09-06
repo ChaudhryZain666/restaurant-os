@@ -58,6 +58,17 @@ services:
     volumes:
       - ./apps/api/src:/repo/apps/api/src
       - ./packages:/repo/packages
+    healthcheck:
+      # Liveness, not readiness: this decides whether Docker/an orchestrator should consider
+      # restarting the container, and restarting api would do nothing to fix a down Mongo/Redis —
+      # it would just add a restart loop on top of an already-degraded dependency. node -e against
+      # http, not curl/wget: the node:22-slim base image (infrastructure/docker/api.Dockerfile)
+      # doesn't reliably have either installed.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   web:
     build:

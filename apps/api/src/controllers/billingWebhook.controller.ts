@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError.js";
 import { getBillingProvider } from "../billing/index.js";
 import { processBillingProviderEvent } from "../services/subscription.service.js";
+import { logger } from "../common/logger.js";
 
 /**
  * POST /webhooks/billing/:provider — mirrors paymentWebhook.controller.ts's handleProviderWebhook
@@ -19,7 +20,14 @@ export async function handleBillingProviderWebhook(req: Request, res: Response) 
   const signatureHeader = req.header(provider.signatureHeaderName);
 
   const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
-  if (!event) throw ApiError.badRequest("Invalid webhook signature");
+  if (!event) {
+    // Phase 48 — the global error handler only logs 500+ responses, so this 400 was previously
+    // invisible in our own logs regardless of whether it meant a misconfigured secret or a genuine
+    // forged request. .warn, not .error: a correctly-handled rejection, not a server fault. Never
+    // logs the signature header or raw body.
+    logger.warn("billing webhook signature verification failed", { provider: provider.name });
+    throw ApiError.badRequest("Invalid webhook signature");
+  }
 
   await processBillingProviderEvent(provider.name, event);
 
