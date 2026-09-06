@@ -1,9 +1,16 @@
 import { z } from "zod";
 
-export const checkDeliverySchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-});
+export const checkDeliverySchema = z
+  .object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+  })
+  // Phase 47 — same guard as order.ts/pos.ts's deliveryAddressInputSchema: (0, 0) is syntactically
+  // valid but never a real customer location.
+  .refine((v) => !(v.latitude === 0 && v.longitude === 0), {
+    message: "A real, geocoded location is required",
+    path: ["latitude"],
+  });
 export type CheckDeliveryInput = z.infer<typeof checkDeliverySchema>;
 
 // Delivery-integrations phase — dispatch/config schemas. See docs/delivery-integrations.md.

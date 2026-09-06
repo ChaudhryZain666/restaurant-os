@@ -12,7 +12,7 @@ import { ModifierSheet } from "./components/ModifierSheet";
 import { OrderPanel } from "./components/OrderPanel";
 import { CustomerPicker, type WalkInDraft } from "./components/CustomerPicker";
 import { CompletedSale } from "./components/CompletedSale";
-import type { CartLine, CustomerHit, MenuResponse, OrderTypeSel, PosPaymentMethod, SelectedModifier } from "./types";
+import type { CartLine, CustomerHit, MenuResponse, OrderTypeSel, PosDeliveryAddress, PosPaymentMethod, SelectedModifier } from "./types";
 import { lineKey, lineTotal } from "./types";
 
 /**
@@ -49,8 +49,8 @@ export function RegisterPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerHit | null>(handoffCustomer);
   const [walkIn, setWalkIn] = useState<WalkInDraft | null>(null);
 
-  const [deliveryLine1, setDeliveryLine1] = useState("");
-  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState<PosDeliveryAddress | null>(null);
+  const [deliveryNotes, setDeliveryNotes] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -115,8 +115,8 @@ export function RegisterPage() {
     setTableId("");
     setPromoCode("");
     setCustomerNotes("");
-    setDeliveryLine1("");
-    setDeliveryCity("");
+    setDeliveryAddress(null);
+    setDeliveryNotes("");
     setCompletedOrder(null);
     setSubmitError(null);
     setOrderType("pickup");
@@ -143,8 +143,8 @@ export function RegisterPage() {
       setSubmitError("Select a table for a dine-in order");
       return;
     }
-    if (orderType === "delivery" && (!deliveryLine1.trim() || !deliveryCity.trim())) {
-      setSubmitError("Enter a delivery address");
+    if (orderType === "delivery" && !deliveryAddress) {
+      setSubmitError("Search for and select a real delivery address before completing the sale");
       return;
     }
 
@@ -163,7 +163,14 @@ export function RegisterPage() {
           orderType,
           paymentMethod,
           tableId: orderType === "dine_in" ? tableId : undefined,
-          deliveryAddress: orderType === "delivery" ? { line1: deliveryLine1, city: deliveryCity, latitude: 0, longitude: 0 } : undefined,
+          // Real, server-resolved coordinates from DeliveryAddressSearch — never a placeholder.
+          // checkDeliveryEligibility (delivery.service.ts) still authoritatively re-derives
+          // distance/fee/eligibility server-side inside createOrderForCustomer; nothing here is
+          // trusted as final.
+          deliveryAddress:
+            orderType === "delivery" && deliveryAddress
+              ? { ...deliveryAddress, instructions: deliveryNotes.trim() || undefined }
+              : undefined,
           customerNotes: customerNotes || undefined,
           promoCode: promoCode || undefined,
         },
@@ -234,12 +241,10 @@ export function RegisterPage() {
     tables,
     tableId,
     onTableChange: setTableId,
-    deliveryLine1,
-    deliveryCity,
-    onDeliveryChange: (l: string, c: string) => {
-      setDeliveryLine1(l);
-      setDeliveryCity(c);
-    },
+    deliveryAddress,
+    onDeliveryAddressChange: setDeliveryAddress,
+    deliveryNotes,
+    onDeliveryNotesChange: setDeliveryNotes,
     paymentMethod,
     onPaymentMethodChange: setPaymentMethod,
     promoCode,

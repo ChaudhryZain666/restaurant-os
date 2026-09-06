@@ -12,17 +12,26 @@ const selectedModifierInputSchema = z.object({
 // distance-validated without them, and createOrder rejects a delivery order that omits them. See
 // docs/delivery-architecture.md. The client may supply a fee/distance-shaped field here and it is
 // simply ignored — nothing on this schema accepts one; createOrder computes both itself.
-const deliveryAddressInputSchema = z.object({
-  line1: z.string().min(1).max(200),
-  line2: z.string().max(200).optional(),
-  city: z.string().min(1).max(100),
-  state: z.string().max(100).optional(),
-  postalCode: z.string().max(20).optional(),
-  country: z.string().max(100).optional(),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  instructions: z.string().max(300).optional(),
-});
+const deliveryAddressInputSchema = z
+  .object({
+    line1: z.string().min(1).max(200),
+    line2: z.string().max(200).optional(),
+    city: z.string().min(1).max(100),
+    state: z.string().max(100).optional(),
+    postalCode: z.string().max(20).optional(),
+    country: z.string().max(100).optional(),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    instructions: z.string().max(300).optional(),
+  })
+  // Phase 47 — (0, 0) ("Null Island") is a syntactically valid pair under the range checks above
+  // but never a real customer location; it's exactly the placeholder POS's delivery flow used to
+  // send before geocoding actually a real address (see pos.ts's identical guard). Rejecting it here
+  // closes the same gap for every caller of this schema, not just POS's.
+  .refine((v) => !(v.latitude === 0 && v.longitude === 0), {
+    message: "A real, geocoded delivery address is required",
+    path: ["latitude"],
+  });
 
 export const createOrderSchema = z
   .object({

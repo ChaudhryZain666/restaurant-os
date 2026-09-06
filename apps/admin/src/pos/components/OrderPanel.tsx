@@ -12,8 +12,9 @@ import {
   IconTruck,
   IconUsers,
 } from "../../components/icons";
-import type { CartLine, OrderTypeSel, PosPaymentMethod } from "../types";
+import type { CartLine, OrderTypeSel, PosDeliveryAddress, PosPaymentMethod } from "../types";
 import { lineTotal } from "../types";
+import { DeliveryAddressSearch } from "./DeliveryAddressSearch";
 
 const ORDER_TYPES: Array<{ value: OrderTypeSel; label: string; icon: typeof IconTable }> = [
   { value: "pickup", label: "Pickup", icon: IconUsers },
@@ -32,9 +33,10 @@ export function OrderPanel({
   tables,
   tableId,
   onTableChange,
-  deliveryLine1,
-  deliveryCity,
-  onDeliveryChange,
+  deliveryAddress,
+  onDeliveryAddressChange,
+  deliveryNotes,
+  onDeliveryNotesChange,
   paymentMethod,
   onPaymentMethodChange,
   promoCode,
@@ -56,9 +58,10 @@ export function OrderPanel({
   tables: TableWithStatus[];
   tableId: string;
   onTableChange: (id: string) => void;
-  deliveryLine1: string;
-  deliveryCity: string;
-  onDeliveryChange: (line1: string, city: string) => void;
+  deliveryAddress: PosDeliveryAddress | null;
+  onDeliveryAddressChange: (address: PosDeliveryAddress | null) => void;
+  deliveryNotes: string;
+  onDeliveryNotesChange: (v: string) => void;
   paymentMethod: PosPaymentMethod;
   onPaymentMethodChange: (m: PosPaymentMethod) => void;
   promoCode: string;
@@ -202,16 +205,11 @@ export function OrderPanel({
           )}
           {orderType === "delivery" && (
             <div className="flex flex-col gap-1.5">
+              <DeliveryAddressSearch value={deliveryAddress} onChange={onDeliveryAddressChange} />
               <input
-                value={deliveryLine1}
-                onChange={(e) => onDeliveryChange(e.target.value, deliveryCity)}
-                placeholder="Address line"
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-              />
-              <input
-                value={deliveryCity}
-                onChange={(e) => onDeliveryChange(deliveryLine1, e.target.value)}
-                placeholder="City"
+                value={deliveryNotes}
+                onChange={(e) => onDeliveryNotesChange(e.target.value)}
+                placeholder="Delivery notes (optional) — gate code, apartment #, etc."
                 className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
               />
             </div>

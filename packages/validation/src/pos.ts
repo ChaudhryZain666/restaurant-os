@@ -5,17 +5,28 @@ const selectedModifierInputSchema = z.object({
   optionId: z.string().min(1),
 });
 
-const deliveryAddressInputSchema = z.object({
-  line1: z.string().min(1).max(200),
-  line2: z.string().max(200).optional(),
-  city: z.string().min(1).max(100),
-  state: z.string().max(100).optional(),
-  postalCode: z.string().max(20).optional(),
-  country: z.string().max(100).optional(),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  instructions: z.string().max(300).optional(),
-});
+const deliveryAddressInputSchema = z
+  .object({
+    line1: z.string().min(1).max(200),
+    line2: z.string().max(200).optional(),
+    city: z.string().min(1).max(100),
+    state: z.string().max(100).optional(),
+    postalCode: z.string().max(20).optional(),
+    country: z.string().max(100).optional(),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    instructions: z.string().max(300).optional(),
+  })
+  // Phase 47 — the actual bug this phase exists to fix: the POS delivery UI used to hardcode
+  // latitude/longitude to exactly (0, 0) instead of a real geocoded address. (0, 0) ("Null
+  // Island") is syntactically valid under the range checks above but never a real customer
+  // location, so it's rejected here as defense-in-depth even though the fixed POS frontend (see
+  // RegisterPage.tsx) no longer sends it — a future regression in either place still gets caught
+  // server-side. See order.ts's identical guard for the customer-facing checkout schema.
+  .refine((v) => !(v.latitude === 0 && v.longitude === 0), {
+    message: "A real, geocoded delivery address is required",
+    path: ["latitude"],
+  });
 
 // Either an existing customer the staff member searched for and picked, or enough to create a
 // new, real (not demo) walk-in customer record on the spot — see

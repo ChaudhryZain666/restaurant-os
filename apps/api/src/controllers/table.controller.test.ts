@@ -235,6 +235,14 @@ describe("table status derivation", () => {
 });
 
 describe("QR generation and regeneration", () => {
+  // Phase 46 — generateQrDataUrl (services/qr.service.ts, the `qrcode` package) does real,
+  // synchronous CPU-bound image rendering, unlike the rest of this file's ordinary DB/HTTP round
+  // trips, which yield the event loop while waiting on network I/O rather than competing for CPU.
+  // That makes these two tests specifically (not the rest of this suite) the ones that cross
+  // Jest's default 5000ms under genuine CPU contention (many parallel Jest workers, concurrent
+  // dev servers) — reproduced repeatedly across full-suite runs this session, never in isolation.
+  // A targeted allowance for real, understood CPU-bound work in exactly the two tests that do it,
+  // not a blanket timeout increase for the file or suite.
   it("returns a data-URL QR image and a /t/ URL for a table", async () => {
     const table = await createTestTable(restaurantA._id);
     const res = await request(app)
@@ -247,7 +255,7 @@ describe("QR generation and regeneration", () => {
     expect(res.body.data.url).toContain(`/r/${restaurantA.slug}/t/${table.qrToken}`);
     // The QR payload must never leak database internals — no restaurantId, no admin path.
     expect(res.body.data.url).not.toContain(restaurantA.id);
-  });
+  }, 15_000);
 
   it("regenerating rotates the token so the old QR code stops resolving", async () => {
     const table = await createTestTable(restaurantA._id);
@@ -266,7 +274,7 @@ describe("QR generation and regeneration", () => {
       `/api/v1/restaurants/${restaurantA.id}/tables/resolve/${regen.body.data.table.qrToken}`
     );
     expect(freshResolve.status).toBe(200);
-  });
+  }, 15_000);
 
   it("staff cannot regenerate a table's QR (lacks restaurant.tables.manage)", async () => {
     const table = await createTestTable(restaurantA._id);

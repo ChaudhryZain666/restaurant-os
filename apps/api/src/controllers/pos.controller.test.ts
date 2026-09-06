@@ -323,3 +323,209 @@ describe("POS order creation — modifiers, payment, order type", () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * Phase 47 — the actual bug this phase fixes: POS's delivery UI used to hardcode
+ * latitude/longitude to (0, 0) instead of a real geocoded address, so the existing
+ * checkDeliveryEligibility engine (delivery.service.ts) was always being asked "is Null Island in
+ * range" instead of the real customer's location. Coordinates here mirror
+ * delivery.controller.test.ts's exactly (same Springfield, IL restaurant point; the same
+ * "~1.8km away, inside an 8km radius" and "Austin, TX, nowhere close" reference points) so both
+ * suites agree on what "eligible" vs "outside the area" means.
+ */
+describe("POS delivery orders (Phase 47)", () => {
+  const RESTAURANT_LAT = 39.7817;
+  const RESTAURANT_LNG = -89.6501;
+  const NEARBY_LAT = 39.7658;
+  const NEARBY_LNG = -89.6501;
+  const FAR_LAT = 30.2672;
+  const FAR_LNG = -97.7431;
+
+  let deliveryRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let deliveryDisabledRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  // A second, real delivery-capable location with deliberately different coordinates/fee/radius —
+  // proves POS delivery eligibility/fee never leaks across restaurants (Phase 47 section 9).
+  let otherLocationRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let deliveryStaffToken: string;
+  let otherLocationStaffToken: string;
+  let deliveryItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+  let otherLocationItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+  const fixtureIds: import("mongoose").Types.ObjectId[] = [];
+
+  beforeAll(async () => {
+    deliveryRestaurant = await createTestRestaurant({
+      latitude: RESTAURANT_LAT,
+      longitude: RESTAURANT_LNG,
+      settings: {
+        orderingEnabled: true,
+        pickupEnabled: true,
+        deliveryEnabled: true,
+        cashEnabled: true,
+        posEnabled: true,
+        minOrderAmount: 0,
+        taxRate: 0,
+        deliveryFee: 4,
+        deliveryRadiusKm: 8,
+      },
+    });
+    deliveryDisabledRestaurant = await createTestRestaurant({
+      latitude: RESTAURANT_LAT,
+      longitude: RESTAURANT_LNG,
+      settings: {
+        orderingEnabled: true,
+        pickupEnabled: true,
+        deliveryEnabled: false,
+        cashEnabled: true,
+        posEnabled: true,
+        minOrderAmount: 0,
+        taxRate: 0,
+        deliveryRadiusKm: 8,
+      },
+    });
+    otherLocationRestaurant = await createTestRestaurant({
+      latitude: FAR_LAT,
+      longitude: FAR_LNG,
+      settings: {
+        orderingEnabled: true,
+        pickupEnabled: true,
+        deliveryEnabled: true,
+        cashEnabled: true,
+        posEnabled: true,
+        minOrderAmount: 0,
+        taxRate: 0,
+        deliveryFee: 777, // deliberately different from deliveryRestaurant's, to prove it never leaks in
+        deliveryRadiusKm: 1,
+      },
+    });
+    fixtureIds.push(deliveryRestaurant._id, deliveryDisabledRestaurant._id, otherLocationRestaurant._id);
+
+    const deliveryOwner = await createTestUser("restaurant_owner", deliveryRestaurant._id);
+    const otherLocationOwner = await createTestUser("restaurant_owner", otherLocationRestaurant._id);
+    deliveryStaffToken = tokenFor(deliveryOwner);
+    otherLocationStaffToken = tokenFor(otherLocationOwner);
+    fixtureIds.push(deliveryOwner._id, otherLocationOwner._id);
+
+    const category = await createTestCategory(deliveryRestaurant._id);
+    deliveryItem = await createTestMenuItem(deliveryRestaurant._id, category._id, { price: 20 });
+    const otherCategory = await createTestCategory(otherLocationRestaurant._id);
+    otherLocationItem = await createTestMenuItem(otherLocationRestaurant._id, otherCategory._id, { price: 20 });
+  });
+
+  afterAll(async () => {
+    await Promise.all([
+      Order.deleteMany({ restaurantId: { $in: fixtureIds } }),
+      Category.deleteMany({ restaurantId: { $in: fixtureIds } }),
+      MenuItem.deleteMany({ restaurantId: { $in: fixtureIds } }),
+      User.deleteMany({ _id: { $in: fixtureIds } }),
+      Restaurant.deleteMany({ _id: { $in: fixtureIds } }),
+    ]);
+  });
+
+  it("eligible address: creates the order with a real delivery fee, real coordinates, and an address snapshot", async () => {
+    const res = await posOrder(deliveryStaffToken, deliveryRestaurant.id, {
+      customer: { name: "Real Address Customer" },
+      items: [{ menuItemId: deliveryItem.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      deliveryAddress: {
+        line1: "1200 S 6th St",
+        city: "Springfield",
+        state: "IL",
+        postalCode: "62703",
+        latitude: NEARBY_LAT,
+        longitude: NEARBY_LNG,
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.deliveryFee).toBe(4);
+    expect(res.body.data.order.deliveryAddress.latitude).toBe(NEARBY_LAT);
+    expect(res.body.data.order.deliveryAddress.longitude).toBe(NEARBY_LNG);
+    expect(res.body.data.order.deliveryAddress.latitude).not.toBe(0);
+    expect(res.body.data.order.deliveryAddress.longitude).not.toBe(0);
+    expect(res.body.data.order.deliveryAddress.line1).toBe("1200 S 6th St");
+
+    const stored = await Order.findById(res.body.data.order.id);
+    expect(stored!.deliveryDistanceKm).toBeGreaterThan(0);
+    expect(stored!.deliveryDistanceKm).toBeLessThan(8);
+  });
+
+  it("outside delivery area: rejects the order and creates nothing", async () => {
+    const before = await Order.countDocuments({ restaurantId: deliveryRestaurant._id });
+    const res = await posOrder(deliveryStaffToken, deliveryRestaurant.id, {
+      customer: { name: "Too Far Customer" },
+      items: [{ menuItemId: deliveryItem.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      deliveryAddress: { line1: "200 Congress Ave", city: "Austin", state: "TX", latitude: FAR_LAT, longitude: FAR_LNG },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/outside the delivery area/i);
+    const after = await Order.countDocuments({ restaurantId: deliveryRestaurant._id });
+    expect(after).toBe(before);
+  });
+
+  it("(0, 0) is never accepted as a real address — the exact bug this phase fixes, rejected at validation, no fallback", async () => {
+    const before = await Order.countDocuments({ restaurantId: deliveryRestaurant._id });
+    const res = await posOrder(deliveryStaffToken, deliveryRestaurant.id, {
+      customer: { name: "Null Island Customer" },
+      items: [{ menuItemId: deliveryItem.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      deliveryAddress: { line1: "Unknown", city: "Unknown", latitude: 0, longitude: 0 },
+    });
+
+    expect(res.status).toBe(400);
+    const after = await Order.countDocuments({ restaurantId: deliveryRestaurant._id });
+    expect(after).toBe(before);
+  });
+
+  it("delivery-disabled restaurant: POS cannot bypass the restaurant's own delivery configuration", async () => {
+    const disabledOwner = await createTestUser("restaurant_owner", deliveryDisabledRestaurant._id);
+    fixtureIds.push(disabledOwner._id);
+    const category = await createTestCategory(deliveryDisabledRestaurant._id);
+    const item = await createTestMenuItem(deliveryDisabledRestaurant._id, category._id, { price: 20 });
+
+    const res = await posOrder(tokenFor(disabledOwner), deliveryDisabledRestaurant.id, {
+      customer: { name: "Should Be Blocked" },
+      items: [{ menuItemId: item.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      deliveryAddress: { line1: "1200 S 6th St", city: "Springfield", latitude: NEARBY_LAT, longitude: NEARBY_LNG },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/delivery/i);
+  });
+
+  it("location isolation: a POS session at one restaurant never uses another restaurant's delivery zone or fee", async () => {
+    // otherLocationRestaurant is centered on Austin, TX with a 1km radius and a $777 fee.
+    // NEARBY_LAT/LNG (Springfield, IL) is thousands of km away — eligible against
+    // deliveryRestaurant's 8km Springfield radius, but must be rejected here as "outside the
+    // area" against otherLocationRestaurant's own Austin-centered configuration, never silently
+    // evaluated against deliveryRestaurant's zone/fee instead.
+    const res = await posOrder(otherLocationStaffToken, otherLocationRestaurant.id, {
+      customer: { name: "Cross Location Customer" },
+      items: [{ menuItemId: otherLocationItem.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      deliveryAddress: { line1: "1200 S 6th St", city: "Springfield", latitude: NEARBY_LAT, longitude: NEARBY_LNG },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/outside the delivery area/i);
+
+    // The SAME staff member/restaurant, but a real address inside ITS OWN 1km-of-Austin radius,
+    // must succeed with ITS OWN $777 fee — never deliveryRestaurant's $4.
+    const nearOwnLocation = await posOrder(otherLocationStaffToken, otherLocationRestaurant.id, {
+      customer: { name: "Cross Location Customer 2" },
+      items: [{ menuItemId: otherLocationItem.id, quantity: 1, selectedModifiers: [] }],
+      orderType: "delivery",
+      paymentMethod: "cash",
+      // A few hundred meters from FAR_LAT/FAR_LNG, still well inside the 1km radius.
+      deliveryAddress: { line1: "200 Congress Ave", city: "Austin", latitude: FAR_LAT + 0.002, longitude: FAR_LNG },
+    });
+    expect(nearOwnLocation.status).toBe(201);
+    expect(nearOwnLocation.body.data.order.deliveryFee).toBe(777);
+  });
+});
