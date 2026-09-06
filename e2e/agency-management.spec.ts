@@ -38,15 +38,15 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
 
     // --- Create a business — transactionally creates the business, its first location, and
     // invites the owner. ---
-    await page.getByRole("link", { name: "Businesses", exact: true }).click();
-    await page.getByRole("button", { name: "New business" }).click();
+    await page.getByRole("link", { name: "Clients", exact: true }).click();
+    await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Agency Client ${stamp}`);
     await page.getByLabel("Business slug").fill(`agency-client-${stamp}`);
     await page.getByLabel("First location name").fill(`Client Location ${stamp}`);
     await page.getByLabel("Location slug").fill(`client-location-${stamp}`);
     await page.getByLabel("Owner full name").fill("Client Owner");
     await page.getByLabel("Owner email").fill(`client-owner-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create business & invite owner" }).click();
+    await page.getByRole("button", { name: "Create client & invite owner" }).click();
 
     await expect(page.getByText(`Agency Client ${stamp}`)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Invite pending")).toBeVisible();
@@ -99,8 +99,8 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
     await otherPage.getByRole("button", { name: "Create agency" }).click();
     await expect(otherPage.getByText(`Other Agency ${stamp}`)).toBeVisible({ timeout: 10_000 });
 
-    await otherPage.getByRole("link", { name: "Businesses", exact: true }).click();
-    await expect(otherPage.getByText("No businesses yet")).toBeVisible({ timeout: 10_000 });
+    await otherPage.getByRole("link", { name: "Clients", exact: true }).click();
+    await expect(otherPage.getByText("No clients yet")).toBeVisible({ timeout: 10_000 });
     await expect(otherPage.getByText(`Agency Client ${stamp}`)).not.toBeVisible();
 
     await otherContext.close();
@@ -201,15 +201,15 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     createdSubscriptionIds.push(subscriptionInsert.insertedId);
 
     // --- Subscribed to a plan whose real max_businesses is 1: the first business succeeds. ---
-    await page.getByRole("link", { name: "Businesses", exact: true }).click();
-    await page.getByRole("button", { name: "New business" }).click();
+    await page.getByRole("link", { name: "Clients", exact: true }).click();
+    await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Limit Client One ${stamp}`);
     await page.getByLabel("Business slug").fill(`limit-client-one-${stamp}`);
     await page.getByLabel("First location name").fill(`Limit Location One ${stamp}`);
     await page.getByLabel("Location slug").fill(`limit-location-one-${stamp}`);
     await page.getByLabel("Owner full name").fill("Limit Client Owner One");
     await page.getByLabel("Owner email").fill(`limit-client-owner-one-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create business & invite owner" }).click();
+    await page.getByRole("button", { name: "Create client & invite owner" }).click();
     await expect(page.getByText(`Limit Client One ${stamp}`)).toBeVisible({ timeout: 10_000 });
 
     // --- Phase 39 added a real client-side pre-check (AgencyBusinessesPage.tsx) that disables
@@ -218,8 +218,8 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     // premise until Phase 40.1 updated it to match). The atomic server-side guard
     // (reserveBusinessSlot) is unchanged and re-proven directly, with real numbers, by
     // agencyEntitlementInheritance.service.test.ts — not duplicated here. ---
-    await expect(page.getByText(/used 1 of 1 business/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("button", { name: "New business" })).toBeDisabled();
+    await expect(page.getByText(/used 1 of 1 client/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: "New client" })).toBeDisabled();
 
     // --- Upgrade to the higher-limit plan via the real Billing UI change-plan action. Portal UX
     // safety phase: selecting a plan now opens a confirmation dialog instead of mutating
@@ -236,15 +236,15 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await expect(page.getByText("E2E High Limit")).toBeVisible({ timeout: 10_000 });
 
     // --- The same second business now succeeds. ---
-    await page.getByRole("link", { name: "Businesses", exact: true }).click();
-    await page.getByRole("button", { name: "New business" }).click();
+    await page.getByRole("link", { name: "Clients", exact: true }).click();
+    await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Limit Client Two ${stamp}`);
     await page.getByLabel("Business slug").fill(`limit-client-two-${stamp}`);
     await page.getByLabel("First location name").fill(`Limit Location Two ${stamp}`);
     await page.getByLabel("Location slug").fill(`limit-location-two-${stamp}`);
     await page.getByLabel("Owner full name").fill("Limit Client Owner Two");
     await page.getByLabel("Owner email").fill(`limit-client-owner-two-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create business & invite owner" }).click();
+    await page.getByRole("button", { name: "Create client & invite owner" }).click();
     await expect(page.getByText(`Limit Client Two ${stamp}`)).toBeVisible({ timeout: 10_000 });
   });
 });

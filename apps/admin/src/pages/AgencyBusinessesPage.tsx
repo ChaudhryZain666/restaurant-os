@@ -6,6 +6,7 @@ import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { useAgencyPermission } from "../hooks/useAgencyPermission";
 import { IconStore } from "../components/icons";
+import { businessJourneyStage, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "../lib/agencyJourney";
 
 interface AgencyBusinessSummary {
   id: string;
@@ -104,12 +105,12 @@ export function AgencyBusinessesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-semibold text-foreground">Businesses</h1>
-          <p className="text-sm text-muted">Every business this agency manages.</p>
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Clients</h1>
+          <p className="text-sm text-muted">The restaurants this agency provisions and supports.</p>
         </div>
         {canManage && (
           <Button size="sm" onClick={() => setShowForm((v) => !v)} disabled={!showForm && atBusinessLimit}>
-            {showForm ? "Cancel" : "New business"}
+            {showForm ? "Cancel" : "New client"}
           </Button>
         )}
       </div>
@@ -121,13 +122,13 @@ export function AgencyBusinessesPage() {
       )}
 
       {!canManage && (
-        <Alert tone="neutral">Only an agency owner or admin can create a new business.</Alert>
+        <Alert tone="neutral">Only an agency owner or admin can create a new client.</Alert>
       )}
 
       {atBusinessLimit && !showForm && canManage && (
         <Alert tone="warning">
-          You've used {usage!.businessCount} of {usage!.maxBusinesses} businesses included on your plan. Upgrade to
-          add another.
+          You've used {usage!.businessCount} of {usage!.maxBusinesses} clients included on your plan. Upgrade to add
+          another.
         </Alert>
       )}
 
@@ -163,9 +164,9 @@ export function AgencyBusinessesPage() {
 
       {showForm && canManage && (
         <Card>
-          <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Create a business</h2>
+          <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Create a client</h2>
           <p className="mb-3 text-sm text-muted">
-            Creates the business and its first location. Choose how the owner gets access below.
+            Creates the client's business record and its first location. Choose how the owner gets access below.
           </p>
           <fieldset className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-3 text-sm sm:flex-row sm:gap-4">
             <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Owner access</legend>
@@ -261,26 +262,27 @@ export function AgencyBusinessesPage() {
               {creating
                 ? "Creating..."
                 : provisioningMode === "direct"
-                  ? "Create business & owner access"
-                  : "Create business & invite owner"}
+                  ? "Create client & owner access"
+                  : "Create client & invite owner"}
             </Button>
           </form>
         </Card>
       )}
 
       {loading ? (
-        <p className="text-muted">Loading businesses...</p>
+        <p className="text-muted">Loading clients...</p>
       ) : result && result.items.length === 0 ? (
-        <EmptyState icon={<IconStore className="h-6 w-6" />} title="No businesses yet" description="Create the first one above." />
+        <EmptyState icon={<IconStore className="h-6 w-6" />} title="No clients yet" description="Create the first one above." />
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-3 font-medium">Business</th>
+                <th className="py-2 pr-3 font-medium">Client</th>
                 <th className="py-2 pr-3 font-medium">Owner</th>
                 <th className="py-2 pr-3 font-medium">Locations</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
+                <th className="py-2 pr-3 font-medium">Progress</th>
                 <th className="py-2 pr-3 font-medium">Subscription</th>
                 <th className="py-2 pr-3 font-medium">Domain</th>
                 <th className="py-2 pr-3 font-medium" />
@@ -301,6 +303,12 @@ export function AgencyBusinessesPage() {
                   <td className="py-2.5 pr-3 text-foreground">{b.locationCount}</td>
                   <td className="py-2.5 pr-3">
                     <Badge tone={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    {(() => {
+                      const stage = businessJourneyStage(b);
+                      return <Badge tone={JOURNEY_STAGE_TONE[stage]}>{JOURNEY_STAGE_LABEL[stage]}</Badge>;
+                    })()}
                   </td>
                   <td className="py-2.5 pr-3 text-muted">{b.subscriptionStatus ?? "—"}</td>
                   <td className="py-2.5 pr-3 text-muted">{b.domainCount > 0 ? "Configured" : "—"}</td>
@@ -323,7 +331,7 @@ export function AgencyBusinessesPage() {
           hasNextPage={result.hasNextPage}
           hasPreviousPage={result.hasPreviousPage}
           onPageChange={setPage}
-          totalLabel={`${result.total} business${result.total === 1 ? "" : "es"}`}
+          totalLabel={`${result.total} client${result.total === 1 ? "" : "s"}`}
         />
       )}
     </div>

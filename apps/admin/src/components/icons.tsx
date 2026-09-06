@@ -110,6 +110,13 @@ export const IconStore = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const IconPin = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z" />
+    <circle cx="12" cy="9.5" r="2.3" />
+  </Icon>
+);
+
 export const IconWallet = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3" />

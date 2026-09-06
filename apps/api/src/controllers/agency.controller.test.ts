@@ -185,6 +185,36 @@ describe("GET /agencies/:agencyId/businesses — cross-agency isolation", () => 
   });
 });
 
+describe("GET /agencies/:agencyId/locations — Portal UX phase, cross-agency isolation", () => {
+  it("shows the agency's own managed location with its business name and availability, never a location from a different agency", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/locations`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const item = res.body.data.items.find((l: { id: string }) => l.id === managedLocation.id);
+    expect(item).toBeDefined();
+    expect(item.businessId).toBe(managedBusiness.id);
+    expect(item.businessName).toBe(managedBusiness.name);
+    expect(item.availability).toEqual(expect.objectContaining({ status: expect.any(String) }));
+
+    const otherAgencyBusiness = await createTestBusiness({ agencyId: otherAgency._id });
+    const otherAgencyLocation = await createTestRestaurant({ businessId: otherAgencyBusiness._id });
+    businessIds.push(otherAgencyBusiness.id);
+    restaurantIds.push(otherAgencyLocation.id);
+
+    const ids = res.body.data.items.map((l: { id: string }) => l.id);
+    expect(ids).not.toContain(otherAgencyLocation.id);
+  });
+
+  it("a member of a DIFFERENT agency cannot list this agency's locations", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/locations`).set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("an outsider (no agency membership at all) cannot list this agency's locations", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/locations`).set("Authorization", `Bearer ${outsiderToken}`);
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("POST /agencies/:agencyId/businesses — creation, transactional owner-invite, limits", () => {
   it("agency_owner can create a business (transactional: owner user + business + first location)", async () => {
     const stamp = Date.now();

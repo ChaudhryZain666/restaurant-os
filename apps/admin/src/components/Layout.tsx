@@ -19,6 +19,7 @@ import {
   IconLogout,
   IconMenuBook,
   IconPalette,
+  IconPin,
   IconRegister,
   IconSettings,
   IconSliders,
@@ -203,14 +204,33 @@ const PLATFORM_GROUPS: NavGroup[] = [
 // "business-level, not location-operational" boundary. `roles` here (not `permission`) since these
 // routes gate on AgencyPermission/agency membership, a different vocabulary than the site-wide
 // Permission type NavItem.permission checks.
+//
+// Portal UX phase — regrouped so an agency reads this as "I manage my clients," not "I'm a
+// restaurant owner with an Agency label": Businesses relabeled Clients (route/API unchanged — a
+// cosmetic label only), and Locations/Activity added as their own items (previously nonexistent —
+// Locations is a new small read endpoint, Activity just fronts an already-existing one). Every item
+// keeps the same `roles` gate as before.
 const AGENCY_GROUPS: NavGroup[] = [
-  { label: "Overview", items: [{ to: "/agency", label: "Dashboard", icon: IconGrid, end: true, roles: ["agency_member", "customer"] }] },
+  {
+    label: "Home",
+    description: "Your client portfolio at a glance",
+    items: [{ to: "/agency", label: "Dashboard", icon: IconGrid, end: true, roles: ["agency_member", "customer"] }],
+  },
+  {
+    label: "Clients",
+    description: "The restaurants you provision and support",
+    items: [
+      { to: "/agency/businesses", label: "Clients", icon: IconStore, roles: ["agency_member", "customer"] },
+      { to: "/agency/locations", label: "Locations", icon: IconPin, roles: ["agency_member", "customer"] },
+    ],
+  },
   {
     label: "Agency",
+    description: "Your own account, team, and subscription",
     items: [
-      { to: "/agency/businesses", label: "Businesses", icon: IconStore, roles: ["agency_member", "customer"] },
       { to: "/agency/members", label: "Team", icon: IconUsers, roles: ["agency_member", "customer"] },
       { to: "/agency/billing", label: "Billing", icon: IconWallet, roles: ["agency_member", "customer"] },
+      { to: "/agency/activity", label: "Activity", icon: IconClipboard, roles: ["agency_member", "customer"] },
     ],
   },
 ];

@@ -75,8 +75,8 @@ test.describe.serial("agency-provisioned owner direct access (Phase 28)", () => 
     await page.getByRole("button", { name: "Create agency" }).click();
     await expect(page.getByText(`Direct Mode Agency ${stamp}`)).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole("link", { name: "Businesses", exact: true }).click();
-    await page.getByRole("button", { name: "New business" }).click();
+    await page.getByRole("link", { name: "Clients", exact: true }).click();
+    await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Create owner access now", { exact: false }).check();
     await page.getByLabel("Business name").fill(`Direct Mode Client ${stamp}`);
     await page.getByLabel("Business slug").fill(`direct-mode-client-${stamp}`);
@@ -85,7 +85,7 @@ test.describe.serial("agency-provisioned owner direct access (Phase 28)", () => 
     await page.getByLabel("Owner full name").fill("Direct Mode Client Owner");
     const ownerEmail = `direct-mode-client-owner-${stamp}@test.local`;
     await page.getByLabel("Owner email").fill(ownerEmail);
-    await page.getByRole("button", { name: "Create business & owner access" }).click();
+    await page.getByRole("button", { name: "Create client & owner access" }).click();
 
     await expect(page.getByText(/Owner access created/i)).toBeVisible({ timeout: 10_000 });
     const passwordCode = page.locator("code");

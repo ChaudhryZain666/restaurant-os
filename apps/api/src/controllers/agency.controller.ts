@@ -27,6 +27,7 @@ import { recordAuditEvent } from "../services/audit.service.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
 import { reserveBusinessSlot, getAgencyEntitlements } from "../services/agencyEntitlement.service.js";
 import { getSubscriptionForAgency } from "../services/subscription.service.js";
+import { computeAvailability } from "../services/restaurantAvailability.service.js";
 
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff/restaurant invite TTL
 
@@ -381,7 +382,7 @@ export async function resendAgencyBusinessOwnerInvite(req: Request, res: Respons
 export async function getAgencyDashboard(req: Request, res: Response) {
   const { agencyId } = req.params;
 
-  const businesses = await Business.find({ agencyId }).select("status locationCount ownerId");
+  const businesses = await Business.find({ agencyId }).select("name status locationCount ownerId").sort({ createdAt: -1 });
   const businessIds = businesses.map((b) => b._id);
   const ownerIds = businesses.map((b) => b.ownerId);
 
@@ -393,6 +394,23 @@ export async function getAgencyDashboard(req: Request, res: Response) {
     DomainMapping.distinct("businessId", { businessId: { $in: businessIds } }),
   ]);
   const plan = subscription ? await Plan.findById(subscription.planId) : null;
+  const inviteByOwnerId = new Map(owners.map((o) => [(o.id as string), Boolean(o.inviteTokenHash)]));
+
+  // Portal UX phase — turns the existing "N still need setup" count into an actionable list: the
+  // real businesses behind that number, so the dashboard links straight to what needs attention
+  // instead of leaving the agency to go hunt for it in the full Businesses list. Same fields
+  // listAgencyBusinesses already computes per-row — no new data model, capped at 5 (most-recent
+  // first) since this is a "what's next" surface, not the full list (which already exists at
+  // /agency/businesses).
+  const attentionBusinesses = businesses
+    .filter((b) => b.status === "pending" || inviteByOwnerId.get(b.ownerId.toString()))
+    .slice(0, 5)
+    .map((b) => ({
+      id: b.id as string,
+      name: b.name,
+      status: b.status,
+      ownerInvitePending: inviteByOwnerId.get(b.ownerId.toString()) ?? false,
+    }));
 
   sendSuccess(res, {
     subscription: subscription ? subscription.toJSON() : null,
@@ -403,11 +421,53 @@ export async function getAgencyDashboard(req: Request, res: Response) {
     // "pending" = created but the owner hasn't finished onboarding (accepted invite / set up their
     // own access yet) — distinct from "suspended", which is a different, unrelated state.
     businessesNeedingSetup: businesses.filter((b) => b.status === "pending").length,
+    attentionBusinesses,
     locationsTotal: businesses.reduce((sum, b) => sum + (b.locationCount ?? 0), 0),
     domainsConfiguredCount: businessIdsWithDomain.length,
     pendingOwnerInvites: owners.filter((o) => Boolean(o.inviteTokenHash)).length,
     pendingMemberInvites,
   });
+}
+
+/**
+ * GET /agencies/:agencyId/locations — Portal UX phase. Locations were only ever visible nested
+ * inside a single business's own detail page (getAgencyBusiness) — there was no flat "every
+ * location I manage" view across the whole client portfolio. Read-only aggregation over the
+ * existing Business/Restaurant models (no schema change); `availability` reuses the exact
+ * Phase 51 `computeAvailability()` every other read path calls — not a second engine. A curated
+ * field selection (not the full Restaurant document), matching the minimal-exposure precedent
+ * already set by getAgencyBusiness's own location list.
+ */
+export async function getAgencyLocations(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const { page, limit } = req.query as unknown as PaginationQueryInput;
+
+  const businesses = await Business.find({ agencyId }).select("name");
+  const businessIds = businesses.map((b) => b._id);
+  const businessNameById = new Map(businesses.map((b) => [(b._id as { toString(): string }).toString(), b.name]));
+
+  const result = await paginateQuery(
+    Restaurant.find({ businessId: { $in: businessIds } })
+      .select(
+        "name slug city businessId status settings.timezone settings.businessHours settings.orderingEnabled settings.temporarilyPaused settings.pausedReason"
+      )
+      .sort({ createdAt: -1 }),
+    { page, limit }
+  );
+
+  const items = result.items.map((r) => ({
+    id: r.id as string,
+    name: r.name,
+    slug: r.slug,
+    city: r.city,
+    status: r.status,
+    businessId: r.businessId?.toString(),
+    businessName: businessNameById.get(r.businessId?.toString() ?? "") ?? "—",
+    timezone: r.settings.timezone,
+    availability: computeAvailability(r.settings),
+  }));
+
+  sendSuccess(res, { ...result, items });
 }
 
 export async function getAgencyAuditLog(req: Request, res: Response) {

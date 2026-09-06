@@ -12,6 +12,7 @@ import {
   getAgencyAuditLog,
   getAgencyBusiness,
   getAgencyDashboard,
+  getAgencyLocations,
   getMyAgencies,
   listAgencyBusinesses,
   resendAgencyBusinessOwnerInvite,
@@ -40,6 +41,12 @@ agencyRouter.post(
   asyncHandler(createAgencyBusiness)
 );
 agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
+agencyRouter.get(
+  "/:agencyId/locations",
+  requireAgencyMatch(),
+  validateQuery(paginationQuerySchema),
+  asyncHandler(getAgencyLocations)
+);
 agencyRouter.post(
   "/:agencyId/businesses/:businessId/resend-owner-invite",
   inviteResendLimiter,

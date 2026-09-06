@@ -6,6 +6,7 @@ import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { useBusiness } from "../context/BusinessContext";
 import { IconStore } from "../components/icons";
+import { businessJourneyStage, JourneySteps } from "../lib/agencyJourney";
 
 interface BusinessDetail {
   id: string;
@@ -127,7 +128,7 @@ export function AgencyBusinessDetailPage() {
   return (
     <div className="flex flex-col gap-4">
       <Link to="/agency/businesses" className="text-sm font-medium text-muted hover:text-foreground">
-        ← Back to businesses
+        ← Back to clients
       </Link>
 
       {error && (
@@ -163,6 +164,13 @@ export function AgencyBusinessDetailPage() {
               </Button>
             )}
           </div>
+
+          <Card>
+            <h2 className="mb-2 font-heading text-lg font-medium text-foreground">Onboarding</h2>
+            <JourneySteps
+              stage={businessJourneyStage({ status: data.business.status, ownerInvitePending: data.owner?.invitePending ?? false })}
+            />
+          </Card>
 
           <Card>
             <h2 className="mb-2 font-heading text-lg font-medium text-foreground">Owner</h2>

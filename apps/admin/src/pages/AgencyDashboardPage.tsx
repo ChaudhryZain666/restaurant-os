@@ -5,6 +5,14 @@ import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useAgency } from "../context/AgencyContext";
+import { businessJourneyStage, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "../lib/agencyJourney";
+
+interface AttentionBusiness {
+  id: string;
+  name: string;
+  status: string;
+  ownerInvitePending: boolean;
+}
 
 interface AgencyDashboardData {
   subscription: Subscription | null;
@@ -13,6 +21,7 @@ interface AgencyDashboardData {
   businessCount: number;
   activeBusinessCount: number;
   businessesNeedingSetup: number;
+  attentionBusinesses: AttentionBusiness[];
   locationsTotal: number;
   domainsConfiguredCount: number;
   pendingOwnerInvites: number;
@@ -189,18 +198,40 @@ export function AgencyDashboardPage() {
               </Link>
             </Card>
 
+            {data.attentionBusinesses.length > 0 && (
+              <Card className="flex flex-col gap-2">
+                <h2 className="font-heading text-sm font-medium text-foreground">Needs attention</h2>
+                <ul className="flex flex-col divide-y divide-border">
+                  {data.attentionBusinesses.map((b) => {
+                    const stage = businessJourneyStage(b);
+                    return (
+                      <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                        <span className="font-medium text-foreground">{b.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge tone={JOURNEY_STAGE_TONE[stage]}>{JOURNEY_STAGE_LABEL[stage]}</Badge>
+                          <Link to={`/agency/businesses/${b.id}`} className="font-medium text-primary hover:underline">
+                            View →
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card>
-                <p className="text-sm text-muted">Businesses</p>
+                <p className="text-sm text-muted">Clients</p>
                 <p className="font-heading text-2xl font-semibold text-foreground">
                   {data.usage.businessCount} / {data.usage.maxBusinesses}
                 </p>
                 <Link to="/agency/businesses" className="text-sm font-medium text-primary hover:underline">
-                  View businesses
+                  View clients
                 </Link>
               </Card>
               <Card>
-                <p className="text-sm text-muted">Active businesses</p>
+                <p className="text-sm text-muted">Active clients</p>
                 <p className="font-heading text-2xl font-semibold text-foreground">{data.activeBusinessCount}</p>
                 <p className="text-xs text-muted">
                   {data.businessesNeedingSetup > 0
@@ -211,12 +242,12 @@ export function AgencyDashboardPage() {
               <Card>
                 <p className="text-sm text-muted">Locations</p>
                 <p className="font-heading text-2xl font-semibold text-foreground">{data.locationsTotal}</p>
-                <p className="text-xs text-muted">Across every managed business</p>
+                <p className="text-xs text-muted">Across every managed client</p>
               </Card>
               <Card>
                 <p className="text-sm text-muted">Domains configured</p>
                 <p className="font-heading text-2xl font-semibold text-foreground">{data.domainsConfiguredCount}</p>
-                <p className="text-xs text-muted">of {data.businessCount} businesses</p>
+                <p className="text-xs text-muted">of {data.businessCount} clients</p>
               </Card>
             </div>
 
@@ -236,7 +267,7 @@ export function AgencyDashboardPage() {
                   {data.pendingOwnerInvites > 0 ? `${data.pendingOwnerInvites} pending` : "All accepted"}
                 </p>
                 <Link to="/agency/businesses" className="text-sm font-medium text-primary hover:underline">
-                  View businesses
+                  View clients
                 </Link>
               </Card>
             </div>

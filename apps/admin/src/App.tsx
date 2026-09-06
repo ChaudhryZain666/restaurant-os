@@ -54,6 +54,8 @@ import { AgencyBusinessesPage } from "./pages/AgencyBusinessesPage";
 import { AgencyMembersPage } from "./pages/AgencyMembersPage";
 import { AgencyBillingPage } from "./pages/AgencyBillingPage";
 import { AgencyBusinessDetailPage } from "./pages/AgencyBusinessDetailPage";
+import { AgencyLocationsPage } from "./pages/AgencyLocationsPage";
+import { AgencyAuditLogPage } from "./pages/AgencyAuditLogPage";
 import { MockCheckoutPage } from "./pages/MockCheckoutPage";
 import { ForcePasswordChangePage } from "./pages/ForcePasswordChangePage";
 
@@ -309,6 +311,14 @@ export function App() {
           }
         />
         <Route
+          path="/agency/locations"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyLocationsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/agency/members"
           element={
             <RequireAuth roles={[...AGENCY_ROLES]}>
@@ -321,6 +331,14 @@ export function App() {
           element={
             <RequireAuth roles={[...AGENCY_ROLES]}>
               <AgencyBillingPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agency/activity"
+          element={
+            <RequireAuth roles={[...AGENCY_ROLES]}>
+              <AgencyAuditLogPage />
             </RequireAuth>
           }
         />
