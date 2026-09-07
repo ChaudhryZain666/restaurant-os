@@ -62,6 +62,17 @@ const baseEnvSchema = z.object({
   // The console provider (dev/test default) never sends anything, so it has no real need for a
   // from-address at all.
   EMAIL_FROM: z.string().optional(),
+  // Phase 56 — where the marketing site's Contact page / "Request a guided demo" lead form
+  // (LeadForm.tsx) notification lands. Unlike EMAIL_FROM this has a real default rather than
+  // failing loud: it's a best-effort internal notification (already wrapped in try/catch at the
+  // call site — a contact-form submission must never fail because this env var was never set), not
+  // a customer-facing send where a wrong address would be a real incident.
+  CONTACT_NOTIFICATION_EMAIL: z.string().email().default("hello@tablecloth.local"),
+  // Same "local-dev/test escape hatch" pattern as AUTH_RATE_LIMIT_MAX/GLOBAL_RATE_LIMIT_MAX — the
+  // real default (5 per 15 minutes) is a genuine anti-spam limit for the public contact endpoint,
+  // but a single Jest file exercising several request shapes against the same in-memory limiter
+  // would otherwise trip it well before real spam-protection matters. Overridden in .env.test.
+  CONTACT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),

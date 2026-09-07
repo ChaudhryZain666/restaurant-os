@@ -97,7 +97,7 @@ function useTweenedNumber(value: number, durationMs = 700) {
  *  not IntersectionObserver ratio comparison — a panel much taller than the viewport can never
  *  reach a high intersection ratio against a narrow center band, which silently starved later
  *  panels of ever winning the comparison. Distance-to-center has no such ceiling. */
-function useCenterActive(refs: React.RefObject<HTMLElement>[]) {
+function useCenterActive(refs: React.RefObject<HTMLElement | null>[]) {
   const [active, setActive] = useState(1);
   useEffect(() => {
     let frame = 0;
@@ -354,7 +354,7 @@ function TierPanel({
   index: number;
   isActive: boolean;
   onSelect: () => void;
-  innerRef: React.RefObject<HTMLDivElement>;
+  innerRef: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div ref={innerRef} className="flex flex-col justify-center py-6 lg:min-h-[62vh] lg:py-10">

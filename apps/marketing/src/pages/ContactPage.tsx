@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
 import { IconArrowRight, IconHeadset, IconMapPin, IconPhone, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { apiClient } from "../lib/api";
 
 const REASONS = [
   { value: "starting", label: "I'm interested in starting" },
@@ -48,12 +49,41 @@ export function ContactPage() {
     description: "Get in touch about starting with Tablecloth, requesting a demo, or getting support for your restaurant.",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [restaurantType, setRestaurantType] = useState<string>(RESTAURANT_TYPES[0]);
+  const [locationCount, setLocationCount] = useState(1);
+  const [message, setMessage] = useState("");
   const [reason, setReason] = useState<(typeof REASONS)[number]["value"]>("starting");
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiClient.request("/public/contact", {
+        method: "POST",
+        body: {
+          name,
+          email,
+          reason: REASONS.find((r) => r.value === reason)?.label,
+          businessName: businessName || undefined,
+          phone: phone || undefined,
+          restaurantType,
+          locationCount,
+          message,
+        },
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -141,6 +171,11 @@ export function ContactPage() {
             ) : (
               <Card className="flex flex-col gap-4">
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  {error && (
+                    <Alert tone="danger" role="alert">
+                      {error}
+                    </Alert>
+                  )}
                   <fieldset className="flex flex-col gap-2">
                     <legend className="mb-0.5 text-sm font-medium text-foreground">What can we help with?</legend>
                     <div className="flex flex-wrap gap-2">
@@ -168,23 +203,41 @@ export function ContactPage() {
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
                       Work email
-                      <input required type="email" className={inputClass} placeholder="jamie@yourrestaurant.com" />
+                      <input
+                        required
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={inputClass}
+                        placeholder="jamie@yourrestaurant.com"
+                      />
                     </label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="flex flex-col gap-1 text-sm">
                       Business / restaurant name
-                      <input className={inputClass} placeholder="The Ember Kitchen" />
+                      <input
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        className={inputClass}
+                        placeholder="The Ember Kitchen"
+                      />
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
                       Phone (optional)
-                      <input type="tel" className={inputClass} placeholder="(555) 123-4567" />
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className={inputClass}
+                        placeholder="(555) 123-4567"
+                      />
                     </label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="flex flex-col gap-1 text-sm">
                       Restaurant type
-                      <select className={inputClass} defaultValue={RESTAURANT_TYPES[0]}>
+                      <select value={restaurantType} onChange={(e) => setRestaurantType(e.target.value)} className={inputClass}>
                         {RESTAURANT_TYPES.map((t) => (
                           <option key={t} value={t}>
                             {t}
@@ -194,7 +247,13 @@ export function ContactPage() {
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
                       Number of locations
-                      <input type="number" min={1} defaultValue={1} className={inputClass} />
+                      <input
+                        type="number"
+                        min={1}
+                        value={locationCount}
+                        onChange={(e) => setLocationCount(Number(e.target.value) || 1)}
+                        className={inputClass}
+                      />
                     </label>
                   </div>
 
@@ -203,16 +262,23 @@ export function ContactPage() {
                       Message
                       <Badge tone="neutral">{REASONS.find((r) => r.value === reason)?.label}</Badge>
                     </span>
-                    <textarea required rows={4} className={inputClass} placeholder={reasonHelpText(reason)} />
+                    <textarea
+                      required
+                      rows={4}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      className={inputClass}
+                      placeholder={reasonHelpText(reason)}
+                    />
                     <span className="text-xs text-muted">{reasonHelpText(reason)}</span>
                   </label>
 
-                  <Button type="submit" size="lg">
-                    Send message
+                  <Button type="submit" size="lg" disabled={submitting}>
+                    {submitting ? "Sending..." : "Send message"}
                   </Button>
                   <p className="text-xs text-muted">
-                    This is a preview build — submitting doesn't create an account or send a real message yet. In
-                    production, our team follows up directly.
+                    Sending this doesn't create an account — it's a message to our team, and someone will follow up
+                    by email.
                   </p>
                 </form>
               </Card>

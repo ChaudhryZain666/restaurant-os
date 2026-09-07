@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Card } from "@restaurant/ui";
+import { apiClient } from "../lib/api";
 
 const ROLES = ["Restaurant owner", "Restaurant manager", "Agency", "Multi-location operator", "Other"] as const;
 const INTERESTS = [
@@ -15,10 +16,14 @@ const INTERESTS = [
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm";
 
 /**
- * A client-side-only lead-capture form. There is no self-service "create a restaurant" API on
- * the backend (only a platform_admin can create a tenant — see RBAC), and this phase is
- * explicitly frontend-only, so this intentionally does NOT call any backend endpoint or pretend
- * to provision an account. It just captures interest and shows an honest confirmation state.
+ * Phase 56 — a real lead-capture form: submits to POST /public/contact (an internal-notification
+ * email, not account creation — see contact.controller.ts). Previously client-side-only
+ * (setSubmitted(true), no network call at all) per an earlier phase's own comment claiming "there
+ * is no self-service 'create a restaurant' API on the backend" — that's no longer true (see
+ * OwnerSignupWizardPage.tsx/StartTrialPage.tsx's real /signup flow), but this form was never a
+ * disguised account-creation attempt either way: it always captured interest for a human follow-up,
+ * which is exactly what it now genuinely does. Still never pretends to create an account — the
+ * disclaimer below stays, just made accurate (a message is actually sent now).
  */
 export function LeadForm({
   submitLabel,
@@ -35,16 +40,45 @@ export function LeadForm({
   qualification?: boolean;
 }) {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<string>(ROLES[0]);
+  const [locationCount, setLocationCount] = useState(1);
   const [interests, setInterests] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
 
   function toggleInterest(value: string) {
     setInterests((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiClient.request("/public/contact", {
+        method: "POST",
+        body: {
+          name,
+          email,
+          businessName: showRestaurantField ? businessName : undefined,
+          phone: phone || undefined,
+          role: qualification ? role : undefined,
+          locationCount: qualification ? locationCount : undefined,
+          interests: qualification && interests.length > 0 ? interests : undefined,
+          message: message || undefined,
+        },
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (submitted) {
@@ -62,23 +96,41 @@ export function LeadForm({
   return (
     <Card className="flex flex-col gap-4">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && (
+          <Alert tone="danger" role="alert">
+            {error}
+          </Alert>
+        )}
         <label className="flex flex-col gap-1 text-sm">
           Your name
           <input required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="Jamie Rivera" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Work email
-          <input required type="email" className={inputClass} placeholder="jamie@yourrestaurant.com" />
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+            placeholder="jamie@yourrestaurant.com"
+          />
         </label>
         {showRestaurantField && (
           <label className="flex flex-col gap-1 text-sm">
             Restaurant / company
-            <input required className={inputClass} placeholder="The Ember Kitchen" />
+            <input
+              required
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              className={inputClass}
+              placeholder="The Ember Kitchen"
+            />
           </label>
         )}
         <label className="flex flex-col gap-1 text-sm">
           Phone (optional)
-          <input type="tel" className={inputClass} placeholder="(555) 123-4567" />
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} placeholder="(555) 123-4567" />
         </label>
 
         {qualification && (
@@ -86,7 +138,7 @@ export function LeadForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm">
                 Role
-                <select className={inputClass} defaultValue={ROLES[0]}>
+                <select value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
                       {r}
@@ -96,7 +148,13 @@ export function LeadForm({
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 Number of restaurants
-                <input type="number" min={1} defaultValue={1} className={inputClass} />
+                <input
+                  type="number"
+                  min={1}
+                  value={locationCount}
+                  onChange={(e) => setLocationCount(Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
               </label>
             </div>
 
@@ -114,17 +172,22 @@ export function LeadForm({
 
             <label className="flex flex-col gap-1 text-sm">
               Anything else? (optional)
-              <textarea rows={3} className={inputClass} placeholder="Tell us a bit more about what you're looking for." />
+              <textarea
+                rows={3}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className={inputClass}
+                placeholder="Tell us a bit more about what you're looking for."
+              />
             </label>
           </>
         )}
 
-        <Button type="submit" size="lg">
-          {submitLabel}
+        <Button type="submit" size="lg" disabled={submitting}>
+          {submitting ? "Sending..." : submitLabel}
         </Button>
         <p className="text-xs text-muted">
-          This is a preview build — submitting doesn't create an account yet. In production, our team follows up to
-          finish setting up your restaurant.
+          Submitting sends your message to our team — it doesn't create an account. We'll follow up by email.
         </p>
       </form>
     </Card>

@@ -134,3 +134,39 @@ describe("envSchema — GLOBAL_RATE_LIMIT_MAX (Portal UX audit, Phase 53)", () =
     expect(envSchema.safeParse({ ...REQUIRED_BASE, GLOBAL_RATE_LIMIT_MAX: "-5" }).success).toBe(false);
   });
 });
+
+describe("envSchema — CONTACT_NOTIFICATION_EMAIL (Phase 56)", () => {
+  it("defaults to a placeholder address when unset", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CONTACT_NOTIFICATION_EMAIL).toBe("hello@tablecloth.local");
+  });
+
+  it("accepts an explicit override", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE, CONTACT_NOTIFICATION_EMAIL: "sales@example.com" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CONTACT_NOTIFICATION_EMAIL).toBe("sales@example.com");
+  });
+
+  it("rejects a non-email value", () => {
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, CONTACT_NOTIFICATION_EMAIL: "not-an-email" }).success).toBe(false);
+  });
+});
+
+describe("envSchema — CONTACT_RATE_LIMIT_MAX (Phase 56)", () => {
+  it("defaults to 5", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CONTACT_RATE_LIMIT_MAX).toBe(5);
+  });
+
+  it("accepts an explicit override", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE, CONTACT_RATE_LIMIT_MAX: "1000" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CONTACT_RATE_LIMIT_MAX).toBe(1000);
+  });
+
+  it("rejects a non-positive value", () => {
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, CONTACT_RATE_LIMIT_MAX: "0" }).success).toBe(false);
+  });
+});

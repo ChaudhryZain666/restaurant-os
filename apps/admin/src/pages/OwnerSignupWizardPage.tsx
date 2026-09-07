@@ -123,7 +123,7 @@ export function OwnerSignupWizardPage() {
         // and would leave a customer unable to see a real price or start a real trial, so it's
         // filtered out here rather than trusted alongside the real catalog.
         const ownerPlans = res.plans
-          .filter((p) => p.type === "OWNER" && p.pricing.some((price) => price.amountCents > 0))
+          .filter((p) => p.type === "OWNER" && p.pricing.some((price) => (price.amountCents ?? 0) > 0))
           .sort((a, b) => (a.pricing.find((x) => x.interval === "monthly")?.amountCents ?? 0) - (b.pricing.find((x) => x.interval === "monthly")?.amountCents ?? 0));
         setPlans(ownerPlans);
         setSelectedPlanCode((prev) => prev || ownerPlans[0]?.code || "");

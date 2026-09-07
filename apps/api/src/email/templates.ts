@@ -1,4 +1,14 @@
 import type { EmailMessage } from "./EmailService.js";
+import type { ContactFormInput } from "@restaurant/validation";
+
+// Every other template in this file only ever interpolates server-generated URLs or names a
+// platform_admin typed (provisioning flows) — never genuinely untrusted public input. The Phase 56
+// contact-form notification below is the first template to render fields an anonymous visitor
+// submitted directly, so it needs real HTML-escaping to stay safe against a submitted name/message
+// containing markup.
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 function layout(title: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -251,5 +261,44 @@ export function staffInviteEmail(
        <p style="color:#78716c; font-size: 13px;">This invite link expires in 7 days.</p>`
     ),
     text: `${details.inviterName} invited you to join ${details.restaurantName} on Tablecloth as a ${details.roleLabel}.\n\nAccept your invitation and set your password: ${acceptUrl}\n\nThis link expires in 7 days.`,
+  };
+}
+
+/** Phase 56 — internal notification sent to CONTACT_NOTIFICATION_EMAIL when the marketing site's
+ *  Contact page or "Request a guided demo" lead form (LeadForm.tsx) is submitted. `to` here is the
+ *  team, not the submitter — this is not a confirmation email to the visitor, matching the honest
+ *  "our team follows up" copy both forms show. Every field below came from an anonymous,
+ *  unauthenticated public submission, so the HTML body escapes it — unlike this file's other
+ *  templates, which only ever interpolate server-generated or platform_admin-typed values. */
+export function contactFormNotificationEmail(to: string, fields: ContactFormInput): EmailMessage {
+  const rows: Array<[string, string | undefined]> = [
+    ["Name", fields.name],
+    ["Email", fields.email],
+    ["Phone", fields.phone],
+    ["Reason", fields.reason],
+    ["Business / restaurant", fields.businessName],
+    ["Restaurant type", fields.restaurantType],
+    ["Locations", fields.locationCount?.toString()],
+    ["Role", fields.role],
+    ["Interested in", fields.interests?.join(", ")],
+  ];
+  const htmlRows = rows
+    .filter(([, value]) => value)
+    .map(([label, value]) => `<p style="margin:0 0 6px;"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value!)}</p>`)
+    .join("\n");
+  const textRows = rows
+    .filter(([, value]) => value)
+    .map(([label, value]) => `${label}: ${value}`)
+    .join("\n");
+
+  return {
+    to,
+    subject: `New contact form submission from ${fields.name}`,
+    html: layout(
+      "New contact form submission",
+      `${htmlRows}
+       ${fields.message ? `<p style="margin-top:16px;"><strong>Message:</strong><br/>${escapeHtml(fields.message).replace(/\n/g, "<br/>")}</p>` : ""}`
+    ),
+    text: `${textRows}${fields.message ? `\n\nMessage:\n${fields.message}` : ""}`,
   };
 }
