@@ -300,6 +300,14 @@ const RECONCILIATION_STALE_AFTER_MS = 15 * 60 * 1000;
  * path a webhook uses. One payment's reconciliation failing (provider timeout, deleted BYOC
  * account, etc.) is logged and never blocks the rest of the sweep.
  */
+// Phase 49 — a defensive cap, not a business rule: under healthy operation the number of payments
+// still pending/requires_action past the stale threshold should be near zero (this ticks every 10
+// minutes — see registerPaymentReconciliationJob). Bounding it means a pathological spike (an
+// outage, a bug that stops payments from ever resolving) can't turn one job tick into thousands of
+// synchronous provider .retrieve() calls — any excess stays "stale" and is simply picked up by the
+// next tick, so this changes worst-case behavior only, never a normal run's outcome.
+const RECONCILIATION_BATCH_LIMIT = 500;
+
 export async function reconcileStalePayments(): Promise<void> {
   const staleBefore = new Date(Date.now() - RECONCILIATION_STALE_AFTER_MS);
   const stale = await Payment.find({
@@ -307,7 +315,7 @@ export async function reconcileStalePayments(): Promise<void> {
     method: "online",
     providerRef: { $type: "string" },
     createdAt: { $lt: staleBefore },
-  });
+  }).limit(RECONCILIATION_BATCH_LIMIT);
 
   for (const payment of stale) {
     try {

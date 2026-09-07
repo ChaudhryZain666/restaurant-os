@@ -83,6 +83,13 @@ export type RestaurantAvailabilityStatus = "open" | "closed" | "paused";
 export interface RestaurantAvailability {
   status: RestaurantAvailabilityStatus;
   reason?: string;
+  /** Phase 51 — ISO UTC instant of the next time this restaurant will be within its configured
+   *  business hours. Only ever set when `status` is "closed" specifically because the current
+   *  local time falls outside businessHours (never set for orderingEnabled:false or
+   *  temporarilyPaused, and absent if businessHours has no configured opening within the search
+   *  window). Convert to the restaurant's own timezone for display — never the viewer's — see
+   *  packages/utils/src/datetime.ts's describeAvailability. */
+  nextOpenAt?: string;
 }
 
 export interface RestaurantReadinessCheck {
