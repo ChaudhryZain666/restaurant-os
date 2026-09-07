@@ -12,6 +12,7 @@ const EVENT_TYPES: OrderEventType[] = [
   "order.completed",
   "order.cancelled",
   "order.payment_updated",
+  "order.delivery_status_updated",
 ];
 
 /**

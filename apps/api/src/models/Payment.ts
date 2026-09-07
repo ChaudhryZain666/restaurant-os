@@ -36,7 +36,10 @@ const paymentSchema = new Schema(
     // Snapshotted from Order.total by payment.service.ts at creation time — the server-computed
     // total is the ONLY source for this value; it is never accepted from a request body.
     amount: { type: Number, required: true, min: 0 },
-    status: { type: String, enum: PAYMENT_STATUSES, default: "pending", index: true },
+    // Phase 49 — no field-level index here; see the {status, createdAt} compound index below,
+    // which is the only real query that filters on status without also filtering on orderId/_id
+    // (grepped the full repo to confirm) and serves it strictly better.
+    status: { type: String, enum: PAYMENT_STATUSES, default: "pending" },
     failureCode: { type: String },
     failureMessage: { type: String },
     // Denormalized running sum of succeeded refunds against this payment (Phase 16) — the
@@ -55,6 +58,14 @@ const paymentSchema = new Schema(
 );
 
 paymentSchema.index({ restaurantId: 1, orderId: 1, createdAt: -1 });
+// Phase 49 — backs payment.service.ts's reconcileStalePayments, the payment-reconciliation
+// repeatable job's query: `{status: {$in: [pending, requires_action]}, createdAt: {$lt: staleBefore}}`
+// (method/providerRef are filtered in-application after this — both are low-cardinality/cheap
+// checks on an already status+date-narrowed set). Replaces the old single-field `status` index,
+// which supported only the equality half of this query and left the createdAt range to an
+// in-memory filter; grepped every other Payment query in the repo and confirmed none of them
+// filter on status without also filtering on _id/orderId (which their own indexes already serve).
+paymentSchema.index({ status: 1, createdAt: 1 });
 // One PAID payment per order: a partial unique index, so multiple pending/failed attempts on the
 // same order stay allowed (retries), but a second payment can never independently reach "paid"
 // once one already has. The DB-level backstop for "an order must never have two successful

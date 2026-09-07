@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Agency } from "../models/Agency.js";
@@ -99,6 +100,39 @@ describe("POST /agencies/:agencyId/members — invite", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ name: existing.name, email: existing.email, role: "agency_admin" });
     expect(res.status).toBe(409);
+  });
+
+  it("(Phase 49) returns a clean 409, not an unhandled 500, when User.create() races a concurrently-committed duplicate email", async () => {
+    const email = `race-agency-member-${Date.now()}@test.local`;
+    const winner = await User.create({ name: "Race Winner", email, passwordHash: await bcrypt.hash("Password123!", 12) });
+    userIds.push(winner.id as string);
+    const findOneSpy = jest.spyOn(User, "findOne").mockResolvedValueOnce(null);
+    try {
+      const res = await request(app)
+        .post(`/api/v1/agencies/${agency.id}/members`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ name: "Race Loser", email, role: "agency_staff" });
+      expect(res.status).toBe(409);
+    } finally {
+      findOneSpy.mockRestore();
+    }
+  });
+
+  it("(Phase 49) returns a clean 409, not an unhandled 500, when AgencyMembership.create() races a concurrently-committed duplicate membership", async () => {
+    const existing = await createTestUser("customer");
+    userIds.push(existing.id);
+    await createTestAgencyMembership(agency._id, existing._id, { role: "agency_staff", status: "active" });
+
+    const findOneSpy = jest.spyOn(AgencyMembership, "findOne").mockResolvedValueOnce(null);
+    try {
+      const res = await request(app)
+        .post(`/api/v1/agencies/${agency.id}/members`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ name: existing.name, email: existing.email, role: "agency_admin" });
+      expect(res.status).toBe(409);
+    } finally {
+      findOneSpy.mockRestore();
+    }
   });
 
   it("requires agency.members.manage (agency_staff cannot invite)", async () => {

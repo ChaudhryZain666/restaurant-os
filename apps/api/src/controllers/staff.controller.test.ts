@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Business } from "../models/Business.js";
@@ -108,6 +109,22 @@ describe("staff management (restaurant.staff.manage — owner only)", () => {
       .set("Authorization", `Bearer ${ownerAToken}`)
       .send(payload);
     expect(second.status).toBe(409);
+  });
+
+  it("(Phase 49) returns a clean 409, not an unhandled 500, when the invite races a concurrently-committed duplicate email", async () => {
+    const email = `race-staff-invite-${Date.now()}@test.local`;
+    const winner = await User.create({ name: "Race Winner", email, passwordHash: await bcrypt.hash("Password123!", 12) });
+    const findOneSpy = jest.spyOn(User, "findOne").mockResolvedValueOnce(null);
+    try {
+      const res = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/staff`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send(invitePayload({ email }));
+      expect(res.status).toBe(409);
+    } finally {
+      findOneSpy.mockRestore();
+      await User.deleteOne({ _id: winner._id });
+    }
   });
 
   it("rejects an invite trying to assign role=restaurant_owner", async () => {

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { OrderStatus } from "@restaurant/types";
+import type { DeliveryStatus, OrderStatus } from "@restaurant/types";
 import type { ProviderPaymentStatus } from "../payments/PaymentProvider.js";
 
 /**
@@ -19,7 +19,14 @@ export type OrderEventType =
   // Fired whenever a Payment's status changes an order's paymentStatus (webhook-confirmed online
   // payments, and cash mark-paid/unpaid) — reuses this same bus/socket/queue pipeline rather than
   // inventing a parallel one for payment updates specifically.
-  | "order.payment_updated";
+  | "order.payment_updated"
+  // Phase 50 — fired on EVERY real Delivery status change (deliveryDispatch.service.ts's
+  // updateDeliveryStatus), not just the two milestones that also advance Order.status
+  // ("picked_up"/"out_for_delivery" -> order.out_for_delivery, "delivered" -> order.completed,
+  // both already covered by the event types above). A courier being "accepted" or a driver being
+  // "assigned" never changes Order.status, but a customer/admin watching this order live should
+  // still see it — this reuses the exact same bus/socket/queue pipeline rather than a second one.
+  | "order.delivery_status_updated";
 
 export interface OrderEventPayload {
   orderId: string;
@@ -36,6 +43,10 @@ export interface OrderEventPayload {
   // amount (which may be less than the order's own total for a partial refund — Order.total alone
   // would overstate a partial refund's confirmation email).
   amount?: number;
+  // Phase 50, additive — only ever set on "order.delivery_status_updated". `status` above is
+  // still the Order's own (possibly unchanged) status; this carries the finer-grained Delivery
+  // lifecycle value a courier-tracking UI actually wants to react to.
+  deliveryStatus?: DeliveryStatus;
 }
 
 /**

@@ -57,10 +57,11 @@ shared fixture).
   multi-restaurant storefront routing is still future work.
 - **No self-service restaurant onboarding.** `platform_admin` still creates restaurants and
   assigns owners manually via the API.
-- **Business hours are stored and editable but not enforced.** `computeAvailability` only
-  considers `orderingEnabled` and `temporarilyPaused` — a restaurant can still accept orders
-  outside its configured hours. Layering in real hours-based enforcement is future work (it
-  needs timezone handling and a real "closes in N minutes" UX, not just a boolean check).
+- ~~Business hours are stored and editable but not enforced.~~ **Superseded by Phase 51** —
+  `computeAvailability` now also enforces `businessHours` (evaluated in the restaurant's own IANA
+  `timezone`), across every order-creation path (online, POS, delivery/pickup/dine-in). See
+  `docs/business-hours-and-timezone.md`. Still future work: multiple periods per day (split
+  shifts) and holiday exceptions — see that doc's own "Deliberately not built" section.
 - **`platform_admin` cannot manage an individual restaurant's menu/orders/settings** even though
   `requireTenantMatch` exempts it — `ROLE_PERMISSIONS.platform_admin` doesn't grant any
   `restaurant.*` permission. Documented since the Phase 0 audit, still not fixed (would need a

@@ -1,4 +1,4 @@
-import { formatRestaurantDateTime, formatRestaurantTime } from "@restaurant/utils";
+import { describeAvailability, formatRestaurantDateTime, formatRestaurantTime, getLocalWeekday } from "@restaurant/utils";
 
 /**
  * Phase 17 — OrdersManagementPage's order-time/status-history displays used to render via the
@@ -33,5 +33,66 @@ describe("formatRestaurantTime / formatRestaurantDateTime (Phase 17)", () => {
     expect(() => formatRestaurantTime(instant, undefined)).not.toThrow();
     expect(() => formatRestaurantTime(instant, null)).not.toThrow();
     expect(() => formatRestaurantTime(instant, "not-a-real-timezone")).not.toThrow();
+  });
+});
+
+/** Phase 51 — the single shared "why is this restaurant unavailable right now" phrase-builder,
+ *  used by both the storefront and the admin portal (see packages/utils/src/datetime.ts). */
+describe("describeAvailability (Phase 51)", () => {
+  test("open", () => {
+    expect(describeAvailability({ status: "open" }, "America/Chicago")).toBe("Open");
+    expect(describeAvailability(null, "America/Chicago")).toBe("Open");
+  });
+
+  test("paused, with and without a reason", () => {
+    expect(describeAvailability({ status: "paused", reason: "Back in 20" }, "America/Chicago")).toBe("Back in 20");
+    expect(describeAvailability({ status: "paused" }, "America/Chicago")).toBe("Temporarily paused");
+  });
+
+  test("closed with no nextOpenAt (e.g. orderingEnabled:false) falls back to a generic message", () => {
+    expect(describeAvailability({ status: "closed" }, "America/Chicago")).toBe("Closed");
+  });
+
+  test("closed, opening later the same restaurant-local day", () => {
+    const now = new Date("2026-01-05T14:00:00.000Z"); // 8am Chicago (UTC-6 in January)
+    const nextOpenAt = new Date("2026-01-05T15:00:00.000Z").toISOString(); // 9am Chicago, same day
+    expect(describeAvailability({ status: "closed", nextOpenAt }, "America/Chicago", now)).toMatch(/^Opens at 9:00/);
+  });
+
+  test("closed, opening the restaurant-local NEXT calendar day — even when that's not yet true in UTC", () => {
+    // 11pm Chicago (UTC-6) on 2026-01-05 — still Jan 5 UTC-wise is irrelevant; what matters is
+    // Chicago's own local date advancing to Jan 6 by the time it next opens at 9am Chicago.
+    const now = new Date("2026-01-06T05:00:00.000Z"); // 11pm Chicago, Jan 5 local
+    const nextOpenAt = new Date("2026-01-06T15:00:00.000Z").toISOString(); // 9am Chicago, Jan 6 local
+    expect(describeAvailability({ status: "closed", nextOpenAt }, "America/Chicago", now)).toMatch(/^Opens tomorrow at 9:00/);
+  });
+
+  test("closed for several days shows an explicit date, never a misleading 'tomorrow'", () => {
+    const now = new Date("2026-01-05T14:00:00.000Z");
+    const nextOpenAt = new Date("2026-01-08T15:00:00.000Z").toISOString(); // 3 local days later
+    const result = describeAvailability({ status: "closed", nextOpenAt }, "America/Chicago", now);
+    expect(result).not.toMatch(/tomorrow/i);
+    expect(result).toMatch(/^Opens .*9:00/);
+  });
+
+  test("uses the restaurant's own local time for the opening time, not the viewer's/UTC", () => {
+    const now = new Date("2026-01-05T05:00:00.000Z");
+    const nextOpenAt = new Date("2026-01-05T15:00:00.000Z").toISOString(); // 15:00 UTC = 9am Chicago (UTC-6)
+    expect(describeAvailability({ status: "closed", nextOpenAt }, "America/Chicago", now)).toContain("9:00");
+  });
+});
+
+describe("getLocalWeekday (Phase 51)", () => {
+  test("returns the restaurant's own local calendar day, which can differ from UTC's/the viewer's", () => {
+    // 2026-01-05T20:00:00Z is Monday 8pm UTC — but already 01:00 Tuesday in Karachi (UTC+5).
+    const instant = new Date("2026-01-05T20:00:00.000Z");
+    expect(getLocalWeekday("Asia/Karachi", instant)).toBe("tuesday");
+    expect(getLocalWeekday("America/Chicago", instant)).toBe("monday");
+  });
+
+  test("falls back to the local machine's day for a missing/invalid timezone instead of throwing", () => {
+    const instant = new Date("2026-01-05T20:00:00.000Z");
+    expect(() => getLocalWeekday(undefined, instant)).not.toThrow();
+    expect(() => getLocalWeekday("not-a-real-timezone", instant)).not.toThrow();
   });
 });

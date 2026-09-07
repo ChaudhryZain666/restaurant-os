@@ -1,5 +1,5 @@
 import type { HydratedDocument } from "mongoose";
-import type { DeliveryStatus } from "@restaurant/types";
+import type { CustomerFacingDelivery, DeliveryStatus } from "@restaurant/types";
 import { Delivery, type DeliveryDoc } from "../models/Delivery.js";
 import { Order, type OrderDoc } from "../models/Order.js";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
@@ -59,6 +59,27 @@ const CANCELLABLE_DELIVERY_STATUSES: readonly DeliveryStatus[] = [
 
 function isValidDeliveryTransition(from: DeliveryStatus, to: DeliveryStatus): boolean {
   return DELIVERY_TRANSITIONS[from].includes(to);
+}
+
+/**
+ * The safe, minimal subset of a Delivery a CUSTOMER may see (see CustomerFacingDelivery's own doc
+ * comment in packages/types for exactly what's excluded and why) — used by order.controller.ts's
+ * getOrder. Never providerDeliveryId, fee/currency/quoteId, failureReason/lastProviderError,
+ * statusHistory, idempotencyKey, or which provider is behind it.
+ */
+export function toCustomerFacingDelivery(
+  delivery: Pick<DeliveryDoc, "status" | "courierName" | "courierPhone" | "trackingUrl" | "pickupEta" | "dropoffEta" | "cancelReason">
+): CustomerFacingDelivery {
+  return {
+    status: delivery.status as DeliveryStatus,
+    courierName: delivery.courierName ?? undefined,
+    courierPhone: delivery.courierPhone ?? undefined,
+    trackingUrl: delivery.trackingUrl ?? undefined,
+    pickupEta: delivery.pickupEta ? delivery.pickupEta.toISOString() : undefined,
+    dropoffEta: delivery.dropoffEta ? delivery.dropoffEta.toISOString() : undefined,
+    // Only customer-relevant once the delivery is actually cancelled — irrelevant noise otherwise.
+    cancelReason: delivery.status === "cancelled" ? (delivery.cancelReason ?? undefined) : undefined,
+  };
 }
 
 /** Stable per order — the same key every time regardless of how many times creation is
@@ -280,6 +301,11 @@ export async function updateDeliveryStatus(
   if (courierPhone !== undefined) delivery.courierPhone = courierPhone;
   if (trackingUrl !== undefined) delivery.trackingUrl = trackingUrl;
   if (cancelReason !== undefined) delivery.cancelReason = cancelReason;
+  // Captured before save() (which resets Mongoose's own modified-path tracking) — true for a real
+  // status move OR a courier-info-only update (e.g. a webhook filling in courierName once assigned,
+  // same status as before). False for an ignored/no-op/rejected transition above, so a stale or
+  // duplicate webhook never triggers a live "something changed" push for nothing.
+  const changed = delivery.isModified();
   await delivery.save();
 
   // Only a staff-driven action gets an audit entry — see applyOrderStatusTransition's own doc
@@ -299,7 +325,37 @@ export async function updateDeliveryStatus(
 
   await advanceOrderForDeliveryStatus(delivery.orderId.toString(), restaurantId, nextStatus, actor);
 
+  if (changed) {
+    await emitDeliveryStatusUpdatedEvent(delivery, restaurantId);
+  }
+
   return delivery;
+}
+
+/**
+ * Phase 50 — fires "order.delivery_status_updated" through the EXISTING order-event pipeline
+ * (Socket.IO push to the customer/restaurant rooms + a logged BullMQ job — see
+ * events/orderEventListeners.ts) for every real Delivery change, not only the two milestones that
+ * also advance Order.status. Called after advanceOrderForDeliveryStatus so `order.status` in the
+ * payload already reflects any mirrored transition that just happened. Best-effort: a lookup
+ * failure here must never turn a successful status update into a thrown error — the Delivery
+ * record itself already saved correctly regardless of whether this notification goes out.
+ */
+async function emitDeliveryStatusUpdatedEvent(delivery: HydratedDocument<DeliveryDoc>, restaurantId: string): Promise<void> {
+  try {
+    const order = await Order.findOne({ _id: delivery.orderId, restaurantId }).select("orderNumber customerId status");
+    if (!order) return;
+    emitOrderEvent("order.delivery_status_updated", {
+      orderId: delivery.orderId.toString(),
+      orderNumber: order.orderNumber,
+      restaurantId,
+      customerId: order.customerId.toString(),
+      status: order.status,
+      deliveryStatus: delivery.status as DeliveryStatus,
+    });
+  } catch (err) {
+    logger.warn("could not emit delivery status update event", { deliveryId: delivery.id, error: (err as Error).message });
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { Button } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 
 /** Modern — an asymmetric split: bold display headline + status/CTA on the left, a large offset
@@ -15,7 +15,7 @@ export function ModernHero({ restaurant, availability, orderingOpen, directionsQ
           }`}
         >
           <span className={`h-1.5 w-1.5 ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
-          {orderingOpen ? "Open now" : availability?.status === "paused" ? availability.reason || "Paused" : "Closed"}
+          {orderingOpen ? "Open now" : availability?.status === "paused" ? availability.reason || "Paused" : describeAvailability(availability, restaurant?.settings.timezone)}
         </span>
 
         <h1 className="text-4xl font-black uppercase leading-[0.95] tracking-tight text-foreground sm:text-6xl">{restaurant?.name}</h1>

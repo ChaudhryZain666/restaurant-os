@@ -38,12 +38,24 @@ export async function resolvePosCustomerId(input: PosCustomerInput): Promise<str
 
   const resolvedEmail = email?.toLowerCase() ?? `walkin-${randomBytes(8).toString("hex")}@pos.local`;
   const passwordHash = await bcrypt.hash(randomBytes(16).toString("hex"), 12);
-  const user = await User.create({
-    name,
-    email: resolvedEmail,
-    phone,
-    passwordHash,
-    role: "customer",
-  });
-  return user.id;
+  // Phase 49 — the email-provided path above has the same check-then-insert race every other
+  // User.create() call site in this codebase does (two staff terminals resolving the same walk-in
+  // email at once); the synthetic-email path's collision odds are negligible but costs nothing
+  // extra to cover the same way. User.email's unique index is the real backstop either way.
+  try {
+    const user = await User.create({
+      name,
+      email: resolvedEmail,
+      phone,
+      passwordHash,
+      role: "customer",
+    });
+    return user.id;
+  } catch (err) {
+    if ((err as { code?: number }).code === 11000) {
+      const existing = await User.findOne({ email: resolvedEmail, role: "customer" });
+      if (existing) return existing.id;
+    }
+    throw err;
+  }
 }

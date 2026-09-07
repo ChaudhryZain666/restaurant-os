@@ -9,6 +9,8 @@ build/
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
+jest-out.txt
 .vscode/*
 !.vscode/extensions.json
 .claude/settings.local.json

@@ -1,5 +1,5 @@
 import { Reveal, cn } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon } from "../icons";
@@ -16,7 +16,7 @@ export function UrbanHero({ restaurant, availability, orderingOpen, directionsQu
     ? "Open now"
     : availability?.status === "paused"
       ? availability.reason || "Paused"
-      : "Closed";
+      : describeAvailability(availability, restaurant?.settings.timezone);
 
   return (
     <section

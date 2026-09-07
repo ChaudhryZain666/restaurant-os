@@ -1,3 +1,4 @@
+import { getLocalWeekday } from "@restaurant/utils";
 import type { FooterProps } from "../types";
 import { PinIcon } from "../icons";
 
@@ -10,13 +11,15 @@ const WEEKDAY_LABELS: Record<string, string> = {
   saturday: "Sat",
   sunday: "Sun",
 };
-const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
 
 /** Contemporary — an off-grid three-block hierarchy (identity, visit info, hours), never a single
  *  centered sentence: identity takes the wide left column while visit/hours sit in narrower columns
  *  that don't fill the remaining grid track, leaving deliberate asymmetric whitespace on the right —
  *  the same "not everything has to reach the edge" spirit as About's off-grid paragraph. */
 export function ContemporaryFooter({ restaurant, hideBranding }: FooterProps) {
+  // Phase 51 — the RESTAURANT's own local day, not the viewer's browser day (a visitor in a
+  // different timezone must still see the restaurant's own "today" bolded).
+  const TODAY_KEY = getLocalWeekday(restaurant?.settings.timezone);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 
   // Phase 42 — see Cinematic's Footer.tsx: rendered as a sibling of <main>, already full-width,

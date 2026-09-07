@@ -6,6 +6,7 @@ import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "../lib/orderStatus";
+import { DELIVERY_STATUS_CUSTOMER_LABELS } from "../lib/deliveryStatus";
 import { OrderStatusTimeline } from "../components/OrderStatusTimeline";
 import { OrderPaymentPanel } from "../components/OrderPaymentPanel";
 import { useOrderEvents } from "../hooks/useOrderEvents";
@@ -277,6 +278,33 @@ export function OrderDetailPage() {
                 <span>Delivery instructions</span>
                 <span className="text-right text-foreground">{order.deliveryAddress.instructions}</span>
               </div>
+            )}
+            {order.delivery && (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span>Delivery status</span>
+                  <span className="text-right text-foreground">{DELIVERY_STATUS_CUSTOMER_LABELS[order.delivery.status]}</span>
+                </div>
+                {order.delivery.courierName && (
+                  <div className="flex justify-between gap-4">
+                    <span>Courier</span>
+                    <span className="text-right text-foreground">
+                      {order.delivery.courierName}
+                      {order.delivery.courierPhone ? ` · ${order.delivery.courierPhone}` : ""}
+                    </span>
+                  </div>
+                )}
+                {order.delivery.trackingUrl && (
+                  <a
+                    href={order.delivery.trackingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="self-start font-medium text-primary underline"
+                  >
+                    Track your delivery
+                  </a>
+                )}
+              </>
             )}
           </>
         )}

@@ -1,3 +1,4 @@
+import { getLocalWeekday } from "@restaurant/utils";
 import type { FooterProps } from "../types";
 import { PinIcon } from "../icons";
 
@@ -10,12 +11,13 @@ const WEEKDAY_LABELS: Record<string, string> = {
   saturday: "Sat",
   sunday: "Sun",
 };
-const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
 
 /** Cinematic — a dark, structured close to the page (matching Hero/Cta's register): identity and
  *  today's hours on one side, address/contact on the other, a quiet branding line beneath — never a
  *  single centered sentence. */
 export function CinematicFooter({ restaurant, hideBranding }: FooterProps) {
+  // Phase 51 — the RESTAURANT's own local day, not the viewer's browser day.
+  const TODAY_KEY = getLocalWeekday(restaurant?.settings.timezone);
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 

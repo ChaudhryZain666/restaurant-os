@@ -207,12 +207,84 @@ mixes them:
 ## Production requirements before this is a live third-party integration
 
 1. A real, approved Uber Direct merchant account and credentials to test the full quote → create →
-   track → cancel → webhook loop against Uber's actual sandbox, then production.
+   track → cancel → webhook loop against Uber's actual sandbox, then production. **Still pending as
+   of Phase 50** — no credentials were available; see that phase's own section below for exactly
+   what was and wasn't possible to verify without them.
 2. Independent confirmation of the two "reasonably inferred, not verified" details above (address
-   JSON structure, webhook `data.courier` shape) against a real payload.
-3. A production monitoring hook for `Delivery.status:"failed"` (currently visible only via the
-   admin/POS UI's status panel and structured logs) — e.g. a dashboard alert or digest, so a stuck
-   failed delivery is never only discoverable by a staff member happening to open that order.
+   JSON structure, webhook `data.courier` shape) against a real payload. **Still pending** — same
+   reason as #1.
+3. ~~A production monitoring hook for `Delivery.status:"failed"`~~ — **addressed by Phase 50**: a
+   `failedDeliveryCount` now appears in the existing `GET /platform/config` diagnostics endpoint
+   (see below). A dedicated alert/digest on top of that count is still a future enhancement, not
+   built this phase — this only makes the number visible somewhere other than one staff member
+   happening to open one order.
 4. A live Careem Delivery APIs adapter, given this platform's stated regional priorities — the
    `DeliveryProvider` contract this phase built was deliberately shaped to make that a second adapter
-   file, not a redesign.
+   file, not a redesign. **Still pending.**
+
+## Phase 50 — customer tracking, real-time delivery events, and hardening
+
+Phase 40 (above) built the full dispatch system but left it entirely invisible to the customer: the
+storefront order page never queried the `Delivery` model at all. This phase closes that gap and adds
+a handful of evidence-backed hardening fixes, without touching the architecture above.
+
+### Customer tracking
+
+`GET /orders/:id` now attaches a `delivery` field (only present on a delivery order that has an
+active dispatch record) — a deliberately narrow, safe subset of the internal `Delivery` document:
+`status`, `courierName`, `courierPhone`, `trackingUrl`, `pickupEta`, `dropoffEta`, and `cancelReason`
+(only once actually cancelled). Never `providerDeliveryId`, `fee`/`currency`/`quoteId` (what the
+courier charges the RESTAURANT), `failureReason`/`lastProviderError` (staff diagnostics),
+`statusHistory`, `idempotencyKey`, or which provider is behind it — see
+`packages/types/src/types/delivery.ts`'s `CustomerFacingDelivery` and
+`deliveryDispatch.service.ts`'s `toCustomerFacingDelivery`. The storefront's `OrderDetailPage` renders
+this with customer-friendly copy (`apps/web/src/lib/deliveryStatus.ts`) inside the existing delivery-
+address card — not a new tracking dashboard.
+
+### Real-time updates for the full delivery lifecycle
+
+Before this phase, a live Socket.IO push only fired for the two Delivery milestones that also
+advance `Order.status` (`picked_up`/`out_for_delivery` → `order.out_for_delivery`, `delivered` →
+`order.completed`). A courier being `accepted` or a driver being `assigned` changed the `Delivery`
+record but pushed nothing live — a customer would only see it on their next manual refresh.
+`updateDeliveryStatus` now also emits a new `order.delivery_status_updated` event (see
+`events/orderEvents.ts`) for EVERY real Delivery change (a real status transition, or a courier-info
+update with no status change) through the exact same existing pipeline — same `orderEventBus`, same
+Socket.IO rooms, same BullMQ-logged job (`events/orderEventListeners.ts`'s `EVENT_TYPES`). No new
+notification infrastructure; the storefront's existing `useOrderEvents` hook already treats any event
+for its order as "something changed, refetch," so no frontend socket-handling code changed either.
+Never fired for an ignored/rejected/no-op transition (a stale or duplicate webhook).
+
+### Provider contract tests
+
+`UberDirectProvider.ts` previously had no adapter-level test coverage at all (only its account-
+connect controller was tested, via a mocked `fetch`). `UberDirectProvider.test.ts` (new) now covers
+create/retrieve/cancel, status mapping (including the "unrecognized status fails closed" guarantee),
+courier/ETA/tracking-URL mapping, every mapped provider error code (401/429/404/422/5xx, malformed
+JSON, timeout, failed auth), access-token caching, and webhook signature verification (valid/wrong-
+secret/tampered/missing/wrong-kind/missing-fields/synthesized-eventId) — all against a mocked
+`fetch`, the same technique this codebase's Safepay/Stripe provider tests already use. Still, per
+Phase 40's own honesty convention, MOCK-verified only — no sandbox/live Uber Direct call has ever
+been made (see "Production requirements" #1 above).
+
+### Dispatch job retry safety net
+
+The `delivery.dispatch_create` BullMQ job previously had zero retry configuration (this queue's
+default: 1 attempt, no automatic retry). That was fine for an ordinary provider-side failure — those
+never throw, they land the `Delivery` in a retryable `"failed"` state instead — but a genuine
+transient infra error (e.g. a dropped DB connection) *before* any `Delivery` document existed at all
+would silently strand a `"ready"` order with no `Delivery` record and no UI action to recover it
+(the "Retry" button only appears once a `Delivery` already exists). `orderTransition.service.ts` now
+enqueues that one job with `{ attempts: 3, backoff: { type: "exponential", delay: 5000 } }` — safe
+specifically because `createDeliveryForOrder` is fully idempotent (see Phase 40's own idempotency
+section above). No other job on this queue changed.
+
+### What Phase 50 did NOT change
+
+The eligibility/fee engine, the `DeliveryProvider` interface, `ManualDispatchProvider`,
+`UberDirectProvider`'s own request/mapping logic, the `DELIVERY_TRANSITIONS` table, webhook signature
+verification/idempotency, RBAC, POS (no genuine integration contract required a POS change — a POS-
+created delivery order already flows through the identical `orderType === "delivery"` dispatch
+trigger as an online one), or the admin `DeliveryStatusPanel` (already showed provider, status,
+courier, tracking link, and failure/cancellation state — nothing there was missing per this phase's
+own acceptance criteria).

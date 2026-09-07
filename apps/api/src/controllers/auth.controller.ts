@@ -138,7 +138,20 @@ export async function register(req: Request, res: Response) {
   if (existing) throw ApiError.conflict("An account with this email already exists");
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ name, email, passwordHash, phone });
+  // Phase 49 — the pre-check above narrows the common case, but can't close a genuine race: two
+  // concurrent registrations for the same email can both pass it before either insert commits.
+  // User.email's unique index is the real backstop; this just translates its raw duplicate-key
+  // error into the same clean 409 the pre-check would have given a slightly-slower request, rather
+  // than letting it surface as an unhandled 500.
+  let user: HydratedDocument<UserDoc>;
+  try {
+    user = await User.create({ name, email, passwordHash, phone });
+  } catch (err) {
+    if ((err as { code?: number }).code === 11000) {
+      throw ApiError.conflict("An account with this email already exists");
+    }
+    throw err;
+  }
   // Phase 37 — every self-registered account gets a verification email; nothing existing reads
   // emailVerifiedAt yet except the new self-serve business-provisioning endpoint, so this is a
   // behavior-neutral addition for every OTHER caller of /auth/register (including the agency

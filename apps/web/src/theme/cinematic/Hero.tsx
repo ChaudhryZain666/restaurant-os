@@ -1,5 +1,5 @@
 import { Reveal } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { useActiveTheme } from "../useActiveTheme";
 import { usePreviewMode } from "../PreviewContext";
@@ -47,7 +47,7 @@ export function CinematicHero({ restaurant, availability, orderingOpen, directio
         <Reveal variant="fade" className="flex items-center gap-3 text-secondary-foreground/70">
           <span className={`h-1.5 w-1.5 rounded-full ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
           <span className="text-xs font-medium uppercase tracking-[0.3em]">
-            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : "Closed right now"}
+            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : describeAvailability(availability, restaurant?.settings.timezone)}
           </span>
         </Reveal>
 

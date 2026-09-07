@@ -112,6 +112,10 @@ export interface Order {
   restaurantPhone?: string;
   restaurantAddress?: string;
   restaurantLogo?: string;
+  /** Phase 50 — present only when this is a delivery order with an active dispatch record. A safe
+   *  customer-facing subset of the internal Delivery record (see types/delivery.ts's
+   *  CustomerFacingDelivery for exactly what's excluded and why). */
+  delivery?: import("./delivery.js").CustomerFacingDelivery;
 }
 
 /** Preview returned by POST /orders/:id/reorder — not an order, a cart-population template. */

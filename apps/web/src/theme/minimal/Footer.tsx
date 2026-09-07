@@ -1,3 +1,4 @@
+import { getLocalWeekday } from "@restaurant/utils";
 import type { FooterProps } from "../types";
 import { PinIcon } from "../icons";
 
@@ -10,7 +11,6 @@ const WEEKDAY_LABELS: Record<string, string> = {
   saturday: "Sat",
   sunday: "Sun",
 };
-const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
 
 /** Minimal — three plain columns under one hairline rule, no background block (unlike Cinematic's
  *  dark full-bleed close). Shares the same `max-w-5xl` / `px-4 sm:px-6` measure as the Header and
@@ -20,6 +20,8 @@ const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frid
  *  color or weight (only today's row gets `text-foreground`; every other row stays `text-muted`).
  *  Respects `hideBranding` — the platform line never appears on a white-labeled domain. */
 export function MinimalFooter({ restaurant, hideBranding }: FooterProps) {
+  // Phase 51 — the RESTAURANT's own local day, not the viewer's browser day.
+  const TODAY_KEY = getLocalWeekday(restaurant?.settings.timezone);
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 

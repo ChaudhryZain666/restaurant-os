@@ -1,5 +1,5 @@
 import { Reveal } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { ArrowRightIcon } from "../icons";
 
@@ -43,7 +43,7 @@ export function LuxuryHero({ restaurant, availability, orderingOpen, directionsQ
 
         <Reveal variant="fade" index={2} className="flex items-center gap-2.5 text-xs font-medium uppercase tracking-[0.18em] text-muted">
           <span className={`h-1.5 w-1.5 rounded-full ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
-          {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : "Closed right now"}
+          {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : describeAvailability(availability, restaurant?.settings.timezone)}
         </Reveal>
 
         <Reveal variant="fade" index={3} className="flex flex-col gap-3 pt-2">

@@ -77,6 +77,25 @@ export interface Delivery {
   updatedAt: string;
 }
 
+/**
+ * Phase 50 — the safe, minimal subset of a Delivery a CUSTOMER may see (attached to
+ * GET /orders/:id when the order is a delivery order with an active dispatch record). Deliberately
+ * excludes everything staff-only or provider-internal: providerDeliveryId, fee/currency/quoteId
+ * (what the COURIER charges the RESTAURANT — never the customer's business), failureReason/
+ * lastProviderError (raw provider diagnostics), statusHistory, idempotencyKey, and which provider
+ * is behind it. See apps/api/src/services/deliveryDispatch.service.ts's toCustomerFacingDelivery.
+ */
+export interface CustomerFacingDelivery {
+  status: DeliveryStatus;
+  courierName?: string;
+  courierPhone?: string;
+  trackingUrl?: string;
+  pickupEta?: string;
+  dropoffEta?: string;
+  /** Only ever set when status is "cancelled" — a customer-relevant reason, not a staff diagnostic. */
+  cancelReason?: string;
+}
+
 export interface RestaurantDeliveryProviderAccount {
   id: string;
   restaurantId: string;

@@ -69,15 +69,27 @@ export async function inviteMember(req: Request, res: Response) {
   if (!user) {
     const unusablePassword = randomBytes(32).toString("hex");
     const passwordHash = await bcrypt.hash(unusablePassword, 12);
-    user = await User.create({
-      name,
-      email,
-      passwordHash,
-      role: "agency_member",
-      isActive: true,
-      inviteTokenHash: hash,
-      inviteExpiresAt,
-    });
+    // Phase 49 — the findOne lookup above narrows the common case, but can't close a genuine
+    // race: two concurrent invites (or an invite racing a self-registration) for the same email
+    // can both pass it before either insert commits. User.email's unique index is the real
+    // backstop; this translates its raw duplicate-key error into a clean 409 rather than letting
+    // it surface as an unhandled 500.
+    try {
+      user = await User.create({
+        name,
+        email,
+        passwordHash,
+        role: "agency_member",
+        isActive: true,
+        inviteTokenHash: hash,
+        inviteExpiresAt,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw ApiError.conflict("An account with this email already exists");
+      }
+      throw err;
+    }
   }
 
   const existingMembership = await AgencyMembership.findOne({ agencyId, userId: user._id });
@@ -93,15 +105,25 @@ export async function inviteMember(req: Request, res: Response) {
     existingMembership.inviteExpiresAt = inviteExpiresAt;
     await existingMembership.save();
   } else {
-    await AgencyMembership.create({
-      agencyId,
-      userId: user._id,
-      role,
-      status: "invited",
-      invitedBy: req.user!.id,
-      inviteTokenHash: hash,
-      inviteExpiresAt,
-    });
+    // Phase 49 — same race as above, against AgencyMembership's own {agencyId, userId} unique
+    // index: two concurrent invites of the same person to the same agency can both pass the
+    // existingMembership check above before either insert commits.
+    try {
+      await AgencyMembership.create({
+        agencyId,
+        userId: user._id,
+        role,
+        status: "invited",
+        invitedBy: req.user!.id,
+        inviteTokenHash: hash,
+        inviteExpiresAt,
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw ApiError.conflict("This person is already a member of (or has a pending invite for) this agency");
+      }
+      throw err;
+    }
   }
 
   const inviter = await User.findById(req.user!.id).select("name");

@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
+import mongoose from "mongoose";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { Business } from "../models/Business.js";
 import { Category } from "../models/Category.js";
 import { MenuItem } from "../models/MenuItem.js";
+import { Order } from "../models/Order.js";
+import { Delivery } from "../models/Delivery.js";
 import { Plan } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
@@ -15,6 +18,7 @@ import {
   createTestBusiness,
   createTestCategory,
   createTestMenuItem,
+  createTestOrder,
   createTestPlan,
   createTestRestaurant,
   createTestUser,
@@ -59,6 +63,8 @@ afterAll(async () => {
     Category.deleteOne({ _id: categoryA._id }),
     Restaurant.deleteOne({ _id: restaurantA._id }),
     AuditLog.deleteMany({ restaurantId: restaurantA._id }),
+    Order.deleteMany({ restaurantId: restaurantA._id }),
+    Delivery.deleteMany({ restaurantId: restaurantA._id }),
     User.deleteMany({ _id: { $in: [platformAdminId, ownerAId, customerId] } }),
   ]);
   await closeTestConnections();
@@ -535,6 +541,29 @@ describe("GET /platform/config (Phase 28) — read-only diagnostics, never secre
       expect(typeof notificationQueueHealth.failed).toBe("number");
       expect(typeof notificationQueueHealth.completed).toBe("number");
     }
+  });
+
+  it("(Phase 50) includes a count of deliveries stuck in 'failed' — the production monitoring hook docs/delivery-integrations.md named as missing", async () => {
+    const before = await request(app).get("/api/v1/platform/config").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(typeof before.body.data.failedDeliveryCount).toBe("number");
+    const baseline = before.body.data.failedDeliveryCount as number;
+
+    const order = await createTestOrder(restaurantA._id, new mongoose.Types.ObjectId(customerId), { orderType: "delivery" });
+    const delivery = await Delivery.create({
+      restaurantId: restaurantA._id,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      provider: "manual",
+      status: "failed",
+      failureReason: "test fixture",
+      idempotencyKey: `delivery_create_${order.id}`,
+    });
+
+    const after = await request(app).get("/api/v1/platform/config").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(after.body.data.failedDeliveryCount).toBe(baseline + 1);
+
+    await Delivery.deleteOne({ _id: delivery._id });
+    await Order.deleteOne({ _id: order._id });
   });
 });
 

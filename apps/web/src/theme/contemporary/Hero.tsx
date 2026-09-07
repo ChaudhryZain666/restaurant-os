@@ -1,5 +1,5 @@
 import { Reveal, cn } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { usePreviewMode } from "../PreviewContext";
 import { ArrowRightIcon } from "../icons";
@@ -21,7 +21,7 @@ export function ContemporaryHero({ restaurant, availability, orderingOpen, direc
         <Reveal variant="fade" className="flex items-center gap-3">
           <span className={`h-2 w-2 shrink-0 ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
           <span className="text-xs font-bold uppercase tracking-[0.28em] text-foreground/60">
-            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : "Closed right now"}
+            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : describeAvailability(availability, restaurant?.settings.timezone)}
           </span>
         </Reveal>
 

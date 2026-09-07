@@ -86,9 +86,24 @@ export async function applyOrderStatusTransition(params: {
   // still never thrown back up to this job anyway (it lands the Delivery in a retryable "failed"
   // state instead).
   if (nextStatus === "ready" && order.orderType === "delivery") {
-    notificationQueue.add("delivery.dispatch_create", { orderId: order.id, restaurantId }).catch((err: unknown) => {
-      logger.error("failed to enqueue delivery dispatch job", { orderId: order.id, restaurantId, error: (err as Error).message });
-    });
+    // Phase 50 — a few retries with backoff, unlike every other job on this queue (which default to
+    // BullMQ's own 1-attempt/no-retry). Safe specifically here because createDeliveryForOrder is
+    // fully idempotent (Delivery's unique orderId/idempotencyKey indexes — see
+    // deliveryDispatch.service.ts) and never throws for an ordinary provider-side failure (that
+    // lands the Delivery in a retryable "failed" state instead, with its own staff-facing "Retry"
+    // action). This only covers the narrower case a retry actually helps: a transient infra error
+    // (e.g. a dropped DB connection) before any Delivery document exists yet at all — today that
+    // would silently strand a "ready" order with no Delivery record and no UI action to recover it,
+    // since "Retry" only appears once a Delivery already exists to retry.
+    notificationQueue
+      .add(
+        "delivery.dispatch_create",
+        { orderId: order.id, restaurantId },
+        { attempts: 3, backoff: { type: "exponential", delay: 5000 } }
+      )
+      .catch((err: unknown) => {
+        logger.error("failed to enqueue delivery dispatch job", { orderId: order.id, restaurantId, error: (err as Error).message });
+      });
   }
 
   return { order, previousStatus };

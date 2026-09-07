@@ -529,3 +529,27 @@ describe("POS delivery orders (Phase 47)", () => {
     expect(nearOwnLocation.body.data.order.deliveryFee).toBe(777);
   });
 });
+
+describe("business hours enforcement — POS is NOT exempt (Phase 51)", () => {
+  const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+  const ALL_CLOSED = WEEKDAY_NAMES.map((day) => ({ day, isClosed: true }));
+
+  it("rejects a POS order when the location is outside its configured business hours, even though staff/POS is otherwise fully enabled", async () => {
+    // restaurantA has no businessHours configured by default (empty array = unrestricted) — this
+    // test deliberately configures it closed, places the order, then restores the original
+    // unrestricted state so no other test in this file is affected.
+    await Restaurant.findByIdAndUpdate(restaurantA._id, { "settings.businessHours": ALL_CLOSED });
+    try {
+      const res = await posOrder(staffAToken, restaurantA.id, {
+        customer: { name: "Late Walk-in" },
+        items: [{ menuItemId: itemA.id, quantity: 1, selectedModifiers: [] }],
+        orderType: "pickup",
+        paymentMethod: "cash",
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error.details?.status).toBe("closed");
+    } finally {
+      await Restaurant.findByIdAndUpdate(restaurantA._id, { "settings.businessHours": [] });
+    }
+  });
+});

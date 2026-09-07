@@ -9,6 +9,7 @@ import type { PlatformRestaurantSummary, PlatformUserSummary } from "@restaurant
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
 import { Order } from "../models/Order.js";
+import { Delivery } from "../models/Delivery.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { DomainMapping } from "../models/DomainMapping.js";
@@ -501,6 +502,18 @@ export async function getPlatformConfig(_req: Request, res: Response) {
     logger.warn("[platform.config] could not read notification queue job counts", { error: (err as Error).message });
   }
 
+  // Phase 50 — docs/delivery-integrations.md's own "Production requirements" section named this
+  // exact gap: a Delivery stuck in "failed" was previously visible only via the admin/POS status
+  // panel or structured logs, discoverable only by a staff member happening to open that one order.
+  // Reuses this same existing platform_admin diagnostics endpoint (no new monitoring system) — a
+  // simple count, never delivery/order/customer detail this endpoint has no business exposing.
+  let failedDeliveryCount: number | null = null;
+  try {
+    failedDeliveryCount = await Delivery.countDocuments({ status: "failed" });
+  } catch (err) {
+    logger.warn("[platform.config] could not read failed delivery count", { error: (err as Error).message });
+  }
+
   sendSuccess(res, {
     config: {
       environment: env.NODE_ENV,
@@ -515,6 +528,7 @@ export async function getPlatformConfig(_req: Request, res: Response) {
       pastDueGracePeriodDays: env.PAST_DUE_GRACE_PERIOD_DAYS,
     },
     notificationQueueHealth: queueHealth,
+    failedDeliveryCount,
   });
 }
 

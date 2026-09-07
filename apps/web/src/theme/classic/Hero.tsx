@@ -1,5 +1,5 @@
 import { Button } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 
 /** Classic — a single rounded banner card: cover image (or a warm gradient fallback) behind the
@@ -46,7 +46,7 @@ export function ClassicHero({ restaurant, availability, orderingOpen, directions
             } ${restaurant?.coverImage ? "backdrop-blur" : ""}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${orderingOpen ? "bg-success" : "bg-warning"}`} aria-hidden />
-            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : "Closed right now"}
+            {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : describeAvailability(availability, restaurant?.settings.timezone)}
           </span>
           {restaurant?.settings.pickupEnabled && (
             <span className={`rounded-pill px-3 py-1 text-xs font-medium ${restaurant?.coverImage ? "bg-white/15 text-white backdrop-blur" : "bg-black/[0.06] text-foreground"}`}>

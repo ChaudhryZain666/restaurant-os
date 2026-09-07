@@ -1,3 +1,4 @@
+import { getLocalWeekday } from "@restaurant/utils";
 import type { FooterProps } from "../types";
 import { PinIcon } from "../icons";
 
@@ -11,13 +12,16 @@ const WEEKDAY_LABELS: Record<string, string> = {
   sunday: "Sunday",
 };
 const WEEKDAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const TODAY_KEY = WEEKDAY_ORDER[(new Date().getDay() + 6) % 7];
 
 /** Luxury — a quiet, structured close: identity in its own column beside contact details and the
  *  full week's hours (today set apart in the foreground color, the rest muted) — real hierarchy
  *  via aligned columns, never a single centered sentence. Stays in the page's own light, hairline
  *  register rather than switching to a dark band. */
 export function LuxuryFooter({ restaurant, hideBranding }: FooterProps) {
+  // Phase 51 — the RESTAURANT's own local day, not the viewer's browser day. getLocalWeekday
+  // already returns the day's NAME ("monday", "tuesday", ...), so no WEEKDAY_ORDER index shift is
+  // needed here even though this theme's own hours list displays Monday-first.
+  const TODAY_KEY = getLocalWeekday(restaurant?.settings.timezone);
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 

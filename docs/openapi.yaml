@@ -206,15 +206,25 @@ components:
     RestaurantAvailability:
       type: object
       description: >
-        Computed from settings.orderingEnabled / settings.temporarilyPaused. Does not factor in
-        businessHours — that stays informational/display-only in Phase 2.
+        Computed from settings.orderingEnabled / settings.temporarilyPaused / settings.businessHours
+        (evaluated in the restaurant's own settings.timezone — Phase 51). Precedence:
+        orderingEnabled:false always wins (closed) > temporarilyPaused always wins (paused) >
+        outside configured hours (closed) > open. An empty/unconfigured businessHours array means
+        no hours-based restriction, not "always closed".
       properties:
         status:
           type: string
           enum: [open, closed, paused]
         reason:
           type: string
-          description: Present when status is "paused" and the restaurant supplied a reason.
+          description: Present when status is "paused" (a supplied pausedReason), or "closed" specifically due to hours ("Outside business hours").
+        nextOpenAt:
+          type: string
+          format: date-time
+          description: >
+            ISO UTC instant of the next time this restaurant will be within its configured business
+            hours. Only ever set when status is "closed" specifically because of hours (never for
+            orderingEnabled:false or temporarilyPaused).
     SupportIdentity:
       type: object
       description: >

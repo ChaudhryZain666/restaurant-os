@@ -1,4 +1,5 @@
 import { Button, cn } from "@restaurant/ui";
+import { describeAvailability } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { usePreviewMode } from "../PreviewContext";
 
@@ -28,7 +29,7 @@ export function EditorialHero({ restaurant, availability, orderingOpen, directio
       <p
         className={`animate-fade-up text-xs uppercase tracking-[0.3em] ${restaurant?.coverImage ? "text-white/80" : "text-secondary-foreground/70"}`}
       >
-        {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : "Closed right now"}
+        {orderingOpen ? "Open for orders" : availability?.status === "paused" ? availability.reason || "Temporarily paused" : describeAvailability(availability, restaurant?.settings.timezone)}
       </p>
       <h1
         className={`animate-fade-up mt-3 max-w-3xl font-heading text-5xl italic leading-[1.05] sm:text-7xl ${restaurant?.coverImage ? "text-white" : "text-secondary-foreground"}`}

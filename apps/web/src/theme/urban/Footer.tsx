@@ -1,3 +1,4 @@
+import { getLocalWeekday } from "@restaurant/utils";
 import type { FooterProps } from "../types";
 import { PinIcon } from "../icons";
 
@@ -10,13 +11,14 @@ const WEEKDAY_LABELS: Record<string, string> = {
   saturday: "Sat",
   sunday: "Sun",
 };
-const TODAY_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
 
 /** Urban — a dark structured block closing the page, opened by the same thick primary rule the
  *  header uses (bookending the page in the theme's own graphic language). Three columns
  *  (identity, contact, hours) separated by real content, never a single centered sentence; today's
  *  hours are picked out with a solid color chip rather than just bolder text. */
 export function UrbanFooter({ restaurant, hideBranding }: FooterProps) {
+  // Phase 51 — the RESTAURANT's own local day, not the viewer's browser day.
+  const TODAY_KEY = getLocalWeekday(restaurant?.settings.timezone);
   const today = restaurant?.settings.businessHours.find((d) => d.day === TODAY_KEY);
   const address = [restaurant?.address, restaurant?.city, restaurant?.state].filter(Boolean).join(", ");
 

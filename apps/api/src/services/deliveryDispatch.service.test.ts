@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import mongoose from "mongoose";
+import type { OrderEventPayload } from "../events/orderEvents.js";
+import { orderEventBus } from "../events/orderEvents.js";
 import { connectDB } from "../config/db.js";
 import { Delivery } from "../models/Delivery.js";
 import { Order } from "../models/Order.js";
@@ -9,9 +11,28 @@ import {
   cancelDelivery,
   createDeliveryForOrder,
   retryDeliveryCreation,
+  toCustomerFacingDelivery,
   updateDeliveryStatus,
 } from "./deliveryDispatch.service.js";
 import { closeTestConnections, createTestOrder, createTestRestaurant, createTestUser } from "../test-utils/fixtures.js";
+
+/** Subscribes to the real orderEventBus (the same one deliveryDispatch.service.ts's
+ *  emitDeliveryStatusUpdatedEvent emits on) for exactly one event, resolving with its payload —
+ *  or `null` if nothing fires within a short window, which is itself a meaningful assertion. */
+function captureNextEvent(type: string, timeoutMs = 500): Promise<OrderEventPayload | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      orderEventBus.off(type, handler);
+      resolve(null);
+    }, timeoutMs);
+    function handler(payload: OrderEventPayload) {
+      clearTimeout(timer);
+      orderEventBus.off(type, handler);
+      resolve(payload);
+    }
+    orderEventBus.on(type, handler);
+  });
+}
 
 const restaurantIds: string[] = [];
 const userIds: string[] = [];
@@ -278,5 +299,104 @@ describe("multi-tenant isolation", () => {
 
     const found = await Delivery.findOne({ _id: delivery._id, restaurantId: restaurantB._id });
     expect(found).toBeNull();
+  });
+});
+
+describe("order.delivery_status_updated — real-time customer/admin event (Phase 50)", () => {
+  it("fires for a delivery-only status change that never touches Order.status (accepted -> driver_assigned)", async () => {
+    const restaurant = await deliveryReadyRestaurant();
+    const customer = await createTestUser("customer");
+    userIds.push(customer.id as string);
+    const order = await deliveryOrder(restaurant._id, customer._id);
+    const delivery = await createDeliveryForOrder(order.id as string, restaurant.id as string);
+
+    const eventPromise = captureNextEvent("order.delivery_status_updated");
+    await updateDeliveryStatus(delivery.id as string, restaurant.id as string, { nextStatus: "driver_assigned" });
+    const event = await eventPromise;
+
+    expect(event).not.toBeNull();
+    expect(event!.orderId).toBe(order.id);
+    expect(event!.restaurantId).toBe(restaurant.id);
+    expect(event!.customerId).toBe(customer.id);
+    expect(event!.status).toBe("ready"); // Order.status itself is untouched by this milestone
+    expect(event!.deliveryStatus).toBe("driver_assigned");
+  });
+
+  it("fires with the ALREADY-mirrored Order status when a milestone also advances the order (picked_up -> out_for_delivery)", async () => {
+    const restaurant = await deliveryReadyRestaurant();
+    const customer = await createTestUser("customer");
+    userIds.push(customer.id as string);
+    const order = await deliveryOrder(restaurant._id, customer._id);
+    const delivery = await createDeliveryForOrder(order.id as string, restaurant.id as string);
+
+    const eventPromise = captureNextEvent("order.delivery_status_updated");
+    await updateDeliveryStatus(delivery.id as string, restaurant.id as string, { nextStatus: "picked_up" });
+    const event = await eventPromise;
+
+    expect(event).not.toBeNull();
+    expect(event!.status).toBe("out_for_delivery"); // reflects the mirror that just happened
+    expect(event!.deliveryStatus).toBe("picked_up");
+  });
+
+  it("does NOT fire for a rejected/no-op transition (stale or out-of-order webhook)", async () => {
+    const restaurant = await deliveryReadyRestaurant();
+    const customer = await createTestUser("customer");
+    userIds.push(customer.id as string);
+    const order = await deliveryOrder(restaurant._id, customer._id);
+    const delivery = await createDeliveryForOrder(order.id as string, restaurant.id as string);
+    await updateDeliveryStatus(delivery.id as string, restaurant.id as string, { nextStatus: "out_for_delivery" });
+
+    const eventPromise = captureNextEvent("order.delivery_status_updated", 300);
+    // A delayed webhook reporting an earlier milestone — rejected by DELIVERY_TRANSITIONS, a no-op.
+    await updateDeliveryStatus(delivery.id as string, restaurant.id as string, { nextStatus: "driver_assigned" });
+    const event = await eventPromise;
+
+    expect(event).toBeNull();
+  });
+
+  it("fires when only courier info changes with no status change (e.g. courier assigned after the fact)", async () => {
+    const restaurant = await deliveryReadyRestaurant();
+    const customer = await createTestUser("customer");
+    userIds.push(customer.id as string);
+    const order = await deliveryOrder(restaurant._id, customer._id);
+    const delivery = await createDeliveryForOrder(order.id as string, restaurant.id as string);
+
+    const eventPromise = captureNextEvent("order.delivery_status_updated");
+    await updateDeliveryStatus(delivery.id as string, restaurant.id as string, {
+      nextStatus: "accepted", // same as current status — no transition, just new courier info
+      courierName: "Ali",
+      courierPhone: "+920000000002",
+    });
+    const event = await eventPromise;
+
+    expect(event).not.toBeNull();
+    expect(event!.deliveryStatus).toBe("accepted");
+  });
+});
+
+describe("toCustomerFacingDelivery (Phase 50) — the safe subset a customer may see", () => {
+  it("never leaks staff-only/provider-internal fields, and only exposes cancelReason once actually cancelled", async () => {
+    const restaurant = await deliveryReadyRestaurant();
+    const customer = await createTestUser("customer");
+    userIds.push(customer.id as string);
+    const order = await deliveryOrder(restaurant._id, customer._id);
+    const delivery = await createDeliveryForOrder(order.id as string, restaurant.id as string);
+    delivery.cancelReason = "restaurant ran out of an item"; // set directly — not yet cancelled
+
+    const view = toCustomerFacingDelivery(delivery);
+
+    expect(view).not.toHaveProperty("providerDeliveryId");
+    expect(view).not.toHaveProperty("fee");
+    expect(view).not.toHaveProperty("currency");
+    expect(view).not.toHaveProperty("quoteId");
+    expect(view).not.toHaveProperty("failureReason");
+    expect(view).not.toHaveProperty("lastProviderError");
+    expect(view).not.toHaveProperty("statusHistory");
+    expect(view).not.toHaveProperty("idempotencyKey");
+    expect(view).not.toHaveProperty("provider");
+    expect(view.cancelReason).toBeUndefined(); // status is "accepted", not "cancelled" — withheld
+
+    delivery.status = "cancelled";
+    expect(toCustomerFacingDelivery(delivery).cancelReason).toBe("restaurant ran out of an item");
   });
 });

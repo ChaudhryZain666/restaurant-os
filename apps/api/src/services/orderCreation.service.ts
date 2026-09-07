@@ -87,12 +87,24 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
   const { settings } = restaurant;
+  // Phase 51 — computeAvailability now also evaluates settings.businessHours in settings.timezone
+  // (the restaurant/location's own IANA zone), not just orderingEnabled/temporarilyPaused. This is
+  // the ONE server-authoritative gate every order-creation path shares (online checkout, POS,
+  // delivery, pickup, dine-in) — a closed/paused restaurant cannot be ordered from through any of
+  // them, including a direct API call that bypasses the storefront/POS UI entirely.
   const availability = computeAvailability(settings);
   if (availability.status === "closed") {
-    throw ApiError.badRequest("This restaurant is not accepting orders right now");
+    throw ApiError.badRequest(availability.reason || "This restaurant is not accepting orders right now", {
+      status: "closed",
+      reason: availability.reason,
+      nextOpenAt: availability.nextOpenAt,
+    });
   }
   if (availability.status === "paused") {
-    throw ApiError.badRequest(availability.reason || "This restaurant has temporarily paused ordering");
+    throw ApiError.badRequest(availability.reason || "This restaurant has temporarily paused ordering", {
+      status: "paused",
+      reason: availability.reason,
+    });
   }
   if (orderType === "pickup" && !settings.pickupEnabled) throw ApiError.badRequest("Pickup is not available");
   if (orderType === "dine_in" && !settings.dineInEnabled) throw ApiError.badRequest("Dine-in ordering is not available");

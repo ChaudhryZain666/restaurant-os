@@ -1,5 +1,5 @@
 import { Reveal } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import type { HeroProps } from "../types";
 import { ArrowRightIcon } from "../icons";
 
@@ -15,7 +15,7 @@ export function MinimalHero({ restaurant, availability, orderingOpen, directions
     ? "Open for orders"
     : availability?.status === "paused"
       ? availability.reason || "Temporarily paused"
-      : "Closed right now";
+      : describeAvailability(availability, restaurant?.settings.timezone);
 
   const metaBits = [restaurant?.settings.pickupEnabled && "Pickup", restaurant?.settings.deliveryEnabled && "Delivery"]
     .filter(Boolean)

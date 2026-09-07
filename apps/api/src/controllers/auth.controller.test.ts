@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { User } from "../models/User.js";
+import bcrypt from "bcryptjs";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { issueRefreshToken, isRefreshTokenActive, verifyRefreshToken } from "../services/token.service.js";
 import { closeTestConnections, createTestUser, tokenFor } from "../test-utils/fixtures.js";
@@ -24,6 +25,29 @@ function track(id: string) {
   userIds.push(id);
   return id;
 }
+
+describe("POST /auth/register — concurrent-duplicate-email race (Phase 49)", () => {
+  it("returns a clean 409, not an unhandled 500, when User.create() loses a race to an already-committed duplicate email", async () => {
+    const email = `race-register-${Date.now()}@test.local`;
+    // Simulates the race window directly and deterministically (rather than relying on real
+    // concurrent timing, which would be flaky): a second request's own findOne pre-check ran
+    // before this row committed, so it sees `null` here even though the row now exists — the
+    // exact condition register()'s try/catch around User.create() exists to catch.
+    const winner = await User.create({ name: "Race Winner", email, passwordHash: await bcrypt.hash("Password123!", 12) });
+    track(winner.id);
+
+    const findOneSpy = jest.spyOn(User, "findOne").mockResolvedValueOnce(null);
+    try {
+      const res = await request(app)
+        .post("/api/v1/auth/register")
+        .send({ name: "Race Loser", email, password: "Password123!" });
+      expect(res.status).toBe(409);
+      expect(res.body.error.message).toMatch(/already exists/i);
+    } finally {
+      findOneSpy.mockRestore();
+    }
+  });
+});
 
 describe("POST /auth/request-password-reset — no user enumeration", () => {
   it("returns the identical response for an existing and a non-existent email", async () => {
