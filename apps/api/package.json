@@ -15,7 +15,11 @@
     "migrate:menu-canonical": "tsx src/scripts/migrateMenuToCanonical.ts",
     "migrate:backfill-subscriptions": "tsx src/scripts/backfillSubscriptions.ts",
     "migrate:backfill-location-counts": "tsx src/scripts/backfillLocationCounts.ts",
+    "db:ensure-indexes": "tsx src/scripts/ensureIndexes.ts",
+    "db:check-duplicates": "tsx src/scripts/checkDuplicateRisk.ts",
     "cleanup:demo-data": "tsx src/scripts/cleanupDemoData.ts",
+    "cleanup:test-plans": "tsx src/scripts/cleanupOrphanedTestPlans.ts",
+    "cleanup:e2e-orders": "tsx src/scripts/cleanupE2eOrders.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

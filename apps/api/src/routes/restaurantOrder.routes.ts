@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createOrderSchema,
+  listRestaurantOrdersQuerySchema,
   updateOrderNoteSchema,
   updateOrderPaymentStatusSchema,
   updateOrderStatusSchema,
@@ -8,7 +9,7 @@ import {
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenantMatch, requireTenantPermission as requirePermission } from "../middleware/tenant.js";
-import { validateBody } from "../middleware/validate.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
 import {
   createOrder,
   listRestaurantOrders,
@@ -26,6 +27,7 @@ restaurantOrderRouter.get(
   requireAuth,
   requireTenantMatch(),
   requirePermission("restaurant.orders.read"),
+  validateQuery(listRestaurantOrdersQuerySchema),
   asyncHandler(listRestaurantOrders)
 );
 restaurantOrderRouter.patch(

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "@jest/globals";
 import request from "supertest";
+import mongoose from "mongoose";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Category } from "../models/Category.js";
@@ -8,6 +9,7 @@ import { MenuItemLocationOverride } from "../models/MenuItemLocationOverride.js"
 import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
+import { Delivery } from "../models/Delivery.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { Business } from "../models/Business.js";
 import { Table } from "../models/Table.js";
@@ -82,6 +84,7 @@ afterAll(async () => {
   await Promise.all([
     Order.deleteMany({ restaurantId: { $in: ids } }),
     Payment.deleteMany({ restaurantId: { $in: ids } }),
+    Delivery.deleteMany({ restaurantId: { $in: ids } }),
     Table.deleteMany({ restaurantId: { $in: ids } }),
     ModifierGroup.deleteMany({ restaurantId: { $in: ids } }),
     MenuItem.deleteMany({ restaurantId: { $in: ids } }),
@@ -1003,6 +1006,173 @@ describe("staff order views include customer contact info", () => {
   });
 });
 
+describe("getOrder attaches a safe customer-facing delivery view (Phase 50)", () => {
+  it("shows status/courier/tracking info to the customer, but never staff-only/provider-internal fields", async () => {
+    const order = await createTestOrder(restaurantA._id, new mongoose.Types.ObjectId(customerId), {
+      orderType: "delivery",
+      deliveryAddress: { line1: "1 Test Ave", city: "Karachi", latitude: 24.9, longitude: 67.05 },
+    });
+    await Delivery.create({
+      restaurantId: restaurantA._id,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      provider: "uber_direct",
+      status: "driver_assigned",
+      courierName: "Ali",
+      courierPhone: "+920000000002",
+      trackingUrl: "https://track.uber.com/del_1",
+      fee: 400,
+      currency: "PKR",
+      providerDeliveryId: "del_1",
+      lastProviderError: "a prior attempt timed out",
+      idempotencyKey: `delivery_create_${order.id}`,
+    });
+
+    const res = await request(app).get(`/api/v1/orders/${order.id}`).set("Authorization", `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.order.delivery).toEqual({
+      status: "driver_assigned",
+      courierName: "Ali",
+      courierPhone: "+920000000002",
+      trackingUrl: "https://track.uber.com/del_1",
+    });
+    expect(res.body.data.order.delivery).not.toHaveProperty("fee");
+    expect(res.body.data.order.delivery).not.toHaveProperty("currency");
+    expect(res.body.data.order.delivery).not.toHaveProperty("providerDeliveryId");
+    expect(res.body.data.order.delivery).not.toHaveProperty("provider");
+    expect(res.body.data.order.delivery).not.toHaveProperty("lastProviderError");
+    expect(res.body.data.order.delivery).not.toHaveProperty("failureReason");
+    expect(res.body.data.order.delivery).not.toHaveProperty("statusHistory");
+    expect(res.body.data.order.delivery).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("omits the delivery field entirely for a pickup order", async () => {
+    const order = await createTestOrder(restaurantA._id, new mongoose.Types.ObjectId(customerId), { orderType: "pickup" });
+    const res = await request(app).get(`/api/v1/orders/${order.id}`).set("Authorization", `Bearer ${customerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.order.delivery).toBeUndefined();
+  });
+
+  it("omits the delivery field for a delivery order that has no dispatch record yet", async () => {
+    const order = await createTestOrder(restaurantA._id, new mongoose.Types.ObjectId(customerId), {
+      orderType: "delivery",
+      deliveryAddress: { line1: "1 Test Ave", city: "Karachi", latitude: 24.9, longitude: 67.05 },
+    });
+    const res = await request(app).get(`/api/v1/orders/${order.id}`).set("Authorization", `Bearer ${customerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.order.delivery).toBeUndefined();
+  });
+});
+
+describe("business hours enforcement (Phase 51) — server-authoritative, applies to every order type", () => {
+  let hoursRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let hoursCategory: Awaited<ReturnType<typeof createTestCategory>>;
+  let hoursItem: Awaited<ReturnType<typeof createTestMenuItem>>;
+  let hoursTable: Awaited<ReturnType<typeof createTestTable>>;
+
+  const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+  const ALL_CLOSED = WEEKDAY_NAMES.map((day) => ({ day, isClosed: true }));
+  // A deterministic "always open" fixture regardless of the REAL current time these tests happen
+  // to run at — an overnight-style period (close <= open) with open === close covers every minute
+  // of every day (see businessHours.service.ts's isWithinTodaysPeriod), so these tests never need
+  // to depend on or fake the current instant.
+  const ALL_OPEN = WEEKDAY_NAMES.map((day) => ({ day, isClosed: false, open: "00:00", close: "00:00" }));
+
+  beforeAll(async () => {
+    hoursRestaurant = await createTestRestaurant({
+      settings: {
+        orderingEnabled: true,
+        pickupEnabled: true,
+        deliveryEnabled: true,
+        dineInEnabled: true,
+        cashEnabled: true,
+        onlinePaymentEnabled: true,
+        minOrderAmount: 0,
+        taxRate: 0,
+        deliveryFee: 5,
+        deliveryRadiusKm: 10,
+        timezone: "UTC",
+        businessHours: ALL_CLOSED,
+      },
+      latitude: 24.8607,
+      longitude: 67.0011,
+      address: "1 Test Street",
+      city: "Karachi",
+    });
+    hoursCategory = await createTestCategory(hoursRestaurant._id);
+    hoursItem = await createTestMenuItem(hoursRestaurant._id, hoursCategory._id, { price: 10 });
+    hoursTable = await createTestTable(hoursRestaurant._id);
+  });
+
+  afterAll(async () => {
+    await Promise.all([
+      MenuItem.deleteOne({ _id: hoursItem._id }),
+      Category.deleteOne({ _id: hoursCategory._id }),
+      Table.deleteOne({ _id: hoursTable._id }),
+      Restaurant.deleteOne({ _id: hoursRestaurant._id }),
+    ]);
+  });
+
+  it("rejects a pickup order outside configured hours — a direct API call cannot bypass this", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${hoursRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: hoursItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details?.status).toBe("closed");
+  });
+
+  it("rejects a delivery order outside configured hours, even to a genuinely deliverable address", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${hoursRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "delivery",
+        items: [{ menuItemId: hoursItem.id, quantity: 1, selectedModifiers: [] }],
+        deliveryAddress: { line1: "42 Customer Lane", city: "Karachi", latitude: 24.87, longitude: 67.02 },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details?.status).toBe("closed");
+  });
+
+  it("rejects a dine-in order outside configured hours", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${hoursRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "dine_in",
+        items: [{ menuItemId: hoursItem.id, quantity: 1, selectedModifiers: [] }],
+        tableToken: hoursTable.qrToken,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details?.status).toBe("closed");
+  });
+
+  it("allows ordering again once businessHours is updated to cover the current moment (re-evaluated fresh, never cached)", async () => {
+    await Restaurant.findByIdAndUpdate(hoursRestaurant._id, { "settings.businessHours": ALL_OPEN });
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${hoursRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ orderType: "pickup", items: [{ menuItemId: hoursItem.id, quantity: 1, selectedModifiers: [] }] });
+    expect(res.status).toBe(201);
+  });
+
+  it("a restaurant's own configured hours never affect a DIFFERENT restaurant's ability to accept orders (multi-location isolation)", async () => {
+    // restaurantA (this file's own top-level fixture) has an empty businessHours array (no hours
+    // configured at all -> unrestricted) and is completely unaffected by hoursRestaurant's own
+    // closed/open state above.
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/orders`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        orderType: "pickup",
+        items: [{ menuItemId: menuItemA.id, quantity: 1, selectedModifiers: [{ groupId: sizeGroup.id, optionId: sizeGroup.options[0]._id.toString() }] }],
+      });
+    expect(res.status).toBe(201);
+  });
+});
+
 describe("order status history (Phase 3 tracking foundation)", () => {
   it("records a statusHistory entry on creation and on every subsequent status change", async () => {
     const createRes = await request(app)
@@ -1219,6 +1389,188 @@ describe("GET /orders/mine — pagination", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(1);
     expect(res.body.data.items[0].orderNumber).toBe("ORD-PAGE-OTHER");
+  });
+});
+
+describe("GET /restaurants/:restaurantId/orders — pagination (Phase 55)", () => {
+  let pagingRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let pagingOwner: Awaited<ReturnType<typeof createTestUser>>;
+  let otherRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let otherOwner: Awaited<ReturnType<typeof createTestUser>>;
+  let pagingOwnerToken: string;
+  let otherOwnerToken: string;
+  let pagingCustomer: Awaited<ReturnType<typeof createTestUser>>;
+  const TOTAL_ORDERS = 25;
+
+  beforeAll(async () => {
+    pagingRestaurant = await createTestRestaurant();
+    pagingOwner = await createTestUser("restaurant_owner", pagingRestaurant._id);
+    otherRestaurant = await createTestRestaurant();
+    otherOwner = await createTestUser("restaurant_owner", otherRestaurant._id);
+    pagingOwnerToken = tokenFor(pagingOwner);
+    otherOwnerToken = tokenFor(otherOwner);
+    pagingCustomer = await createTestUser("customer");
+    const customerId = pagingCustomer._id;
+
+    // Staggered createdAt so newest-first ordering is unambiguous; 5 of the 25 are "paid" so the
+    // server-side paymentStatus filter (Phase 55 — previously only ever filtered whatever the
+    // single unbounded fetch happened to already contain client-side) has something real to prove.
+    await Promise.all(
+      Array.from({ length: TOTAL_ORDERS }, (_, i) =>
+        createTestOrder(pagingRestaurant._id, customerId, {
+          orderNumber: `ORD-RPAGE-${i}`,
+          createdAt: new Date(Date.now() - i * 1000),
+          paymentStatus: i < 5 ? "paid" : "unpaid",
+        })
+      )
+    );
+    await createTestOrder(otherRestaurant._id, customerId, { orderNumber: "ORD-RPAGE-OTHER" });
+  }, 20_000);
+
+  afterAll(async () => {
+    await Order.deleteMany({ restaurantId: { $in: [pagingRestaurant._id, otherRestaurant._id] } });
+    await Restaurant.deleteMany({ _id: { $in: [pagingRestaurant._id, otherRestaurant._id] } });
+    await User.deleteMany({ _id: { $in: [pagingOwner._id, otherOwner._id, pagingCustomer._id] } });
+  });
+
+  it("defaults to page 1 with a limit of 200 (unchanged from the pre-pagination hard cap) when no page/limit is given — KDS/POS callers see no change", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pagingRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${pagingOwnerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.page).toBe(1);
+    expect(res.body.data.limit).toBe(200);
+    expect(res.body.data.total).toBe(TOTAL_ORDERS);
+    expect(res.body.data.hasNextPage).toBe(false);
+    expect(res.body.data.orders).toHaveLength(TOTAL_ORDERS);
+    // Newest first, and customerName is still attached (existing contract, untouched).
+    expect(res.body.data.orders[0].orderNumber).toBe("ORD-RPAGE-0");
+    expect(res.body.data.orders[0].customerName).toEqual(expect.any(String));
+  });
+
+  it("respects an explicit smaller limit and reports hasNextPage correctly", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pagingRestaurant.id}/orders?page=1&limit=10`)
+      .set("Authorization", `Bearer ${pagingOwnerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.orders).toHaveLength(10);
+    expect(res.body.data.hasNextPage).toBe(true);
+    expect(res.body.data.orders[0].orderNumber).toBe("ORD-RPAGE-0");
+  });
+
+  it("returns the remainder on the next page", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pagingRestaurant.id}/orders?page=2&limit=20`)
+      .set("Authorization", `Bearer ${pagingOwnerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.orders).toHaveLength(TOTAL_ORDERS - 20);
+    expect(res.body.data.hasNextPage).toBe(false);
+  });
+
+  it("filters by paymentStatus server-side, against the full history, not just one page", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pagingRestaurant.id}/orders?paymentStatus=paid&limit=2`)
+      .set("Authorization", `Bearer ${pagingOwnerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(5);
+    expect(res.body.data.orders).toHaveLength(2);
+    expect(res.body.data.hasNextPage).toBe(true);
+    for (const order of res.body.data.orders) {
+      expect(order.paymentStatus).toBe("paid");
+    }
+  });
+
+  it("rejects a limit above 200", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${pagingRestaurant.id}/orders?limit=500`)
+      .set("Authorization", `Bearer ${pagingOwnerToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("a different restaurant's paginated view never includes this restaurant's orders", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${otherRestaurant.id}/orders`)
+      .set("Authorization", `Bearer ${otherOwnerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(1);
+    expect(res.body.data.orders[0].orderNumber).toBe("ORD-RPAGE-OTHER");
+  });
+});
+
+/**
+ * Phase 55 — concrete volume evidence, not just "tests pass." Reproduces, at a controlled and
+ * fully self-cleaning scale, the exact condition that caused a real e2e timeout in production use:
+ * a restaurant with several hundred accumulated orders. Seeds via `insertMany` (not 500 sequential
+ * `Order.create()` calls) purely so the TEST SETUP itself stays fast — the thing actually being
+ * measured is the paginated read against the real indexes (`restaurantId_1_status_1_createdAt_-1`,
+ * `restaurantId_1_createdAt_-1` — both already existed, see Phase 49; no new index was added).
+ * A dedicated, disposable restaurant — never demo-restaurant — deleted in afterAll, so this leaves
+ * nothing behind (see docs/development-setup.md's test-data-isolation guidance).
+ */
+describe("order list query performance at realistic volume (Phase 55)", () => {
+  let volumeRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let volumeOwner: Awaited<ReturnType<typeof createTestUser>>;
+  let volumeOwnerToken: string;
+  const VOLUME = 500;
+
+  beforeAll(async () => {
+    volumeRestaurant = await createTestRestaurant();
+    volumeOwner = await createTestUser("restaurant_owner", volumeRestaurant._id);
+    volumeOwnerToken = tokenFor(volumeOwner);
+    const customerId = new mongoose.Types.ObjectId();
+
+    const docs = Array.from({ length: VOLUME }, (_, i) => ({
+      restaurantId: volumeRestaurant._id,
+      customerId,
+      orderNumber: `ORD-VOL-${i}`,
+      items: [{ menuItemId: new mongoose.Types.ObjectId(), name: "Test Item", unitPrice: 10, quantity: 1, lineTotal: 10 }],
+      orderType: "pickup",
+      paymentMethod: "cash",
+      subtotal: 10,
+      total: 10,
+      status: i % 20 === 0 ? "completed" : "pending",
+      statusHistory: [{ status: "pending", at: new Date() }],
+      createdAt: new Date(Date.now() - i * 1000),
+    }));
+    await Order.insertMany(docs);
+  }, 30_000);
+
+  afterAll(async () => {
+    await Order.deleteMany({ restaurantId: volumeRestaurant._id });
+    await Restaurant.deleteOne({ _id: volumeRestaurant._id });
+    await User.deleteMany({ _id: { $in: [volumeOwner._id] } });
+  });
+
+  it(`a paginated request against ${VOLUME} accumulated orders returns quickly and only the requested page size`, async () => {
+    const start = Date.now();
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${volumeRestaurant.id}/orders?page=1&limit=50`)
+      .set("Authorization", `Bearer ${volumeOwnerToken}`);
+    const elapsedMs = Date.now() - start;
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.total).toBe(VOLUME);
+    expect(res.body.data.orders).toHaveLength(50);
+    expect(res.body.data.hasNextPage).toBe(true);
+    // Generous ceiling (not a tight benchmark assertion) — this exists to catch a REGRESSION back
+    // to an unbounded/unindexed scan, not to enforce a specific performance target. The response
+    // for a single 50-row page should never meaningfully depend on there being 500 vs. 25 total
+    // rows once the query is actually using restaurantId_1_status_1_createdAt_-1 /
+    // restaurantId_1_createdAt_-1 — this was comfortably under 100ms in local runs.
+    expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  it("the ?active=true (KDS) view stays correctly bounded to non-terminal statuses at this volume", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${volumeRestaurant.id}/orders?active=true`)
+      .set("Authorization", `Bearer ${volumeOwnerToken}`);
+    expect(res.status).toBe(200);
+    // 1 in 20 seeded as "completed" (not active) — the rest ("pending") are active.
+    const expectedActive = VOLUME - Math.ceil(VOLUME / 20);
+    expect(res.body.data.total).toBe(expectedActive);
+    for (const order of res.body.data.orders) {
+      expect(order.status).not.toBe("completed");
+    }
   });
 });
 

@@ -110,7 +110,10 @@ test.describe("online payment", () => {
       // --- Phase 34: staff issues a real refund through the same OrderPaymentAdmin control
       // rendered inline in this order group — a real POST .../payments/:id/refund, not a database
       // shortcut, driving the same refund pipeline payment.controller.test.ts exercises via
-      // supertest, now also proven through the real UI. ---
+      // supertest, now also proven through the real UI. OrderPaymentAdmin only renders once the
+      // card is expanded (OrdersManagementPage.tsx's OrderCard gates it behind local `expanded`
+      // state, reset on every remount) — the order number itself is the expand/collapse toggle.
+      await orderGroupAfter.getByRole("button", { name: orderNumber }).click();
       await orderGroupAfter.getByRole("button", { name: "Issue refund" }).click();
       await orderGroupAfter.getByRole("button", { name: "Confirm refund" }).click();
       await expect(orderGroupAfter.getByText("Paid · Refunded")).toBeVisible({ timeout: 10_000 });

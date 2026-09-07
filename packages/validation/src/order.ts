@@ -104,3 +104,27 @@ export type UpdateOrderNoteInput = z.infer<typeof updateOrderNoteSchema>;
 // bounded page/limit (Phase 12's shared pagination convention).
 export const listMyOrdersQuerySchema = z.object(paginationQueryShape);
 export type ListMyOrdersQueryInput = z.infer<typeof listMyOrdersQuerySchema>;
+
+// GET /restaurants/:restaurantId/orders — Phase 55: real pagination, added because the endpoint's
+// previous defensive `DEFAULT_LIST_LIMIT` hard-cap (200, no way to page beyond it) meant a
+// restaurant with real accumulated volume always fetched/rendered its entire recent history at
+// once. `limit`'s default is intentionally 200 here (NOT the shared 20-item default other
+// paginated endpoints use) so the two existing unpaginated callers — KitchenPage.tsx's `?active=true`
+// KDS view and POS's OrdersPage.tsx — see byte-for-byte the same response shape and volume as
+// before when they don't pass page/limit themselves. Only OrdersManagementPage.tsx (Phase 55) opts
+// into a smaller page size. `active`/`orderType`/`tableId` already existed as hand-parsed strings;
+// `paymentStatus` is new, added because OrdersManagementPage's Paid/Unpaid filter used to only ever
+// filter whatever the single unbounded fetch happened to contain — moving it server-side means the
+// filter is now correct against the restaurant's ENTIRE order history, not just one page of it.
+export const listRestaurantOrdersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(200).default(200),
+  active: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
+  orderType: z.enum(["pickup", "delivery", "dine_in"]).optional(),
+  paymentStatus: z.enum(["unpaid", "paid"]).optional(),
+  tableId: z.string().min(1).optional(),
+});
+export type ListRestaurantOrdersQueryInput = z.infer<typeof listRestaurantOrdersQuerySchema>;

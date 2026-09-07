@@ -100,6 +100,36 @@ The isolated test database/Redis index are created automatically on first use (M
 create a database/logical DB lazily) — expect the very first test file that touches either after a
 fresh isolation setup to take a few seconds longer than normal; every run after that is fast.
 
+**If your local dev database predates Phase 46** (i.e. it's been running since before this file's
+Jest isolation existed), it may still carry leftover `"Test Plan"` documents — and subscriptions
+pointing at them — created back when Jest had no database of its own. Phase 46 makes this
+structurally impossible going forward; it doesn't retroactively clean up what already landed there.
+Run `npm run --workspace apps/api cleanup:test-plans` once to remove them
+(`apps/api/src/scripts/cleanupOrphanedTestPlans.ts`) — it only ever touches documents named exactly
+`"Test Plan"` (createTestPlan's own, unvarying fixture name — never a real commercial plan's name)
+and is safe to re-run (a no-op once clean).
+
+### Playwright — e2e order backlog (Phase 55)
+
+Unlike Jest, the e2e suite runs against the real, running dev servers and the SAME shared dev
+database — there's no equivalent "point it at its own database" fix available without standing up a
+second full dev-server stack, a materially bigger change than this repo's e2e infrastructure
+currently needs. Instead, every e2e spec already follows two universal, deterministic conventions
+(true by inspection, never used by seed data or a real signup): a spec-created restaurant's slug
+always starts with `e2e-`, and a spec-created user's email always ends in `@test.local`. Repeated
+runs against the shared seeded `demo-restaurant` (reused by specs like `online-payment.spec.ts` that
+need a fully-set-up, orderable restaurant rather than provisioning their own) accumulate real Order
+documents there over time — confirmed as a genuine contributor to a real e2e timeout once volume
+got large enough (Phase 55's Orders-page investigation).
+
+Run `npm run --workspace apps/api cleanup:e2e-orders` periodically (`apps/api/src/scripts/
+cleanupE2eOrders.ts`, logic in `services/e2eOrderCleanup.service.ts`) to remove them. It only ever
+deletes `Order` documents — never a restaurant, business, or user — matching either marker above,
+older than one hour (so a test suite running concurrently can't have its own in-progress order
+pulled out from under it), and refuses to run at all under `NODE_ENV=production`. Safe to re-run.
+Disposable e2e-created restaurants/businesses/users themselves are NOT cleaned up by this script —
+see the script's own comment for why that's deliberately out of scope for now.
+
 A handful of pre-existing tests (`agencyEntitlementInheritance.service.test.ts`) already guard with
 `if (!plan) return` for "the real commercial catalog isn't present in this database" — under full
 isolation that guard now always applies (the isolated database never has `npm run seed`'s catalog

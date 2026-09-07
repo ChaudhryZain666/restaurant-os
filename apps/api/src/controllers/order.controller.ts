@@ -3,6 +3,7 @@ import type { HydratedDocument } from "mongoose";
 import type {
   CreateOrderInput,
   ListMyOrdersQueryInput,
+  ListRestaurantOrdersQueryInput,
   UpdateOrderNoteInput,
   UpdateOrderPaymentStatusInput,
   UpdateOrderStatusInput,
@@ -12,12 +13,14 @@ import { roleHasPermission } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
 import { Order, type OrderDoc } from "../models/Order.js";
 import { User } from "../models/User.js";
+import { Delivery } from "../models/Delivery.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { reverseLoyaltyForOrderIfNeeded } from "../services/loyalty.service.js";
 import { priceOrderItems, type PricedOrderItem } from "../services/orderPricing.service.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
 import { applyOrderStatusTransition } from "../services/orderTransition.service.js";
+import { toCustomerFacingDelivery } from "../services/deliveryDispatch.service.js";
 import { emitOrderEvent, statusToEventType } from "../events/orderEvents.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { resolveTenantAccess } from "../middleware/tenant.js";
@@ -90,35 +93,40 @@ export async function listMyOrders(req: Request, res: Response) {
 }
 
 const ACTIVE_STATUSES = ["pending", "confirmed", "preparing", "ready", "out_for_delivery"] as const;
-const DEFAULT_LIST_LIMIT = 200;
 
 /**
  * ?active=true bounds the query to kitchen/dashboard-relevant statuses — used by the Kitchen
- * Display System and, optionally, the restaurant dashboard's "active" view, so that screen never
- * pulls a restaurant's entire order history. Omitting it preserves the original unbounded
- * behavior the existing dashboard's History section already depends on, capped defensively at
- * DEFAULT_LIST_LIMIT rather than truly unbounded (Phase 6 performance review — see docs).
+ * Display System, so that screen never pulls a restaurant's entire order history.
+ *
+ * Phase 55 — real page/limit pagination (see listRestaurantOrdersQuerySchema's own comment for why
+ * `limit` defaults to 200, not the shared 20-item default: it preserves this endpoint's existing
+ * behavior byte-for-byte for the two callers that don't pass page/limit at all, KitchenPage.tsx and
+ * POS's OrdersPage.tsx). Response stays `{ orders: [...] }` — additive `page`/`limit`/`total`/
+ * `hasNextPage` fields sit alongside it, so those two untouched callers (which only ever
+ * destructure `{ orders }`) see no change. Root cause this fixes: OrdersManagementPage.tsx used to
+ * fetch this same hard-200-cap, non-paginated response on mount AND on every single realtime
+ * order:event, re-rendering up to 200 full order cards each time — confirmed as the actual driver
+ * behind a real, reproducible timeout in online-payment.spec.ts once demo-restaurant accumulated
+ * 200+ e2e-created orders (Phase 55 investigation).
  */
 export async function listRestaurantOrders(req: Request, res: Response) {
   const { restaurantId } = req.params;
-  const { active, orderType, tableId } = req.query as {
-    active?: string;
-    orderType?: string;
-    tableId?: string;
-  };
+  const { active, orderType, tableId, paymentStatus, page, limit } = req.query as unknown as ListRestaurantOrdersQueryInput;
 
   // Phase 32 — excludes public storefront-playground demo orders by default so KDS/Orders
   // Management (both call this same function) never show a real restaurant's staff fake traffic
   // from an anonymous visitor's demo checkout.
   const filter: Record<string, unknown> = { restaurantId, isDemo: { $ne: true } };
-  if (active === "true") filter.status = { $in: ACTIVE_STATUSES };
+  if (active) filter.status = { $in: ACTIVE_STATUSES };
   if (orderType) filter.orderType = orderType;
   if (tableId) filter.tableId = tableId;
+  if (paymentStatus) filter.paymentStatus = paymentStatus;
 
-  const orders = await Order.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(DEFAULT_LIST_LIMIT);
-  sendSuccess(res, { orders: await withCustomerInfo(orders) });
+  const { items, total, hasNextPage } = await paginateQuery(
+    Order.find(filter).sort({ createdAt: -1 }),
+    { page, limit }
+  );
+  sendSuccess(res, { orders: await withCustomerInfo(items), page, limit, total, hasNextPage });
 }
 
 export async function getOrder(req: Request, res: Response) {
@@ -141,9 +149,15 @@ export async function getOrder(req: Request, res: Response) {
   // Not sensitive to either audience — attached the same way customerName/customerPhone already
   // are, so a printable receipt/kitchen ticket (Phase 14) has the restaurant's own name/contact
   // without a second round trip from either frontend.
-  const [[withInfo], restaurant] = await Promise.all([
+  const [[withInfo], restaurant, delivery] = await Promise.all([
     withCustomerInfo([order]),
     Restaurant.findById(order.restaurantId).select("name phone address city state postalCode logo"),
+    // Phase 50 — only delivery orders can ever have a dispatch record; findOne on the rest is a
+    // wasted round trip for every pickup/dine-in order (the overwhelming majority), so the query
+    // itself is skipped entirely rather than run-and-discard.
+    order.orderType === "delivery"
+      ? Delivery.findOne({ orderId: order._id }).select("status courierName courierPhone trackingUrl pickupEta dropoffEta cancelReason")
+      : null,
   ]);
   const withRestaurantInfo = {
     ...withInfo,
@@ -155,6 +169,11 @@ export async function getOrder(req: Request, res: Response) {
     // Phase 29 audit finding P1-7 — the model always had this, the receipt/kitchen-ticket print
     // views (Phase 14) just never received it in this projection to render one.
     restaurantLogo: restaurant?.logo,
+    // Phase 50 — a safe, customer-facing subset of the Delivery record (see
+    // toCustomerFacingDelivery's own doc comment for exactly what's excluded). Attached for BOTH
+    // audiences here — staff already has a richer view via DeliveryStatusPanel's own
+    // GET .../delivery endpoint, so this is additive, never a replacement for that.
+    delivery: delivery ? toCustomerFacingDelivery(delivery) : undefined,
   };
   sendSuccess(res, { order: isOwner ? stripInternalFields(withRestaurantInfo) : withRestaurantInfo });
 }

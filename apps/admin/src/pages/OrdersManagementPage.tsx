@@ -172,6 +172,15 @@ const PAYMENT_FILTER_OPTIONS: Array<{ value: "all" | PaymentStatus; label: strin
   { value: "unpaid", label: "Unpaid" },
 ];
 
+// Phase 55 — this used to fetch every order the (non-paginated, 200-hard-capped) API endpoint
+// would return, on mount AND on every single realtime order:event, then filter orderType/payment
+// entirely client-side. Confirmed as the actual driver behind a real e2e timeout once a shared
+// test restaurant accumulated 200+ orders: re-rendering up to 200 full order cards on every socket
+// event is real, measurable work. PAGE_SIZE is deliberately far below the API's own 200-row max —
+// "Load more" (below) is how staff reach further back; normal day-to-day active-order volume for a
+// real restaurant should rarely need it.
+const PAGE_SIZE = 50;
+
 export function OrdersManagementPage() {
   const restaurantId = useActiveLocationId();
   const timezone = useRestaurantTimezone();
@@ -182,27 +191,55 @@ export function OrdersManagementPage() {
   const [search, setSearch] = useState("");
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderType | "all">("all");
   const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatus>("all");
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
 
-  async function reload() {
-    const { orders } = await apiClient.request<{ orders: Order[] }>(`/restaurants/${restaurantId}/orders`);
+  // orderType/paymentStatus are now sent to the server (previously filtered client-side against
+  // whatever the single unbounded fetch happened to already contain) — Paid/Unpaid and the type
+  // filter now correctly consider the restaurant's ENTIRE order history, not just one page of it.
+  async function reload(nextLimit = limit) {
+    const params = new URLSearchParams({ page: "1", limit: String(nextLimit) });
+    if (orderTypeFilter !== "all") params.set("orderType", orderTypeFilter);
+    if (paymentFilter !== "all") params.set("paymentStatus", paymentFilter);
+    const { orders, hasNextPage, total } = await apiClient.request<{ orders: Order[]; hasNextPage: boolean; total: number }>(
+      `/restaurants/${restaurantId}/orders?${params.toString()}`
+    );
     setOrders(orders);
+    setHasMore(hasNextPage);
+    setTotal(total);
     // A later successful reload always wins over an earlier failed one (e.g. a StrictMode
     // double-mount where one of two concurrent requests transiently failed) — otherwise a
     // stale error banner could sit above data that actually loaded fine.
     setError(null);
   }
 
+  // Initial load, and whenever a server-side filter changes — each one starts back at one page.
   useEffect(() => {
-    reload()
+    setLimit(PAGE_SIZE);
+    reload(PAGE_SIZE)
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeFilter, paymentFilter]);
 
-  // Live updates: any order event for this restaurant triggers a re-fetch of the authoritative
-  // list — the socket payload itself is never applied as state (see useRestaurantOrderEvents).
+  // Live updates: any order event for this restaurant re-fetches exactly what's currently loaded
+  // (not the whole history) — the socket payload itself is never applied as state (see
+  // useRestaurantOrderEvents). Terminal-status History orders beyond the loaded window simply don't
+  // live-update, which is fine — a completed/cancelled order never changes again.
   useRestaurantOrderEvents(() => {
     reload().catch(() => {});
   });
+
+  async function loadMore() {
+    const next = limit + PAGE_SIZE;
+    setLimit(next);
+    try {
+      await reload(next);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function setStatus(order: Order, status: OrderStatus) {
     setError(null);
@@ -230,19 +267,20 @@ export function OrdersManagementPage() {
     }
   }
 
+  // orderType/paymentStatus are now applied server-side (see reload) — only free-text search
+  // still runs client-side, scoped to whatever's currently loaded (same as it ever was; the
+  // difference is the loaded set is now bounded by design instead of an incidental 200-row cap).
   const searchLower = search.trim().toLowerCase();
   const filteredOrders = useMemo(
     () =>
       orders.filter((o) => {
-        if (orderTypeFilter !== "all" && o.orderType !== orderTypeFilter) return false;
-        if (paymentFilter !== "all" && o.paymentStatus !== paymentFilter) return false;
         if (searchLower) {
           const haystack = `${o.orderNumber} ${o.customerName ?? ""} ${o.tableName ?? ""}`.toLowerCase();
           if (!haystack.includes(searchLower)) return false;
         }
         return true;
       }),
-    [orders, orderTypeFilter, paymentFilter, searchLower]
+    [orders, searchLower]
   );
 
   if (loading) return <p>Loading orders...</p>;
@@ -366,6 +404,17 @@ export function OrdersManagementPage() {
             );
           })}
         </details>
+      )}
+
+      {hasMore && (
+        <div className="flex flex-col items-center gap-1 pt-2">
+          <p className="text-xs text-muted">
+            Showing {orders.length} of {total} orders
+          </p>
+          <Button size="sm" variant="ghost" onClick={loadMore}>
+            Load more
+          </Button>
+        </div>
       )}
     </div>
   );
