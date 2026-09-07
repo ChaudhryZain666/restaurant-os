@@ -75,19 +75,25 @@ test.describe.serial("POS delivery order flow (Phase 47)", () => {
     await page.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByText("Location set — 39.7817, -89.6501")).toBeVisible({ timeout: 10_000 });
 
-    // --- Enable POS + delivery directly, via Mongo. NOT the invite-token-style "the real value
-    // never leaves the server" exception this repo's other specs use — this is a real, reproducible,
-    // PRE-EXISTING bug this phase's own investigation surfaced (unrelated to the POS delivery fix
-    // itself): SettingsPage.tsx's "Enable the staff POS terminal" checkbox visibly checks (confirmed
-    // via toBeChecked()) but the PATCH request it submits still carries posEnabled:false regardless
-    // — reproduced consistently, including with a forced click and a settle delay, so a real state
-    // bug, not test flakiness. Documented in the Phase 47 report as a separate, out-of-scope finding
-    // rather than "fixed" here — this phase's mandate is the delivery-coordinate bug specifically,
-    // not an unrelated Settings-page defect. Bypassing it here keeps this test's actual subject (the
-    // real POS delivery UI, exercised below) reliable rather than blocked on an unrelated bug.
+    // --- Enable POS through the real Settings UI. Phase 47 documented a "checkbox checks but
+    // doesn't persist" bug here and bypassed it via Mongo; Phase 54's investigation found the real
+    // defect wasn't posEnabled-specific at all — it was two separate bugs (SettingsPage.tsx's
+    // businessHours submit-time fallback, and logo/coverImage's overly strict URL validation) that
+    // could each make an ENTIRE settings save silently fail or misbehave, with posEnabled just one
+    // of the fields caught in the blast radius. Neither affects this test's fresh, logo-less
+    // restaurant, and both are now fixed at their real root cause (see restaurant.controller.test.ts's
+    // "Phase 54" tests) — so this now goes through the real UI, which doubles as this spec's own
+    // regression coverage for that fix. ---
+    await page.getByRole("button", { name: "Ordering", exact: true }).click();
+    await page.locator("label", { hasText: "Enable the staff POS terminal" }).locator('input[type="checkbox"]').check();
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10_000 });
+
+    // Delivery enablement/fee/radius still go via Mongo — a real Delivery-page walkthrough is out of
+    // scope for this spec (its own subject is the POS delivery-coordinate flow, exercised below).
     await db.collection("restaurants").updateOne(
       { slug },
-      { $set: { "settings.posEnabled": true, "settings.deliveryEnabled": true, "settings.deliveryFee": 4, "settings.deliveryRadiusKm": 8 } }
+      { $set: { "settings.deliveryEnabled": true, "settings.deliveryFee": 4, "settings.deliveryRadiusKm": 8 } }
     );
 
     // --- Owner adds a menu item to sell (Menu page, matching the existing golden-path pattern). ---

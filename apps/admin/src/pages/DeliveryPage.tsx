@@ -241,12 +241,30 @@ export function DeliveryPage() {
                 </button>
               </div>
             ))}
+            {(() => {
+              const tiers = restaurant.settings.deliveryFeeTiers ?? [];
+              const distances = tiers.map((t) => t.maxDistanceKm);
+              const hasDuplicate = new Set(distances).size !== distances.length;
+              return (
+                hasDuplicate && (
+                  <p className="text-xs text-danger">
+                    Two tiers share the same distance — whichever fee resolves is arbitrary. Give each tier a distinct
+                    "Up to" distance.
+                  </p>
+                )
+              );
+            })()}
             <Button
               size="sm"
               variant="secondary"
               className="self-start"
               onClick={() => {
-                const tiers = [...(restaurant.settings.deliveryFeeTiers ?? []), { maxDistanceKm: 1, fee: 0 }];
+                const existing = restaurant.settings.deliveryFeeTiers ?? [];
+                // Defaults past the furthest existing tier rather than a flat 1 — appending a new
+                // tier used to silently create an out-of-order (and, with a single existing tier at
+                // <=1km, a duplicate) entry before the admin had touched anything.
+                const nextDistance = existing.length === 0 ? 1 : Math.max(...existing.map((t) => t.maxDistanceKm)) + 1;
+                const tiers = [...existing, { maxDistanceKm: nextDistance, fee: 0 }];
                 setRestaurant({ ...restaurant, settings: { ...restaurant.settings, deliveryFeeTiers: tiers } });
               }}
             >

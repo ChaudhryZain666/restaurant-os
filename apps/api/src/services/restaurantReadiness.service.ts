@@ -141,11 +141,16 @@ export async function computeSetupChecklist(restaurant: HydratedDocument<Restaur
       label: "Custom domain",
       status: activeDomain?.status === "active" ? "complete" : activeDomain ? "in_progress" : "optional",
     },
-    {
-      key: "seo",
-      label: "Search engine metadata",
-      status: "complete",
-    },
+    // Phase 54 — removed the "seo" item that used to sit here (hardcoded `status: "complete"`,
+    // permanently, for every restaurant). Investigated why: MenuPage.tsx (apps/web) already injects
+    // title/meta description/canonical/Open Graph/Twitter Card/Restaurant+Menu JSON-LD automatically
+    // for every restaurant, computed from data that's always present with sensible fallbacks (e.g.
+    // restaurant.description falls back to "Order online from {name}.") — genuinely no owner
+    // configuration exists or is needed. A checklist item that can never be anything but "complete"
+    // isn't a checklist item; worse, its own copy ("Review settings") sent the owner to a Settings
+    // page with no SEO-related fields anywhere, promising an action that doesn't exist. Removed at
+    // the presentation layer (here and readinessCopy.ts's matching entry) rather than leaving a
+    // permanently-satisfied phantom task — no readiness/publish gate depended on this key.
   ];
 
   return items;

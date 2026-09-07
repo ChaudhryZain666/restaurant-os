@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "@jest/globals";
 import request from "supertest";
 import mongoose from "mongoose";
 import { createApp } from "../app.js";
@@ -477,6 +477,23 @@ describe("restaurant retrieval", () => {
     expect(res.body.data.restaurant.settings).toBeDefined();
   });
 
+  it("the public availability reflects businessHours, with a nextOpenAt, when closed for hours (Phase 51)", async () => {
+    const ALL_CLOSED = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => ({
+      day,
+      isClosed: true,
+    }));
+    await Restaurant.findByIdAndUpdate(restaurantB._id, { "settings.businessHours": ALL_CLOSED, "settings.timezone": "UTC" });
+    try {
+      const res = await request(app).get(`/api/v1/restaurants/by-slug/${restaurantB.slug}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.availability.status).toBe("closed");
+      expect(res.body.data.availability.reason).toBe("Outside business hours");
+      expect(res.body.data.availability.nextOpenAt).toBeUndefined(); // every day closed -> no next opening within the search window
+    } finally {
+      await Restaurant.findByIdAndUpdate(restaurantB._id, { "settings.businessHours": [], "settings.timezone": "UTC" });
+    }
+  });
+
   it("rejects an unknown slug", async () => {
     const res = await request(app).get(`/api/v1/restaurants/by-slug/does-not-exist-${Date.now()}`);
     expect(res.status).toBe(404);
@@ -709,6 +726,42 @@ describe("restaurant settings update (OWNER-only operation)", () => {
     expect(res.status).toBe(400);
   });
 
+  // Phase 54 — delivery fee tier validation. Order alone doesn't matter (resolveDeliveryFee always
+  // picks the tightest-covering tier regardless of array order — see delivery.service.ts), but two
+  // tiers at the same distance resolve ambiguously and are now rejected.
+  it("accepts delivery fee tiers regardless of storage order", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({
+        settings: {
+          deliveryFeeTiers: [
+            { maxDistanceKm: 10, fee: 6 },
+            { maxDistanceKm: 3, fee: 2 },
+          ],
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurant.settings.deliveryFeeTiers).toHaveLength(2);
+  });
+
+  it("rejects two delivery fee tiers at the same distance", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({
+        settings: {
+          deliveryFeeTiers: [
+            { maxDistanceKm: 5, fee: 3 },
+            { maxDistanceKm: 5, fee: 10 },
+          ],
+        },
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it("rejects a brandColor with an injection-style payload", async () => {
     const res = await request(app)
       .patch(`/api/v1/restaurants/${restaurantA.id}`)
@@ -761,5 +814,95 @@ describe("restaurant settings update (OWNER-only operation)", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.restaurant.latitude).toBeUndefined();
     expect(res.body.data.restaurant.longitude).toBeUndefined();
+  });
+
+  // Phase 54 — reliability audit. logo/coverImage previously required z.string().url(), which
+  // rejects the app-relative static paths (e.g. "/restaurant-images/x.svg") that the demo seed data
+  // — and any restaurant whose logo/cover isn't a full external URL — legitimately uses (both
+  // apps/web's and apps/admin's own public/ folders really serve these). That meant EVERY settings
+  // save for such a restaurant 400'd and silently discarded every other field in the same request
+  // (see SettingsPage.tsx), not just the image fields. Mirrors menu.ts's imageUrl fix.
+  it("accepts an app-relative path for logo/coverImage (Phase 54)", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ logo: "/restaurant-images/demo-restaurant-logo.svg", coverImage: "/restaurant-images/demo-restaurant-cover.jpg" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurant.logo).toBe("/restaurant-images/demo-restaurant-logo.svg");
+    expect(res.body.data.restaurant.coverImage).toBe("/restaurant-images/demo-restaurant-cover.jpg");
+  });
+
+  it("still accepts a full absolute URL for logo/coverImage", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ logo: "https://cdn.example.com/logo.png" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurant.logo).toBe("https://cdn.example.com/logo.png");
+  });
+
+  it("rejects an unreasonably long logo value", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ logo: "/" + "a".repeat(501) });
+
+    expect(res.status).toBe(400);
+  });
+
+  // Phase 54 — the actual production-affecting root cause behind "a newly provisioned restaurant
+  // can end up Outside business hours after a Settings-page save": SettingsPage.tsx's handleSubmit
+  // used to fall back to a hardcoded 09:00-21:00 default whenever businessHours was empty, and since
+  // that form always resubmits every setting regardless of which tab is open, ANY unrelated save
+  // (e.g. just toggling deliveryEnabled) silently turned an intentionally-unrestricted restaurant
+  // into an hours-restricted one. The bug was entirely client-side — the API itself always honored
+  // exactly what it was sent — but these tests pin the API's own contract so a future regression at
+  // this layer would also be caught: an omitted/empty businessHours must never be invented, and an
+  // explicit real change must be correctly reflected in availability.
+  describe("business hours are never silently invented by an unrelated save (Phase 54)", () => {
+    let freshRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+    let freshOwner: Awaited<ReturnType<typeof createTestUser>>;
+    let freshOwnerToken: string;
+
+    beforeEach(async () => {
+      freshRestaurant = await createTestRestaurant({ settings: { businessHours: [], timezone: "UTC" } });
+      freshOwner = await createTestUser("restaurant_owner", freshRestaurant._id);
+      freshOwnerToken = tokenFor(freshOwner);
+    });
+
+    afterEach(async () => {
+      await Promise.all([
+        Restaurant.deleteOne({ _id: freshRestaurant._id }),
+        User.deleteOne({ _id: freshOwner._id }),
+      ]);
+    });
+
+    it("an unrelated settings save leaves an empty (unrestricted) businessHours empty, and the restaurant stays open", async () => {
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${freshRestaurant.id}`)
+        .set("Authorization", `Bearer ${freshOwnerToken}`)
+        .send({ settings: { deliveryEnabled: true } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.restaurant.settings.businessHours).toEqual([]);
+      expect(res.body.data.availability.status).toBe("open");
+    });
+
+    it("actually changing business hours to an all-closed schedule correctly closes the restaurant", async () => {
+      const allClosed = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => ({
+        day,
+        isClosed: true,
+      }));
+      const res = await request(app)
+        .patch(`/api/v1/restaurants/${freshRestaurant.id}`)
+        .set("Authorization", `Bearer ${freshOwnerToken}`)
+        .send({ settings: { businessHours: allClosed } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.availability.status).toBe("closed");
+      expect(res.body.data.availability.reason).toBe("Outside business hours");
+    });
   });
 });

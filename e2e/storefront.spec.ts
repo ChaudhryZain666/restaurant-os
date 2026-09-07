@@ -22,13 +22,16 @@ test("customer can register, add an item to cart, and place an order", async ({ 
 
   // "/" legacy-redirects to the default restaurant's canonical /r/:slug URL (Phase 8).
   await expect(page).toHaveURL(/\/r\/demo-restaurant$/);
-  // Margherita Pizza (seeded) has a required "Size" modifier group, so "Add to cart" opens a
-  // selection panel rather than adding immediately. Targeted by name rather than "first item"
-  // since other e2e specs can add their own items/categories to the same seeded restaurant.
+  // Margherita Pizza (seeded) has a required "Size" modifier group, so "Add to cart"/"Add to order"
+  // opens a selection panel rather than adding immediately. Targeted by name rather than "first
+  // item" since other e2e specs can add their own items/categories to the same seeded restaurant.
+  // Phase 54 — the add/confirm button copy is per-theme ("classic" says "Add to cart"/"Confirm add
+  // to cart"; every other theme says "Add to order"/"Confirm" — see each theme's own
+  // MenuSection.tsx), and demo-restaurant's active theme isn't this test's concern, so match either.
   const pizzaRow = page.locator("li", { hasText: "Margherita Pizza" });
-  await pizzaRow.getByRole("button", { name: "Add to cart" }).click();
+  await pizzaRow.getByRole("button", { name: /Add to (cart|order)/ }).click();
   await page.getByRole("radio").first().check();
-  await page.getByRole("button", { name: "Confirm add to cart" }).click();
+  await page.getByRole("button", { name: "Confirm" }).click();
 
   await page.getByRole("link", { name: /Cart/ }).click();
   await expect(page.getByRole("heading", { name: "Cart" })).toBeVisible();

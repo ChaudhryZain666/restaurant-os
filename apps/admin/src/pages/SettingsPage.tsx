@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { BusinessHoursDay, GeocodeResult, Restaurant, Weekday } from "@restaurant/types";
+import type { BusinessHoursDay, GeocodeResult, Restaurant, RestaurantAvailability, Weekday } from "@restaurant/types";
 import { WEEKDAYS } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
+import { describeAvailability } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
@@ -71,6 +72,7 @@ export function SettingsPage() {
   const restaurantId = useActiveLocationId();
   const { refetch: refetchNavSettings } = useRestaurantSettings();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,8 +99,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     apiClient
-      .request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`)
-      .then((data) => setRestaurant(data.restaurant))
+      .request<{ restaurant: Restaurant; availability: RestaurantAvailability }>(`/restaurants/${restaurantId}`)
+      .then((data) => {
+        setRestaurant(data.restaurant);
+        setAvailability(data.availability);
+      })
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
   }, []);
@@ -110,9 +115,10 @@ export function SettingsPage() {
     setSaved(false);
     setError(null);
     try {
-      const { restaurant: updated } = await apiClient.request<{ restaurant: Restaurant }>(
-        `/restaurants/${restaurantId}`,
-        {
+      const { restaurant: updated, availability: updatedAvailability } = await apiClient.request<{
+        restaurant: Restaurant;
+        availability: RestaurantAvailability;
+      }>(`/restaurants/${restaurantId}`, {
           method: "PATCH",
           body: {
             name: restaurant.name,
@@ -146,13 +152,25 @@ export function SettingsPage() {
               kitchenEnabled: restaurant.settings.kitchenEnabled,
               staffEnabled: restaurant.settings.staffEnabled,
               posEnabled: restaurant.settings.posEnabled,
-              businessHours:
-                restaurant.settings.businessHours.length > 0 ? restaurant.settings.businessHours : defaultHours(),
+              // Phase 54 — this used to fall back to defaultHours() (a hardcoded Mon-Sun 09:00-21:00
+              // schedule) whenever businessHours was empty. An empty array is a deliberate, meaningful
+              // value (see businessHours.service.ts's own doc comment: "no hours-based restriction at
+              // all," true of every newly provisioned restaurant) — NOT a placeholder needing a
+              // default filled in before submit. Since this form always resubmits every setting
+              // regardless of which tab is active, that fallback silently turned ANY unrelated
+              // Settings save (Location, Ordering, anything) into the restaurant's first-ever
+              // hours restriction, which could immediately make it "outside business hours" depending
+              // on the time of day the save happened — a real, production-affecting bug, not just a
+              // test artifact. The Business Hours tab's own edits (withUpdatedHours, above) already
+              // seed defaultHours() as their own starting point when the owner actually edits a day,
+              // so nothing here is needed to keep that tab usable.
+              businessHours: restaurant.settings.businessHours,
             },
           },
         }
       );
       setRestaurant(updated);
+      setAvailability(updatedAvailability);
       setSaved(true);
       // Phase 28 — so a kitchenEnabled/staffEnabled change takes effect in the nav (and on the
       // Kitchen/Staff pages themselves) immediately, without a full page reload.
@@ -603,9 +621,8 @@ export function SettingsPage() {
             </label>
           </div>
           <ComingSoon>
-            Order times and reports already use this timezone. What's still missing: the Business Hours tab is
-            informational only — orders aren't automatically closed outside them, and "closes in 5 minutes"-style
-            scheduling isn't built yet. Use the Ordering tab's manual open/pause toggle until then.
+            Order times, reports, and ordering availability all use this timezone. Changing it only changes how times
+            are interpreted going forward — it never rewrites anything already stored.
           </ComingSoon>
         </div>
       )}
@@ -613,6 +630,14 @@ export function SettingsPage() {
       {tab === "Business Hours" && (
         <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
           <legend className="px-1 text-sm font-medium">Weekly hours</legend>
+          {availability && (
+            <div className="mb-1 flex items-center gap-2 text-sm">
+              <span className="text-muted">Current status (per your saved settings):</span>
+              <Badge tone={availability.status === "open" ? "success" : availability.status === "paused" ? "warning" : "neutral"}>
+                {describeAvailability(availability, restaurant.settings.timezone)}
+              </Badge>
+            </div>
+          )}
           {WEEKDAYS.map((day) => {
             const hours = hoursFor(restaurant, day);
             return (

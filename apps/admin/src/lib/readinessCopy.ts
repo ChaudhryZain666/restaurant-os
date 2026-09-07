@@ -82,10 +82,7 @@ export const EXTENDED_CHECK_COPY: Record<string, { title: string; why: string; t
     to: "/settings?tab=payment",
     linkLabel: "Connect payment account",
   },
-  seo: {
-    title: "Search engine metadata",
-    why: "Helps your storefront show up correctly when customers search for you.",
-    to: "/settings",
-    linkLabel: "Review settings",
-  },
+  // Phase 54 — "seo" removed: the API no longer returns it (see restaurantReadiness.service.ts's
+  // matching comment) — it was a permanently-"complete", non-actionable item pointing at a
+  // Settings page with no corresponding fields.
 };

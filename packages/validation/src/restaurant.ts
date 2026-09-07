@@ -100,7 +100,25 @@ export const restaurantSettingsSchema = z.object({
   posEnabled: z.boolean().optional(),
   // Delivery-integrations phase — which courier dispatches a delivery order.
   deliveryProvider: z.enum(["manual", "uber_direct"]).optional(),
-});
+})
+  // Phase 54 — delivery.service.ts's resolveDeliveryFee picks the covering tier with the smallest
+  // maxDistanceKm, so storage ORDER never affects which fee actually applies — validating order
+  // wouldn't fix a real bug, only a cosmetic one. A true DUPLICATE distance is the genuinely broken
+  // case: two tiers at the same maxDistanceKm with different fees resolve ambiguously (whichever
+  // happens to appear first in the array silently wins, with no error). Rejected here, at the
+  // smallest layer that can actually see the whole array at once.
+  .refine(
+    (v) => {
+      if (!v.deliveryFeeTiers) return true;
+      const seen = new Set<number>();
+      for (const tier of v.deliveryFeeTiers) {
+        if (seen.has(tier.maxDistanceKm)) return false;
+        seen.add(tier.maxDistanceKm);
+      }
+      return true;
+    },
+    { message: "Delivery fee tiers can't have two tiers at the same distance", path: ["deliveryFeeTiers"] }
+  );
 export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 
 // Deliberately excludes slug, ownerId, and status — slug changes break storefront URLs,
@@ -110,8 +128,14 @@ export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 export const updateRestaurantSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   description: z.string().max(2000).optional(),
-  logo: z.string().url().optional(),
-  coverImage: z.string().url().optional(),
+  // Same fix as menu.ts's imageUrl (Phase 54 — reliability audit): accepts an absolute URL OR a
+  // same-origin relative path (e.g. "/restaurant-images/demo-restaurant-logo.svg", the convention
+  // apps/web's and apps/admin's own public/ folders both serve real files for) — a bare `.url()`
+  // check rejected those even though `<img src>` renders them fine, so EVERY Settings-page save
+  // for a restaurant with a relative logo/coverImage (every demo-seeded restaurant included) was
+  // silently failing validation, blocking every other field in the same save (see SettingsPage.tsx).
+  logo: z.string().min(1).max(500).optional(),
+  coverImage: z.string().min(1).max(500).optional(),
   phone: z.string().max(30).optional(),
   email: z.string().email().optional(),
   address: z.string().max(200).optional(),

@@ -236,9 +236,13 @@ export function BillingPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Billing</h1>
         <p className="text-sm text-muted">
-          {subscription && subscription.provider !== "mock"
-            ? "Your subscription status."
-            : "Your subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."}
+          {/* Portal UX audit (Phase 53) — this used to treat a brand-new owner with NO subscription
+              yet (subscription === null) as if the platform were running mock billing, regardless
+              of the real configured provider. Only actually say "mock billing system" once a
+              subscription genuinely reports provider === "mock", never as the default assumption. */}
+          {subscription?.provider === "mock"
+            ? "Your subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."
+            : "Your subscription status."}
         </p>
       </div>
 
@@ -296,7 +300,12 @@ export function BillingPage() {
                   Reactivate
                 </Button>
               )}
-              {subscription.status === "trialing" && (
+              {/* Phase 54 — a no-card trial (createSubscriptionCore) deliberately never gets a
+                  providerSubscriptionId until checkout (see subscription.service.ts), and
+                  mockAdvanceSubscription requires one — so for the (now-common) no-card trial this
+                  button was always guaranteed to error. Only offered when there's actually a
+                  provider reference for it to advance. */}
+              {subscription.status === "trialing" && subscription.provider === "mock" && subscription.providerSubscriptionId && (
                 <Button size="sm" onClick={simulateTrialConversion} disabled={busy}>
                   Simulate trial conversion (dev)
                 </Button>
