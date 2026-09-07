@@ -20,6 +20,7 @@ import {
   IconMenuBook,
   IconPalette,
   IconPin,
+  IconPrinter,
   IconRegister,
   IconSettings,
   IconSliders,
@@ -148,6 +149,10 @@ const RESTAURANT_GROUPS: NavGroup[] = [
       // subscription whether it has one location or several.
       { to: "/billing", label: "Billing", icon: IconWallet, permission: "billing.read" },
       { to: "/settings", label: "Settings", icon: IconSettings, permission: "restaurant.settings.manage" },
+      // Phase 57 — deliberately its own permission (restaurant.printers.manage), not
+      // restaurant.settings.manage: both owner AND manager configure printers (Section 20), but
+      // Settings itself stays owner-only, so this can't live inside that page/tab.
+      { to: "/printers", label: "Printers", icon: IconPrinter, permission: "restaurant.printers.manage" },
       { to: "/theme-studio", label: "Theme Studio", icon: IconPalette, permission: "restaurant.settings.manage" },
       { to: "/audit-log", label: "Audit log", icon: IconClipboard, permission: "restaurant.audit.read" },
     ],

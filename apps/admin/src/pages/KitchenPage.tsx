@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Order, OrderStatus } from "@restaurant/types";
+import type { Order, OrderStatus, PrintJob } from "@restaurant/types";
 import { Badge, Button, Card } from "@restaurant/ui";
 import { getStatusTimestamp, formatElapsed } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
@@ -8,6 +8,8 @@ import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useSocketStatus } from "../hooks/useSocketStatus";
 import { ScopeBadge } from "../components/ScopeBadge";
+import { usePrintJob } from "../pos/printing/usePrintJob";
+import { PrintStatusBadge } from "../pos/printing/PrintStatusBadge";
 import {
   actionLabel,
   isAwaitingOnlinePayment,
@@ -31,6 +33,22 @@ const EMPTY_COLUMN_COPY: Record<OrderStatus, string> = {
 };
 
 function KitchenOrderCard({ order, now, onSetStatus }: { order: Order; now: Date; onSetStatus: (order: Order, status: OrderStatus) => void }) {
+  const { printOrder, retry } = usePrintJob();
+  const [ticketJob, setTicketJob] = useState<PrintJob | null>(null);
+
+  async function handlePrint() {
+    // Opened synchronously, before any await — see CompletedSale.tsx's identical comment.
+    const printWindow = window.open("", "_blank");
+    const outcome = await printOrder("kitchen_ticket", order.id, { isReprint: Boolean(ticketJob) }, printWindow);
+    setTicketJob(outcome.job);
+  }
+
+  async function handleRetry() {
+    if (!ticketJob) return;
+    const printWindow = window.open("", "_blank");
+    setTicketJob((await retry(ticketJob, printWindow)).job);
+  }
+
   const awaitingPayment = isAwaitingOnlinePayment(order);
   const next = awaitingPayment && order.status === "pending" ? null : nextForwardStatus(order);
   const label = actionLabel(order);
@@ -87,12 +105,15 @@ function KitchenOrderCard({ order, now, onSetStatus }: { order: Order; now: Date
             {label}
           </Button>
         )}
-        <button
-          onClick={() => window.open(`/print/ticket/${order.id}`, "_blank", "noopener")}
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          Print ticket
+        <button onClick={handlePrint} className="text-xs font-medium text-primary hover:underline">
+          {ticketJob ? "Reprint ticket" : "Print ticket"}
         </button>
+        {ticketJob && <PrintStatusBadge status={ticketJob.status} />}
+        {ticketJob && (ticketJob.status === "failed" || ticketJob.status === "unavailable") && (
+          <button onClick={handleRetry} className="text-xs font-medium text-primary hover:underline">
+            Retry
+          </button>
+        )}
       </div>
     </Card>
   );

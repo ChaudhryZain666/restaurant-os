@@ -38,6 +38,7 @@ export type Permission =
   | "restaurant.analytics.read"
   | "restaurant.tables.manage"
   | "restaurant.pos.operate"
+  | "restaurant.printers.manage"
   | "billing.read"
   | "billing.manage"
   | "platform.restaurants.manage"
@@ -84,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.analytics.read",
     "restaurant.tables.manage",
     "restaurant.pos.operate",
+    "restaurant.printers.manage",
     "billing.read",
     "billing.manage",
     "support.tickets.read",
@@ -102,6 +104,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.analytics.read",
     "restaurant.tables.manage",
     "restaurant.pos.operate",
+    "restaurant.printers.manage",
     "billing.read",
     "support.tickets.read",
   ],

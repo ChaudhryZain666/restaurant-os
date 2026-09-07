@@ -261,3 +261,11 @@ export const IconImage = (p: SVGProps<SVGSVGElement>) => (
     <path d="m21 15-5-5L5 21" />
   </Icon>
 );
+
+export const IconPrinter = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M6 9V3h12v6" />
+    <rect x="4" y="9" width="16" height="8" rx="1.5" />
+    <path d="M6 14h12v7H6z" />
+  </Icon>
+);

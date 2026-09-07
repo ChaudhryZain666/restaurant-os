@@ -60,6 +60,13 @@ export const AUDIT_ACTIONS = [
   // on why: no real user to attribute it to). Only an explicit staff action does.
   "delivery.cancelled",
   "delivery.status_updated",
+  // Phase 57 — printer configuration changes and print-job failures. Successful prints are not
+  // logged individually (that would make the audit log a print-volume log, not a record of
+  // meaningful actions) — only configuration changes and failures, which staff may need to explain.
+  "printer.created",
+  "printer.updated",
+  "printer.deleted",
+  "print_job.failed",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = [
@@ -74,6 +81,8 @@ export const AUDIT_TARGET_TYPES = [
   "payment_account",
   "delivery_account",
   "delivery",
+  "printer",
+  "print_job",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -28,3 +28,4 @@ export * from "./theme.js";
 export * from "./restaurantPaymentAccount.js";
 export * from "./pos.js";
 export * from "./contact.js";
+export * from "./printer.js";

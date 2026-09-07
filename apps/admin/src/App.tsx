@@ -25,6 +25,7 @@ import { PosOrdersPage } from "./pos/OrdersPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PrinterSettingsPage } from "./pages/PrinterSettingsPage";
 import { ThemeStudioPage } from "./pages/ThemeStudioPage";
 import { RestaurantSupportPage } from "./pages/RestaurantSupportPage";
 import { RestaurantTicketDetailPage } from "./pages/RestaurantTicketDetailPage";
@@ -40,6 +41,7 @@ import { PlatformUsersPage } from "./pages/PlatformUsersPage";
 import { SetupPage } from "./pages/SetupPage";
 import { LocationsPage } from "./pages/LocationsPage";
 import { PrintOrderPage } from "./pages/PrintOrderPage";
+import { PrintPreviewPage } from "./pages/PrintPreviewPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
 import { PlatformAnalyticsPage } from "./pages/PlatformAnalyticsPage";
@@ -113,6 +115,16 @@ export function App() {
         element={
           <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
             <PrintOrderPage />
+          </RequireAuth>
+        }
+      />
+      {/* Phase 57 — generic browser-print rendering for a PrintJob with no underlying order (a
+          test print — see PrintPreviewPage.tsx's own doc comment). Same gate as /print/:mode/:id. */}
+      <Route
+        path="/print/preview/:jobId"
+        element={
+          <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
+            <PrintPreviewPage />
           </RequireAuth>
         }
       />
@@ -267,6 +279,14 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.settings.manage">
               <SettingsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/printers"
+          element={
+            <RequireAuth permission="restaurant.printers.manage">
+              <PrinterSettingsPage />
             </RequireAuth>
           }
         />

@@ -38,4 +38,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "delivery_account.disconnected": "Delivery account disconnected",
   "delivery.cancelled": "Delivery cancelled",
   "delivery.status_updated": "Delivery status updated",
+  "printer.created": "Printer added",
+  "printer.updated": "Printer updated",
+  "printer.deleted": "Printer removed",
+  "print_job.failed": "Print job failed",
 };

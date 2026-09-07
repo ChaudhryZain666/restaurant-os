@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import type { Order } from "@restaurant/types";
+import { useParams, useSearchParams } from "react-router-dom";
+import type { Order, PrintJob } from "@restaurant/types";
 import { formatCurrency } from "@restaurant/utils";
+import { Badge } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 
 /**
@@ -10,12 +11,22 @@ import { apiClient } from "../lib/api";
  * (TablesPage's QR-code print) rather than any hardware/ESC-POS integration — deliberately no
  * Layout wrapper (see App.tsx: this route sits outside <Layout>), so there's no sidebar/header to
  * hide with print CSS; the page IS the printable content. Opened via window.open(...) from a
- * "Print" button on OrdersManagementPage/KitchenPage, and auto-triggers the print dialog once the
- * order has loaded.
+ * "Print" button on OrdersManagementPage/KitchenPage/POS, and auto-triggers the print dialog once
+ * the order has loaded.
+ *
+ * Phase 57 — this rendering is intentionally UNCHANGED. The only addition is an optional `?jobId=`
+ * query param: when present (every caller now passes it — see pos/printing/adapters.ts's
+ * browserPrintAdapter), this page fetches that PrintJob to know whether to show a "REPRINT" banner
+ * and reports the job's outcome back via PATCH once window.print()'s dialog closes, via the
+ * `afterprint` event — which fires whether the user actually printed or cancelled, an honest
+ * browser limitation with no stronger signal available (see Section 13's own point about this).
  */
 export function PrintOrderPage() {
   const { mode, id } = useParams<{ mode: "ticket" | "receipt"; id: string }>();
+  const [searchParams] = useSearchParams();
+  const jobId = searchParams.get("jobId");
   const [order, setOrder] = useState<Order | null>(null);
+  const [job, setJob] = useState<PrintJob | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,18 +37,41 @@ export function PrintOrderPage() {
   }, [id]);
 
   useEffect(() => {
-    if (order) {
-      // Defer one tick so the just-rendered content is actually painted before print().
-      const t = setTimeout(() => window.print(), 150);
-      return () => clearTimeout(t);
-    }
-  }, [order]);
+    if (!jobId || !order) return;
+    apiClient
+      .request<{ printJob: PrintJob }>(`/restaurants/${order.restaurantId}/print-jobs/${jobId}`)
+      .then((data) => setJob(data.printJob))
+      .catch(() => undefined); // A missing/unreadable job never blocks printing the order itself.
+  }, [jobId, order]);
+
+  useEffect(() => {
+    if (!order) return;
+    // Defer one tick so the just-rendered content is actually painted before print().
+    const t = setTimeout(() => window.print(), 150);
+    const reportOutcome = () => {
+      if (jobId && order) {
+        apiClient
+          .request(`/restaurants/${order.restaurantId}/print-jobs/${jobId}`, { method: "PATCH", body: { status: "printed" } })
+          .catch(() => undefined);
+      }
+    };
+    window.addEventListener("afterprint", reportOutcome);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("afterprint", reportOutcome);
+    };
+  }, [order, jobId]);
 
   if (error) return <p className="p-6 text-danger">{error}</p>;
   if (!order) return <p className="p-6 text-muted">Loading...</p>;
 
   return (
     <div className="mx-auto max-w-sm p-6 font-mono text-sm text-black">
+      {job?.isReprint && (
+        <p className="mb-3 text-center print:mb-3">
+          <Badge tone="warning">REPRINT</Badge>
+        </p>
+      )}
       <div className="mb-3 text-center">
         {mode === "receipt" && order.restaurantLogo && (
           <img src={order.restaurantLogo} alt="" className="mx-auto mb-2 h-12 w-12 object-contain" />
