@@ -235,9 +235,12 @@ export function AgencyBillingPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Agency billing</h1>
         <p className="text-sm text-muted">
-          {subscription && subscription.provider !== "mock"
-            ? "Your agency's subscription status."
-            : "Your agency's subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."}
+          {/* Portal UX audit (Phase 53) — same fix as BillingPage.tsx: don't assume "mock billing"
+              for an agency with no subscription yet, only once one genuinely reports provider
+              === "mock". */}
+          {subscription?.provider === "mock"
+            ? "Your agency's subscription status. No real payment provider is connected yet — this runs against a mock billing system for now."
+            : "Your agency's subscription status."}
         </p>
       </div>
 

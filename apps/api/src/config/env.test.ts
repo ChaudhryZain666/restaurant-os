@@ -115,3 +115,22 @@ describe("envSchema — AUTH_RATE_LIMIT_MAX (Phase 46)", () => {
     expect(envSchema.safeParse({ ...REQUIRED_BASE, AUTH_RATE_LIMIT_MAX: "-5" }).success).toBe(false);
   });
 });
+
+describe("envSchema — GLOBAL_RATE_LIMIT_MAX (Portal UX audit, Phase 53)", () => {
+  it("defaults to 1000 (today's production/dev value, previously hardcoded) when unset", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.GLOBAL_RATE_LIMIT_MAX).toBe(1000);
+  });
+
+  it("accepts an explicit override for local full-E2E-suite runs", () => {
+    const result = envSchema.safeParse({ ...REQUIRED_BASE, GLOBAL_RATE_LIMIT_MAX: "50000" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.GLOBAL_RATE_LIMIT_MAX).toBe(50000);
+  });
+
+  it("rejects a non-positive value", () => {
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, GLOBAL_RATE_LIMIT_MAX: "0" }).success).toBe(false);
+    expect(envSchema.safeParse({ ...REQUIRED_BASE, GLOBAL_RATE_LIMIT_MAX: "-5" }).success).toBe(false);
+  });
+});

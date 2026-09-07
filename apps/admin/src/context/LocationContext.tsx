@@ -114,8 +114,18 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+    // Portal UX audit (Phase 53) — user?.mustChangePassword is a real dependency, not just user?.id:
+    // a temporary-password ("direct access") session already has a valid user/activeBusinessId the
+    // instant it logs in, so this effect fires immediately and hits GET /businesses/:id/locations —
+    // which the server unconditionally rejects for any mustChangePassword:true session (see
+    // middleware/auth.ts's PASSWORD_CHANGE_ALLOWED_PATHS). That fetch throws, is never caught here,
+    // and activeLocationId/locations are left stuck at their initial empty values. Completing the
+    // password change flips mustChangePassword to false but changes neither user.id nor
+    // activeBusinessId, so without this dependency the effect never retried — every location-scoped
+    // page (Setup, Menu overrides, Dashboard, Settings, ...) stayed broken for the rest of the
+    // session until a full page reload. Confirmed live via Playwright, not just read from source.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, activeBusinessId]);
+  }, [user?.id, user?.mustChangePassword, activeBusinessId]);
 
   const switchLocation = useCallback(
     (locationId: string) => {

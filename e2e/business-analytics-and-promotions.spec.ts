@@ -80,7 +80,10 @@ test.describe.serial("business-wide analytics and promotions (Phase 23)", () => 
     await page.getByRole("button", { name: "Create item & continue" }).click();
     await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByText(itemName, { exact: false })).toBeVisible();
+    // li-scoped (matching the categoryName check above), not a bare page-wide getByText — the
+    // Portal UX audit's new "Item added" toast (Phase 53) legitimately also renders this same
+    // item name in its own, separate description text.
+    await expect(page.locator("li", { hasText: itemName })).toBeVisible();
 
     // --- Publish Location A. ---
     await page.getByRole("link", { name: "Setup" }).click();

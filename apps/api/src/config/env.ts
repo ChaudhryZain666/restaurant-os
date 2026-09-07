@@ -22,6 +22,14 @@ const baseEnvSchema = z.object({
   // changing this value, touch a watched .ts file (or restart the dev server directly) or the
   // running process keeps enforcing whatever value it started with.
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
+  // Portal UX audit (Phase 53) — same escape hatch as AUTH_RATE_LIMIT_MAX above, for app.ts's
+  // separate "foundation-level" global limiter (applied to every route, not just /auth/*), which
+  // this env var didn't previously exist for at all (it was a hardcoded 1000). A full local E2E
+  // suite run makes far more than 1000 total requests across every route in 15 minutes, and this
+  // was confirmed live to be the dominant cause of a whole session's worth of unrelated-looking
+  // test failures once the narrower AUTH_RATE_LIMIT_MAX alone was raised. Defaults to the exact
+  // previous hardcoded value (1000) everywhere this isn't explicitly overridden.
+  GLOBAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1000),
   CLIENT_ORIGIN: z.string().default("http://localhost:5173"),
   ADMIN_ORIGIN: z.string().default("http://localhost:5174"),
   // Phase 28 — the marketing site (apps/marketing) is a separate, unauthenticated frontend. It only

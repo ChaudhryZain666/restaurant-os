@@ -39,6 +39,9 @@ test("restaurant_staff sees only the nav links they actually have permission for
   // the real final landing spot for this role, not "/" itself.
   await page.goto("http://localhost:5174/delivery");
   await expect(page).toHaveURL(/\/orders$/, { timeout: 10_000 });
+  // Portal UX audit (Phase 53) — this redirect used to be completely silent; a toast now explains
+  // why the user landed somewhere other than the link/URL they used.
+  await expect(page.getByText("You don't have access to that page")).toBeVisible({ timeout: 10_000 });
 
   await page.goto("http://localhost:5174/settings");
   await expect(page).toHaveURL(/\/orders$/, { timeout: 10_000 });

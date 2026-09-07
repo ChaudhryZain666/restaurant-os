@@ -206,14 +206,27 @@ async function main() {
         taxRate: 0.08,
         deliveryFee: 3.99,
         deliveryRadiusKm: 8,
+        // Portal UX audit (Phase 53) — this was previously a realistic-looking Mon-Sat 9/10am-10/11pm,
+        // closed-Sunday schedule. That's fine for a human browsing the deployed demo site, but this
+        // fixture is ALSO relied on (assuming it's always orderable) by ~15 unrelated e2e specs across
+        // many phases (admin-audit-log, delivery, geocoding-delivery, dine-in, kitchen-realtime,
+        // multi-tenant, online-payment, order-cancellation, storefront, ...). Once Phase 51 turned
+        // businessHours from stored-but-unenforced into a real server-authoritative gate, this became a
+        // genuine, previously-invisible defect: the whole suite's real order-creation tests started
+        // failing with "Outside business hours" whenever they happened to run outside that narrow
+        // window (confirmed live — nextOpenAt came back as a real future timestamp during this audit).
+        // Every day, `open === close === "00:00"` is the same genuine 24/7-open wrap-around fixture
+        // Phase 51's own test suite already validated (see businessHours.service.test.ts) — real
+        // configured hours, not an empty/unrestricted array, so the demo still shows a populated
+        // Business Hours tab, just one that's never closed.
         businessHours: [
-          { day: "monday", isClosed: false, open: "09:00", close: "22:00" },
-          { day: "tuesday", isClosed: false, open: "09:00", close: "22:00" },
-          { day: "wednesday", isClosed: false, open: "09:00", close: "22:00" },
-          { day: "thursday", isClosed: false, open: "09:00", close: "22:00" },
-          { day: "friday", isClosed: false, open: "09:00", close: "23:00" },
-          { day: "saturday", isClosed: false, open: "10:00", close: "23:00" },
-          { day: "sunday", isClosed: true },
+          { day: "monday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "tuesday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "wednesday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "thursday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "friday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "saturday", isClosed: false, open: "00:00", close: "00:00" },
+          { day: "sunday", isClosed: false, open: "00:00", close: "00:00" },
         ],
       },
     });

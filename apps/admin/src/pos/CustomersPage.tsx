@@ -46,6 +46,21 @@ export function PosCustomersPage() {
       .finally(() => setLoading(false));
   }, [restaurantId, debounced]);
 
+  // Portal UX audit (Phase 53) — matches RegisterPage.tsx's guard exactly: without it, a location
+  // with POS turned off still let a real user browse this page directly by URL, even though the
+  // nav item and the register itself are both correctly hidden/blocked.
+  if (restaurant?.settings.posEnabled === false) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={<IconUsers className="h-6 w-6" />}
+          title="POS is not enabled for this location"
+          description="Turn on the POS terminal under Settings → Ordering in Restaurant Admin to start ringing up in-person sales."
+        />
+      </div>
+    );
+  }
+
   const currency = restaurant?.settings.currency ?? "USD";
   const customers = result?.items ?? [];
 

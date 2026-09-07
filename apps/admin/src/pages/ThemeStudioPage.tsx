@@ -5,6 +5,7 @@ import { Alert, Badge, Button, ConfirmDialog, HEX_COLOR_PATTERN, useToast } from
 import { apiClient } from "../lib/api";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { THEME_CATALOG } from "../lib/themeCatalog";
+import { previewUrl } from "../lib/links";
 import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -178,8 +179,6 @@ export function ThemeStudioPage() {
     setDraft((prev) => (prev ? { ...prev, sections: { ...prev.sections, [key]: shown } } : prev));
   }
 
-  const previewUrl = `/r/${restaurant.slug}/preview`;
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -192,7 +191,7 @@ export function ThemeStudioPage() {
         </div>
         <div className="flex items-center gap-2">
           {themeData.hasUnpublishedChanges && <Badge tone="warning">Unpublished changes</Badge>}
-          <a href={previewUrl} target="_blank" rel="noreferrer">
+          <a href={previewUrl(restaurant.slug)} target="_blank" rel="noreferrer">
             <Button type="button" variant="ghost">
               Preview
             </Button>

@@ -386,12 +386,21 @@ export async function getAgencyDashboard(req: Request, res: Response) {
   const businessIds = businesses.map((b) => b._id);
   const ownerIds = businesses.map((b) => b.ownerId);
 
-  const [subscription, usage, pendingMemberInvites, owners, businessIdsWithDomain] = await Promise.all([
+  const [subscription, usage, pendingMemberInvites, owners, businessIdsWithDomain, locationsTotal] = await Promise.all([
     getSubscriptionForAgency(agencyId),
     getAgencyEntitlements(agencyId),
     AgencyMembership.countDocuments({ agencyId, status: "invited" }),
     User.find({ _id: { $in: ownerIds } }).select("inviteTokenHash"),
     DomainMapping.distinct("businessId", { businessId: { $in: businessIds } }),
+    // Portal UX audit (Phase 53) — Business.locationCount deliberately excludes each business's
+    // guaranteed first location (see createAgencyBusiness/createBusinessSelfServe's own doc
+    // comments: "a brand-new business's first location is never itself limited by a location
+    // count"), so summing it here undercounted every agency-created business by exactly one and
+    // disagreed with what listAgencyBusinesses' own per-row count (a live Restaurant aggregate)
+    // already correctly shows. A live count, not the entitlement counter, is the right source for
+    // "how many locations does this agency actually manage" — that counter's job is enforcing a
+    // plan limit, not reporting a fact.
+    Restaurant.countDocuments({ businessId: { $in: businessIds } }),
   ]);
   const plan = subscription ? await Plan.findById(subscription.planId) : null;
   const inviteByOwnerId = new Map(owners.map((o) => [(o.id as string), Boolean(o.inviteTokenHash)]));
@@ -422,7 +431,7 @@ export async function getAgencyDashboard(req: Request, res: Response) {
     // own access yet) — distinct from "suspended", which is a different, unrelated state.
     businessesNeedingSetup: businesses.filter((b) => b.status === "pending").length,
     attentionBusinesses,
-    locationsTotal: businesses.reduce((sum, b) => sum + (b.locationCount ?? 0), 0),
+    locationsTotal,
     domainsConfiguredCount: businessIdsWithDomain.length,
     pendingOwnerInvites: owners.filter((o) => Boolean(o.inviteTokenHash)).length,
     pendingMemberInvites,

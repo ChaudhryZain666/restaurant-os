@@ -112,6 +112,19 @@ test.describe.serial("agency-provisioned owner direct access (Phase 28)", () => 
     // Now reaches the real dashboard, and the temporary password no longer works.
     await expect(page).not.toHaveURL(/\/force-password-change$/, { timeout: 10_000 });
 
+    // Portal UX audit (Phase 53) regression: LocationContext's activeLocationId used to get stuck
+    // at null for the rest of THIS session (no page reload) — its resolving effect fired once,
+    // immediately on the temporary-password login, before mustChangePassword had cleared, so the
+    // server correctly rejected GET /businesses/:id/locations with PASSWORD_CHANGE_REQUIRED; the
+    // effect's dependency array didn't include mustChangePassword, so it never retried once the
+    // change-password call above cleared it. Every location-scoped page (Menu, Setup, Dashboard's
+    // own analytics, ...) stayed broken — "You do not have access to this restaurant" — until a
+    // full reload. Visiting Menu here, in the SAME session with NO reload, proves the fix: real
+    // menu content renders, not the access-denied alert.
+    await page.getByRole("link", { name: "Menu", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("You do not have access to this restaurant")).toHaveCount(0);
+
     await page.context().clearCookies();
     await page.goto("http://localhost:5174/login");
     await page.locator('input[type="email"]').fill(ownerEmail);
@@ -198,6 +211,58 @@ test.describe.serial("Kitchen / Staff feature toggles (Phase 28)", () => {
     await expect(page.getByRole("link", { name: "Staff", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Kitchen", exact: true }).click();
     await expect(page.getByText(/Kitchen operations are turned off/i)).toHaveCount(0);
+  });
+
+  test("POS subpages (Tables/Customers/Orders) enforce posEnabled just like the Register page (Portal UX audit, Phase 53)", async ({ page }) => {
+    test.setTimeout(90_000);
+    const stamp = Date.now();
+    const slug = `e2e-pos-gate-${stamp}`;
+    const ownerEmail = `e2e-pos-gate-owner-${stamp}@test.local`;
+
+    await page.goto("http://localhost:5174/login");
+    await page.locator('input[type="email"]').fill("platform-admin@restaurant.local");
+    await page.locator('input[type="password"]').fill("Admin123!");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/platform$/, { timeout: 10_000 });
+
+    await page.getByRole("link", { name: "Restaurants" }).click();
+    await page.getByRole("button", { name: "Create restaurant" }).click();
+    await page.getByLabel("Name", { exact: true }).fill(`E2E POS Gate ${stamp}`);
+    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Full name").fill("POS Gate Owner");
+    await page.getByLabel("Email", { exact: true }).fill(ownerEmail);
+    await page.getByRole("button", { name: "Create restaurant & send invite" }).click();
+    await expect(page.getByText("Restaurant created")).toBeVisible({ timeout: 10_000 });
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await db.collection("users").updateOne(
+      { email: ownerEmail },
+      { $set: { inviteTokenHash: tokenHash, inviteExpiresAt: new Date(Date.now() + 60 * 60 * 1000) } }
+    );
+    await page.goto(`http://localhost:5174/accept-invite?token=${rawToken}`);
+    await page.locator('input[type="password"]').fill("PosGateOwner123!");
+    await page.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
+
+    // posEnabled defaults to false — before this fix, only /pos itself showed the friendly
+    // "not enabled" state; the three POS subpages rendered their normal, fully-functional content
+    // if reached directly by URL, silently bypassing the toggle.
+    for (const path of ["/pos/tables", "/pos/customers", "/pos/orders"]) {
+      await page.goto(`http://localhost:5174${path}`);
+      await expect(page.getByText("POS is not enabled for this location")).toBeVisible({ timeout: 10_000 });
+    }
+
+    await page.goto("http://localhost:5174/settings");
+    await page.getByRole("button", { name: "Ordering" }).click();
+    await page.locator("label", { hasText: "Enable the staff POS terminal" }).locator('input[type="checkbox"]').check();
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10_000 });
+
+    for (const path of ["/pos/tables", "/pos/customers", "/pos/orders"]) {
+      await page.goto(`http://localhost:5174${path}`);
+      await expect(page.getByText("POS is not enabled for this location")).toHaveCount(0);
+    }
   });
 });
 

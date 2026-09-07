@@ -160,8 +160,17 @@ describe("Phase 28 — GET /agencies/:agencyId/dashboard", () => {
     expect(typeof res.body.data.businessCount).toBe("number");
     expect(res.body.data.usage).toHaveProperty("maxBusinesses");
     expect(res.body.data.usage).toHaveProperty("businessCount");
-    expect(typeof res.body.data.locationsTotal).toBe("number");
     expect(typeof res.body.data.domainsConfiguredCount).toBe("number");
+
+    // Portal UX audit (Phase 53) — locationsTotal used to sum Business.locationCount, which is
+    // deliberately never incremented for a business's own first location (see
+    // createAgencyBusiness's doc comment), so this always undercounted by exactly one per business
+    // and disagreed with listAgencyBusinesses' own per-row (live) count. By this point in the file,
+    // "Phase 28 — agency-provisioned owner access" has created 2 real businesses under this agency
+    // (Direct Access Co, Invite Mode Co), each with exactly 1 real location — a live count must be
+    // at least 2, never 0.
+    expect(typeof res.body.data.locationsTotal).toBe("number");
+    expect(res.body.data.locationsTotal).toBeGreaterThanOrEqual(2);
   });
 
   it("cross-agency isolation: a different agency's owner cannot read this agency's dashboard", async () => {

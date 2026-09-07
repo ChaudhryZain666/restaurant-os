@@ -1,9 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate } from "react-router-dom";
-import type { Order, OrderStatus, Restaurant, RestaurantAnalytics, RestaurantReadiness, SetupChecklistItem } from "@restaurant/types";
+import type {
+  Order,
+  OrderStatus,
+  Restaurant,
+  RestaurantAnalytics,
+  RestaurantAvailability,
+  RestaurantReadiness,
+  SetupChecklistItem,
+} from "@restaurant/types";
 import { roleHasPermission } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState, Skeleton } from "@restaurant/ui";
-import { formatCurrency } from "@restaurant/utils";
+import { describeAvailability, formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useActiveLocationId } from "../context/LocationContext";
@@ -53,6 +61,7 @@ export function DashboardPage() {
   const canViewAnalytics = roleHasPermission(user!.role, "restaurant.analytics.read");
   const canManageSettings = roleHasPermission(user!.role, "restaurant.settings.manage");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
   const [analytics, setAnalytics] = useState<RestaurantAnalytics | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [readiness, setReadiness] = useState<RestaurantReadiness | null>(null);
@@ -69,7 +78,9 @@ export function DashboardPage() {
     if (!restaurantId) return;
     setLoading(true);
     setError(null);
-    const restaurantReq = apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`);
+    const restaurantReq = apiClient.request<{ restaurant: Restaurant; availability: RestaurantAvailability }>(
+      `/restaurants/${restaurantId}`
+    );
     const analyticsReq = canViewAnalytics
       ? apiClient.request<{ analytics: RestaurantAnalytics }>(`/restaurants/${restaurantId}/analytics`)
       : Promise.resolve(null);
@@ -91,6 +102,7 @@ export function DashboardPage() {
     return Promise.all([restaurantReq, analyticsReq, ordersReq, readinessReq, checklistReq])
       .then(([restaurantData, analyticsData, ordersData, readinessData, checklistData]) => {
         setRestaurant(restaurantData.restaurant);
+        setAvailability(restaurantData.availability);
         if (analyticsData) setAnalytics(analyticsData.analytics);
         if (ordersData) {
           setOrders([...ordersData.orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
@@ -296,7 +308,19 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Dashboard</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold text-foreground">Dashboard</h1>
+          {/* Portal UX audit (Phase 53) — this is the one place an owner actually looks first, and
+              it previously gave zero indication of whether the restaurant is currently accepting
+              orders (Workflow O2's core question) even though the storefront/Settings already show
+              it correctly via this exact same describeAvailability() call — no new engine, no new
+              data fetch, just surfacing data GET /restaurants/:id already returns. */}
+          {availability && restaurant && (
+            <Badge tone={availability.status === "open" ? "success" : availability.status === "paused" ? "warning" : "neutral"}>
+              {describeAvailability(availability, restaurant.settings.timezone)}
+            </Badge>
+          )}
+        </div>
         <p className="text-sm text-muted">Here's how the restaurant is doing right now.</p>
       </div>
 

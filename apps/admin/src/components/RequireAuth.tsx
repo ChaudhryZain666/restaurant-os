@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { agencyRoleGrantsPermission, roleHasPermission, type Permission, type UserRole } from "@restaurant/types";
+import { useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useBusiness } from "../context/BusinessContext";
 import { roleHomePath } from "../lib/roleHome";
@@ -38,6 +39,35 @@ export function RequireAuth({ permission, roles, allowPlatformAdmin, children }:
   const { user, loading } = useAuth();
   const { activeBusinessId, agencyRoleForActiveBusiness } = useBusiness();
   const location = useLocation();
+  const { showToast } = useToast();
+
+  const allowed = Boolean(
+    user &&
+      ((allowPlatformAdmin && user.role === "platform_admin") ||
+        (permission
+          ? roleHasPermission(user.role, permission) ||
+            (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission))
+          : roles
+            ? roles.includes(user.role)
+            : true))
+  );
+
+  // Portal UX audit (Phase 53) — this used to be a completely silent bounce: a user following a
+  // bookmarked/shared link to a page their role can't reach just landed back on their own
+  // Dashboard with zero explanation. Reuses the existing toast system (already wired up in
+  // Layout.tsx for order notifications), not a new notification architecture. lastToastedPathRef
+  // dedupes against React 18 StrictMode's dev-only double-invoked effects (and any other re-render
+  // that leaves pathname/loading/allowed unchanged) so a single denied-navigation attempt never
+  // shows more than one toast.
+  const lastToastedPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || !user || user.mustChangePassword || allowed) return;
+    if (lastToastedPathRef.current === location.pathname) return;
+    lastToastedPathRef.current = location.pathname;
+    showToast({ title: "You don't have access to that page", description: "We've sent you back to your dashboard." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, loading, allowed]);
+
   if (loading) return <p>Loading...</p>;
   if (!user) return <Navigate to="/login" replace />;
 
@@ -49,14 +79,6 @@ export function RequireAuth({ permission, roles, allowPlatformAdmin, children }:
     return <Navigate to="/force-password-change" replace />;
   }
 
-  const allowed =
-    (allowPlatformAdmin && user.role === "platform_admin") ||
-    (permission
-      ? roleHasPermission(user.role, permission) ||
-        (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission))
-      : roles
-        ? roles.includes(user.role)
-        : true);
   if (!allowed) {
     // Route to THIS user's own default landing page, not unconditionally "/" — "/" itself is
     // permission-gated (see App.tsx), so a platform_admin (or, as of Phase 25, an

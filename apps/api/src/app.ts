@@ -52,7 +52,7 @@ export function createApp() {
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 1000,
+      limit: env.GLOBAL_RATE_LIMIT_MAX,
       standardHeaders: true,
       legacyHeaders: false,
       handler: jsonRateLimitHandler,

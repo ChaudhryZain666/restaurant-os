@@ -4,6 +4,7 @@ import type { TableWithStatus } from "@restaurant/types";
 import { EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
+import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { IconTable } from "../components/icons";
 
 /**
@@ -14,6 +15,7 @@ import { IconTable } from "../components/icons";
  */
 export function PosTablesPage() {
   const restaurantId = useActiveLocationId();
+  const { restaurant } = useRestaurantSettings();
   const navigate = useNavigate();
   const [tables, setTables] = useState<TableWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,20 @@ export function PosTablesPage() {
     );
   }
   if (error) return <div className="p-6"><EmptyState title="Couldn't load tables" description={error} /></div>;
+  // Portal UX audit (Phase 53) — matches RegisterPage.tsx's guard exactly: without it, a location
+  // with POS turned off still let a real user browse/act on this page directly by URL, even though
+  // the nav item and the register itself are both correctly hidden/blocked.
+  if (restaurant?.settings.posEnabled === false) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={<IconTable className="h-6 w-6" />}
+          title="POS is not enabled for this location"
+          description="Turn on the POS terminal under Settings → Ordering in Restaurant Admin to start ringing up in-person sales."
+        />
+      </div>
+    );
+  }
   if (tables.length === 0) {
     return (
       <div className="p-6">

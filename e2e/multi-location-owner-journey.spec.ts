@@ -102,7 +102,10 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await page.getByRole("button", { name: "Create item & continue" }).click();
     await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByText(itemA, { exact: false })).toBeVisible();
+    // li-scoped (matching the categoryA check above), not a bare page-wide getByText — the
+    // Portal UX audit's new "Item added" toast (Phase 53) legitimately also renders this same
+    // item name in its own, separate description text.
+    await expect(page.locator("li", { hasText: itemA })).toBeVisible();
 
     // --- Create a second location through the real Locations page — the new capability itself. ---
     await page.getByRole("link", { name: "Locations" }).click();
@@ -141,15 +144,15 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await page.getByRole("button", { name: "Create item & continue" }).click();
     await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByText(itemB, { exact: false })).toBeVisible();
+    await expect(page.locator("li", { hasText: itemB })).toBeVisible();
     // A's item is still here too — the canonical menu accumulates, it isn't replaced per switch.
-    await expect(page.getByText(itemA, { exact: false })).toBeVisible();
+    await expect(page.locator("li", { hasText: itemA })).toBeVisible();
 
     // --- Switch back to A: BOTH items are visible here too, since the whole menu is genuinely
     // shared across the business — proving the switch re-resolves correctly in both directions. ---
     await switcher.selectOption({ label: restaurantName });
     await page.getByRole("link", { name: "Menu", exact: true }).click();
-    await expect(page.getByText(itemA, { exact: false })).toBeVisible();
-    await expect(page.getByText(itemB, { exact: false })).toBeVisible();
+    await expect(page.locator("li", { hasText: itemA })).toBeVisible();
+    await expect(page.locator("li", { hasText: itemB })).toBeVisible();
   });
 });

@@ -7,7 +7,7 @@ import {
   type MenuItem,
   type MenuItemLocationOverride,
 } from "@restaurant/types";
-import { Badge, Button, Card, EmptyState } from "@restaurant/ui";
+import { Badge, Button, Card, EmptyState, useToast } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -292,6 +292,11 @@ export function MenuManagementPage() {
   // (/businesses/:businessId/...) and location overrides (/restaurants/:restaurantId/.../override)
   // since both are gated by the same permission constants, just checked via different middleware.
   const canWrite = roleHasPermission(user!.role, "restaurant.menu.write");
+  // Portal UX audit (Phase 53) — every save/delete on this page used to give zero positive
+  // confirmation beyond the list silently re-rendering, inconsistent with the rest of the app
+  // (Settings, Theme Studio both already toast). Reuses the existing toast system already wired up
+  // in Layout.tsx for order notifications — not a new notification architecture.
+  const { showToast } = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -337,12 +342,14 @@ export function MenuManagementPage() {
     e.preventDefault();
     setError(null);
     try {
+      const createdName = newCategoryName;
       await apiClient.request(`/businesses/${businessId}/categories`, {
         method: "POST",
         body: { name: newCategoryName },
       });
       setNewCategoryName("");
       await reload();
+      showToast({ title: "Category added", description: `"${createdName}" is ready for items.` });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -355,6 +362,7 @@ export function MenuManagementPage() {
     try {
       await apiClient.request(`/businesses/${businessId}/categories/${category.id}`, { method: "DELETE" });
       await reload();
+      showToast({ title: "Category deleted", description: `"${category.name}" was removed for every location.` });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -406,6 +414,7 @@ export function MenuManagementPage() {
     await handleUpdateCategory(id, { name });
     setEditingCategoryId(null);
     setEditingCategoryName("");
+    showToast({ title: "Category renamed", description: `Now called "${name}".` });
   }
 
   async function handleUpdateItemSortOrder(item: MenuItem, sortOrder: number) {
@@ -439,6 +448,7 @@ export function MenuManagementPage() {
       await apiClient.request(`/businesses/${businessId}/menu/${item.id}`, { method: "DELETE" });
       if (expandedItemId === item.id) closePanel();
       await reload();
+      showToast({ title: "Item deleted", description: `"${item.name}" was removed for every location.` });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -489,12 +499,14 @@ export function MenuManagementPage() {
         const freshItems = await reload();
         setExpandedItemId(item.id);
         setDraft(draftFromItem(freshItems.find((i) => i.id === item.id) ?? item));
+        showToast({ title: "Item added", description: `"${item.name}" is on the menu.` });
       } else if (expandedItemId) {
         await apiClient.request(`/businesses/${businessId}/menu/${expandedItemId}`, {
           method: "PATCH",
           body: { ...body, isAvailable: draft.isAvailable },
         });
         await reload();
+        showToast({ title: "Item saved", description: `"${draft.name}" was updated.` });
       }
     } catch (err) {
       setError((err as Error).message);

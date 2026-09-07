@@ -573,6 +573,15 @@ export function CartPage() {
               </label>
             ))}
           </div>
+          {/* Portal UX audit (Phase 53) — Workflow O6's explicit dependency check: a customer who
+              scanned a real table QR while dineInEnabled is off previously saw dine-in silently
+              missing from the options above with zero explanation (admin already explains this
+              dependency in both directions on TablesPage/Settings — this is the one place the
+              customer side of it went unexplained). Purely informational; ordering availability
+              itself stays entirely server-authoritative, unchanged. */}
+          {table && !dineInAvailable && (
+            <p className="text-xs text-muted">This table's QR code is set up, but dine-in ordering isn't turned on for this restaurant right now.</p>
+          )}
           {orderType === "dine_in" && table && (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background p-3 text-sm">
               <span className="text-foreground">

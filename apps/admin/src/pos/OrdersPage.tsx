@@ -7,7 +7,7 @@ import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useRestaurantTimezone } from "../hooks/useRestaurantTimezone";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
-import { IconClock } from "../components/icons";
+import { IconClock, IconRegister } from "../components/icons";
 import { STATUS_LABELS, STATUS_TONE } from "../lib/orderStatusFlow";
 
 const ACTIVE_STATUSES = new Set(["pending", "confirmed", "preparing", "ready", "out_for_delivery"]);
@@ -45,6 +45,21 @@ export function PosOrdersPage() {
   useRestaurantOrderEvents(() => {
     reload().catch(() => {});
   });
+
+  // Portal UX audit (Phase 53) — matches RegisterPage.tsx's guard exactly: without it, a location
+  // with POS turned off still let a real user browse this page directly by URL, even though the
+  // nav item and the register itself are both correctly hidden/blocked.
+  if (restaurant?.settings.posEnabled === false) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={<IconRegister className="h-6 w-6" />}
+          title="POS is not enabled for this location"
+          description="Turn on the POS terminal under Settings → Ordering in Restaurant Admin to start ringing up in-person sales."
+        />
+      </div>
+    );
+  }
 
   const currency = restaurant?.settings.currency ?? "USD";
   const visible = filter === "active" ? orders.filter((o) => ACTIVE_STATUSES.has(o.status)) : orders;
