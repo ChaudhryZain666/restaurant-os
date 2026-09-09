@@ -3,7 +3,7 @@ import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restau
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
-import { useAuth } from "../context/AuthContext";
+import { useActiveBusinessId } from "../context/BusinessContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useCan } from "../hooks/useCan";
 
@@ -55,8 +55,7 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
  * grace-period messaging, and a "pay now" checkout path alongside the existing no-card trial path.
  */
 export function BillingPage() {
-  const { user } = useAuth();
-  const businessId = user!.businessId!;
+  const businessId = useActiveBusinessId();
   const { locations } = useActiveLocation();
   const canManage = useCan("billing.manage");
 

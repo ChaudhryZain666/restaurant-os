@@ -118,3 +118,17 @@ export function useBusiness() {
   if (!ctx) throw new Error("useBusiness must be used within BusinessProvider");
   return ctx;
 }
+
+/**
+ * Phase 59 — the business-level analog of LocationContext's useActiveLocationId(), for pages that
+ * (per this file's own Phase 26 doc comment) were meant to resolve their scope via THIS context but
+ * read `user!.businessId!` directly instead, which is undefined for an agency_member — a real,
+ * previously-undiscovered gap in the "zero page-level changes" promise above (only the
+ * useActiveLocationId() idiom actually got wired up; this idiom never did). Behavior-neutral for a
+ * real restaurant-role account (BusinessContext computes activeBusinessId AS user.businessId for
+ * those roles already); for an agency_member acting on a managed business, this is the one missing
+ * piece that makes Menu/BusinessAnalytics/Billing/BusinessPromotions work correctly.
+ */
+export function useActiveBusinessId(): string {
+  return useBusiness().activeBusinessId!;
+}

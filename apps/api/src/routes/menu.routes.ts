@@ -2,8 +2,14 @@ import { Router } from "express";
 import { menuItemOverrideSchema, menuItemSchema, updateMenuItemSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
-import { requireTenantMatch, requireTenantPermission } from "../middleware/tenant.js";
+// Phase 59 — was requirePermission from middleware/rbac.js (plain, non-agency-aware) on every route
+// below except /import/*. That contradicted this router's own documented intent
+// (docs/multi-tenant-storefront-architecture.md's Phase 26 section: "menu.routes.ts... became
+// agency-aware automatically... no change needed") and AGENCY_ROLE_GRANTS already listing
+// restaurant.menu.read/write for agency roles — a real gap where an agency member could never
+// actually reach Menu CRUD, only the later-added /import/* routes. Now consistent with
+// table.routes.ts/staff.routes.ts's exact same alias convention.
+import { requireTenantMatch, requireTenantPermission as requirePermission } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createMenuItem,
@@ -77,30 +83,28 @@ menuRouter.delete(
   asyncHandler(deleteMenuItemOverride)
 );
 
-// Phase 30 — menu importer. Uses requireTenantPermission (agency-aware), not the plain
-// requirePermission every other route on this router uses, so an agency member with genuine
-// access to this location (agency_owner/admin implicitly, agency_staff via explicit businessIds —
-// see middleware/tenant.ts's resolveTenantAccess) can run an import, matching the brief's explicit
-// agency requirement — deliberately scoped to ONLY these new routes, not a silent widening of the
-// existing menu CRUD routes' narrower (Phase 26) agency boundary.
+// Phase 30 — menu importer. Agency-aware via the same requirePermission alias as the rest of this
+// router (Phase 59 fix above), so an agency member with genuine access to this location
+// (agency_owner/admin implicitly, agency_staff via explicit businessIds — see
+// middleware/tenant.ts's resolveTenantAccess) can run an import.
 menuRouter.post(
   "/import/preview",
   requireAuth,
   requireTenantMatch(),
-  requireTenantPermission("restaurant.menu.write"),
+  requirePermission("restaurant.menu.write"),
   asyncHandler(previewMenuImport)
 );
 menuRouter.post(
   "/import/commit",
   requireAuth,
   requireTenantMatch(),
-  requireTenantPermission("restaurant.menu.write"),
+  requirePermission("restaurant.menu.write"),
   asyncHandler(commitMenuImport)
 );
 menuRouter.get(
   "/import/:importId",
   requireAuth,
   requireTenantMatch(),
-  requireTenantPermission("restaurant.menu.read"),
+  requirePermission("restaurant.menu.read"),
   asyncHandler(getMenuImportReport)
 );

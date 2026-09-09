@@ -119,7 +119,7 @@ export function AgencyMembersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-semibold text-foreground">Team</h1>
-          <p className="text-sm text-muted">Who can manage this agency and the businesses it manages.</p>
+          <p className="text-sm text-muted">Who can manage this agency and the clients it manages.</p>
         </div>
         {canManage && (
           <Button size="sm" onClick={() => setShowForm((v) => !v)}>
@@ -127,6 +127,38 @@ export function AgencyMembersPage() {
           </Button>
         )}
       </div>
+
+      <Card className="flex flex-col gap-2">
+        <h2 className="font-heading text-sm font-medium text-foreground">What each role can access</h2>
+        <p className="text-xs text-muted">
+          Two separate layers: what a role can do to the agency itself, and — separately — what it can do once it enters a
+          client's business (via "Manage this business" on a client's page). Payment-provider management is never granted to any
+          agency role inside a client business, regardless of agency role.
+        </p>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border p-2.5 text-xs">
+            <dt className="mb-1 font-medium text-foreground">Owner</dt>
+            <dd className="text-muted">
+              Full agency access: settings, domain, billing, team, and every client. Inside a client's business: everything except
+              payments.
+            </dd>
+          </div>
+          <div className="rounded-lg border border-border p-2.5 text-xs">
+            <dt className="mb-1 font-medium text-foreground">Admin</dt>
+            <dd className="text-muted">
+              Manages clients and team, views billing — cannot change agency settings/domain or the agency's own subscription.
+              Inside a client's business: everything except payments and staff management.
+            </dd>
+          </div>
+          <div className="rounded-lg border border-border p-2.5 text-xs">
+            <dt className="mb-1 font-medium text-foreground">Staff</dt>
+            <dd className="text-muted">
+              Read-only at the agency level. Only accesses the specific client businesses assigned to them, and only to view menu,
+              orders, and analytics there — no changes.
+            </dd>
+          </div>
+        </dl>
+      </Card>
 
       {error && (
         <Alert tone="danger" role="alert">

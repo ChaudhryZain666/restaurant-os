@@ -1,5 +1,13 @@
 import { Router } from "express";
-import { createAgencyBusinessSchema, createAgencySchema, paginationQuerySchema } from "@restaurant/validation";
+import {
+  createAgencyBusinessSchema,
+  createAgencySchema,
+  listAgencyBusinessesQuerySchema,
+  paginationQuerySchema,
+  setAgencyDomainSchema,
+  setClientCommercialTermsSchema,
+  updateAgencySchema,
+} from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAgencyMatch, requireAgencyPermission } from "../middleware/agency.js";
@@ -12,10 +20,15 @@ import {
   getAgencyAuditLog,
   getAgencyBusiness,
   getAgencyDashboard,
+  getAgencyLocationDetail,
   getAgencyLocations,
   getMyAgencies,
   listAgencyBusinesses,
   resendAgencyBusinessOwnerInvite,
+  setAgencyDomain,
+  setClientCommercialTerms,
+  updateAgency,
+  verifyAgencyDomain,
 } from "../controllers/agency.controller.js";
 
 export const agencyRouter = Router();
@@ -26,11 +39,31 @@ agencyRouter.post("/", validateBody(createAgencySchema), asyncHandler(createAgen
 agencyRouter.get("/me", asyncHandler(getMyAgencies));
 
 agencyRouter.get("/:agencyId", requireAgencyMatch(), asyncHandler(getAgency));
+agencyRouter.patch(
+  "/:agencyId",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.manage"),
+  validateBody(updateAgencySchema),
+  asyncHandler(updateAgency)
+);
+agencyRouter.post(
+  "/:agencyId/domain",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.manage"),
+  validateBody(setAgencyDomainSchema),
+  asyncHandler(setAgencyDomain)
+);
+agencyRouter.post(
+  "/:agencyId/domain/verify",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.manage"),
+  asyncHandler(verifyAgencyDomain)
+);
 agencyRouter.get("/:agencyId/dashboard", requireAgencyMatch(), asyncHandler(getAgencyDashboard));
 agencyRouter.get(
   "/:agencyId/businesses",
   requireAgencyMatch(),
-  validateQuery(paginationQuerySchema),
+  validateQuery(listAgencyBusinessesQuerySchema),
   asyncHandler(listAgencyBusinesses)
 );
 agencyRouter.post(
@@ -41,12 +74,20 @@ agencyRouter.post(
   asyncHandler(createAgencyBusiness)
 );
 agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
+agencyRouter.put(
+  "/:agencyId/businesses/:businessId/commercial-terms",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.businesses.manage"),
+  validateBody(setClientCommercialTermsSchema),
+  asyncHandler(setClientCommercialTerms)
+);
 agencyRouter.get(
   "/:agencyId/locations",
   requireAgencyMatch(),
   validateQuery(paginationQuerySchema),
   asyncHandler(getAgencyLocations)
 );
+agencyRouter.get("/:agencyId/locations/:locationId", requireAgencyMatch(), asyncHandler(getAgencyLocationDetail));
 agencyRouter.post(
   "/:agencyId/businesses/:businessId/resend-owner-invite",
   inviteResendLimiter,

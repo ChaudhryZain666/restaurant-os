@@ -2,8 +2,9 @@ import { Router } from "express";
 import { modifierGroupOverrideSchema, modifierGroupSchema, updateModifierGroupSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
-import { requireTenantMatch } from "../middleware/tenant.js";
+// Phase 59 — was requirePermission from middleware/rbac.js (plain, non-agency-aware); see
+// menu.routes.ts's identical fix for the full reasoning (this router has the exact same gap).
+import { requireTenantMatch, requireTenantPermission as requirePermission } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import {
   createModifierGroup,

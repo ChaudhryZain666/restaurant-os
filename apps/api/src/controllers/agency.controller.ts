@@ -4,7 +4,14 @@ import mongoose from "mongoose";
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { PaginationQueryInput } from "@restaurant/validation";
-import type { CreateAgencyBusinessInput, CreateAgencyInput } from "@restaurant/validation";
+import type {
+  CreateAgencyBusinessInput,
+  CreateAgencyInput,
+  ListAgencyBusinessesQueryInput,
+  SetAgencyDomainInput,
+  SetClientCommercialTermsInput,
+  UpdateAgencyInput,
+} from "@restaurant/validation";
 import type { AgencyAuditLogEntry } from "@restaurant/types";
 import { Agency, type AgencyDoc } from "../models/Agency.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
@@ -13,11 +20,12 @@ import { Business, type BusinessDoc } from "../models/Business.js";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
 import { Plan } from "../models/Plan.js";
+import { ClientCommercialTerms } from "../models/ClientCommercialTerms.js";
 import { DomainMapping } from "../models/DomainMapping.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
-import { paginateQuery } from "../utils/pagination.js";
+import { escapeRegex, paginateQuery } from "../utils/pagination.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
@@ -28,6 +36,8 @@ import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
 import { reserveBusinessSlot, getAgencyEntitlements } from "../services/agencyEntitlement.service.js";
 import { getSubscriptionForAgency } from "../services/subscription.service.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
+import { computeReadiness } from "../services/restaurantReadiness.service.js";
+import { checkDomainVerification, generateVerificationToken, isSelfClaim, verificationRecordHost } from "../services/domainVerification.service.js";
 
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff/restaurant invite TTL
 
@@ -115,9 +125,49 @@ export async function getAgency(req: Request, res: Response) {
  */
 export async function listAgencyBusinesses(req: Request, res: Response) {
   const { agencyId } = req.params;
-  const { page, limit } = req.query as unknown as PaginationQueryInput;
+  const { page, limit, search, status, sort, order } = req.query as unknown as ListAgencyBusinessesQueryInput;
 
-  const result = await paginateQuery(Business.find({ agencyId }).sort({ createdAt: -1 }), { page, limit });
+  const filter: Record<string, unknown> = { agencyId };
+
+  // "inactive"/"onboarding" map directly onto Business.status. "live"/"owner_pending"/
+  // "multi_location" are derived (owner-invite state, live location count — same states
+  // businessJourneyStage already computes client-side) and need their matching business ids
+  // pre-resolved before the paginated query, since neither is a field stored on Business itself.
+  // Every pre-resolution query here is scoped to THIS agency's own businesses only — bounded by one
+  // agency's portfolio size, never a platform-wide scan.
+  if (status === "inactive") filter.status = "suspended";
+  else if (status === "onboarding") filter.status = "pending";
+  else if (status === "live" || status === "owner_pending" || status === "multi_location") {
+    const scopedBusinesses = await Business.find({ agencyId }).select("_id ownerId");
+    if (status === "multi_location") {
+      const counts = await Restaurant.aggregate<{ _id: mongoose.Types.ObjectId }>([
+        { $match: { businessId: { $in: scopedBusinesses.map((b) => b._id) } } },
+        { $group: { _id: "$businessId", count: { $sum: 1 } } },
+        { $match: { count: { $gt: 1 } } },
+      ]);
+      filter._id = { $in: counts.map((c) => c._id) };
+    } else {
+      const owners = await User.find({ _id: { $in: scopedBusinesses.map((b) => b.ownerId) } }).select("inviteTokenHash");
+      const pendingOwnerIds = new Set(owners.filter((o) => o.inviteTokenHash).map((o) => o.id as string));
+      const wantPending = status === "owner_pending";
+      filter._id = {
+        $in: scopedBusinesses
+          .filter((b) => pendingOwnerIds.has(b.ownerId.toString()) === wantPending)
+          .map((b) => b._id),
+      };
+      if (status === "live") filter.status = "active";
+    }
+  }
+
+  if (search) {
+    const re = new RegExp(escapeRegex(search), "i");
+    const matchingOwners = await User.find({ role: "restaurant_owner", $or: [{ name: re }, { email: re }] }).select("_id");
+    const orClauses: Record<string, unknown>[] = [{ name: re }];
+    if (matchingOwners.length > 0) orClauses.push({ ownerId: { $in: matchingOwners.map((o) => o._id) } });
+    filter.$or = orClauses;
+  }
+
+  const result = await paginateQuery(Business.find(filter).sort({ [sort]: order === "asc" ? 1 : -1 }), { page, limit });
   const businessIds = result.items.map((b) => b._id);
 
   const [locationCounts, subscriptions, owners, domainCounts] = await Promise.all([
@@ -309,13 +359,16 @@ export async function getAgencyBusiness(req: Request, res: Response) {
   const business = await Business.findOne({ _id: businessId, agencyId });
   if (!business) throw ApiError.notFound("Business not found");
 
-  const [owner, locations, subscription, domains] = await Promise.all([
+  const [owner, locations, subscription, domains, commercialTerms] = await Promise.all([
     User.findById(business.ownerId).select("name email inviteTokenHash"),
     Restaurant.find({ businessId }).select("name slug status settings.timezone settings.currency").sort({ createdAt: 1 }),
     Subscription.findOne({ ownerType: "business", ownerId: businessId }).select("status planId currentPeriodEnd"),
     // Phase 28 — read-only visibility only (status/hostname), same reasoning as
     // listAgencyBusinesses's domainCount: management stays owner-only via DomainSettingsPanel.tsx.
     DomainMapping.find({ businessId }).select("hostname status"),
+    // Phase 59 — informational only, see ClientCommercialTerms.ts's doc comment. Absence (null) IS
+    // "not configured," not an error state.
+    ClientCommercialTerms.findOne({ businessId }),
   ]);
 
   sendSuccess(res, {
@@ -324,7 +377,43 @@ export async function getAgencyBusiness(req: Request, res: Response) {
     locations: locations.map((l) => l.toJSON()),
     subscription: subscription?.toJSON() ?? null,
     domains: domains.map((d) => d.toJSON()),
+    commercialTerms: commercialTerms?.toJSON() ?? null,
   });
+}
+
+/**
+ * PUT /agencies/:agencyId/businesses/:businessId/commercial-terms — Phase 59. Records what THIS
+ * agency charges its OWN client; never a payment-collection action (no provider, no webhook, no
+ * invoice — see ClientCommercialTerms.ts's doc comment). Upserts so the agency can set-then-adjust
+ * terms freely; `agencyId` is re-confirmed against the URL's on every write (never trusted from the
+ * body) exactly like every other write in this file. Scoped the same "404, not 403, for a business
+ * managed by a different agency" way as getAgencyBusiness/resendAgencyBusinessOwnerInvite, so a
+ * caller can never distinguish "doesn't exist" from "belongs to someone else's agency."
+ */
+export async function setClientCommercialTerms(req: Request, res: Response) {
+  const { agencyId, businessId } = req.params;
+  const updates = req.body as SetClientCommercialTermsInput;
+
+  const business = await Business.findOne({ _id: businessId, agencyId });
+  if (!business) throw ApiError.notFound("Business not found");
+
+  const terms = await ClientCommercialTerms.findOneAndUpdate(
+    { businessId },
+    { $set: { ...updates, agencyId, businessId } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+  );
+
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.client_commercial_terms_updated",
+    targetType: "business",
+    targetId: business._id,
+    metadata: { businessName: business.name },
+  });
+
+  sendSuccess(res, { commercialTerms: terms.toJSON() });
 }
 
 /**
@@ -477,6 +566,130 @@ export async function getAgencyLocations(req: Request, res: Response) {
   }));
 
   sendSuccess(res, { ...result, items });
+}
+
+/**
+ * GET /agencies/:agencyId/locations/:locationId — Phase 58 Section 14, the location drill-down
+ * AgencyLocationsPage's flat list previously had no page to link into. Scoped by resolving the
+ * location's OWN businessId and confirming it belongs to this agency (mirrors getAgencyBusiness's
+ * "404, not 403, for a location under a different agency" reasoning) — never trusts the location id
+ * alone. Deliberately NOT a second Restaurant Owner Portal (Section 14's own warning): portfolio
+ * visibility only — identity, availability, setup readiness, owner relationship, storefront link —
+ * no menu/order/staff management surfaces.
+ */
+export async function getAgencyLocationDetail(req: Request, res: Response) {
+  const { agencyId, locationId } = req.params;
+
+  const location = await Restaurant.findById(locationId);
+  if (!location || !location.businessId) throw ApiError.notFound("Location not found");
+
+  const business = await Business.findOne({ _id: location.businessId, agencyId });
+  if (!business) throw ApiError.notFound("Location not found");
+
+  const [owner, readiness] = await Promise.all([
+    User.findById(business.ownerId).select("name email inviteTokenHash"),
+    computeReadiness(location),
+  ]);
+
+  sendSuccess(res, {
+    business: { id: business.id as string, name: business.name },
+    location: location.toJSON(),
+    owner: owner ? { name: owner.name, email: owner.email, invitePending: Boolean(owner.inviteTokenHash) } : null,
+    availability: computeAvailability(location.settings),
+    readiness,
+    storefrontUrl: `${env.CLIENT_ORIGIN}/r/${location.slug}`,
+  });
+}
+
+/**
+ * PATCH /agencies/:agencyId — profile/branding edits only (name/description/logo/contactEmail).
+ * Slug is immutable (see updateAgencySchema's doc comment).
+ */
+export async function updateAgency(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const updates = req.body as UpdateAgencyInput;
+
+  const agency = await Agency.findByIdAndUpdate(agencyId, { $set: updates }, { new: true, runValidators: true });
+  if (!agency) throw ApiError.notFound("Agency not found");
+
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.updated",
+    targetType: "agency",
+    targetId: agency._id,
+  });
+
+  sendSuccess(res, { agency: agency.toJSON() });
+}
+
+/**
+ * POST /agencies/:agencyId/domain — Phase 58 Section 12A. Records a CANDIDATE white-label domain
+ * and starts ownership verification, reusing domainVerification.service.ts's exact DNS-TXT
+ * mechanism DomainMapping already established for location custom domains — not a new verification
+ * system. Setting/verifying this domain does NOT enable sending email from it or branding
+ * invitation emails (no per-tenant email-sending infrastructure exists yet — see
+ * docs/agency-white-label-domain.md); it establishes ownership only, which is the real prerequisite
+ * for that future work, not a substitute for it.
+ */
+export async function setAgencyDomain(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const { domain } = req.body as SetAgencyDomainInput;
+
+  if (isSelfClaim(domain, new URL(env.CLIENT_ORIGIN).hostname) || isSelfClaim(domain, new URL(env.ADMIN_ORIGIN).hostname)) {
+    throw ApiError.badRequest("This platform's own domain can't be claimed as a white-label domain");
+  }
+
+  const agency = await Agency.findByIdAndUpdate(
+    agencyId,
+    { $set: { domain, domainStatus: "pending_verification", domainVerificationToken: generateVerificationToken(), domainVerifiedAt: undefined } },
+    { new: true, runValidators: true }
+  );
+  if (!agency) throw ApiError.notFound("Agency not found");
+
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.domain_set",
+    targetType: "agency",
+    targetId: agency._id,
+    metadata: { domain },
+  });
+
+  sendSuccess(res, { agency: agency.toJSON(), verificationRecordHost: verificationRecordHost(domain) }, 201);
+}
+
+/** POST /agencies/:agencyId/domain/verify — idempotent, safe to call any number of times; never
+ *  activates email-sending or anything beyond flipping domainStatus (see setAgencyDomain's comment
+ *  on exactly what verification does and doesn't unlock). */
+export async function verifyAgencyDomain(req: Request, res: Response) {
+  const { agencyId } = req.params;
+
+  const agency = await Agency.findById(agencyId);
+  if (!agency) throw ApiError.notFound("Agency not found");
+  if (!agency.domain || !agency.domainVerificationToken) {
+    throw ApiError.badRequest("No domain has been configured for this agency yet");
+  }
+
+  const verified = await checkDomainVerification(agency.domain, agency.domainVerificationToken);
+  if (verified && agency.domainStatus !== "verified") {
+    agency.domainStatus = "verified";
+    agency.domainVerifiedAt = new Date();
+    await agency.save();
+    await recordAgencyAuditEvent({
+      agencyId,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "agency.domain_verified",
+      targetType: "agency",
+      targetId: agency._id,
+      metadata: { domain: agency.domain },
+    });
+  }
+
+  sendSuccess(res, { verified, agency: agency.toJSON() });
 }
 
 export async function getAgencyAuditLog(req: Request, res: Response) {

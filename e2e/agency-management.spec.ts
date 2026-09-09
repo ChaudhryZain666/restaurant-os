@@ -36,27 +36,31 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
     await expect(page.getByText(`Test Agency ${stamp}`)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("agency_owner")).toBeVisible();
 
-    // --- Create a business — transactionally creates the business, its first location, and
-    // invites the owner. ---
+    // --- Create a client via ClientProvisioningWizard (Phase 59) — transactionally creates the
+    // business, its first location, and invites the owner (the Commercial step is left blank here,
+    // tested separately); lands directly on the new client's Detail page. ---
     await page.getByRole("link", { name: "Clients", exact: true }).click();
     await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Agency Client ${stamp}`);
     await page.getByLabel("Business slug").fill(`agency-client-${stamp}`);
-    await page.getByLabel("First location name").fill(`Client Location ${stamp}`);
-    await page.getByLabel("Location slug").fill(`client-location-${stamp}`);
     await page.getByLabel("Owner full name").fill("Client Owner");
     await page.getByLabel("Owner email").fill(`client-owner-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create client & invite owner" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByLabel("First location name").fill(`Client Location ${stamp}`);
+    await page.getByLabel("Location slug").fill(`client-location-${stamp}`);
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click(); // Commercial step — left blank
+    await page.getByRole("button", { name: "Next" }).click(); // Owner access step — default "invite"
+    await page.getByRole("button", { name: "Create client" }).click();
 
-    await expect(page.getByText(`Agency Client ${stamp}`)).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/agency\/businesses\/[a-f0-9]+$/, { timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: `Agency Client ${stamp}` })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Invite pending")).toBeVisible();
 
     // --- Phase 26: enter the managed business's real operational admin as the agency owner
     // (implicit access, no explicit businessIds assignment needed), confirm Menu/Orders actually
     // load (proves requireTenantMatch's agency branch, not just requireBusinessMatch's), then exit
     // cleanly back to the Agency section. ---
-    await page.getByRole("link", { name: "Manage" }).click();
-    await expect(page).toHaveURL(/\/agency\/businesses\/[a-f0-9]+$/, { timeout: 10_000 });
     await page.getByRole("button", { name: "Manage this business" }).click();
     await expect(page).toHaveURL("http://localhost:5174/", { timeout: 10_000 });
     await expect(page.getByText(`Managing Agency Client ${stamp}`)).toBeVisible();
@@ -205,19 +209,25 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Limit Client One ${stamp}`);
     await page.getByLabel("Business slug").fill(`limit-client-one-${stamp}`);
-    await page.getByLabel("First location name").fill(`Limit Location One ${stamp}`);
-    await page.getByLabel("Location slug").fill(`limit-location-one-${stamp}`);
     await page.getByLabel("Owner full name").fill("Limit Client Owner One");
     await page.getByLabel("Owner email").fill(`limit-client-owner-one-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create client & invite owner" }).click();
-    await expect(page.getByText(`Limit Client One ${stamp}`)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByLabel("First location name").fill(`Limit Location One ${stamp}`);
+    await page.getByLabel("Location slug").fill(`limit-location-one-${stamp}`);
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Create client" }).click();
+    await expect(page.getByRole("heading", { name: `Limit Client One ${stamp}` })).toBeVisible({ timeout: 10_000 });
 
     // --- Phase 39 added a real client-side pre-check (AgencyBusinessesPage.tsx) that disables
     // "New business" once the plan's real limit is reached — so a second business is now blocked
     // BEFORE the form can even open, not by a server 409 after filling it out (this test's own
     // premise until Phase 40.1 updated it to match). The atomic server-side guard
     // (reserveBusinessSlot) is unchanged and re-proven directly, with real numbers, by
-    // agencyEntitlementInheritance.service.test.ts — not duplicated here. ---
+    // agencyEntitlementInheritance.service.test.ts — not duplicated here. Back on the Clients list
+    // (creation now lands on the new client's own Detail page, Phase 59) to see the usage banner. ---
+    await page.getByRole("link", { name: "Clients", exact: true }).click();
     await expect(page.getByText(/used 1 of 1 client/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: "New client" })).toBeDisabled();
 
@@ -240,11 +250,15 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await page.getByRole("button", { name: "New client" }).click();
     await page.getByLabel("Business name").fill(`Limit Client Two ${stamp}`);
     await page.getByLabel("Business slug").fill(`limit-client-two-${stamp}`);
-    await page.getByLabel("First location name").fill(`Limit Location Two ${stamp}`);
-    await page.getByLabel("Location slug").fill(`limit-location-two-${stamp}`);
     await page.getByLabel("Owner full name").fill("Limit Client Owner Two");
     await page.getByLabel("Owner email").fill(`limit-client-owner-two-${stamp}@test.local`);
-    await page.getByRole("button", { name: "Create client & invite owner" }).click();
-    await expect(page.getByText(`Limit Client Two ${stamp}`)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByLabel("First location name").fill(`Limit Location Two ${stamp}`);
+    await page.getByLabel("Location slug").fill(`limit-location-two-${stamp}`);
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Create client" }).click();
+    await expect(page.getByRole("heading", { name: `Limit Client Two ${stamp}` })).toBeVisible({ timeout: 10_000 });
   });
 });

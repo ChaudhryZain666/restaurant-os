@@ -28,6 +28,14 @@ export const AGENCY_AUDIT_ACTIONS = [
   "agency.subscription_payment_succeeded",
   "agency.subscription_payment_failed",
   "agency.subscription_past_due",
+  // Phase 58 — agency profile/branding edits and white-label domain ownership verification
+  // (Section 12A — domain OWNERSHIP verification only, no email-sending infrastructure attached).
+  "agency.updated",
+  "agency.domain_set",
+  "agency.domain_verified",
+  // Phase 59 — the agency set/changed what it charges its OWN client for its services. Distinct
+  // from every "agency.subscription_*" action above, which is the agency's OWN platform billing.
+  "agency.client_commercial_terms_updated",
 ] as const;
 
 export const AGENCY_AUDIT_TARGET_TYPES = ["agency", "agency_membership", "business", "subscription"] as const;

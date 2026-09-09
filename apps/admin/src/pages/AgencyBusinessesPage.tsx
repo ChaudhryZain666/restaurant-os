@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import type { Paginated } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -7,6 +7,7 @@ import { useAgency } from "../context/AgencyContext";
 import { useAgencyPermission } from "../hooks/useAgencyPermission";
 import { IconStore } from "../components/icons";
 import { businessJourneyStage, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "../lib/agencyJourney";
+import { ClientProvisioningWizard } from "../components/ClientProvisioningWizard";
 
 interface AgencyBusinessSummary {
   id: string;
@@ -23,37 +24,70 @@ interface AgencyBusinessSummary {
 
 const PAGE_SIZE = 20;
 
-type ProvisioningMode = "invite" | "direct";
+const STATUS_FILTERS = ["all", "live", "onboarding", "owner_pending", "inactive", "multi_location"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+const STATUS_FILTER_LABEL: Record<StatusFilter, string> = {
+  all: "All clients",
+  live: "Live",
+  onboarding: "Onboarding",
+  owner_pending: "Awaiting owner acceptance",
+  inactive: "Inactive",
+  multi_location: "Multiple locations",
+};
 
-function emptyDraft() {
-  return { businessName: "", businessSlug: "", ownerName: "", ownerEmail: "", locationName: "", locationSlug: "" };
-}
+const SORT_OPTIONS = ["createdAt", "name", "locationCount"] as const;
+type SortField = (typeof SORT_OPTIONS)[number];
+const SORT_LABEL: Record<SortField, string> = { createdAt: "Date created", name: "Name", locationCount: "Locations" };
 
 /**
  * Phase 25 — list + create. Phase 26 added the "Manage" link into AgencyBusinessDetailPage, which
  * is where the actual "enter this business's operational admin" action lives (see that page's doc
  * comment) — this list itself stays a summary view, not the entry point.
+ *
+ * Phase 58 — server-side search/filter/sort (Sections 7-9), mirroring PlatformRestaurantsPage.tsx's
+ * exact debounce/query-param pattern so this list scales to hundreds of clients without ever
+ * loading them all into the browser. `status` filter values mirror agencyJourney.ts's real,
+ * already-derived lifecycle states — see packages/validation/src/agency.ts's doc comment for why
+ * these, not raw Business.status, are what's offered.
+ *
+ * Phase 59 — "New client" now opens ClientProvisioningWizard's guided Client -> Restaurant ->
+ * Commercial -> Owner -> Review flow instead of one flat form; on success this page immediately
+ * navigates to the new client's detail page (Section 7's "land on a useful Client Detail view"),
+ * carrying the one-time revealed password / any commercial-terms save error via router state rather
+ * than duplicating that display logic here.
  */
 export function AgencyBusinessesPage() {
   const { activeAgencyId } = useAgency();
+  const navigate = useNavigate();
   const canManage = useAgencyPermission("agency.businesses.manage");
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sort, setSort] = useState<SortField>("createdAt");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [result, setResult] = useState<Paginated<AgencyBusinessSummary> | null>(null);
   const [usage, setUsage] = useState<{ maxBusinesses: number; businessCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [draft, setDraft] = useState(emptyDraft());
-  const [provisioningMode, setProvisioningMode] = useState<ProvisioningMode>("invite");
-  const [creating, setCreating] = useState(false);
-  // Shown exactly once, right after a "direct access" creation succeeds — never persisted beyond
-  // this component's state, cleared the moment the agency dismisses it.
-  const [revealedPassword, setRevealedPassword] = useState<{ ownerEmail: string; password: string } | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, sort, order]);
 
   async function reload() {
     if (!activeAgencyId) return;
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort, order });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (statusFilter !== "all") params.set("status", statusFilter);
     const [data, entitlementsRes] = await Promise.all([
-      apiClient.request<Paginated<AgencyBusinessSummary>>(`/agencies/${activeAgencyId}/businesses?page=${page}&limit=${PAGE_SIZE}`),
+      apiClient.request<Paginated<AgencyBusinessSummary>>(`/agencies/${activeAgencyId}/businesses?${params}`),
       apiClient.request<{ usage: { maxBusinesses: number; businessCount: number } }>(`/agencies/${activeAgencyId}/subscription/entitlements`),
     ]);
     setResult(data);
@@ -66,7 +100,7 @@ export function AgencyBusinessesPage() {
       .catch((err) => setError((err as Error).message))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAgencyId, page]);
+  }, [activeAgencyId, page, debouncedSearch, statusFilter, sort, order]);
 
   // Phase 39 — a pre-check so the "New business" action can be disabled and explained at the
   // limit, instead of only failing with a 409 after the form is filled out. reserveBusinessSlot
@@ -75,28 +109,14 @@ export function AgencyBusinessesPage() {
   // always has been.
   const atBusinessLimit = usage !== null && usage.businessCount >= usage.maxBusinesses;
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setCreating(true);
-    try {
-      const result = await apiClient.request<{ ownerTemporaryPassword?: string }>(
-        `/agencies/${activeAgencyId}/businesses`,
-        { method: "POST", body: { ...draft, provisioningMode } }
-      );
-      if (provisioningMode === "direct" && result.ownerTemporaryPassword) {
-        setRevealedPassword({ ownerEmail: draft.ownerEmail, password: result.ownerTemporaryPassword });
-      }
-      setDraft(emptyDraft());
-      setProvisioningMode("invite");
-      setShowForm(false);
-      setPage(1);
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setCreating(false);
-    }
+  function handleClientCreated(result: { businessId: string; ownerTemporaryPassword?: string; ownerEmail: string; commercialTermsError?: string }) {
+    setShowForm(false);
+    navigate(`/agency/businesses/${result.businessId}`, {
+      state: {
+        revealedPassword: result.ownerTemporaryPassword ? { ownerEmail: result.ownerEmail, password: result.ownerTemporaryPassword } : undefined,
+        commercialTermsError: result.commercialTermsError,
+      },
+    });
   }
 
   if (!activeAgencyId) return null;
@@ -108,9 +128,9 @@ export function AgencyBusinessesPage() {
           <h1 className="font-heading text-2xl font-semibold text-foreground">Clients</h1>
           <p className="text-sm text-muted">The restaurants this agency provisions and supports.</p>
         </div>
-        {canManage && (
-          <Button size="sm" onClick={() => setShowForm((v) => !v)} disabled={!showForm && atBusinessLimit}>
-            {showForm ? "Cancel" : "New client"}
+        {canManage && !showForm && (
+          <Button size="sm" onClick={() => setShowForm(true)} disabled={atBusinessLimit}>
+            New client
           </Button>
         )}
       </div>
@@ -132,147 +152,65 @@ export function AgencyBusinessesPage() {
         </Alert>
       )}
 
-      {revealedPassword && (
-        <Alert tone="warning" role="alert">
-          <div className="flex flex-col gap-2">
-            <p className="font-medium">
-              Owner access created for {revealedPassword.ownerEmail}. Share this temporary password with them now — it
-              will not be shown again, and they'll be required to set their own password the first time they sign in.
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="rounded bg-background px-2 py-1 font-mono text-sm text-foreground">
-                {revealedPassword.password}
-              </code>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(revealedPassword.password)}
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={() => setRevealedPassword(null)}
-                className="ml-auto text-sm font-medium text-muted hover:underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </Alert>
+      {showForm && canManage && activeAgencyId && (
+        <ClientProvisioningWizard
+          agencyId={activeAgencyId}
+          atBusinessLimit={atBusinessLimit}
+          onCreated={handleClientCreated}
+          onCancel={() => setShowForm(false)}
+        />
       )}
 
-      {showForm && canManage && (
-        <Card>
-          <h2 className="mb-3 font-heading text-lg font-medium text-foreground">Create a client</h2>
-          <p className="mb-3 text-sm text-muted">
-            Creates the client's business record and its first location. Choose how the owner gets access below.
-          </p>
-          <fieldset className="mb-3 flex flex-col gap-2 rounded-lg border border-border p-3 text-sm sm:flex-row sm:gap-4">
-            <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Owner access</legend>
-            <label className="flex items-start gap-2">
-              <input
-                type="radio"
-                name="provisioningMode"
-                checked={provisioningMode === "invite"}
-                onChange={() => setProvisioningMode("invite")}
-                className="mt-0.5"
-              />
-              <span>
-                <span className="font-medium text-foreground">Send invitation</span>
-                <br />
-                <span className="text-muted">Email the owner a secure link to set their own password.</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="radio"
-                name="provisioningMode"
-                checked={provisioningMode === "direct"}
-                onChange={() => setProvisioningMode("direct")}
-                className="mt-0.5"
-              />
-              <span>
-                <span className="font-medium text-foreground">Create owner access now</span>
-                <br />
-                <span className="text-muted">
-                  Get a one-time temporary password to relay to the owner directly. They must set their own password
-                  before using the account.
-                </span>
-              </span>
-            </label>
-          </fieldset>
-          <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
-              Business name
-              <input
-                required
-                value={draft.businessName}
-                onChange={(e) => setDraft({ ...draft, businessName: e.target.value })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Business slug
-              <input
-                required
-                value={draft.businessSlug}
-                onChange={(e) => setDraft({ ...draft, businessSlug: e.target.value.toLowerCase() })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              First location name
-              <input
-                required
-                value={draft.locationName}
-                onChange={(e) => setDraft({ ...draft, locationName: e.target.value })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Location slug
-              <input
-                required
-                value={draft.locationSlug}
-                onChange={(e) => setDraft({ ...draft, locationSlug: e.target.value.toLowerCase() })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Owner full name
-              <input
-                required
-                value={draft.ownerName}
-                onChange={(e) => setDraft({ ...draft, ownerName: e.target.value })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              Owner email
-              <input
-                required
-                type="email"
-                value={draft.ownerEmail}
-                onChange={(e) => setDraft({ ...draft, ownerEmail: e.target.value })}
-                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              />
-            </label>
-            <Button type="submit" size="sm" disabled={creating || atBusinessLimit} className="self-start sm:col-span-2">
-              {creating
-                ? "Creating..."
-                : provisioningMode === "direct"
-                  ? "Create client & owner access"
-                  : "Create client & invite owner"}
-            </Button>
-          </form>
-        </Card>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by client, owner name, or owner email..."
+          className="max-w-sm flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+        >
+          {STATUS_FILTERS.map((f) => (
+            <option key={f} value={f}>
+              {STATUS_FILTER_LABEL[f]}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortField)}
+            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+          >
+            {SORT_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {SORT_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => setOrder((o) => (o === "asc" ? "desc" : "asc"))}
+          aria-label={order === "asc" ? "Sort ascending" : "Sort descending"}
+          className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground hover:bg-black/[0.03]"
+        >
+          {order === "asc" ? "↑ Asc" : "↓ Desc"}
+        </button>
+      </div>
 
       {loading ? (
         <p className="text-muted">Loading clients...</p>
       ) : result && result.items.length === 0 ? (
-        <EmptyState icon={<IconStore className="h-6 w-6" />} title="No clients yet" description="Create the first one above." />
+        debouncedSearch || statusFilter !== "all" ? (
+          <EmptyState icon={<IconStore className="h-6 w-6" />} title="No clients match these filters" description="Try a different search term or filter." />
+        ) : (
+          <EmptyState icon={<IconStore className="h-6 w-6" />} title="No clients yet" description="Create the first one above." />
+        )
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -291,7 +229,11 @@ export function AgencyBusinessesPage() {
             <tbody className="divide-y divide-border">
               {result?.items.map((b) => (
                 <tr key={b.id}>
-                  <td className="py-2.5 pr-3 font-medium text-foreground">{b.name}</td>
+                  <td className="py-2.5 pr-3 font-medium text-foreground">
+                    <Link to={`/agency/businesses/${b.id}`} className="hover:underline">
+                      {b.name}
+                    </Link>
+                  </td>
                   <td className="py-2.5 pr-3 text-muted">
                     {b.ownerName ?? "—"}
                     {b.ownerInvitePending && (

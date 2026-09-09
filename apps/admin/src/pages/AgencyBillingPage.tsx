@@ -253,9 +253,9 @@ export function AgencyBillingPage() {
       {usage && (
         <Card className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="font-heading text-sm font-medium text-foreground">Business usage</p>
+            <p className="font-heading text-sm font-medium text-foreground">Client usage</p>
             <p className="text-sm text-muted">
-              {usage.businessCount} of {usage.maxBusinesses} businesses used
+              {usage.businessCount} of {usage.maxBusinesses} clients used
               {usage.businessCount >= usage.maxBusinesses && " — at limit"}
             </p>
           </div>
@@ -428,18 +428,18 @@ export function AgencyBillingPage() {
               <dd className="text-foreground">{subscription.billingInterval === "monthly" ? "Monthly" : "Yearly"}</dd>
               {typeof newMaxBusinesses === "number" && (
                 <>
-                  <dt className="text-muted">Included businesses</dt>
+                  <dt className="text-muted">Included clients</dt>
                   <dd className="text-foreground">{newMaxBusinesses}</dd>
                 </>
               )}
             </dl>
             <p className="mt-3 text-sm text-muted">
-              This applies to your whole agency account, not just the business you're currently viewing.
+              This applies to your whole agency account, not just the client you're currently viewing.
             </p>
             {conflict && (
               <p className="mt-2 text-sm font-medium text-danger">
-                You're currently managing {usage!.businessCount} businesses, but {newPlan.name} only includes{" "}
-                {newMaxBusinesses}. Remove a business first, or choose a plan with a higher limit.
+                You're currently managing {usage!.businessCount} clients, but {newPlan.name} only includes{" "}
+                {newMaxBusinesses}. Remove a client first, or choose a plan with a higher limit.
               </p>
             )}
           </ConfirmDialog>

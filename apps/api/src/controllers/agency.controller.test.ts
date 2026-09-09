@@ -10,6 +10,9 @@ import { Restaurant } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
 import { Plan } from "../models/Plan.js";
 import { User } from "../models/User.js";
+import { ClientCommercialTerms } from "../models/ClientCommercialTerms.js";
+import { MockDnsRecord } from "../models/MockDnsRecord.js";
+import { verificationRecordHost } from "../services/domainVerification.service.js";
 import {
   closeTestConnections,
   createTestAgency,
@@ -86,6 +89,7 @@ afterAll(async () => {
     AgencyAuditLog.deleteMany({ agencyId: { $in: agencyIds } }),
     AgencyMembership.deleteMany({ agencyId: { $in: agencyIds } }),
     Subscription.deleteMany({ ownerType: "agency", ownerId: { $in: agencyIds } }),
+    ClientCommercialTerms.deleteMany({ businessId: { $in: businessIds } }),
     Restaurant.deleteMany({ _id: { $in: restaurantIds } }),
     Business.deleteMany({ _id: { $in: businessIds } }),
     Agency.deleteMany({ _id: { $in: agencyIds } }),
@@ -514,6 +518,35 @@ describe("requireTenantMatch's agency branch (Phase 26) — location-operational
     expect(staffRes.status).toBe(403);
   });
 
+  // Phase 59 — menu.routes.ts/category.routes.ts/modifier.routes.ts (location-scoped overrides)
+  // used the plain, non-agency-aware requirePermission from middleware/rbac.js on every route,
+  // contradicting AGENCY_ROLE_GRANTS already listing restaurant.menu.read/write for agency roles —
+  // a real gap where no agency member could ever reach Menu, only its business-level canonical
+  // counterpart (businessMenu.routes.ts, already correctly requireBusinessPermission-gated).
+  it("Menu location overrides: agency_owner reaches read+write; agency_staff (read-only grant) reaches read but not write", async () => {
+    const ownerRead = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/menu/overrides`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(ownerRead.status).toBe(200);
+
+    const ownerWrite = await request(app)
+      .put(`/api/v1/restaurants/${managedLocation.id}/menu/000000000000000000000000/override`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({});
+    expect(ownerWrite.status).not.toBe(403); // reaches validation/lookup, not blocked by authorization
+
+    const staffRead = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/menu/overrides`)
+      .set("Authorization", `Bearer ${staffToken}`);
+    expect(staffRead.status).toBe(200);
+
+    const staffWrite = await request(app)
+      .put(`/api/v1/restaurants/${managedLocation.id}/menu/000000000000000000000000/override`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({});
+    expect(staffWrite.status).toBe(403);
+  });
+
   it("no agency member can reach a location under a business NOT managed by their agency", async () => {
     const unrelatedLocation = await createTestRestaurant({ businessId: unrelatedBusiness._id });
     restaurantIds.push(unrelatedLocation.id);
@@ -614,5 +647,340 @@ describe("GET /platform/agencies — platform-admin read-only overview", () => {
 
     const asOwner = await request(app).get("/api/v1/platform/agencies").set("Authorization", `Bearer ${ownerToken}`);
     expect(asOwner.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Phase 58 — Clients search/filter/sort, location drill-down, agency profile/domain settings.
+// ---------------------------------------------------------------------------------------------
+
+describe("GET /agencies/:agencyId/businesses — search, filter, sort (Phase 58)", () => {
+  let liveOwner: Awaited<ReturnType<typeof createTestUser>>;
+  let pendingOwner: Awaited<ReturnType<typeof createTestUser>>;
+  let liveBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  let pendingBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  let suspendedBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  let multiLocationBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  const stamp = Date.now();
+  const searchTargetName = `Zzz Search Target ${stamp}`;
+
+  beforeAll(async () => {
+    liveOwner = await createTestUser("restaurant_owner", undefined, { name: `Findable Owner ${stamp}`, email: `findable-owner-${stamp}@test.local` });
+    pendingOwner = await createTestUser("restaurant_owner", undefined, {
+      inviteTokenHash: "seeded-hash",
+      inviteExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    userIds.push(liveOwner.id, pendingOwner.id);
+
+    liveBusiness = await createTestBusiness({ agencyId: agency._id, ownerId: liveOwner._id, status: "active", name: searchTargetName });
+    pendingBusiness = await createTestBusiness({ agencyId: agency._id, ownerId: pendingOwner._id, status: "pending" });
+    suspendedBusiness = await createTestBusiness({ agencyId: agency._id, ownerId: liveOwner._id, status: "suspended" });
+    multiLocationBusiness = await createTestBusiness({ agencyId: agency._id, ownerId: liveOwner._id, status: "active" });
+    businessIds.push(liveBusiness.id, pendingBusiness.id, suspendedBusiness.id, multiLocationBusiness.id);
+
+    const locA = await createTestRestaurant({ businessId: multiLocationBusiness._id });
+    const locB = await createTestRestaurant({ businessId: multiLocationBusiness._id });
+    restaurantIds.push(locA.id, locB.id);
+  });
+
+  it("search matches by business name", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?search=${encodeURIComponent("Zzz Search Target")}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.items.map((b: { id: string }) => b.id);
+    expect(ids).toEqual([liveBusiness.id]);
+  });
+
+  it("search matches by owner name and owner email, never leaking a different agency's businesses", async () => {
+    const byName = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?search=${encodeURIComponent(`Findable Owner ${stamp}`)}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    const namedIds = byName.body.data.items.map((b: { id: string }) => b.id);
+    expect(namedIds).toEqual(expect.arrayContaining([liveBusiness.id, suspendedBusiness.id, multiLocationBusiness.id]));
+    expect(namedIds).not.toContain(unrelatedBusiness.id);
+
+    const byEmail = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?search=${encodeURIComponent(`findable-owner-${stamp}@test.local`)}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(byEmail.body.data.items.map((b: { id: string }) => b.id)).toEqual(expect.arrayContaining([liveBusiness.id]));
+  });
+
+  it("a search string that matches nothing returns an empty page, not an error", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?search=${encodeURIComponent("no-such-client-exists-anywhere")}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([]);
+    expect(res.body.data.total).toBe(0);
+  });
+
+  it("status=inactive returns only suspended businesses for this agency", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/businesses?status=inactive`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.items.map((b: { id: string; status: string }) => b.id);
+    expect(ids).toContain(suspendedBusiness.id);
+    expect(res.body.data.items.every((b: { status: string }) => b.status === "suspended")).toBe(true);
+  });
+
+  it("status=owner_pending returns only businesses whose owner hasn't accepted yet", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/businesses?status=owner_pending`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.items.map((b: { id: string }) => b.id);
+    expect(ids).toContain(pendingBusiness.id);
+    expect(ids).not.toContain(liveBusiness.id);
+    expect(res.body.data.items.every((b: { ownerInvitePending: boolean }) => b.ownerInvitePending === true)).toBe(true);
+  });
+
+  it("status=live returns only active businesses whose owner has accepted", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/businesses?status=live`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.items.map((b: { id: string }) => b.id);
+    expect(ids).toContain(liveBusiness.id);
+    expect(ids).not.toContain(pendingBusiness.id);
+    expect(ids).not.toContain(suspendedBusiness.id);
+  });
+
+  it("status=multi_location returns only businesses with more than one location", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/businesses?status=multi_location`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.items.map((b: { id: string }) => b.id);
+    expect(ids).toContain(multiLocationBusiness.id);
+    expect(ids).not.toContain(liveBusiness.id);
+  });
+
+  it("sorts by name ascending", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?sort=name&order=asc&limit=100`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    const names = res.body.data.items.map((b: { name: string }) => b.name);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b));
+    expect(names).toEqual(sorted);
+  });
+
+  it("rejects an un-whitelisted sort field", async () => {
+    const res = await request(app).get(`/api/v1/agencies/${agency.id}/businesses?sort=ownerId`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("a member of a different agency gets no results leaked through search/filter either", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses?search=${encodeURIComponent("Zzz Search Target")}`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /agencies/:agencyId/locations/:locationId — drill-down (Phase 58)", () => {
+  it("returns business/owner/availability/readiness/storefront context for an authorized member", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/locations/${managedLocation.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.id).toBe(managedBusiness.id);
+    expect(res.body.data.location.id).toBe(managedLocation.id);
+    expect(res.body.data.availability).toEqual(expect.objectContaining({ status: expect.any(String) }));
+    expect(res.body.data.readiness).toEqual(expect.objectContaining({ ready: expect.any(Boolean), checks: expect.any(Array) }));
+    expect(res.body.data.storefrontUrl).toContain(managedLocation.slug);
+  });
+
+  it("404s for a location whose business belongs to a different agency (never leaks existence)", async () => {
+    const otherAgencyBusiness = await createTestBusiness({ agencyId: otherAgency._id });
+    const otherAgencyLocation = await createTestRestaurant({ businessId: otherAgencyBusiness._id });
+    businessIds.push(otherAgencyBusiness.id);
+    restaurantIds.push(otherAgencyLocation.id);
+
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/locations/${otherAgencyLocation.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("a member of a different agency cannot reach this agency's location detail", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/locations/${managedLocation.id}`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("PATCH /agencies/:agencyId — profile settings (Phase 58)", () => {
+  it("agency_owner (agency.manage) can update the profile; agency_admin (no agency.manage) cannot", async () => {
+    const asAdmin = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ name: "Should Not Apply" });
+    expect(asAdmin.status).toBe(403);
+
+    const asOwner = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ description: "Updated description" });
+    expect(asOwner.status).toBe(200);
+    expect(asOwner.body.data.agency.description).toBe("Updated description");
+  });
+
+  it("a member of a different agency cannot update this agency's profile", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ description: "Hijacked" });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /agencies/:agencyId/domain and /domain/verify — white-label domain ownership (Phase 58, Section 12A)", () => {
+  it("rejects claiming the platform's own configured origin as a white-label domain", async () => {
+    const res = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/domain`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ domain: "localhost" });
+    expect(res.status).toBe(400);
+  });
+
+  it("agency_admin (no agency.manage) cannot set the domain; agency_owner can, and it starts as pending_verification", async () => {
+    const domain = `agency-${Date.now()}.example.test`;
+
+    const asAdmin = await request(app).post(`/api/v1/agencies/${agency.id}/domain`).set("Authorization", `Bearer ${adminToken}`).send({ domain });
+    expect(asAdmin.status).toBe(403);
+
+    const res = await request(app).post(`/api/v1/agencies/${agency.id}/domain`).set("Authorization", `Bearer ${ownerToken}`).send({ domain });
+    expect(res.status).toBe(201);
+    expect(res.body.data.agency.domain).toBe(domain);
+    expect(res.body.data.agency.domainStatus).toBe("pending_verification");
+    expect(res.body.data.agency.domainVerificationToken).toEqual(expect.any(String));
+  });
+
+  it("verification fails with no DNS record seeded, then succeeds once the correct TXT value is seeded — never a fake 'Verified' without a real match", async () => {
+    const domain = `agency-verify-${Date.now()}.example.test`;
+    const setRes = await request(app).post(`/api/v1/agencies/${agency.id}/domain`).set("Authorization", `Bearer ${ownerToken}`).send({ domain });
+    const token = setRes.body.data.agency.domainVerificationToken as string;
+
+    const firstCheck = await request(app).post(`/api/v1/agencies/${agency.id}/domain/verify`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(firstCheck.status).toBe(200);
+    expect(firstCheck.body.data.verified).toBe(false);
+    expect(firstCheck.body.data.agency.domainStatus).toBe("pending_verification");
+
+    await MockDnsRecord.create({ hostname: verificationRecordHost(domain), txtValues: [token] });
+
+    const secondCheck = await request(app).post(`/api/v1/agencies/${agency.id}/domain/verify`).set("Authorization", `Bearer ${ownerToken}`);
+    expect(secondCheck.status).toBe(200);
+    expect(secondCheck.body.data.verified).toBe(true);
+    expect(secondCheck.body.data.agency.domainStatus).toBe("verified");
+
+    await MockDnsRecord.deleteOne({ hostname: verificationRecordHost(domain) });
+  });
+
+  it("a member of a different agency cannot set or verify this agency's domain", async () => {
+    const setRes = await request(app)
+      .post(`/api/v1/agencies/${agency.id}/domain`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ domain: "hijack.example.test" });
+    expect(setRes.status).toBe(403);
+
+    const verifyRes = await request(app).post(`/api/v1/agencies/${agency.id}/domain/verify`).set("Authorization", `Bearer ${otherAgencyOwnerToken}`);
+    expect(verifyRes.status).toBe(403);
+  });
+});
+
+describe("PUT /agencies/:agencyId/businesses/:businessId/commercial-terms (Phase 59)", () => {
+  it("is null (not configured) before anything is ever set", async () => {
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.commercialTerms).toBeNull();
+  });
+
+  it("agency_owner can set commercial terms; they then appear on the business detail response", async () => {
+    const setRes = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ planLabel: "Growth", priceAmountCents: 9900, currency: "USD", billingCycle: "monthly", status: "active" });
+    expect(setRes.status).toBe(200);
+    expect(setRes.body.data.commercialTerms).toMatchObject({
+      planLabel: "Growth",
+      priceAmountCents: 9900,
+      currency: "USD",
+      billingCycle: "monthly",
+      status: "active",
+      agencyId: agency.id,
+      businessId: managedBusiness.id,
+    });
+
+    const detailRes = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(detailRes.body.data.commercialTerms).toMatchObject({ planLabel: "Growth", priceAmountCents: 9900 });
+  });
+
+  it("re-setting terms upserts (replaces), it never creates a second record", async () => {
+    await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ priceAmountCents: 14900, status: "trial" });
+
+    const res = await request(app)
+      .get(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.body.data.commercialTerms.priceAmountCents).toBe(14900);
+    expect(res.body.data.commercialTerms.status).toBe("trial");
+
+    const count = await ClientCommercialTerms.countDocuments({ businessId: managedBusiness.id });
+    expect(count).toBe(1);
+  });
+
+  it("agency_staff (no agency.businesses.manage) cannot set commercial terms; agency_admin can", async () => {
+    const staffAttempt = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ priceAmountCents: 5000 });
+    expect(staffAttempt.status).toBe(403);
+
+    const adminAttempt = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ priceAmountCents: 5000 });
+    expect(adminAttempt.status).toBe(200);
+  });
+
+  it("404s for a business managed by a different agency (never leaks existence, matches getAgencyBusiness)", async () => {
+    const res = await request(app)
+      .put(`/api/v1/agencies/${otherAgency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ priceAmountCents: 100 });
+    expect(res.status).toBe(404);
+  });
+
+  it("a member of a different agency cannot set commercial terms for this agency's business", async () => {
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ priceAmountCents: 100 });
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects an empty update and a negative price", async () => {
+    const empty = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({});
+    expect(empty.status).toBe(400);
+
+    const negative = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/commercial-terms`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ priceAmountCents: -500 });
+    expect(negative.status).toBe(400);
+  });
+});
+
+describe("Payment security — agency workspace access never reaches payment credentials (Phase 59)", () => {
+  it("an agency_owner acting on a managed location's real payment-account route is rejected — restaurant.payments.manage is granted to no agency role", async () => {
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${managedLocation.id}/payment-account`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(403);
   });
 });

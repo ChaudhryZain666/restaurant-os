@@ -236,6 +236,7 @@ const AGENCY_GROUPS: NavGroup[] = [
       { to: "/agency/members", label: "Team", icon: IconUsers, roles: ["agency_member", "customer"] },
       { to: "/agency/billing", label: "Billing", icon: IconWallet, roles: ["agency_member", "customer"] },
       { to: "/agency/activity", label: "Activity", icon: IconClipboard, roles: ["agency_member", "customer"] },
+      { to: "/agency/settings", label: "Settings", icon: IconSettings, roles: ["agency_member", "customer"] },
     ],
   },
 ];
@@ -500,7 +501,14 @@ function LayoutContent() {
         {sidebarContent}
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      {/* Phase 58 — min-w-0 is required here: a flex item's default min-width is `auto` (its
+          content's intrinsic width), so without this a page whose content includes a wide table
+          (even one correctly wrapped in its own overflow-x-auto) pushes THIS column wider than the
+          viewport instead of scrolling internally — <main>'s own overflow-x-hidden below can't
+          compensate for that on its own. Found on 3 real Agency Portal pages at 390px during this
+          phase's own responsive audit; the underlying cause is layout-wide (every page renders
+          through this same wrapper), so this fixes it for all of them, not just the Agency ones. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3.5 sm:px-6">
           <button
             onClick={() => setMobileOpen(true)}
@@ -571,7 +579,7 @@ function LayoutContent() {
             </div>
           )}
         </header>
-        <main className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">
           {/* Phase 19 — forces a full remount of whatever page is showing on every location
               switch, so its (mostly mount-only, useEffect(() => {...}, [])) fetch always re-runs
               against the new id. Confirmed necessary, not just a safety margin: several pages

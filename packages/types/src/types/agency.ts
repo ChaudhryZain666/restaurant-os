@@ -10,6 +10,8 @@
  */
 export type AgencyStatus = "pending" | "active" | "suspended";
 
+export type AgencyDomainStatus = "pending_verification" | "verified";
+
 export interface Agency {
   id: string;
   name: string;
@@ -21,6 +23,16 @@ export interface Agency {
   /** Maintained counter, incremented atomically on business creation — the entitlement guard for
    *  `max_businesses` (see agencyEntitlement.service.ts). Never computed by counting on read. */
   businessCount: number;
+  /** Phase 58, Section 12A — the agency's candidate white-label domain and its DNS-TXT ownership
+   *  verification status. Verifying ownership does NOT enable sending email from this domain or
+   *  branding invitation emails — no per-tenant email-sending infrastructure exists yet. See
+   *  docs/agency-white-label-domain.md for exactly what is and isn't real. */
+  domain?: string;
+  domainStatus?: AgencyDomainStatus;
+  /** The exact value to publish in a DNS TXT record (plaintext, not a bearer credential — see
+   *  Agency.ts's own doc comment for why this differs from this codebase's invite/reset tokens). */
+  domainVerificationToken?: string;
+  domainVerifiedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

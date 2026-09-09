@@ -17,4 +17,8 @@ export const AGENCY_AUDIT_ACTION_LABELS: Record<AgencyAuditAction, string> = {
   "agency.subscription_payment_succeeded": "Agency payment succeeded",
   "agency.subscription_payment_failed": "Agency payment failed",
   "agency.subscription_past_due": "Agency subscription marked past due",
+  "agency.updated": "Agency profile updated",
+  "agency.domain_set": "White-label domain added",
+  "agency.domain_verified": "White-label domain verified",
+  "agency.client_commercial_terms_updated": "Client commercial terms updated",
 };

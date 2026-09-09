@@ -3,7 +3,7 @@ import type { BusinessAnalyticsOverview, BusinessAnalyticsProducts, BusinessAnal
 import { Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveBusinessId } from "../context/BusinessContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 import { ScopeBadge } from "../components/ScopeBadge";
 import { IconChart } from "../components/icons";
@@ -38,8 +38,7 @@ const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 
  * timezones.
  */
 export function BusinessAnalyticsPage() {
-  const { user } = useAuth();
-  const businessId = user!.businessId!;
+  const businessId = useActiveBusinessId();
   const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);
   const canView = has("business_analytics");
 

@@ -80,7 +80,11 @@ export function AgencyLocationsPage() {
             <tbody className="divide-y divide-border">
               {result?.items.map((l) => (
                 <tr key={l.id}>
-                  <td className="px-4 py-2.5 font-medium text-foreground">{l.name}</td>
+                  <td className="px-4 py-2.5 font-medium text-foreground">
+                    <Link to={`/agency/locations/${l.id}`} className="hover:underline">
+                      {l.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2.5 text-muted">
                     <Link to={`/agency/businesses/${l.businessId}`} className="font-medium text-primary hover:underline">
                       {l.businessName}

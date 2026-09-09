@@ -3,7 +3,7 @@ import type { Promotion, PromotionType } from "@restaurant/types";
 import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useActiveBusinessId } from "../context/BusinessContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
@@ -41,8 +41,7 @@ function statusOf(promo: Promotion): { label: string; tone: "success" | "neutral
  * now also shows (read-only) any business promotion targeting that location.
  */
 export function BusinessPromotionsPage() {
-  const { user } = useAuth();
-  const businessId = user!.businessId!;
+  const businessId = useActiveBusinessId();
   const { locations } = useActiveLocation();
   const fallbackCurrency = useRestaurantCurrency();
   const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);

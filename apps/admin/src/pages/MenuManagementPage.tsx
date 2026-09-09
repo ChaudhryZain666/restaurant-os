@@ -1,16 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import {
-  roleHasPermission,
-  type Category,
-  type CategoryLocationOverride,
-  type MenuItem,
-  type MenuItemLocationOverride,
-} from "@restaurant/types";
+import type { Category, CategoryLocationOverride, MenuItem, MenuItemLocationOverride } from "@restaurant/types";
 import { Badge, Button, Card, EmptyState, useToast } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { useCan } from "../hooks/useCan";
+import { useActiveBusinessId } from "../context/BusinessContext";
 import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { ModifierGroupsEditor } from "../components/ModifierGroupsEditor";
@@ -280,8 +275,7 @@ interface OverridesResponse {
 }
 
 export function MenuManagementPage() {
-  const { user } = useAuth();
-  const businessId = user!.businessId!;
+  const businessId = useActiveBusinessId();
   const restaurantId = useActiveLocationId();
   const currency = useRestaurantCurrency();
   // Every role that can reach this page at all (owner/manager/restaurant_staff — see App.tsx's
@@ -291,7 +285,9 @@ export function MenuManagementPage() {
   // write control on the page, not just item edits. Applies equally to canonical writes
   // (/businesses/:businessId/...) and location overrides (/restaurants/:restaurantId/.../override)
   // since both are gated by the same permission constants, just checked via different middleware.
-  const canWrite = roleHasPermission(user!.role, "restaurant.menu.write");
+  // useCan (not a bare roleHasPermission check) so an agency member acting on a managed business
+  // sees write controls exactly when their AGENCY_ROLE_GRANTS actually include menu.write too.
+  const canWrite = useCan("restaurant.menu.write");
   // Portal UX audit (Phase 53) — every save/delete on this page used to give zero positive
   // confirmation beyond the list silently re-rendering, inconsistent with the rest of the app
   // (Settings, Theme Studio both already toast). Reuses the existing toast system already wired up
