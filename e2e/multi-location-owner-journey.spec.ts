@@ -131,7 +131,9 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     // reliably hold across a fresh switch either. ---
     await switcher.selectOption({ label: locationBName });
     await page.getByRole("link", { name: "Menu", exact: true }).click();
-    await expect(page.getByText(itemA, { exact: false })).toBeVisible();
+    // li-scoped, not a bare page-wide getByText — same collision this file's own comment above
+    // already documents (the "Item added" toast renders this same item name in its own text too).
+    await expect(page.locator("li", { hasText: itemA })).toBeVisible();
 
     // --- Build a distinct item while switched to B — it joins the SAME shared canonical menu. ---
     await page.getByPlaceholder("New category name").fill(categoryB);

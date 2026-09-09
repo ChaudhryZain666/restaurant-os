@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { Restaurant } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
+import { useActiveBusinessId } from "../context/BusinessContext";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -41,7 +41,7 @@ function emptyDraft(): Draft {
  * POST /businesses/:businessId/locations (not POST /restaurants, which stays platform_admin-only).
  */
 export function LocationsPage() {
-  const { user } = useAuth();
+  const businessId = useActiveBusinessId();
   const { locations, activeLocationId, switchLocation, refetchLocations } = useActiveLocation();
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [slugTouched, setSlugTouched] = useState(false);
@@ -53,11 +53,11 @@ export function LocationsPage() {
 
   useEffect(() => {
     apiClient
-      .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${user!.businessId}/locations/limit`)
+      .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${businessId}/locations/limit`)
       .then(setLimit)
       .catch(() => setLimit(null)); // never block the page on this pure UI pre-check
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [businessId]);
 
   function updateName(name: string) {
     setDraft((d) => ({ ...d, name, slug: slugTouched ? d.slug : slugify(name) }));
@@ -69,7 +69,7 @@ export function LocationsPage() {
     setSubmitting(true);
     try {
       const { restaurant } = await apiClient.request<{ restaurant: Restaurant }>(
-        `/businesses/${user!.businessId}/locations`,
+        `/businesses/${businessId}/locations`,
         {
           method: "POST",
           body: {
@@ -87,7 +87,7 @@ export function LocationsPage() {
       setDraft(emptyDraft());
       setSlugTouched(false);
       apiClient
-        .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${user!.businessId}/locations/limit`)
+        .request<{ max: number; current: number; canCreate: boolean }>(`/businesses/${businessId}/locations/limit`)
         .then(setLimit)
         .catch(() => undefined);
     } catch (err) {

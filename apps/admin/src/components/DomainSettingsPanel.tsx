@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { DomainMapping, DomainMappingStatus } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
 import { useActiveLocationId } from "../context/LocationContext";
+import { useActiveBusinessId } from "../context/BusinessContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -38,9 +38,9 @@ const STATUS_LABEL: Record<DomainMappingStatus, string> = {
  * guard (restaurantDomain.routes.ts) remains the real, unweakened authority — this is convenience only.
  */
 export function DomainSettingsPanel() {
-  const { user } = useAuth();
   const restaurantId = useActiveLocationId();
-  const { has, loading: entitlementsLoading } = useBusinessEntitlements(user?.businessId);
+  const businessId = useActiveBusinessId();
+  const { has, loading: entitlementsLoading } = useBusinessEntitlements(businessId);
   const canAddDomain = has("custom_domains");
   const [domains, setDomains] = useState<DomainMapping[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ export function DomainSettingsPanel() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function reload() {
-    const { domains } = await apiClient.request<{ domains: DomainMapping[] }>(`/businesses/${user!.businessId}/domains`);
+    const { domains } = await apiClient.request<{ domains: DomainMapping[] }>(`/businesses/${businessId}/domains`);
     setDomains(domains.filter((d) => d.locationId === restaurantId));
   }
 

@@ -589,3 +589,49 @@ override, returning it to its normal `mock` default.
 **Production safety**: unchanged — `PADDLE_ENV` stayed `sandbox` throughout every real API call this
 phase made; `.env` was never modified by any script; no production Paddle product, price,
 subscription, or webhook destination was created or reachable.
+
+## 23. Subscription entitlements / pricing-rules audit — confirmed correct, gaps closed, one scope decision recorded
+
+**Audit conclusion**: the commercial/entitlement model this audit was asked to establish — a
+business's own subscription wins, then its managing agency's live subscription, then the generous
+no-subscription default — was **already fully implemented and founder-approved** (§19 above,
+`entitlementLimit.service.ts`'s `resolveBusinessPlanWithInheritance`). No redesign was needed or
+performed. This section records what the audit verified, the real test-coverage gaps it closed, and
+two real UI bugs it found and fixed along the way.
+
+**Test coverage closed** (`agencyEntitlementInheritance.service.test.ts`): the original suite proved
+active/expired/cancelling agency subscriptions and direct-vs-inherited precedence, but never a
+`trialing` subscription specifically, nor the "business leaves its agency" transition. Both are now
+covered: a `trialing` business or agency resolves its plan's real entitlements exactly like `active`
+(both are `LIVE_STATUSES`, no special-casing needed or added); clearing `Business.agencyId` on a
+managed business stops inherited entitlements immediately, falls through correctly to the business's
+own subscription or the generous default, and never touches `Business.ownerId`. A companion test also
+confirms a newly agency-provisioned business's `ownerId` is the real new owner user — never the
+agency or any agency member — closing out the "agency membership is not ownership" regression the
+brief asked for.
+
+**"Business leaves agency" has no dedicated endpoint** — a deliberate scope decision, not an
+oversight. No controller anywhere clears `Business.agencyId` once set; today this could only happen
+via direct data access (e.g. a future platform-admin action). The audit tested the *entitlement
+consequence* of that transition (above) since the resolution mechanism already handles it correctly
+and statelessly — building a real "leave agency" UI/API feature was judged out of this phase's scope
+(commercial/entitlement *correctness*, not new relationship-management surface) and is left for a
+future phase to decide deliberately, not silently added here.
+
+**Two real UI bugs found and fixed, both pre-existing (not introduced by any prior phase's own
+change, just never exercised by a test until now)**: `DomainSettingsPanel.tsx` and `LocationsPage.tsx`
+both read `user!.businessId` directly instead of `useActiveBusinessId()` — the same class of gap
+`useActiveBusinessId` was introduced to fix elsewhere (Menu, Business Analytics, Billing, Business
+Promotions). Since an agency member's `user.businessId` is always `undefined`, this meant an agency
+member could not add/view custom domains or add/view locations for a business they manage in-workspace
+— not merely a UI inconsistency but a real, silent functional break. Fixed the same way as every other
+instance of this pattern: swapped to `useActiveBusinessId()`. Live-verified end to end in a new spec,
+`e2e/agency-entitlement-inheritance.spec.ts` — including proving a restrictive agency subscription
+correctly locks the Domains tab for a managed business, and that the SAME business's Domains tab
+correctly unlocks the moment that agency subscription expires, never breaking the page in between
+(the storefront/UI safety Section 5 of the brief asked for, now proven live, not just reasoned about).
+
+**Nothing else was changed**: no pricing values, no plan documents, no entitlement keys, and no
+`requireEntitlement`/`ClientCommercialTerms` wiring were touched. `ClientCommercialTerms` remains
+exactly what §9 of the brief requires it to mean — informational agency→client commercial data, never
+connected to `Subscription`, the billing provider, or any invoice/transaction record.

@@ -1,15 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import { connectDB } from "../config/db.js";
 import { Agency } from "../models/Agency.js";
+import { AgencyMembership } from "../models/AgencyMembership.js";
 import { Business } from "../models/Business.js";
 import { Plan } from "../models/Plan.js";
 import { Subscription } from "../models/Subscription.js";
+import { User } from "../models/User.js";
 import {
   closeTestConnections,
   createTestAgency,
+  createTestAgencyMembership,
   createTestBusiness,
   createTestPlan,
   createTestSubscription,
+  createTestUser,
 } from "../test-utils/fixtures.js";
 import { canCreateLocation, hasFeatureEntitlement, reserveLocationSlot } from "./entitlementLimit.service.js";
 import { canCreateAnotherBusiness, reserveBusinessSlot } from "./agencyEntitlement.service.js";
@@ -27,6 +31,7 @@ import { createSubscriptionForBusiness } from "./subscription.service.js";
 const businessIds: string[] = [];
 const agencyIds: string[] = [];
 const planIds: string[] = [];
+const userIds: string[] = [];
 
 afterAll(async () => {
   await Promise.all([
@@ -34,6 +39,8 @@ afterAll(async () => {
     Business.deleteMany({ _id: { $in: businessIds } }),
     Agency.deleteMany({ _id: { $in: agencyIds } }),
     Plan.deleteMany({ _id: { $in: planIds } }),
+    User.deleteMany({ _id: { $in: userIds } }),
+    AgencyMembership.deleteMany({ agencyId: { $in: agencyIds } }),
   ]);
   await closeTestConnections();
 });
@@ -254,6 +261,134 @@ describe("Phase 39 — agency-inherited entitlements for a managed business with
     // agency plan's restrictive custom_domains:false — a business must not permanently retain (or
     // lose) an entitlement from a subscription that is no longer live.
     expect(await hasFeatureEntitlement("business", managedByExpired.id as string, "custom_domains")).toBe(true);
+  });
+});
+
+describe("Phase 59 — trial-status entitlement resolution (the audit's own required scenarios 2 and 5)", () => {
+  it("an independent business on a TRIALING subscription resolves its plan's real entitlements, not the generous no-subscription default", async () => {
+    const restrictivePlan = await createTestPlan({
+      type: "OWNER",
+      entitlements: [{ key: "custom_domains", value: false }, { key: "max_locations", value: 1 }],
+    });
+    planIds.push(restrictivePlan.id);
+    const business = await createTestBusiness();
+    businessIds.push(business.id);
+    await createTestSubscription("business", business._id, restrictivePlan._id, { status: "trialing" });
+
+    // A trialing subscription is LIVE (LIVE_STATUSES) — its plan's real entitlements apply, proving
+    // trial status is not silently treated as "no subscription."
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(false);
+    await reserveLocationSlot(business.id as string);
+    expect(await canCreateLocation(business.id as string)).toBe(false); // caps at 1, not the 20 default
+  });
+
+  it("a business managed by an agency on a TRIALING subscription inherits the agency's trial-plan entitlements", async () => {
+    const restrictiveAgencyPlan = await createTestPlan({
+      type: "AGENCY",
+      entitlements: [
+        { key: "custom_domains", value: false },
+        { key: "max_businesses", value: 5 },
+        { key: "managed_business_max_locations", value: 1 },
+      ],
+    });
+    planIds.push(restrictiveAgencyPlan.id);
+    const trialingAgency = await createTestAgency();
+    agencyIds.push(trialingAgency.id);
+    await createTestSubscription("agency", trialingAgency._id, restrictiveAgencyPlan._id, { status: "trialing" });
+
+    const managedBusiness = await createTestBusiness({ agencyId: trialingAgency._id });
+    businessIds.push(managedBusiness.id);
+
+    expect(await hasFeatureEntitlement("business", managedBusiness.id as string, "custom_domains")).toBe(false);
+    await reserveLocationSlot(managedBusiness.id as string);
+    expect(await canCreateLocation(managedBusiness.id as string)).toBe(false); // caps at 1, inherited from the trialing agency plan
+  });
+});
+
+describe("Phase 59 — a business leaving an agency (scenario 9): entitlement inheritance stops immediately, ownership is untouched", () => {
+  it("clearing Business.agencyId immediately stops agency-inherited restrictions and falls through to the business's own state — never a permanent retention of the former agency's tier", async () => {
+    const restrictiveAgencyPlan = await createTestPlan({
+      type: "AGENCY",
+      entitlements: [
+        { key: "custom_domains", value: false },
+        { key: "business_analytics", value: false },
+        { key: "max_businesses", value: 5 },
+        { key: "managed_business_max_locations", value: 1 },
+      ],
+    });
+    planIds.push(restrictiveAgencyPlan.id);
+    const agency = await createTestAgency();
+    agencyIds.push(agency.id);
+    await createTestSubscription("agency", agency._id, restrictiveAgencyPlan._id);
+
+    const business = await createTestBusiness({ agencyId: agency._id });
+    businessIds.push(business.id);
+    const originalOwnerId = business.ownerId!.toString();
+
+    // While managed: inherits the agency's restrictive plan.
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(false);
+    await reserveLocationSlot(business.id as string);
+    expect(await canCreateLocation(business.id as string)).toBe(false); // capped at the agency's 1
+
+    // The business leaves the agency — today this is a data-level transition (no dedicated
+    // "leave agency" endpoint exists yet in the product; see the Phase 59 report's scope note),
+    // exercised here exactly the way a platform-admin action or a future feature would perform it.
+    await Business.updateOne({ _id: business._id }, { $unset: { agencyId: "" } });
+
+    // Inheritance stops the moment the relationship stops (resolveBusinessPlanWithInheritance can no
+    // longer find an agency to inherit from) — falls through to the generous no-subscription default,
+    // since this business never had its own subscription. Never a lingering restriction, never a
+    // lingering grant, from an agency it no longer belongs to.
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(true);
+    expect(await canCreateLocation(business.id as string)).toBe(true); // back to the 20-default headroom
+
+    // Ownership was never touched by any of this — the exact founder-approved guarantee
+    // (docs/commercial-decisions.md §19: "agency membership was always an access grant, never an
+    // ownership transfer").
+    const reloaded = await Business.findById(business._id);
+    expect(reloaded!.ownerId!.toString()).toBe(originalOwnerId);
+    expect(reloaded!.agencyId).toBeUndefined();
+  });
+
+  it("a business that leaves an agency and has its OWN direct subscription is entirely unaffected by the departure", async () => {
+    const restrictiveAgencyPlan = await createTestPlan({
+      type: "AGENCY",
+      entitlements: [{ key: "custom_domains", value: false }, { key: "max_businesses", value: 5 }],
+    });
+    const ownPlan = await createTestPlan({ type: "OWNER", entitlements: [{ key: "custom_domains", value: true }] });
+    planIds.push(restrictiveAgencyPlan.id, ownPlan.id);
+
+    const agency = await createTestAgency();
+    agencyIds.push(agency.id);
+    await createTestSubscription("agency", agency._id, restrictiveAgencyPlan._id);
+
+    const business = await createTestBusiness({ agencyId: agency._id });
+    businessIds.push(business.id);
+    await createTestSubscription("business", business._id, ownPlan._id);
+
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(true); // own plan wins even while managed
+
+    await Business.updateOne({ _id: business._id }, { $unset: { agencyId: "" } });
+    expect(await hasFeatureEntitlement("business", business.id as string, "custom_domains")).toBe(true); // unchanged after leaving
+  });
+});
+
+describe("Phase 59 — agency membership is never confused with business ownership (Section 11 regression)", () => {
+  it("a newly agency-provisioned business's ownerId is the new owner user, never the agency or any agency member", async () => {
+    const agency = await createTestAgency();
+    agencyIds.push(agency.id);
+    const agencyOwnerUser = await createTestUser("agency_member");
+    await createTestAgencyMembership(agency._id, agencyOwnerUser._id, { role: "agency_owner" });
+    userIds.push(agencyOwnerUser.id as string);
+
+    const restaurantOwnerUser = await createTestUser("restaurant_owner");
+    userIds.push(restaurantOwnerUser.id as string);
+    const business = await createTestBusiness({ agencyId: agency._id, ownerId: restaurantOwnerUser._id });
+    businessIds.push(business.id);
+
+    expect(business.ownerId!.toString()).toBe((restaurantOwnerUser.id as string).toString());
+    expect(business.ownerId!.toString()).not.toBe((agencyOwnerUser.id as string).toString());
+    expect(business.agencyId!.toString()).toBe(agency.id as string);
   });
 });
 
