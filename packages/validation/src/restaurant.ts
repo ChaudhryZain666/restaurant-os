@@ -98,6 +98,12 @@ export const restaurantSettingsSchema = z.object({
   staffEnabled: z.boolean().optional(),
   // POS phase — same contract as kitchenEnabled/staffEnabled above.
   posEnabled: z.boolean().optional(),
+  // Phase 75 — per-location opt-in into a card terminal (only meaningful when this deployment
+  // also has a real provider configured; see restaurant.controller.ts's posTerminalProviderConfigured
+  // and posTerminalPayment.service.ts's own two-gate check). Existed on the Restaurant model since
+  // Phase 74 but was never reachable through this update schema until the Settings UI added in this
+  // phase needed to actually set it — before that, only test fixtures ever set it, directly via Mongo.
+  posTerminalEnabled: z.boolean().optional(),
   // Delivery-integrations phase — which courier dispatches a delivery order.
   deliveryProvider: z.enum(["manual", "uber_direct"]).optional(),
 })

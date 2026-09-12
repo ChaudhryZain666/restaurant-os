@@ -68,7 +68,7 @@ function Tile({
       id={id}
       ref={ref}
       className={cn(
-        "group relative flex scroll-mt-24 flex-col justify-between overflow-hidden border border-white/10 bg-[#141210] p-5 transition-all duration-500",
+        "group relative flex scroll-mt-24 flex-col justify-between overflow-hidden border border-white/10 bg-[color:var(--color-surface)] p-5 transition-all duration-500",
         size === "lg" ? "min-h-[280px]" : "min-h-[180px]",
         visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
       )}
@@ -294,7 +294,7 @@ function QrOrderingMoment() {
     <div ref={ref} className="flex items-center gap-4">
       <div className="grid h-14 w-14 shrink-0 grid-cols-4 grid-rows-4 gap-[2px] rounded-sm bg-white p-1.5">
         {Array.from({ length: 16 }).map((_, i) => (
-          <span key={i} className="rounded-[1px]" style={{ background: [0, 3, 5, 9, 10, 12, 15].includes(i) ? "#0f0d0c" : "transparent" }} />
+          <span key={i} className="rounded-[1px]" style={{ background: [0, 3, 5, 9, 10, 12, 15].includes(i) ? "var(--color-surface)" : "transparent" }} />
         ))}
       </div>
       <IconPhone
@@ -313,7 +313,7 @@ function MultiLocationMoment() {
       {offsets.map((o) => (
         <div
           key={o}
-          className="absolute h-12 w-20 rounded-sm border border-white/15 bg-[#1b1712] transition-all duration-500"
+          className="absolute h-12 w-20 rounded-sm border border-white/15 bg-[color:var(--color-surface-elevated)] transition-all duration-500"
           style={{
             left: visible ? `${o * 26}px` : 0,
             top: visible ? `${o * 4}px` : 0,
@@ -329,7 +329,7 @@ function MultiLocationMoment() {
 
 function BrandingMoment() {
   const { ref, visible } = useScrollReveal<HTMLDivElement>();
-  const colors = ["#e08a3e", "#0f766e", "#7c3aed", "#be123c"];
+  const colors = ["#c9838d", "#0f766e", "#7c3aed", "#be123c"];
   return (
     <div ref={ref} className="flex items-center gap-2">
       {colors.map((c, i) => (

@@ -8,7 +8,15 @@ import { AgencyAuditLog } from "../models/AgencyAuditLog.js";
 import { Plan } from "../models/Plan.js";
 import { Subscription } from "../models/Subscription.js";
 import { User } from "../models/User.js";
-import { closeTestConnections, createTestAgency, createTestAgencyMembership, createTestPlan, createTestUser, tokenFor } from "../test-utils/fixtures.js";
+import {
+  closeTestConnections,
+  createTestAgency,
+  createTestAgencyMembership,
+  createTestPlan,
+  createTestSubscription,
+  createTestUser,
+  tokenFor,
+} from "../test-utils/fixtures.js";
 
 const app = createApp();
 
@@ -139,5 +147,83 @@ describe("subscription lifecycle — cancel / reactivate", () => {
       .post(`/api/v1/agencies/${agency.id}/subscription/reactivate`)
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(reactivateAttempt.status).toBe(404); // no LIVE subscription anymore — cancelled is terminal
+  });
+});
+
+/**
+ * Phase 76 — regression coverage for a real gap this launch audit found: getAgencyEntitlementsHandler
+ * used to read the agency's most recent subscription regardless of status and hand back that plan's
+ * entitlements unconditionally, so an expired/cancelled agency subscription still reported full plan
+ * entitlements. Fresh, isolated fixtures (not the shared `agency`/`plan` above, which the previous
+ * describe block deliberately leaves in a cancelled state) so this suite's outcome never depends on
+ * file execution order.
+ */
+describe("GET /agencies/:agencyId/subscription/entitlements — status-aware (Phase 76)", () => {
+  it("a live agency subscription reports its plan's real entitlements", async () => {
+    const liveAgency = await createTestAgency();
+    const owner = await createTestUser("agency_member");
+    await createTestAgencyMembership(liveAgency._id, owner._id, { role: "agency_owner" });
+    const ownerTok = tokenFor(owner, [{ agencyId: liveAgency.id, role: "agency_owner" }]);
+    const entitledPlan = await createTestPlan({ type: "AGENCY", code: `agency-entitlements-live-${Date.now()}` });
+    await createTestSubscription("agency", liveAgency._id, entitledPlan._id, { status: "active" });
+
+    const res = await request(app)
+      .get(`/api/v1/agencies/${liveAgency.id}/subscription/entitlements`)
+      .set("Authorization", `Bearer ${ownerTok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.source).toBe("agency");
+    expect(res.body.data.entitlements.custom_domains).toBe(true);
+
+    await Promise.all([
+      Subscription.deleteMany({ ownerType: "agency", ownerId: liveAgency._id }),
+      AgencyMembership.deleteMany({ agencyId: liveAgency._id }),
+      Agency.deleteOne({ _id: liveAgency._id }),
+      Plan.deleteOne({ _id: entitledPlan._id }),
+      User.deleteOne({ _id: owner._id }),
+    ]);
+  });
+
+  it("an EXPIRED agency subscription never reports live entitlements (the real bug this phase fixed)", async () => {
+    const lapsedAgency = await createTestAgency();
+    const owner = await createTestUser("agency_member");
+    await createTestAgencyMembership(lapsedAgency._id, owner._id, { role: "agency_owner" });
+    const ownerTok = tokenFor(owner, [{ agencyId: lapsedAgency.id, role: "agency_owner" }]);
+    const entitledPlan = await createTestPlan({ type: "AGENCY", code: `agency-entitlements-expired-${Date.now()}` });
+    await createTestSubscription("agency", lapsedAgency._id, entitledPlan._id, { status: "expired" });
+
+    const res = await request(app)
+      .get(`/api/v1/agencies/${lapsedAgency.id}/subscription/entitlements`)
+      .set("Authorization", `Bearer ${ownerTok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.source).toBe("lapsed");
+    expect(res.body.data.entitlements).toBeNull();
+
+    await Promise.all([
+      Subscription.deleteMany({ ownerType: "agency", ownerId: lapsedAgency._id }),
+      AgencyMembership.deleteMany({ agencyId: lapsedAgency._id }),
+      Agency.deleteOne({ _id: lapsedAgency._id }),
+      Plan.deleteOne({ _id: entitledPlan._id }),
+      User.deleteOne({ _id: owner._id }),
+    ]);
+  });
+
+  it("no subscription at all resolves to the honest 'default' source, not a crash", async () => {
+    const freshAgency = await createTestAgency();
+    const owner = await createTestUser("agency_member");
+    await createTestAgencyMembership(freshAgency._id, owner._id, { role: "agency_owner" });
+    const ownerTok = tokenFor(owner, [{ agencyId: freshAgency.id, role: "agency_owner" }]);
+
+    const res = await request(app)
+      .get(`/api/v1/agencies/${freshAgency.id}/subscription/entitlements`)
+      .set("Authorization", `Bearer ${ownerTok}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.source).toBe("default");
+    expect(res.body.data.entitlements).toBeNull();
+
+    await Promise.all([
+      AgencyMembership.deleteMany({ agencyId: freshAgency._id }),
+      Agency.deleteOne({ _id: freshAgency._id }),
+      User.deleteOne({ _id: owner._id }),
+    ]);
   });
 });

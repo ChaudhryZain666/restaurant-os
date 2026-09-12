@@ -16,6 +16,15 @@ export default {
         success: "var(--color-success)",
         warning: "var(--color-warning)",
         danger: "var(--color-danger)",
+        sidebar: {
+          DEFAULT: "var(--color-sidebar)",
+          foreground: "var(--color-sidebar-foreground)",
+          "foreground-dim": "var(--color-sidebar-foreground-dim)",
+          muted: "var(--color-sidebar-muted)",
+          "muted-soft": "var(--color-sidebar-muted-soft)",
+          border: "var(--color-sidebar-border)",
+          hover: "var(--color-sidebar-hover)",
+        },
       },
       fontFamily: {
         heading: ["var(--font-heading)"],

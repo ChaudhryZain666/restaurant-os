@@ -60,9 +60,12 @@ test.describe("QR dine-in ordering", () => {
 
       const itemRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
       await itemRow.scrollIntoViewIfNeeded();
-      await itemRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-      await itemRow.getByText("Small", { exact: false }).click();
-      await itemRow.getByRole("button", { name: "Confirm add to cart" }).click();
+      await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
+      // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a
+      // large-photograph overlay (role="dialog"), not an inline row expansion.
+      const detailDialog = customerPage.getByRole("dialog");
+      await detailDialog.getByText("Small", { exact: false }).click();
+      await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 
       // Table context (sessionStorage) must survive this in-app navigation to the cart.
       await customerPage.getByRole("link", { name: /Cart/ }).click();

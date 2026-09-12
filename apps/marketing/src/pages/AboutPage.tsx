@@ -36,8 +36,8 @@ const TIMELINE = [
 
 export function AboutPage() {
   usePageMeta({
-    title: "About — Tablecloth",
-    description: "Why Tablecloth exists: restaurants deserve to own their ordering experience and customer relationships, not rent them back from a marketplace.",
+    title: "About — GarnishTable",
+    description: "Why GarnishTable exists: restaurants deserve to own their ordering experience and customer relationships, not rent them back from a marketplace.",
   });
   return (
     <>
@@ -46,7 +46,7 @@ export function AboutPage() {
           as="h1"
           eyebrow="Why this exists"
           title="Restaurants shouldn't have to rent back what they built"
-          description="Tablecloth is a focused online ordering platform — not a marketplace, not a website builder. Just the tools a restaurant actually needs to sell direct, and keep what selling direct earns them."
+          description="GarnishTable is a focused online ordering platform — not a marketplace, not a website builder. Just the tools a restaurant actually needs to sell direct, and keep what selling direct earns them."
         />
       </Section>
 
@@ -122,7 +122,7 @@ export function AboutPage() {
           </span>
           <h2 className="font-heading text-3xl font-semibold text-secondary-foreground">Want to talk it through?</h2>
           <p className="max-w-md text-sm text-secondary-foreground/70">
-            No sales script — just a straight answer about whether Tablecloth fits how your restaurant actually runs.
+            No sales script — just a straight answer about whether GarnishTable fits how your restaurant actually runs.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <Link to="/contact">

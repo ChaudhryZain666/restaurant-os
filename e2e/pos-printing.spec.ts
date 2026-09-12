@@ -117,8 +117,8 @@ test.describe.serial("POS printing (Phase 57)", () => {
     await page.getByPlaceholder("Base price").fill("12");
     await page.getByRole("combobox").selectOption({ label: categoryName });
     await page.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Customize this item")).toBeVisible();
+    await page.getByRole("button", { name: "Back to menu" }).click();
 
     await page.getByRole("link", { name: "Setup" }).click();
     await expect(page.getByRole("button", { name: "Publish restaurant" })).toBeEnabled({ timeout: 10_000 });
@@ -131,6 +131,11 @@ test.describe.serial("POS printing (Phase 57)", () => {
     await page.getByRole("button", { name: "Select customer" }).click();
     await page.getByRole("button", { name: "Continue without a name" }).click();
     await page.getByRole("button", { name: /Take .* cash/ }).click();
+    // Phase 73 — order creation now always leaves the order unpaid pending an explicit cash-received
+    // confirmation (see PaymentConfirmation.tsx) instead of marking it paid the instant the sale
+    // button is tapped. $20 comfortably covers the $12 item.
+    await page.getByLabel("Cash received").fill("20");
+    await page.getByRole("button", { name: "Complete payment" }).click();
     await expect(page.getByRole("heading", { name: /^Order #/ })).toBeVisible({ timeout: 10_000 });
 
     // The order itself is unconditionally successful regardless of anything about printing.

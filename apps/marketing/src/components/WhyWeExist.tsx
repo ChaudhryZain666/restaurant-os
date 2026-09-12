@@ -51,7 +51,7 @@ export function WhyWeExist() {
                 y1={cy}
                 x2="0"
                 y2="0"
-                stroke="#e08a3e"
+                stroke="#c9838d"
                 strokeWidth="0.4"
                 opacity={p * 0.4}
                 style={{ transition: reducedMotion ? "none" : "opacity 200ms linear" }}

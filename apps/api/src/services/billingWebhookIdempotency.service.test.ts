@@ -76,7 +76,7 @@ async function newCheckoutCompletionPayload() {
     successUrl: "https://admin.example.com/billing-checkout-complete",
     cancelUrl: "https://admin.example.com/billing",
   });
-  const token = (checkout.url as string).split("/mock-checkout/")[1];
+  const token = (checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
   const payload = provider.completeCheckoutSession(token);
   return { business, provider, payload };
 }

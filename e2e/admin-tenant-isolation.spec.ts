@@ -34,7 +34,9 @@ test.describe("admin panel — tenant isolation", () => {
     });
 
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query once the owner lands there post-login).
+    await page.locator("aside nav").getByRole("link", { name: "Menu" }).click();
 
     // Own restaurant's menu is visible...
     await expect(page.getByText("Butter Chicken")).toBeVisible({ timeout: 10_000 });
@@ -63,11 +65,13 @@ test.describe("admin panel — tenant isolation", () => {
     try {
       // Bella Vista's owner sits on their Dashboard — socket rooms are joined server-side from the
       // JWT (restaurant:{id}), so this proves that room join, not just the REST layer, is tenant-safe.
+      // Phase 71 — the operating dashboard's h1 is now a time-of-day greeting naming the restaurant,
+      // not the literal word "Dashboard"; the subtitle line stays static, so assert that instead.
       await otherOwnerPage.goto("http://localhost:5174/login");
       await otherOwnerPage.locator('input[type="email"]').fill("marco@bella-vista.local");
       await otherOwnerPage.locator('input[type="password"]').fill("Owner123!");
       await otherOwnerPage.getByRole("button", { name: "Sign in" }).click();
-      await expect(otherOwnerPage.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 10_000 });
+      await expect(otherOwnerPage.getByText("Here's what's happening with your restaurant today.")).toBeVisible({ timeout: 10_000 });
 
       const customerEmail = `e2e-tenant-iso-${Date.now()}@test.local`;
       await customerPage.goto("http://localhost:5173/register");

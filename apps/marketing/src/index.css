@@ -3,39 +3,104 @@
 @tailwind utilities;
 
 /**
- * Design tokens — this is the marketing site's OWN identity (apps/web, the real product, keeps its
- * separate copy of this file untouched; editing here only affects marketing).
+ * GarnishTable brand tokens (Phase 66) — this is the marketing site's OWN identity (apps/web, the
+ * real product/storefront themes, keeps its separate copy of this file untouched and is never
+ * recolored by anything here; editing here only affects marketing + whatever shared `packages/ui`
+ * components this app itself builds, e.g. `<Logo>`, `<Button>`).
  *
- * "The Restaurant, In Motion" — established across the homepage rebuild (Hero's neutral blueprint,
- * Offer's operations board, Showcase's control-room blue, Journey's route, Pricing's warm
- * parchment/wine growth chapter) and now promoted to the SITE-WIDE base palette so every other
- * marketing page (Product, Solutions, Pricing, FAQ, Demo, About, Contact, Start Trial) inherits the
- * same brand through the shared Section/Card/Button/SectionHeading primitives, rather than each
- * page carrying the old orange identity on its own. Wine (matching Pricing's --color-wine) is now
- * the one signature accent across light pages; near-black/blueprint/info-blue stay scoped to
- * .theme-obsidian (the Home hero's dark chapters) — see that block below for the "same brand,
- * different atmosphere" split.
+ * Every color is a semantic `--gt-*` token (bg/bg-soft/surface/surface-elevated/text/text-muted/
+ * border/brand/brand-hover/brand-soft/accent, plus the existing status colors) — this is the single
+ * place GarnishTable's palette lives; `tailwind.config.js`'s `primary`/`background`/`surface`/etc.
+ * classes all resolve through these vars, so `bg-primary`/`text-foreground`/`bg-background` (used
+ * across every existing component — Section/Card/Button/FeatureCard/ScaleSelector/...) keep working
+ * completely unchanged. Recoloring the brand is now a one-file, one-block edit, never a scattered
+ * hex hunt — see the `.theme-obsidian` block below for this same system's dark-canvas counterpart
+ * (the Home hero's cinematic chapters), which used to run a second, unrelated orange identity
+ * (#e08a3e/#c2410c) — now a genuinely dark reading of the SAME wine family, not a second brand.
+ *
+ * Deep wine/oxblood + warm parchment/ivory — editorial and hospitality-adjacent rather than the
+ * generic SaaS blue/purple this platform (GarnishTable) deliberately avoids. `--gt-text` stays the
+ * existing warm near-black-brown (not a cooler pure-neutral) so body copy never reads as colder
+ * than the parchment it sits on.
  */
 :root {
-  --color-primary: #611b28;
-  --color-primary-foreground: #f8f4ea;
-  --color-secondary: #2b2116;
-  --color-secondary-foreground: #f8f4ea;
-  --color-accent: #7a4550;
-  --color-accent-foreground: #fffdf8;
-  --color-background: #f6f0e2;
-  --color-surface: #fdfbf5;
-  --color-surface-elevated: #ffffff;
-  --color-foreground: #2b2116;
-  --color-muted: #6b5d48;
-  --color-border: #d9cdb0;
-  --color-success: #15803d;
-  --color-warning: #b45309;
-  --color-danger: #dc2626;
-  --color-info: #3d6fd6;
+  /* The five founding swatches: GT Wine, GT Ink, GT Deep, GT Parchment, GT Ivory. */
+  --gt-bg: #f6f0e2; /* GT Parchment */
+  --gt-bg-soft: #eee7d7;
+  --gt-surface: #fcfaf5; /* GT Ivory */
+  --gt-surface-elevated: #ffffff;
+  --gt-text: #2b2116;
+  --gt-text-muted: #6b5d48;
+  --gt-border: #d9cdb0;
 
-  --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --gt-brand: #611b28; /* GT Wine */
+  --gt-brand-hover: #4a141f;
+  --gt-brand-soft: #f2e2e1;
+  --gt-brand-foreground: #f8f4ea;
+
+  --gt-ink: #2b2116;
+  --gt-ink-foreground: #f8f4ea;
+  /* GT Ink / GT Deep — the palette's two near-black swatches, used by the fixed dark-chapter
+     tokens below (never by :root's own ordinary light-mode text/surface tokens, which stay the
+     warmer #2b2116-family already tuned to sit on parchment). */
+  --gt-accent: #7a4550;
+  --gt-accent-foreground: #fffdf8;
+
+  --gt-success: #15803d;
+  --gt-warning: #b45309;
+  --gt-danger: #dc2626;
+  --gt-info: #3d6fd6;
+
+  /* Back-compat aliases — every existing component/Tailwind mapping reads through these names;
+     see tailwind.config.js. Never edit values here, only above. */
+  --color-primary: var(--gt-brand);
+  --color-primary-foreground: var(--gt-brand-foreground);
+  --color-secondary: var(--gt-ink);
+  --color-secondary-foreground: var(--gt-ink-foreground);
+  --color-accent: var(--gt-accent);
+  --color-accent-foreground: var(--gt-accent-foreground);
+  --color-background: var(--gt-bg);
+  --color-surface: var(--gt-surface);
+  --color-surface-elevated: var(--gt-surface-elevated);
+  --color-foreground: var(--gt-text);
+  --color-muted: var(--gt-text-muted);
+  --color-border: var(--gt-border);
+  --color-success: var(--gt-success);
+  --color-warning: var(--gt-warning);
+  --color-danger: var(--gt-danger);
+  --color-info: var(--gt-info);
+
+  /* "Fixed" tokens — deliberately NOT redefined inside `.theme-obsidian` below, so they resolve to
+     the SAME value regardless of which theme wraps the element using them. The Home page's dark
+     cinematic chapters intentionally escape to a light parchment ground for its "warm" sections
+     (Pricing/Why it's useful/What we replace) partway down an otherwise-dark page — `--color-*`
+     can't express that (it means something different in each context by design), so this is the
+     token those sections' own gradient/background values reach for instead of a raw hex literal.
+     `--gt-brand-fixed`/`--gt-accent-fixed`/`--gt-brand-foreground-fixed` cover the same problem for
+     TEXT and card fills within those sections — ScaleSelector/WhyUseful/WhatWeReplace originally
+     read the theme-relative `--color-primary`/`--color-accent`/`--color-foreground` here, which
+     silently resolved to `.theme-obsidian`'s dark-canvas values (a near-white foreground, a pale
+     lifted-for-dark-backgrounds brand rose) even though these components always render on their own
+     fixed-light parchment/ivory surfaces — near-invisible text on a light card. */
+  --gt-parchment-fixed: #eee7d7;
+  --gt-ink-fixed: #171416; /* GT Ink */
+  --gt-surface-fixed: #fcfaf5;
+  --gt-border-fixed: #d9cdb0;
+  --gt-text-fixed: #2b2116;
+  --gt-text-muted-fixed: #6b5d48;
+  --gt-brand-fixed: #611b28;
+  --gt-brand-foreground-fixed: #f8f4ea;
+  --gt-accent-fixed: #7a4550;
+
+  /* GarnishTable's typography pairing (Phase 66) — Playfair Display, a refined high-contrast
+     editorial serif, for every headline and the wordmark itself; Inter for UI/body copy, chosen
+     for its readability at small sizes and its wide weight range. Loaded once, site-wide, via
+     index.html — no per-page/per-section font switching (the dark Home hero used to run its own
+     separate Instrument Serif/Sans pairing; unified here so the brand reads as one typographic
+     voice everywhere, light or dark). Real fallback stacks either way, never a silent system-font
+     substitution if the network font is slow/blocked. */
+  --font-heading: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.625rem;
@@ -157,43 +222,72 @@ h3 {
   transform: scale(1);
 }
 
-/* Phase 42 — the dark, cinematic treatment for the Home landing page only (see HomePage.tsx's root
-   wrapper). Additive and class-scoped rather than a change to :root: every OTHER marketing route
-   (Pricing/Product/Solutions/...) shares that :root block directly and must stay on the existing
-   light palette untouched. Re-balances the SAME two brand hues (#c2410c/#b45309-family) for a dark
-   canvas rather than introducing a new brand — deliberately not the generic near-black+cyan/purple
-   "AI SaaS" gradient look. */
+/* Phase 42, recolored Phase 66 — the dark, cinematic treatment for the Home landing page only (see
+   HomePage.tsx's root wrapper). Additive and class-scoped rather than a change to :root: every
+   OTHER marketing route (Pricing/Product/Solutions/...) shares that :root block directly and must
+   stay on the existing light palette untouched.
+   Phase 66 — this used to run its own, unrelated orange identity (#e08a3e/#c2410c), duplicating the
+   brand rather than reading as the same one in a different light. Now a genuine dark reading of the
+   SAME GarnishTable wine family: near-black plum ground, a warm dusty-rose brand highlight (lifted
+   in lightness specifically so it stays legible on a near-black surface — the light theme's own
+   deep #611b28 wine would go muddy there), and the brief's own suggested oxblood as the secondary
+   accent. Warning stays a true, brand-independent amber (status colors are never brand colors, the
+   same principle the real product's own design system already follows) rather than reusing the old
+   orange as a coincidence. */
 .theme-obsidian {
-  --color-primary: #e08a3e;
-  --color-primary-foreground: #1a1310;
-  --color-secondary: #0f0d0c;
-  --color-secondary-foreground: #f5efe6;
-  --color-accent: #c2410c;
-  --color-accent-foreground: #fff7ee;
-  --color-background: #0f0d0c;
-  --color-surface: #171310;
-  --color-surface-elevated: #1e1815;
-  --color-foreground: #f5efe6;
-  --color-muted: #a89a8c;
-  --color-border: #2a231d;
-  --color-success: #4ade80;
-  --color-warning: #e08a3e;
-  --color-danger: #f87171;
-  /* Phase "Restaurant, In Motion" — one semantic addition: a cool system/info blue for operational
-     states (e.g. an order "Preparing," a delivery in transit) that are neither the brand's warm
-     amber/orange nor a literal success/warning/danger state. Used sparingly, per the brief's own
-     "do not turn the page into a neon interface" instruction — never a second accent competing
-     with amber. */
-  --color-info: #5b8def;
-  --font-heading-obsidian: "Instrument Serif", "Didot", Georgia, serif;
-  --font-body-obsidian: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --gt-bg: #171416; /* GT Ink */
+  --gt-bg-soft: #1c181a;
+  --gt-surface: #24171b; /* GT Deep */
+  --gt-surface-elevated: #2c1e22;
+  --gt-text: #f5efe6;
+  --gt-text-muted: #a89a8c;
+  --gt-border: #2e2620;
+
+  --gt-brand: #c9838d;
+  --gt-brand-hover: #d89aa2;
+  --gt-brand-soft: #2a1a1d;
+  --gt-brand-foreground: #1a1310;
+
+  --gt-ink: #0f0d0c;
+  --gt-ink-foreground: #f5efe6;
+  --gt-accent: #8b3042;
+  --gt-accent-foreground: #fff7ee;
+
+  --gt-success: #4ade80;
+  --gt-warning: #d9a441;
+  --gt-danger: #f87171;
+  /* A cool system/info blue for operational states (e.g. an order "Preparing," a delivery in
+     transit) that are neither the brand's warm rose nor a literal success/warning/danger state.
+     Used sparingly — never a second accent competing with the brand highlight. */
+  --gt-info: #6fa0f0;
+
+  --color-primary: var(--gt-brand);
+  --color-primary-foreground: var(--gt-brand-foreground);
+  --color-secondary: var(--gt-ink);
+  --color-secondary-foreground: var(--gt-ink-foreground);
+  --color-accent: var(--gt-accent);
+  --color-accent-foreground: var(--gt-accent-foreground);
+  --color-background: var(--gt-bg);
+  --color-surface: var(--gt-surface);
+  --color-surface-elevated: var(--gt-surface-elevated);
+  --color-foreground: var(--gt-text);
+  --color-muted: var(--gt-text-muted);
+  --color-border: var(--gt-border);
+  --color-success: var(--gt-success);
+  --color-warning: var(--gt-warning);
+  --color-danger: var(--gt-danger);
+  --color-info: var(--gt-info);
+
+  /* Phase 66 — unified onto the site's one GarnishTable typeface pairing (Playfair Display/Inter,
+     see :root above) rather than the separate Instrument Serif/Sans this dark chapter used to run
+     on its own; same brand voice in every register, not two. */
   color-scheme: dark;
-  font-family: var(--font-body-obsidian);
+  font-family: var(--font-body);
 }
 .theme-obsidian h1,
 .theme-obsidian h2,
 .theme-obsidian h3 {
-  font-family: var(--font-heading-obsidian);
+  font-family: var(--font-heading);
 }
 
 .skeleton-shimmer {

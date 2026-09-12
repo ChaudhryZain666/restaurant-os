@@ -82,8 +82,8 @@ test.describe.serial("dashboard not-ready state (Portal UX phase)", () => {
     await page.getByPlaceholder("Base price").fill("8");
     await page.getByRole("main").getByRole("combobox").selectOption({ label: categoryName });
     await page.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Customize this item")).toBeVisible();
+    await page.getByRole("button", { name: "Back to menu" }).click();
 
     // --- Back on Dashboard: the same in-place state now reflects the change live, no redirect
     // needed, and Publish is enabled without ever having visited /setup. ---
@@ -93,8 +93,11 @@ test.describe.serial("dashboard not-ready state (Portal UX phase)", () => {
     await page.getByRole("button", { name: "Publish restaurant" }).click();
 
     // --- Publishing transitions Dashboard straight to its normal operating-state metrics view,
-    // in place — still no /setup redirect anywhere in this entire flow. ---
-    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Here's how the restaurant is doing right now.")).toBeVisible();
+    // in place — still no /setup redirect anywhere in this entire flow. Phase 71 — the operating
+    // dashboard's own h1 is now a time-of-day greeting naming the restaurant (e.g. "Good evening,
+    // E2E Not Ready ...") rather than the literal word "Dashboard", so this asserts the restaurant
+    // name appears in a heading plus the new, still-static subtitle line. ---
+    await expect(page.getByRole("heading", { name: restaurantName })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Here's what's happening with your restaurant today.")).toBeVisible();
   });
 });

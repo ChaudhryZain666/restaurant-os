@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
@@ -37,11 +37,8 @@ export function RegisterPage() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm animate-scale-in">
-        <div className="mb-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-            T
-          </span>
-          <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+        <div className="mb-5">
+          <Logo />
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
           <h1 className="font-heading text-2xl font-semibold text-foreground">Create your account</h1>

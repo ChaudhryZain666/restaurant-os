@@ -92,6 +92,40 @@ describe("requireEntitlement middleware — real HTTP, business_analytics gated 
       .set("Authorization", `Bearer ${tokenFor(noSubOwner)}`);
     expect(allowed.status).toBe(200);
   });
+
+  // Phase 64 Section 15 — the two tests above prove "never subscribed" (defaults allowed) and "live,
+  // but the plan itself lacks the key" (denied). Missing until now: the real HTTP proof that a
+  // LAPSED subscription (real history, not currently live) is ALSO denied — even on a plan that
+  // itself grants the key — never confused with "never subscribed" merely because both currently
+  // lack a live subscription. subscription.service.test.ts already proves this at the resolver level
+  // (resolveSubscriptionState); this is the same property proven through the real route + middleware,
+  // so a lapsed owner genuinely cannot reach a paid endpoint by calling the API directly.
+  it("a LAPSED subscription (real history, not live) is denied even on a plan that grants the key — never treated as 'never subscribed'; reactivating restores access immediately", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    const grantingPlan = await createTestPlan({ entitlements: [{ key: "business_analytics", value: true }] });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(grantingPlan.id);
+
+    const sub = await createTestSubscription("business", business._id, grantingPlan._id, { status: "expired" });
+
+    const deniedWhileLapsed = await request(app)
+      .get(`/api/v1/businesses/${business.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${tokenFor(owner)}`);
+    expect(deniedWhileLapsed.status).toBe(403);
+
+    // Reactivation: the same subscription going live again immediately restores access — no
+    // separate "unlock" step, no stale denial.
+    await Subscription.updateOne({ _id: sub._id }, { $set: { status: "active" } });
+
+    const allowedAfterReactivation = await request(app)
+      .get(`/api/v1/businesses/${business.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${tokenFor(owner)}`);
+    expect(allowedAfterReactivation.status).toBe(200);
+  });
 });
 
 describe("Phase 34 — the real owner_basic/owner_pro catalog plans gate the same way the generic mechanism above already proves", () => {

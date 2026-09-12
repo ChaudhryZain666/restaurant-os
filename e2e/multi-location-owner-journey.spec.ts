@@ -86,7 +86,7 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 
     // --- Single location: no switcher anywhere, Locations page stays minimal. ---
-    await expect(page.getByRole("combobox", { name: "Active location" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Switch location/ })).toHaveCount(0);
     await page.getByRole("link", { name: "Locations" }).click();
     await expect(page.getByText(/starts as a single location/i)).toBeVisible();
 
@@ -100,8 +100,8 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await page.getByPlaceholder("Base price").fill("9");
     await page.getByRole("main").getByRole("combobox").selectOption({ label: categoryA });
     await page.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Customize this item")).toBeVisible();
+    await page.getByRole("button", { name: "Back to menu" }).click();
     // li-scoped (matching the categoryA check above), not a bare page-wide getByText — the
     // Portal UX audit's new "Item added" toast (Phase 53) legitimately also renders this same
     // item name in its own, separate description text.
@@ -121,7 +121,7 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await expect(page.locator("li", { hasText: locationBName })).toBeVisible();
 
     // --- Now that there are two locations, the switcher appears. ---
-    const switcher = page.getByRole("combobox", { name: "Active location" });
+    const switcher = page.getByRole("button", { name: /Switch location/ });
     await expect(switcher).toBeVisible();
 
     // --- Switch to Location B: the switch correctly resolves B's real effective menu, which —
@@ -129,7 +129,8 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     // it away — correctly INCLUDES A's item. This is the intended shared-menu behavior (Phase 21),
     // not stale data: if the switch were serving cached/wrong data, this assertion wouldn't
     // reliably hold across a fresh switch either. ---
-    await switcher.selectOption({ label: locationBName });
+    await switcher.click();
+    await page.getByRole("option", { name: new RegExp(locationBName) }).click();
     await page.getByRole("link", { name: "Menu", exact: true }).click();
     // li-scoped, not a bare page-wide getByText — same collision this file's own comment above
     // already documents (the "Item added" toast renders this same item name in its own text too).
@@ -144,15 +145,16 @@ test.describe.serial("multi-location owner journey (Phase 19)", () => {
     await page.getByPlaceholder("Base price").fill("14");
     await page.getByRole("main").getByRole("combobox").selectOption({ label: categoryB });
     await page.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Customize this item")).toBeVisible();
+    await page.getByRole("button", { name: "Back to menu" }).click();
     await expect(page.locator("li", { hasText: itemB })).toBeVisible();
     // A's item is still here too — the canonical menu accumulates, it isn't replaced per switch.
     await expect(page.locator("li", { hasText: itemA })).toBeVisible();
 
     // --- Switch back to A: BOTH items are visible here too, since the whole menu is genuinely
     // shared across the business — proving the switch re-resolves correctly in both directions. ---
-    await switcher.selectOption({ label: restaurantName });
+    await switcher.click();
+    await page.getByRole("option", { name: new RegExp(restaurantName) }).click();
     await page.getByRole("link", { name: "Menu", exact: true }).click();
     await expect(page.locator("li", { hasText: itemA })).toBeVisible();
     await expect(page.locator("li", { hasText: itemB })).toBeVisible();

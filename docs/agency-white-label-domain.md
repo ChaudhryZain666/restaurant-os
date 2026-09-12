@@ -6,7 +6,7 @@ An agency can record a candidate domain (e.g. `mediabymiller.com`) on its own `A
 verify **ownership** of it, via `POST /agencies/:agencyId/domain` and
 `POST /agencies/:agencyId/domain/verify` (Agency Portal → Settings). Verification reuses
 `domainVerification.service.ts` exactly as it already works for a restaurant's own custom storefront
-domain (`DomainMapping`) — publish a DNS TXT record at `_tablecloth-verify.<domain>` with a
+domain (`DomainMapping`) — publish a DNS TXT record at `_garnishtable-verify.<domain>` with a
 system-generated value, then the platform does a live DNS lookup and compares it. This is a real,
 working ownership check, not a fake "Verified ✓" badge — `Agency.domainStatus` only flips to
 `"verified"` after a genuine DNS TXT match.

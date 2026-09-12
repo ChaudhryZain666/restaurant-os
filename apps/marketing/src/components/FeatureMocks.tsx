@@ -326,7 +326,7 @@ export function BrandingMock() {
       <div className="rounded-lg border border-border bg-surface p-4">
         <p className="mb-2 text-xs text-muted">Brand color</p>
         <div className="flex items-center gap-2">
-          {["#c2410c", "#0f766e", "#7c3aed", "#be123c"].map((c, i) => (
+          {["#611b28", "#0f766e", "#7c3aed", "#be123c"].map((c, i) => (
             <span
               key={c}
               className={`h-8 w-8 rounded-full border-2 ${i === 0 ? "border-foreground" : "border-transparent"}`}

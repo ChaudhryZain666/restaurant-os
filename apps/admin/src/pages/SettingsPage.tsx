@@ -152,6 +152,12 @@ export function SettingsPage() {
               kitchenEnabled: restaurant.settings.kitchenEnabled,
               staffEnabled: restaurant.settings.staffEnabled,
               posEnabled: restaurant.settings.posEnabled,
+              // Phase 75 — meaningful only once a card-terminal provider is actually configured at
+              // the deployment level (restaurant.posTerminalProviderConfigured, computed server-side
+              // from env.POS_TERMINAL_PROVIDER — see docs/pos-architecture.md's Phase 74/75
+              // sections); the checkbox below is disabled otherwise so this can't be turned on for a
+              // location with no real capability behind it.
+              posTerminalEnabled: restaurant.settings.posTerminalEnabled,
               // Phase 54 — this used to fall back to defaultHours() (a hardcoded Mon-Sun 09:00-21:00
               // schedule) whenever businessHours was empty. An empty array is a deliberate, meaningful
               // value (see businessHours.service.ts's own doc comment: "no hours-based restriction at
@@ -503,6 +509,47 @@ export function SettingsPage() {
               </Link>
               .
             </p>
+
+            {/* Phase 75 — two independent, clearly-separate concepts: whether ANY card-terminal
+                capability exists in this deployment at all (a platform-level fact this page can only
+                report, never change), and whether THIS location has opted into it (the one thing this
+                page actually controls). Never offers a provider picker — there is nothing real to
+                pick from yet (see docs/payment-provider-decision.md). */}
+            <div className="mt-1 flex flex-col gap-2 border-t border-border pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-foreground">Card terminal</span>
+                <Badge tone={restaurant.posTerminalProviderConfigured ? "success" : "neutral"}>
+                  {restaurant.posTerminalProviderConfigured ? "Provider available" : "Not configured"}
+                </Badge>
+              </div>
+              {restaurant.posTerminalProviderConfigured ? (
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={restaurant.settings.posTerminalEnabled ?? false}
+                      onChange={(e) =>
+                        setRestaurant({
+                          ...restaurant,
+                          settings: { ...restaurant.settings, posTerminalEnabled: e.target.checked },
+                        })
+                      }
+                    />
+                    Enable card-terminal payments for this location
+                  </label>
+                  <p className="text-xs text-muted">
+                    This is a per-location setting — it only affects the location currently selected
+                    above, not the rest of this business.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted">
+                  No card-terminal provider is configured for this deployment yet, so there is nothing
+                  to turn on here. Card payments are still accepted — staff confirm them directly at
+                  the register once a card machine approves the charge.
+                </p>
+              )}
+            </div>
           </fieldset>
 
           <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">

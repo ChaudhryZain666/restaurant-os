@@ -25,7 +25,7 @@ const STEPS = [
 
 export function StartTrialPage() {
   usePageMeta({
-    title: "Start Your Free Trial — Tablecloth",
+    title: "Start Your Free Trial — GarnishTable",
     description: "Create your restaurant's branded storefront, add your menu, and start accepting online orders directly — no commission-hungry marketplace.",
   });
   return (

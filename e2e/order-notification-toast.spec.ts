@@ -21,7 +21,9 @@ test.describe("admin — new order toast notification", () => {
       await ownerPage.getByLabel("Email").fill("owner@demo-restaurant.local");
       await ownerPage.getByLabel("Password").fill("Owner123!");
       await ownerPage.getByRole("button", { name: "Sign in" }).click();
-      await expect(ownerPage.getByRole("heading", { name: "Dashboard" })).toBeVisible({ timeout: 10_000 });
+      // Phase 71 — the operating dashboard's h1 is now a time-of-day greeting naming the
+      // restaurant, not the literal word "Dashboard"; the subtitle line stays static.
+      await expect(ownerPage.getByText("Here's what's happening with your restaurant today.")).toBeVisible({ timeout: 10_000 });
 
       await customerPage.goto("http://localhost:5173/login");
       await customerPage.getByLabel("Email").fill("customer1@test.local");
@@ -40,9 +42,12 @@ test.describe("admin — new order toast notification", () => {
       await customerPage.goto("http://localhost:5173/");
       const itemRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
       await itemRow.scrollIntoViewIfNeeded();
-      await itemRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-      await itemRow.getByText("Small", { exact: false }).click();
-      await itemRow.getByRole("button", { name: "Confirm add to cart" }).click();
+      await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
+      // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a
+      // large-photograph overlay (role="dialog"), not an inline row expansion.
+      const detailDialog = customerPage.getByRole("dialog");
+      await detailDialog.getByText("Small", { exact: false }).click();
+      await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 
       await customerPage.getByRole("link", { name: /Cart/ }).click();
       await customerPage.getByRole("button", { name: /Place order/ }).click();
@@ -52,7 +57,7 @@ test.describe("admin — new order toast notification", () => {
 
       // Owner never navigated away from Dashboard — the toast must be app-shell-global, not
       // scoped to the Orders/Kitchen pages.
-      await expect(ownerPage.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+      await expect(ownerPage.getByText("Here's what's happening with your restaurant today.")).toBeVisible();
       const toast = ownerPage.getByRole("status").filter({ hasText: orderNumber });
       await expect(toast).toBeVisible({ timeout: 15_000 });
       await expect(toast.getByText("New order received")).toBeVisible();

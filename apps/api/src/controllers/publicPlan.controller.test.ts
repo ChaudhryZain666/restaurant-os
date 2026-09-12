@@ -9,6 +9,7 @@ const app = createApp();
 
 let activePlan: Awaited<ReturnType<typeof createTestPlan>>;
 let inactivePlan: Awaited<ReturnType<typeof createTestPlan>>;
+let negotiatedPlan: Awaited<ReturnType<typeof createTestPlan>>;
 
 beforeAll(async () => {
   await connectDB();
@@ -18,10 +19,13 @@ beforeAll(async () => {
     metadata: { internalNote: "never expose this" },
   });
   inactivePlan = await createTestPlan({ isActive: false });
+  // Phase 63 — a real, fully-functional, isActive plan (a future negotiated agency arrangement would
+  // look exactly like this) that must still never appear in the public catalog.
+  negotiatedPlan = await createTestPlan({ isActive: true, isPubliclyListed: false });
 });
 
 afterAll(async () => {
-  await Plan.deleteMany({ _id: { $in: [activePlan._id, inactivePlan._id] } });
+  await Plan.deleteMany({ _id: { $in: [activePlan._id, inactivePlan._id, negotiatedPlan._id] } });
   await closeTestConnections();
 });
 
@@ -36,6 +40,15 @@ describe("Phase 28 — GET /public/plans", () => {
     const codes = res.body.data.plans.map((p: { code: string }) => p.code);
     expect(codes).toContain(activePlan.code);
     expect(codes).not.toContain(inactivePlan.code);
+  });
+
+  it("Phase 63 — never lists an isActive plan marked isPubliclyListed:false (a future negotiated/custom agency arrangement), even though it remains real and fully usable for a subscription", async () => {
+    const res = await request(app).get("/api/v1/public/plans");
+    const codes = res.body.data.plans.map((p: { code: string }) => p.code);
+    expect(codes).not.toContain(negotiatedPlan.code);
+
+    const reloaded = await Plan.findById(negotiatedPlan._id);
+    expect(reloaded!.isActive).toBe(true); // still real, still selectable by a direct subscription
   });
 
   it("never leaks providerPriceId, providerProductId, or metadata", async () => {

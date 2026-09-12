@@ -45,8 +45,8 @@ function reasonHelpText(reason: string): string {
 
 export function ContactPage() {
   usePageMeta({
-    title: "Contact — Tablecloth",
-    description: "Get in touch about starting with Tablecloth, requesting a demo, or getting support for your restaurant.",
+    title: "Contact — GarnishTable",
+    description: "Get in touch about starting with GarnishTable, requesting a demo, or getting support for your restaurant.",
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);

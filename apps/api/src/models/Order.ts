@@ -86,6 +86,15 @@ const orderSchema = new Schema(
     // up by staff for a walk-in table). Defaults to "online" so the entire pre-POS dataset is
     // correctly, implicitly online with zero migration required.
     channel: { type: String, enum: ["online", "pos"], default: "online" },
+    // Phase 75 — who rang this order up, for staff accountability/reporting (sales by staff member,
+    // cash accountability, a future shift-reconciliation view — none of which are built this phase).
+    // Nullable by design: every pre-Phase-75 order (and every "online" order, forever — a customer
+    // is never a "creator" in this sense) has no value here and none is backfilled. Set exactly
+    // once, at creation, from the authenticated staff session (pos.controller.ts) — never accepted
+    // from the request body, and never overwritten afterward (see docs/pos-architecture.md's Phase
+    // 75 section on "created by" vs "recovered by": resuming a pending sale does not change who
+    // created it).
+    createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
     // Live reference (for admin/KDS "show me this table's orders" queries) plus a snapshotted
     // name (for display without a join, and so a later table rename/deletion never changes how
     // a historical order reads — the same snapshot-over-live-reference reasoning as orderItemSchema

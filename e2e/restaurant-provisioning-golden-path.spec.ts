@@ -121,8 +121,8 @@ test.describe.serial("restaurant provisioning golden path (Phase 14)", () => {
       await adminPage.getByRole("combobox").selectOption({ label: categoryName });
       await adminPage.getByRole("button", { name: "Create item & continue" }).click();
       // No modifier groups configured — a plain item, "Add to cart" will add it directly.
-      await expect(adminPage.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-      await adminPage.getByRole("button", { name: "Done" }).click();
+      await expect(adminPage.getByText("Customize this item")).toBeVisible();
+      await adminPage.getByRole("button", { name: "Back to menu" }).click();
 
       // --- Back to Setup: readiness now passes, publish becomes available and works. ---
       await adminPage.getByRole("link", { name: "Setup" }).click();

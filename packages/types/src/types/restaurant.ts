@@ -61,6 +61,11 @@ export interface RestaurantSettings {
    *  is independently re-checked server-side (POST .../pos/orders), same as every other settings
    *  gate here. */
   posEnabled?: boolean;
+  /** Phase 74 — per-location opt-in for the physical card-terminal payment flow, independent of
+   *  posEnabled (a location can run POS with cash/staff-confirmed-card only). Re-checked
+   *  server-side alongside the deployment-level terminal-provider config — see
+   *  `Restaurant.posTerminalProviderConfigured` below and docs/pos-architecture.md. */
+  posTerminalEnabled?: boolean;
   /** Which courier dispatches a delivery order — independent of deliveryEnabled/deliveryFee (which
    *  govern the customer-facing charge, not who shows up). Defaults to "manual" (the restaurant's
    *  own fleet). See docs/delivery-integrations.md. */
@@ -148,4 +153,10 @@ export interface Restaurant {
    *  `theme` for rendering, so "Preview" always shows the draft, never leaking it publicly. */
   themeDraft?: RestaurantThemeConfig;
   createdAt: string;
+  /** Phase 74 — computed, not persisted: true only when this deployment has a real (or, in
+   *  dev/test, mock) POS card-terminal provider configured (env.POS_TERMINAL_PROVIDER !== "none"),
+   *  independent of this specific location's own `settings.posTerminalEnabled` opt-in. Staff-facing
+   *  only (GET /restaurants/:id) — absent on every public/storefront restaurant response, same
+   *  precedent as ownerId/businessId above. */
+  posTerminalProviderConfigured?: boolean;
 }

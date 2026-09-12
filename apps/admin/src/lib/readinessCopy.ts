@@ -86,3 +86,25 @@ export const EXTENDED_CHECK_COPY: Record<string, { title: string; why: string; t
   // matching comment) — it was a permanently-"complete", non-actionable item pointing at a
   // Settings page with no corresponding fields.
 };
+
+/**
+ * Phase 71 — a presentation-only classification on top of the same EXTENDED_CHECK_COPY keys above
+ * (the API itself has no "tier" concept, only `status`), splitting SetupPage's previously-flat
+ * "More setup" list into Required/Recommended/Optional per the brief's own hierarchy. "Recommended"
+ * is operationally significant (money, hours, who's serving); "Optional" is closer to growth/vanity.
+ * A key not listed here (there shouldn't be one) falls back to "optional" — see SetupPage.tsx.
+ * Deliberately independent of the API's own `status: "optional"` (which means "not applicable to
+ * THIS restaurant right now", e.g. Kitchen when kitchenEnabled is false) — SetupPage.tsx layers
+ * that check on top of this one, so a Recommended item the restaurant has turned off still displays
+ * under Optional, not Recommended.
+ */
+export const SETUP_ITEM_TIER: Record<string, "recommended" | "optional"> = {
+  branding: "recommended",
+  hours: "recommended",
+  payment: "recommended",
+  staff: "recommended",
+  tables: "recommended",
+  kitchen: "recommended",
+  loyalty: "optional",
+  domain: "optional",
+};

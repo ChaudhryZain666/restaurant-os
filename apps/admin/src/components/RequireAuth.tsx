@@ -69,7 +69,14 @@ export function RequireAuth({ permission, roles, allowPlatformAdmin, children }:
   }, [location.pathname, loading, allowed]);
 
   if (loading) return <p>Loading...</p>;
-  if (!user) return <Navigate to="/login" replace />;
+  // Phase 73 — carries the originally-requested URL through state so LoginPage can return the
+  // user to it after authenticating, instead of always dropping them on their role's generic
+  // home page. This is what makes a direct, unauthenticated hit to /pos (or any other route)
+  // actually land back on /pos post-login — see LoginPage.tsx's read of location.state.from.
+  // Purely a UX convenience: if the authenticated user then turns out not to be allowed on that
+  // route, this same component's `allowed` check below still redirects them away — nothing here
+  // weakens or bypasses the real permission gate.
+  if (!user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
 
   // Phase 28 — an agency-provisioned "direct access" account can reach nothing but the forced
   // change-password screen until it sets a real password (server enforces this independently too,

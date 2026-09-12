@@ -50,9 +50,10 @@ describe("envSchema — production email safety (Phase 45)", () => {
       EMAIL_PROVIDER: "smtp",
       SMTP_HOST: "smtp.example.com",
       SMTP_PORT: "587",
-      EMAIL_FROM: "Tablecloth <hello@realdomain.example>",
+      EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
       CLIENT_ORIGIN: "https://order.realdomain.example",
       ADMIN_ORIGIN: "https://admin.realdomain.example",
+      MARKETING_ORIGIN: "https://www.realdomain.example",
     });
     expect(result.success).toBe(true);
   });
@@ -64,7 +65,7 @@ describe("envSchema — production email safety (Phase 45)", () => {
       EMAIL_PROVIDER: "smtp",
       SMTP_HOST: "smtp.example.com",
       SMTP_PORT: "587",
-      EMAIL_FROM: "Tablecloth <hello@realdomain.example>",
+      EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
     });
     // No explicit CLIENT_ORIGIN/ADMIN_ORIGIN above — both fall back to their localhost defaults.
     expect(result.success).toBe(false);
@@ -75,18 +76,37 @@ describe("envSchema — production email safety (Phase 45)", () => {
     }
   });
 
-  it("accepts NODE_ENV=production with real, non-localhost CLIENT_ORIGIN/ADMIN_ORIGIN", () => {
+  it("accepts NODE_ENV=production with real, non-localhost CLIENT_ORIGIN/ADMIN_ORIGIN/MARKETING_ORIGIN", () => {
     const result = envSchema.safeParse({
       ...REQUIRED_BASE,
       NODE_ENV: "production",
       EMAIL_PROVIDER: "smtp",
       SMTP_HOST: "smtp.example.com",
       SMTP_PORT: "587",
-      EMAIL_FROM: "Tablecloth <hello@realdomain.example>",
+      EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
+      CLIENT_ORIGIN: "https://order.realdomain.example",
+      ADMIN_ORIGIN: "https://admin.realdomain.example",
+      MARKETING_ORIGIN: "https://www.realdomain.example",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects NODE_ENV=production left on the default localhost MARKETING_ORIGIN even with everything else configured (Phase 76)", () => {
+    const result = envSchema.safeParse({
+      ...REQUIRED_BASE,
+      NODE_ENV: "production",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_PORT: "587",
+      EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
       CLIENT_ORIGIN: "https://order.realdomain.example",
       ADMIN_ORIGIN: "https://admin.realdomain.example",
     });
-    expect(result.success).toBe(true);
+    // No explicit MARKETING_ORIGIN above — falls back to its localhost default.
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.MARKETING_ORIGIN?.[0]).toMatch(/localhost/);
+    }
   });
 
   it("still allows the console provider outside production — development and test are unaffected", () => {
@@ -139,7 +159,7 @@ describe("envSchema — CONTACT_NOTIFICATION_EMAIL (Phase 56)", () => {
   it("defaults to a placeholder address when unset", () => {
     const result = envSchema.safeParse({ ...REQUIRED_BASE });
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.CONTACT_NOTIFICATION_EMAIL).toBe("hello@tablecloth.local");
+    if (result.success) expect(result.data.CONTACT_NOTIFICATION_EMAIL).toBe("hello@garnishtable.local");
   });
 
   it("accepts an explicit override", () => {

@@ -29,24 +29,42 @@ import { createOrderForCustomer } from "../services/orderCreation.service.js";
 /** Never sent to a customer — staff-only field. Applied right before every customer-facing
  *  response (listMyOrders, getOrder-as-owner, cancelMyOrder) rather than relying on callers to
  *  remember, since the consequence of forgetting is a real data leak. */
-function stripInternalFields<T extends Record<string, unknown>>(order: T): Omit<T, "internalNote"> {
-  const { internalNote: _internalNote, ...rest } = order;
+// Phase 75 — createdByUserId/createdByName join staff-only internalNote here: staff attribution
+// for a POS sale is exactly as internal as the staff note is, never meant for the customer who
+// placed/received the order.
+function stripInternalFields<T extends Record<string, unknown>>(
+  order: T
+): Omit<T, "internalNote" | "createdByUserId" | "createdByName"> {
+  const { internalNote: _internalNote, createdByUserId: _createdByUserId, createdByName: _createdByName, ...rest } = order;
   return rest;
 }
 
 /**
- * Attaches { customerName, customerPhone } to each order's JSON for staff-facing views. A
- * separate batched User lookup rather than Mongoose .populate() — populate would replace
- * customerId with a nested document and change what order.toJSON() produces, which every
- * existing order test/consumer already depends on being a plain ObjectId string.
+ * Attaches { customerName, customerPhone } to each order's JSON for staff-facing views, and
+ * (Phase 75) { createdByName } for POS orders that have a createdByUserId — one batched User
+ * lookup covering both, rather than a second query. A separate batched lookup rather than
+ * Mongoose .populate() — populate would replace customerId with a nested document and change what
+ * order.toJSON() produces, which every existing order test/consumer already depends on being a
+ * plain ObjectId string.
  */
-async function withCustomerInfo(orders: HydratedDocument<OrderDoc>[]) {
-  const customerIds = [...new Set(orders.map((o) => o.customerId.toString()))];
-  const customers = await User.find({ _id: { $in: customerIds } }, "name phone");
-  const byId = new Map(customers.map((c) => [c.id, c]));
+// Exported (Phase 75) — pos.controller.ts's listPendingSales reuses this exact enrichment
+// (customerName/customerPhone/createdByName) rather than a second, parallel User-lookup
+// implementation for what is still fundamentally the same "orders, staff-facing" projection.
+export async function withCustomerInfo(orders: HydratedDocument<OrderDoc>[]) {
+  const userIds = [
+    ...new Set(orders.flatMap((o) => [o.customerId.toString(), o.createdByUserId?.toString()].filter((id): id is string => Boolean(id)))),
+  ];
+  const users = await User.find({ _id: { $in: userIds } }, "name phone");
+  const byId = new Map(users.map((c) => [c.id, c]));
   return orders.map((order) => {
     const customer = byId.get(order.customerId.toString());
-    return { ...order.toJSON(), customerName: customer?.name, customerPhone: customer?.phone };
+    const creator = order.createdByUserId ? byId.get(order.createdByUserId.toString()) : undefined;
+    return {
+      ...order.toJSON(),
+      customerName: customer?.name,
+      customerPhone: customer?.phone,
+      createdByName: creator?.name,
+    };
   });
 }
 
@@ -224,6 +242,12 @@ export async function updateOrderPaymentStatus(req: Request, res: Response) {
     throw ApiError.badRequest(
       "This order's payment method is online — its payment status is set by the payment provider, not manually"
     );
+  }
+  // Phase 75 audit finding — a genuine, pre-existing gap: nothing stopped a cancelled order from
+  // being marked paid afterward (order.status and order.paymentStatus are intentionally separate
+  // fields, but "cancelled" must still be a hard stop for payment, not just a display label).
+  if (existing.status === "cancelled" && paymentStatus === "paid") {
+    throw ApiError.badRequest("This order has been cancelled and cannot be marked paid");
   }
 
   const order = await Order.findOneAndUpdate(

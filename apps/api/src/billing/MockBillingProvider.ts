@@ -157,7 +157,14 @@ export class MockBillingProvider implements BillingProvider {
   async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession> {
     const token = randomBytes(16).toString("hex");
     this.checkouts.set(token, { providerCustomerId: input.providerCustomerId, providerPriceId: input.providerPriceId, metadata: input.metadata });
-    return { mode: "redirect", url: `/mock-checkout/${token}`, providerPriceId: input.providerPriceId };
+    // Phase 64 — the mock checkout stub page (MockCheckoutPage.tsx) is public/token-only, like a
+    // real redirect-based provider's own checkout page would be, so it has no other way to know
+    // whether its "Back to billing" action belongs on the owner or the agency billing surface.
+    // ownerType is already present in this same checkout's metadata, so it rides along in the URL
+    // itself rather than requiring an authenticated lookup — this is mock-provider-only wiring
+    // (the real PaddleBillingProvider uses "overlay" mode, which completes in-page via Paddle.js's
+    // own event callback and never navigates through this URL at all).
+    return { mode: "redirect", url: `/mock-checkout/${token}?ownerType=${input.metadata.ownerType}`, providerPriceId: input.providerPriceId };
   }
 
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null> {

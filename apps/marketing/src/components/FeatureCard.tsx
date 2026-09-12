@@ -29,7 +29,7 @@ export function FeatureCard({
             would silently lose the "light cards floating on a dark canvas" premium pattern the
             redesign relies on. On every light page these values already match bg-surface/foreground
             exactly, so this is a no-op there. */}
-        <Card className="flex h-full flex-col gap-3 border-[#e7e2dc] bg-[#fdfbf7] text-[#1c1917] shadow-sm transition-all duration-normal group-hover:-translate-y-1 group-hover:shadow-elevated group-focus-visible:-translate-y-1 group-focus-visible:shadow-elevated">
+        <Card className="flex h-full flex-col gap-3 border-[color:var(--gt-border-fixed)] bg-[color:var(--gt-surface-fixed)] text-[color:var(--gt-text-fixed)] shadow-sm transition-all duration-normal group-hover:-translate-y-1 group-hover:shadow-elevated group-focus-visible:-translate-y-1 group-focus-visible:shadow-elevated">
           <div className="flex items-start justify-between gap-2">
             <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors duration-normal group-hover:bg-primary group-hover:text-primary-foreground">
               {icon}
@@ -40,8 +40,8 @@ export function FeatureCard({
               </Badge>
             )}
           </div>
-          <h3 className="font-heading text-lg font-semibold text-[#1c1917]">{title}</h3>
-          <p className="text-sm text-[#78716c]">{description}</p>
+          <h3 className="font-heading text-lg font-semibold text-[color:var(--gt-text-fixed)]">{title}</h3>
+          <p className="text-sm text-[color:var(--gt-text-muted-fixed)]">{description}</p>
           <span className="mt-auto flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity duration-normal group-hover:opacity-100 group-focus-visible:opacity-100">
             Learn more <IconArrowRight className="h-3.5 w-3.5" />
           </span>

@@ -45,9 +45,12 @@ test.describe("kitchen display — real-time order flow", () => {
       await customerPage.goto("http://localhost:5173/");
       const itemRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
       await itemRow.scrollIntoViewIfNeeded();
-      await itemRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-      await itemRow.getByText("Small", { exact: false }).click();
-      await itemRow.getByRole("button", { name: "Confirm add to cart" }).click();
+      await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
+      // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a
+      // large-photograph overlay (role="dialog"), not an inline row expansion.
+      const detailDialog = customerPage.getByRole("dialog");
+      await detailDialog.getByText("Small", { exact: false }).click();
+      await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 
       await customerPage.getByRole("link", { name: /Cart/ }).click();
       await customerPage.getByRole("button", { name: /Place order/ }).click();

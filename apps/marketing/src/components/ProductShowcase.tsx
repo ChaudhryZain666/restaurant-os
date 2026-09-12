@@ -85,7 +85,7 @@ export function ProductShowcase() {
           return (
             <div
               key={tab.id}
-              className="absolute overflow-hidden rounded-sm border bg-[#0c0b09]"
+              className="absolute overflow-hidden rounded-sm border bg-[color:var(--color-surface)]"
               style={{
                 left: rect.left,
                 top: rect.top,
@@ -96,7 +96,7 @@ export function ProductShowcase() {
                 transition: reducedMotion ? "none" : "left 550ms cubic-bezier(0.16,1,0.3,1), top 550ms cubic-bezier(0.16,1,0.3,1), width 550ms cubic-bezier(0.16,1,0.3,1), height 550ms cubic-bezier(0.16,1,0.3,1), border-color 300ms ease",
               }}
             >
-              <div className="flex items-center justify-between gap-1 border-b border-white/10 bg-[#100e0b] px-2 py-1.5 sm:px-3 sm:py-2">
+              <div className="flex items-center justify-between gap-1 border-b border-white/10 bg-[color:var(--color-surface-elevated)] px-2 py-1.5 sm:px-3 sm:py-2">
                 <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full"

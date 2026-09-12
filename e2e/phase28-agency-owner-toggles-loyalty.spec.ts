@@ -335,8 +335,8 @@ test.describe.serial("loyalty reward redemption (Phase 28)", () => {
       await adminPage.getByPlaceholder("Base price").fill("100");
       await adminPage.getByRole("combobox").selectOption({ label: categoryName });
       await adminPage.getByRole("button", { name: "Create item & continue" }).click();
-      await expect(adminPage.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-      await adminPage.getByRole("button", { name: "Done" }).click();
+      await expect(adminPage.getByText("Customize this item")).toBeVisible();
+      await adminPage.getByRole("button", { name: "Back to menu" }).click();
 
       await adminPage.getByRole("link", { name: "Setup" }).click();
       await expect(adminPage.getByRole("button", { name: "Publish restaurant" })).toBeEnabled({ timeout: 10_000 });

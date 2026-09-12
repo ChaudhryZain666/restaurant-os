@@ -102,6 +102,13 @@ export interface Order {
   /** Staff-only — never present on a customer-facing response (see order.controller.ts's
    *  stripInternalFields). Only meaningful on staff-facing responses. */
   internalNote?: string;
+  /** Phase 75 — the staff member who created this order via the POS (never set for channel
+   *  "online"). Staff-only, same as internalNote — stripped from any customer-facing response.
+   *  Never changes after creation, even when a different staff member resumes/completes the sale
+   *  (see docs/pos-architecture.md's "created by ≠ recovered by" section). */
+  createdByUserId?: string;
+  /** Resolved display name for createdByUserId, attached the same way customerName is — staff-only. */
+  createdByName?: string;
   createdAt: string;
   /** Only present on staff-facing responses (listRestaurantOrders / getOrder as staff). */
   customerName?: string;

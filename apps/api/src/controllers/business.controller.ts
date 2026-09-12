@@ -179,10 +179,14 @@ export async function createLocationForBusiness(req: Request, res: Response) {
 export async function createBusinessSelfServe(req: Request, res: Response) {
   const { name, slug, timezone, currency } = req.body as CreateBusinessSelfServeInput;
 
-  const caller = await User.findById(req.user!.id);
-  if (!caller) throw ApiError.unauthorized("User no longer exists");
-  if (caller.businessId) throw ApiError.conflict("You already have a business set up");
-  if (!caller.emailVerifiedAt) {
+  // A cheap, non-authoritative pre-check only — narrows the common case with one fewer round trip
+  // before opening a session/transaction. The REAL guard is the fresh, session-scoped read inside
+  // the transaction below (Phase 60 fix — see that block's own comment for why this outer check
+  // alone was never enough).
+  const precheck = await User.findById(req.user!.id);
+  if (!precheck) throw ApiError.unauthorized("User no longer exists");
+  if (precheck.businessId) throw ApiError.conflict("You already have a business set up");
+  if (!precheck.emailVerifiedAt) {
     throw ApiError.forbidden("Please verify your email address before creating your restaurant");
   }
 
@@ -194,9 +198,27 @@ export async function createBusinessSelfServe(req: Request, res: Response) {
   const session = await mongoose.startSession();
   let business: HydratedDocument<BusinessDoc>;
   let restaurant: HydratedDocument<RestaurantDoc>;
+  let actorRole: string;
   try {
     try {
       const created = (await session.withTransaction(async () => {
+        // Phase 60 — a real, previously-undiscovered race: two concurrent requests for the same
+        // caller (double-click, a stale second tab, a network retry) could both pass the outer
+        // pre-check above before either committed, each create their OWN real Business+Restaurant,
+        // and race to write this caller's businessId — MongoDB's own write-conflict detection
+        // aborts and auto-retries the loser's *entire* transaction (via withTransaction), but the
+        // retry re-ran this callback against the SAME stale, outer-scope `caller` object, which
+        // never saw the winner's already-committed businessId — so the retry created a SECOND
+        // real, silently orphaned Business+Restaurant instead of failing cleanly. Re-reading the
+        // caller here, scoped to this session, makes the check itself part of the transaction: on
+        // a retry, this read sees the new snapshot (the winner's committed write), correctly
+        // throws the same 409 the outer pre-check would have given a slightly-slower request, and
+        // — critically — throws BEFORE either Business or Restaurant document is created, so a
+        // losing retry never creates anything at all.
+        const caller = await User.findById(req.user!.id).session(session);
+        if (!caller) throw ApiError.unauthorized("User no longer exists");
+        if (caller.businessId) throw ApiError.conflict("You already have a business set up");
+
         const [createdBusiness] = await Business.create(
           [{ name, slug, ownerId: caller._id, status: "active" }],
           { session }
@@ -225,10 +247,15 @@ export async function createBusinessSelfServe(req: Request, res: Response) {
         if (caller.role === "customer") caller.role = "restaurant_owner";
         await caller.save({ session });
 
-        return { createdBusiness, createdRestaurant };
-      })) as { createdBusiness: HydratedDocument<BusinessDoc>; createdRestaurant: HydratedDocument<RestaurantDoc> };
+        return { createdBusiness, createdRestaurant, actorRole: caller.role };
+      })) as {
+        createdBusiness: HydratedDocument<BusinessDoc>;
+        createdRestaurant: HydratedDocument<RestaurantDoc>;
+        actorRole: string;
+      };
       business = created.createdBusiness;
       restaurant = created.createdRestaurant;
+      actorRole = created.actorRole;
     } catch (err) {
       if ((err as { code?: number }).code === 11000) {
         throw ApiError.conflict("That restaurant URL is already taken — try another");
@@ -241,8 +268,8 @@ export async function createBusinessSelfServe(req: Request, res: Response) {
 
   await recordAuditEvent({
     restaurantId: restaurant._id,
-    actorUserId: caller._id,
-    actorRole: caller.role,
+    actorUserId: precheck._id,
+    actorRole,
     action: "restaurant.created",
     targetType: "restaurant",
     targetId: restaurant._id,

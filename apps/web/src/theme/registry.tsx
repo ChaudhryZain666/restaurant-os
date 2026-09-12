@@ -75,22 +75,29 @@ export const THEME_REGISTRY: Record<string, ThemeDefinition> = {
     description: "Immersive and dramatic — a viewport-height photographic hero, typography sitting directly on the image, a transparent nav that solidifies on scroll. A restaurant-film register, not an app.",
     styleTags: ["Immersive", "Dramatic", "Image-led"],
     motion: { intensity: "expressive" },
-    // Phase 42 Stage 2B — recolored toward the marketing site's own warm ember/amber identity for
-    // brand continuity (primary was already a close amber-gold match; accent moves from a cool
-    // wine-red to a warmer burnt-ember so every accent moment reads as the same brand, not two).
+    // Phase 75 — recolored back toward deep wine/oxblood + warm parchment/ivory, replacing Phase 42
+    // Stage 2B's amber/burnt-ember direction. That recolor chased brand continuity with the
+    // marketing site's identity AT THE TIME, but the marketing site's own palette has since moved
+    // on (its current `--gt-*` tokens in apps/marketing/src/index.css are wine/parchment, not
+    // amber/ember) — this brought Cinematic, the flagship theme the demo restaurant actually uses,
+    // back in line with where the brand really is today. These are Cinematic's own independently-
+    // defined values, not an import of the marketing app's tokens: apps/web must never read the
+    // platform's own branding directly (a restaurant's storefront is never GarnishTable-branded —
+    // see apps/admin/src/index.css's own comment on this same rule), it just happens to land on a
+    // deliberately similar premium-hospitality palette because that's what this brand direction is.
     defaultTokens: {
       colors: {
-        primary: "#c8933e",
-        primaryForeground: "#1a1614",
-        secondary: "#15130f",
-        secondaryForeground: "#f7f3ec",
-        accent: "#b8541f",
-        accentForeground: "#f7f3ec",
-        background: "#faf8f4",
-        surface: "#ffffff",
-        foreground: "#171512",
-        muted: "#6b6459",
-        border: "#e6e1d8",
+        primary: "#6d1f2a",
+        primaryForeground: "#f7f1e2",
+        secondary: "#1c1417",
+        secondaryForeground: "#f5eee0",
+        accent: "#8a3f45",
+        accentForeground: "#f7f1e2",
+        background: "#f7f2e6",
+        surface: "#fffaf3",
+        foreground: "#1c1512",
+        muted: "#6d6153",
+        border: "#e3dcc8",
       },
       radius: "sharp",
       density: "spacious",

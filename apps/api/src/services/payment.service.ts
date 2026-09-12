@@ -232,7 +232,14 @@ export async function processProviderEvent(
  * isValidPaymentTransition; reconciliation: its own isValidPaymentTransition check) — this
  * function only ever applies a single, already-decided transition.
  */
-async function applyPaymentStatusTransition(
+/**
+ * Exported (Phase 74) — posTerminalPayment.service.ts reuses this exact atomic transition path
+ * (the partial-unique-index-backed "one paid Payment per order" guarantee, the transactional
+ * Order.paymentStatus write, the order.payment_updated event) for POS terminal payments too,
+ * rather than a second, parallel implementation. This function only ever applies a single,
+ * already-decided transition — callers own their own idempotency/validity gating first.
+ */
+export async function applyPaymentStatusTransition(
   payment: HydratedDocument<PaymentDoc>,
   newStatus: ProviderWebhookEvent["status"]
 ): Promise<void> {

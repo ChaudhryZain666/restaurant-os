@@ -85,3 +85,19 @@ export const createPosOrderSchema = z
     path: ["deliveryAddress"],
   });
 export type CreatePosOrderInput = z.infer<typeof createPosOrderSchema>;
+
+// Phase 74 — same convention as createPaymentSchema (payment.ts): the client owns the retry/
+// double-click boundary, not the server guessing whether two requests were "the same tap."
+export const createPosTerminalPaymentSchema = z.object({
+  idempotencyKey: z.string().min(8).max(128),
+});
+export type CreatePosTerminalPaymentInput = z.infer<typeof createPosTerminalPaymentSchema>;
+
+// Dev/test-only driver input (see posTerminalPayment.controller.ts's mockCompleteTerminalPayment,
+// only ever registered when env.POS_TERMINAL_PROVIDER === "mock"). No "timeout" here — timeout is
+// a client-side polling concept, not a discrete outcome a terminal reports (see
+// PaymentTerminalProvider.ts).
+export const mockCompleteTerminalPaymentSchema = z.object({
+  outcome: z.enum(["paid", "failed", "cancelled"]),
+});
+export type MockCompleteTerminalPaymentInput = z.infer<typeof mockCompleteTerminalPaymentSchema>;

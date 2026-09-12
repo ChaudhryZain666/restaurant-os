@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../lib/api";
 
 type EntitlementValue = boolean | number | string;
-type EntitlementSource = "business" | "agency" | "default";
+type EntitlementSource = "business" | "agency" | "lapsed" | "default";
 
 interface EntitlementsResponse {
   entitlements: Record<string, EntitlementValue> | null;
@@ -19,8 +19,16 @@ interface EntitlementsResponse {
  *
  * `entitlements === null` while `loading` is true means "don't know yet" (treat conservatively,
  * i.e. don't render an upgrade prompt prematurely); once loaded, `null` entitlements with
- * `source: "default"` means no plan was found at all, which the boolean-default convention
- * (entitlement.service.ts) treats as allowed — `has()` reflects that.
+ * `source: "default"` means no plan was found ANYWHERE in this owner's history — the boolean-default
+ * convention (entitlement.service.ts) treats that as allowed — `has()` reflects that.
+ *
+ * Phase 63 fix — `source: "lapsed"` (a real subscription existed, e.g. an expired trial or a
+ * cancelled/expired paid subscription, but nothing is live now) is a DIFFERENT null-entitlements
+ * case, and must resolve to DENIED, not allowed. Before this fix, `has()` only checked "is
+ * `entitlements` null," so `"lapsed"` was silently treated exactly like `"default"` — the frontend
+ * kept showing a fully-unlocked page even though the server's own `requireEntitlement` middleware
+ * would already reject the same action with a 403. That gap (API correctly denies, UI still invites
+ * the click) is exactly what this hook exists to prevent.
  */
 export function useBusinessEntitlements(businessId: string | undefined | null) {
   const [entitlements, setEntitlements] = useState<Record<string, EntitlementValue> | null>(null);
@@ -47,9 +55,11 @@ export function useBusinessEntitlements(businessId: string | undefined | null) {
       .finally(() => setLoading(false));
   }, [businessId]);
 
-  /** No entitlements resolved at all (source: "default") means the boolean-default-TRUE convention
-   *  applies — same rule the server's hasFeatureEntitlement uses, so this can't disagree with it. */
+  /** Mirrors hasFeatureEntitlement's own precedence exactly, so this can never disagree with the
+   *  server: "lapsed" denies; genuinely no subscription history anywhere ("default") allows; a real
+   *  plan's own key decides otherwise. */
   function has(key: string): boolean {
+    if (source === "lapsed") return false;
     if (!entitlements) return true;
     const value = entitlements[key];
     if (typeof value === "boolean") return value;

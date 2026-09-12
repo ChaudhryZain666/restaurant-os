@@ -26,22 +26,28 @@ test.describe("storefront demo playground", () => {
     await page.goto("http://localhost:5173/r/demo-restaurant/experience");
     // Generous timeout on this first assertion only — the lazy-loaded experience chunk plus the
     // restaurant/menu fetches it triggers can take a few seconds on a cold dev-server compile.
-    await expect(page.getByRole("heading", { name: /This is Demo Restaurant/ })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: /This is Wildwood Kitchen/ })).toBeVisible({ timeout: 15_000 });
 
     // --- Add a real item with a real (required) modifier to the real cart, from inside the
     //     device frame, WHILE still on Cinematic (the playground's default seed theme — see
-    //     PlaygroundPanel.tsx) — its button labels ("Add to order"/"Confirm") are the ones asserted
-    //     below. Done before switching themes further down: each theme's menu interaction uses
-    //     genuinely different labels (see LuxuryMenuSection's plain "Add"/hairline-bordered
-    //     "Confirm"), which is itself proof the themes are structurally different, not just
-    //     re-colored — but that means this add-to-cart step must happen on a known theme, not after
-    //     switching away from it. ---
+    //     PlaygroundPanel.tsx). Done before switching themes further down: each theme's menu
+    //     interaction uses genuinely different labels/composition (see LuxuryMenuSection's plain
+    //     "Add"/hairline-bordered "Confirm"), which is itself proof the themes are structurally
+    //     different, not just re-colored — but that means this add-to-cart step must happen on a
+    //     known theme, not after switching away from it.
+    //
+    //     Phase 65 — Cinematic's item detail is now a large-photograph overlay (role="dialog"),
+    //     not an inline row expansion, so the modifier controls and confirm action live in that
+    //     dialog rather than nested inside the row's own <li> — scoped to the dialog below instead
+    //     of `itemRow`. Its confirm button also now shows the live price ("Add to order — $12.50"),
+    //     not a bare "Confirm". ---
     const itemRow = page.locator("li", { hasText: "Margherita Pizza" }).first();
     await itemRow.scrollIntoViewIfNeeded();
     await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
-    await expect(itemRow.getByText("Size", { exact: false })).toBeVisible();
-    await itemRow.getByText("Small", { exact: false }).click();
-    await itemRow.getByRole("button", { name: "Confirm", exact: true }).click();
+    const detailDialog = page.getByRole("dialog");
+    await expect(detailDialog.getByText("Size", { exact: false })).toBeVisible();
+    await detailDialog.getByText("Small", { exact: false }).click();
+    await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
     await expect(page.getByRole("button", { name: /Try a real checkout \(1\)/ })).toBeVisible();
 
     // --- Theme switching changes the real renderer's structural fingerprint, live — the cart
@@ -90,7 +96,9 @@ test.describe("storefront demo playground", () => {
       await ownerPage.getByLabel("Email").fill("owner@demo-restaurant.local");
       await ownerPage.getByLabel("Password").fill("Owner123!");
       await ownerPage.getByRole("button", { name: "Sign in" }).click();
-      await ownerPage.getByRole("link", { name: "Orders" }).click();
+      // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+      // also matches a bare page-wide "Orders" substring query once the owner lands there post-login).
+      await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       await expect(ownerPage.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
       await expect(ownerPage.getByRole("group", { name: `Order ${orderNumber}` })).not.toBeVisible();
     } finally {
@@ -104,10 +112,12 @@ test.describe("storefront demo playground", () => {
     try {
       await freshPage.goto("http://localhost:5173/r/demo-restaurant/experience");
       // Cinematic is the playground's default seed (see PlaygroundPanel.tsx) whenever the
-      // restaurant's real published theme isn't one of the five current showcase directions — the
-      // real demo-restaurant fixture stays on the legacy "classic" key for other e2e specs'
-      // structural-fingerprint safety (see registry.tsx's doc comment), so a fresh visitor here
-      // always lands on Cinematic, never on whatever the previous visitor picked.
+      // restaurant's real published theme isn't one of the five current showcase directions —
+      // and (Phase 65) demo-restaurant's real published theme IS now Cinematic (the platform's
+      // flagship, since this is also what the marketing site's live iframe renders), so a fresh
+      // visitor lands on Cinematic either way: via its own real theme this time, not the fallback.
+      // The fallback path itself is still real and still exercised by every OTHER seeded
+      // restaurant this route can be opened against that hasn't been switched to a showcase theme.
       await expect(freshPage.getByRole("button", { name: "Select Cinematic theme" })).toHaveAttribute("aria-pressed", "true");
     } finally {
       await freshContext.close();
@@ -123,7 +133,7 @@ test.describe("storefront demo playground", () => {
   // survives incidental visual tweaks.
   test("Cinematic hero stays within the playground frame's bounds on the mobile preset", async ({ page }) => {
     await page.goto("http://localhost:5173/r/demo-restaurant/experience");
-    const heroHeading = page.getByRole("heading", { name: /This is Demo Restaurant/ });
+    const heroHeading = page.getByRole("heading", { name: /This is Wildwood Kitchen/ });
     await expect(heroHeading).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole("button", { name: "Mobile", exact: true }).click();

@@ -6,12 +6,19 @@ import { connectDB } from "../config/db.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
 import { User } from "../models/User.js";
+import { Business } from "../models/Business.js";
+import { DomainMapping } from "../models/DomainMapping.js";
+import { Plan } from "../models/Plan.js";
+import { Subscription } from "../models/Subscription.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import {
   closeTestConnections,
+  createTestBusiness,
   createTestCategory,
   createTestMenuItem,
+  createTestPlan,
   createTestRestaurant,
+  createTestSubscription,
   createTestUser,
   tokenFor,
 } from "../test-utils/fixtures.js";
@@ -575,6 +582,28 @@ describe("restaurant settings update (OWNER-only operation)", () => {
       .send({ settings: { onlinePaymentEnabled: true } });
   });
 
+  it("Phase 75 — owner can toggle the per-location card-terminal setting through this endpoint (the one the Settings UI actually calls)", async () => {
+    // Regression coverage for a real gap Phase 75 found: posTerminalEnabled existed on the
+    // Restaurant model since Phase 74, but restaurantSettingsSchema (packages/validation/src/
+    // restaurant.ts) never listed it — this endpoint's own doc comment says "anything not listed
+    // here is stripped by zod" — so before the schema fix, a real Settings-page save of this
+    // checkbox silently did nothing at all.
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ settings: { posTerminalEnabled: true } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.restaurant.settings.posTerminalEnabled).toBe(true);
+
+    const off = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ settings: { posTerminalEnabled: false } });
+    expect(off.status).toBe(200);
+    expect(off.body.data.restaurant.settings.posTerminalEnabled).toBe(false);
+  });
+
   it("Phase 42 — owner can enable online payments for a restaurant with an active connected payment account", async () => {
     const restaurant = await createTestRestaurant({ settings: { onlinePaymentEnabled: false, cashEnabled: true } });
     const owner = await createTestUser("restaurant_owner", restaurant._id);
@@ -903,6 +932,103 @@ describe("restaurant settings update (OWNER-only operation)", () => {
       expect(res.status).toBe(200);
       expect(res.body.data.availability.status).toBe("closed");
       expect(res.body.data.availability.reason).toBe("Outside business hours");
+    });
+  });
+
+  describe("GET /restaurants/by-domain/:hostname — Phase 64: a lapsed subscription stops serving a previously-active custom domain", () => {
+    const businessIdsToClean: string[] = [];
+    const restaurantIdsToClean: string[] = [];
+    const planIdsToClean: string[] = [];
+
+    afterAll(async () => {
+      await DomainMapping.deleteMany({ businessId: { $in: businessIdsToClean } });
+      await Subscription.deleteMany({ ownerType: "business", ownerId: { $in: businessIdsToClean } });
+      await Restaurant.deleteMany({ _id: { $in: restaurantIdsToClean } });
+      await Business.deleteMany({ _id: { $in: businessIdsToClean } });
+      await Plan.deleteMany({ _id: { $in: planIdsToClean } });
+    });
+
+    it("resolves normally while the business's plan grants custom_domains", async () => {
+      const business = await createTestBusiness();
+      businessIdsToClean.push(business.id);
+      const location = await createTestRestaurant({ businessId: business._id, ownerId: business.ownerId, status: "active" });
+      restaurantIdsToClean.push(location.id);
+      const plan = await createTestPlan({ type: "OWNER", entitlements: [{ key: "custom_domains", value: true }] });
+      planIdsToClean.push(plan.id);
+      await createTestSubscription("business", business._id, plan._id);
+      const hostname = `phase64-live-${Date.now()}.example.com`;
+      await DomainMapping.create({
+        hostname,
+        businessId: business._id,
+        locationId: location._id,
+        status: "active",
+        verificationToken: "test-token",
+        activatedAt: new Date(),
+      });
+
+      const res = await request(app).get(`/api/v1/restaurants/by-domain/${hostname}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.restaurant.slug).toBe(location.slug);
+    });
+
+    it("stops resolving once the plan lapses — the DomainMapping document is never touched, only serving stops", async () => {
+      const business = await createTestBusiness();
+      businessIdsToClean.push(business.id);
+      const location = await createTestRestaurant({ businessId: business._id, ownerId: business.ownerId, status: "active" });
+      restaurantIdsToClean.push(location.id);
+      const plan = await createTestPlan({ type: "OWNER", entitlements: [{ key: "custom_domains", value: true }] });
+      planIdsToClean.push(plan.id);
+      const subscription = await createTestSubscription("business", business._id, plan._id);
+      const hostname = `phase64-lapsed-${Date.now()}.example.com`;
+      const mapping = await DomainMapping.create({
+        hostname,
+        businessId: business._id,
+        locationId: location._id,
+        status: "active",
+        verificationToken: "test-token",
+        activatedAt: new Date(),
+      });
+
+      // Confirmed live first (same as the test above).
+      expect((await request(app).get(`/api/v1/restaurants/by-domain/${hostname}`)).status).toBe(200);
+
+      // The subscription lapses (Phase 63's real states — no second lifecycle invented here).
+      await Subscription.updateOne({ _id: subscription._id }, { $set: { status: "expired" } });
+
+      const res = await request(app).get(`/api/v1/restaurants/by-domain/${hostname}`);
+      expect(res.status).toBe(404);
+
+      // The mapping itself is completely untouched — still "active", still real, ready to resolve
+      // again the instant a live subscription applies.
+      const reloadedMapping = await DomainMapping.findById(mapping._id);
+      expect(reloadedMapping!.status).toBe("active");
+    });
+
+    it("resumes resolving immediately once a new subscription becomes live again — no manual domain re-activation needed", async () => {
+      const business = await createTestBusiness();
+      businessIdsToClean.push(business.id);
+      const location = await createTestRestaurant({ businessId: business._id, ownerId: business.ownerId, status: "active" });
+      restaurantIdsToClean.push(location.id);
+      const plan = await createTestPlan({ type: "OWNER", entitlements: [{ key: "custom_domains", value: true }] });
+      planIdsToClean.push(plan.id);
+      const subscription = await createTestSubscription("business", business._id, plan._id, { status: "expired" });
+      const hostname = `phase64-recovered-${Date.now()}.example.com`;
+      await DomainMapping.create({
+        hostname,
+        businessId: business._id,
+        locationId: location._id,
+        status: "active",
+        verificationToken: "test-token",
+        activatedAt: new Date(),
+      });
+
+      expect((await request(app).get(`/api/v1/restaurants/by-domain/${hostname}`)).status).toBe(404);
+
+      await Subscription.updateOne({ _id: subscription._id }, { $set: { status: "active" } });
+
+      const res = await request(app).get(`/api/v1/restaurants/by-domain/${hostname}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.restaurant.slug).toBe(location.slug);
     });
   });
 });

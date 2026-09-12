@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Restaurant, RestaurantReadiness, SetupChecklistItem } from "@restaurant/types";
-import { Alert, Badge, Button, Card } from "@restaurant/ui";
+import { Alert, Badge, Button, Card, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { previewUrl, storefrontUrl } from "../lib/links";
-import { EXTENDED_CHECK_COPY, READY_CHECK_COPY } from "../lib/readinessCopy";
+import { EXTENDED_CHECK_COPY, READY_CHECK_COPY, SETUP_ITEM_TIER } from "../lib/readinessCopy";
 
 function CheckIcon({ complete }: { complete: boolean }) {
   return (
@@ -89,7 +89,18 @@ export function SetupPage() {
     }
   }
 
-  if (loading) return <p className="text-muted">Loading setup...</p>;
+  if (loading) {
+    return (
+      <div className="flex max-w-2xl flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
   if (!restaurant || !readiness)
     return (
       <Alert tone="danger" role="alert">
@@ -99,19 +110,54 @@ export function SetupPage() {
 
   const isLive = restaurant.status === "active";
   const isSuspended = restaurant.status === "suspended";
+  const doneCount = readiness.checks.filter((c) => c.complete).length;
+  const progressPercent = readiness.checks.length ? Math.round((doneCount / readiness.checks.length) * 100) : 0;
+  const progressMessage =
+    doneCount === 0 ? "Let's get started." : readiness.ready ? "You're all set to go live." : progressPercent >= 50 ? "You're almost there." : "You're just getting started.";
+
+  // Phase 71 — split by SETUP_ITEM_TIER, but an item the API itself marked "optional" (not
+  // applicable to this restaurant right now, e.g. Kitchen with kitchenEnabled off) always lands in
+  // Optional regardless of its usual tier — that status already means "skip this," so Recommended
+  // would misrepresent it.
+  const recommendedItems = extended.filter((item) => item.status !== "optional" && SETUP_ITEM_TIER[item.key] === "recommended");
+  const optionalItems = extended.filter((item) => item.status === "optional" || SETUP_ITEM_TIER[item.key] !== "recommended");
+
+  function renderExtendedItem(item: SetupChecklistItem) {
+    const copy = EXTENDED_CHECK_COPY[item.key];
+    const badge = EXTENDED_STATUS_BADGE[item.status];
+    return (
+      <li key={item.key} className="flex items-start justify-between gap-3 py-2.5">
+        <div className="flex items-start gap-2.5">
+          <Badge tone={badge.tone} className="mt-0.5 shrink-0">
+            {badge.label}
+          </Badge>
+          <div>
+            <p className="text-sm text-foreground/80">{copy?.title ?? item.label}</p>
+            {copy && <p className="text-xs text-muted">{copy.why}</p>}
+          </div>
+        </div>
+        {item.status !== "complete" && item.status !== "optional" && copy && (
+          <Link to={copy.to} className="shrink-0 text-sm font-medium text-primary hover:underline">
+            {copy.linkLabel} →
+          </Link>
+        )}
+      </li>
+    );
+  }
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">
-          {isLive ? "Setup" : "Get your restaurant ready"}
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">{isLive ? "Setup" : "Get ready"}</p>
+        <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">
+          {isLive ? `${restaurant.name} is ready to sell` : `Let's get ${restaurant.name} ready to take orders.`}
         </h1>
-        <p className="text-sm text-muted">
+        <p className="mt-1 text-sm text-muted">
           {isSuspended
             ? "Your restaurant has been suspended and is not visible to customers."
             : isLive
-              ? "Your restaurant is live and visible to customers."
-              : "Finish these before your restaurant can go live — then round it out with the optional items below."}
+              ? "Your storefront is live — here's the rest of what's set up, and what's still worth adding."
+              : progressMessage}
         </p>
       </div>
 
@@ -138,15 +184,24 @@ export function SetupPage() {
       ) : (
         <>
           {isLive ? (
-            // Phase 28 — a compact status line, not a full-page replacement: the checklist below
-            // stays visible after publishing, so there's still somewhere to go for the rest of
-            // setup instead of the page just ending here.
-            <Card className="flex flex-wrap items-center justify-between gap-3">
+            // Phase 71 — a rewarding summary instead of a bare "Published" status line: every
+            // required check, all complete (publishing itself guarantees this), plus the two
+            // actions an owner reaches for right after going live. The extended checklist below
+            // stays visible too — this replaces the old compact status card, not the whole page.
+            <Card className="flex flex-col gap-3 animate-scale-in">
               <div className="flex items-center gap-2">
                 <Badge tone="success">Published</Badge>
-                <span className="text-sm text-foreground">Customers can find and order from your storefront.</span>
+                <span className="text-sm font-medium text-foreground">Ready to sell</span>
               </div>
-              <div className="flex flex-wrap gap-3">
+              <ul className="flex flex-col gap-1.5">
+                {readiness.checks.map((check) => (
+                  <li key={check.key} className="flex items-center gap-2 text-sm text-foreground/85">
+                    <CheckIcon complete={check.complete} />
+                    {READY_CHECK_COPY[check.key]?.title ?? check.label}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap gap-3 border-t border-border pt-3">
                 <a
                   href={storefrontUrl(restaurant.slug)}
                   target="_blank"
@@ -168,10 +223,20 @@ export function SetupPage() {
           ) : (
             <>
               <Card className="flex flex-col gap-1">
-                <Badge tone="neutral" className="self-start">
-                  Not published yet
-                </Badge>
-                <ul className="mt-2 flex flex-col divide-y divide-border">
+                <div className="mb-1 flex items-center justify-between">
+                  <Badge tone="neutral">Not published yet</Badge>
+                  <span className="text-xs font-medium text-muted">
+                    {doneCount} of {readiness.checks.length} ready
+                  </span>
+                </div>
+                <div className="mb-1 h-1.5 overflow-hidden rounded-full bg-black/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-normal ease-premium"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p className="mb-2 text-xs font-medium text-foreground/70">REQUIRED TO GO LIVE</p>
+                <ul className="flex flex-col divide-y divide-border">
                   {readiness.checks.map((check) => {
                     const copy = READY_CHECK_COPY[check.key];
                     return (
@@ -218,36 +283,21 @@ export function SetupPage() {
             </>
           )}
 
-          <Card className="flex flex-col gap-1">
-            <p className="mb-1 text-sm font-medium text-foreground">More setup</p>
-            <p className="mb-2 text-xs text-muted">
-              Optional — none of this blocks publishing, but it rounds out your restaurant's setup.
-            </p>
-            <ul className="flex flex-col divide-y divide-border">
-              {extended.map((item) => {
-                const copy = EXTENDED_CHECK_COPY[item.key];
-                const badge = EXTENDED_STATUS_BADGE[item.status];
-                return (
-                  <li key={item.key} className="flex items-start justify-between gap-3 py-2.5">
-                    <div className="flex items-start gap-2.5">
-                      <Badge tone={badge.tone} className="mt-0.5 shrink-0">
-                        {badge.label}
-                      </Badge>
-                      <div>
-                        <p className="text-sm text-foreground/80">{copy?.title ?? item.label}</p>
-                        {copy && <p className="text-xs text-muted">{copy.why}</p>}
-                      </div>
-                    </div>
-                    {item.status !== "complete" && item.status !== "optional" && copy && (
-                      <Link to={copy.to} className="shrink-0 text-sm font-medium text-primary hover:underline">
-                        {copy.linkLabel} →
-                      </Link>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
+          {recommendedItems.length > 0 && (
+            <Card className="flex flex-col gap-1">
+              <p className="mb-1 text-sm font-medium text-foreground">Recommended</p>
+              <p className="mb-2 text-xs text-muted">Doesn't block publishing, but matters for day-to-day operating.</p>
+              <ul className="flex flex-col divide-y divide-border">{recommendedItems.map(renderExtendedItem)}</ul>
+            </Card>
+          )}
+
+          {optionalItems.length > 0 && (
+            <Card className="flex flex-col gap-1">
+              <p className="mb-1 text-sm font-medium text-foreground">Optional</p>
+              <p className="mb-2 text-xs text-muted">Nice enhancements, whenever you get to them.</p>
+              <ul className="flex flex-col divide-y divide-border">{optionalItems.map(renderExtendedItem)}</ul>
+            </Card>
+          )}
         </>
       )}
     </div>

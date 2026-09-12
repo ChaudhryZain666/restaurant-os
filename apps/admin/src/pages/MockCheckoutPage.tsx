@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Alert, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 
@@ -10,9 +10,18 @@ import { apiClient } from "../lib/api";
  * redirect would carry. Clicking the button drives the SAME signature-verified webhook path a real
  * payment confirmation would (POST /billing/mock-checkout/:token/complete ->
  * processBillingProviderEvent) — never a direct database write pretending payment succeeded.
+ *
+ * Phase 64 — "Back to billing" used to always land on the owner's /billing, even for an agency
+ * subscription checkout (this path had no automated coverage until this phase's agency reactivation
+ * test actually drove it). Since this page is public/token-only, it can't look up the checkout's
+ * owner type itself — MockBillingProvider.createCheckoutSession now rides it along as a URL param
+ * (mock-provider-only wiring; the real PaddleBillingProvider uses "overlay" mode and never
+ * navigates through this page at all).
  */
 export function MockCheckoutPage() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const ownerType = searchParams.get("ownerType");
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +57,7 @@ export function MockCheckoutPage() {
         {done ? (
           <>
             <Alert tone="success">Payment confirmed — your subscription is now active.</Alert>
-            <Button size="sm" onClick={() => navigate("/billing")}>
+            <Button size="sm" onClick={() => navigate(ownerType === "agency" ? "/agency/billing" : "/billing")}>
               Back to billing
             </Button>
           </>

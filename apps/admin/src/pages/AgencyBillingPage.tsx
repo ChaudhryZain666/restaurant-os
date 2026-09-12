@@ -5,6 +5,7 @@ import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 import { useAgencyPermission } from "../hooks/useAgencyPermission";
+import { MARKETING_CONTACT_URL } from "../lib/links";
 
 const STATUS_TONE: Record<Subscription["status"], "success" | "neutral" | "warning" | "danger"> = {
   trialing: "warning",
@@ -41,6 +42,15 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
   if (!entry?.amountCents || !entry.currency) return null;
   const amount = (entry.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: entry.currency });
   return `${amount}/${interval === "monthly" ? "mo" : "yr"}`;
+}
+
+// Phase 64 — mirrors BillingPage.tsx's identical constant/helper, same reasoning: agrees with the
+// real trial-ending reminder email's own window (notification.queue.ts) without importing a
+// backend-only file.
+const TRIAL_REMINDER_WINDOW_DAYS = 3;
+function isEndingSoon(trialEnd: string | Date): boolean {
+  const msRemaining = new Date(trialEnd).getTime() - Date.now();
+  return msRemaining > 0 && msRemaining <= TRIAL_REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -230,6 +240,12 @@ export function AgencyBillingPage() {
   if (!activeAgencyId) return null;
   if (loading) return <p className="text-muted">Loading billing...</p>;
 
+  // Phase 64 — mirrors BillingPage.tsx's identical fix: a terminal (expired/cancelled) agency
+  // subscription used to show a dead-end status card with no action buttons and no way back in.
+  const needsPlanSelection = !subscription || !plan || subscription.status === "expired" || subscription.status === "cancelled";
+  const isEndedNotNew = Boolean(subscription && (subscription.status === "expired" || subscription.status === "cancelled"));
+  const atOrOverCapacity = Boolean(usage && usage.businessCount >= usage.maxBusinesses);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -251,21 +267,42 @@ export function AgencyBillingPage() {
       )}
 
       {usage && (
-        <Card className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-heading text-sm font-medium text-foreground">Client usage</p>
+        <Card className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-heading text-sm font-medium text-foreground">Client usage</p>
+              <p className="text-sm text-muted">
+                {usage.businessCount} of {usage.maxBusinesses} clients used
+                {atOrOverCapacity && " — at limit"}
+              </p>
+            </div>
+            <div className="h-2 w-40 overflow-hidden rounded-full bg-border">
+              <div
+                className={`h-full ${atOrOverCapacity ? "bg-danger" : "bg-primary"}`}
+                style={{ width: `${Math.min(100, (usage.businessCount / Math.max(usage.maxBusinesses, 1)) * 100)}%` }}
+              />
+            </div>
+          </div>
+          {/* Phase 64 Section 12/13 — no volume-tier plans, no pricing table: just a route to a real
+              human conversation for an agency that's outgrown the public plan. ClientCommercialTerms
+              is never involved here — this is purely a contact action, not a billing mechanism. */}
+          {atOrOverCapacity && (
             <p className="text-sm text-muted">
-              {usage.businessCount} of {usage.maxBusinesses} clients used
-              {usage.businessCount >= usage.maxBusinesses && " — at limit"}
+              Managing more businesses than your current plan allows?{" "}
+              <a href={MARKETING_CONTACT_URL} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                Contact us about a custom agency package
+              </a>
+              .
             </p>
-          </div>
-          <div className="h-2 w-40 overflow-hidden rounded-full bg-border">
-            <div
-              className={`h-full ${usage.businessCount >= usage.maxBusinesses ? "bg-danger" : "bg-primary"}`}
-              style={{ width: `${Math.min(100, (usage.businessCount / Math.max(usage.maxBusinesses, 1)) * 100)}%` }}
-            />
-          </div>
+          )}
         </Card>
+      )}
+
+      {isEndedNotNew && (
+        <Alert tone="warning">
+          Your agency account and every managed client's data are still here. Choose a plan below to restore your
+          managed businesses' full features.
+        </Alert>
       )}
 
       {subscription && plan ? (
@@ -290,6 +327,18 @@ export function AgencyBillingPage() {
             </Alert>
           )}
 
+          {subscription.status === "trialing" && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
+            <Alert tone="warning" className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()} — add a payment method now to
+                keep your managed businesses' full features without interruption.
+              </span>
+              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy}>
+                Subscribe now
+              </Button>
+            </Alert>
+          )}
+
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {subscription.trialEnd && subscription.status === "trialing" && (
               <div>
@@ -309,7 +358,9 @@ export function AgencyBillingPage() {
             )}
           </dl>
 
-          {canManage ? (
+          {isEndedNotNew ? (
+            <p className="text-sm text-muted">Choose a plan below to pick up where you left off.</p>
+          ) : canManage ? (
             <div className="flex flex-wrap gap-3">
               {subscription.status === "cancelling" && (
                 <Button size="sm" onClick={reactivate} disabled={busy}>
@@ -355,9 +406,11 @@ export function AgencyBillingPage() {
             <p className="text-xs text-muted">Only an agency owner can change or cancel this subscription.</p>
           )}
         </Card>
-      ) : (
+      ) : null}
+
+      {needsPlanSelection && (
         <Card className="flex flex-col gap-4">
-          <p className="text-sm text-muted">No subscription yet.</p>
+          <p className="text-sm text-muted">{isEndedNotNew ? "Ready to pick back up?" : "No subscription yet."}</p>
           {canManage ? (
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1 text-sm">

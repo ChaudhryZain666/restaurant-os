@@ -28,7 +28,7 @@ interface ThemeOverrideContextValue {
   clearOverride: () => void;
 }
 
-const STORAGE_KEY = "tablecloth:demoThemeOverride:v1";
+const STORAGE_KEY = "garnishtable:demoThemeOverride:v1";
 
 const ThemeOverrideContext = createContext<ThemeOverrideContextValue | undefined>(undefined);
 

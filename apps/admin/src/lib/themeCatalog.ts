@@ -31,7 +31,7 @@ export const THEME_CATALOG: ThemeCatalogEntry[] = [
     name: "Cinematic",
     description: "Immersive and dramatic — a viewport-height photographic hero, typography sitting directly on the image, a transparent nav that solidifies on scroll. A restaurant-film register, not an app.",
     styleTags: ["Immersive", "Dramatic", "Image-led"],
-    swatch: { primary: "#c8933e", secondary: "#15130f", accent: "#7a2e2e", background: "#faf8f4" },
+    swatch: { primary: "#6d1f2a", secondary: "#1c1417", accent: "#8a3f45", background: "#f7f2e6" },
   },
   {
     key: "luxury",

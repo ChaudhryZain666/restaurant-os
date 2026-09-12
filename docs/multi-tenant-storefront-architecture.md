@@ -1217,7 +1217,7 @@ lookups an unbounded number of times — a hash-only store would make the flow i
   domain (`env.CLIENT_ORIGIN`'s hostname) as a candidate — a business can't "verify" the platform
   itself.
 - **Check verification** (`POST .../check-verification`, synchronous — a single DNS lookup doesn't
-  need a background job) → live TXT lookup at `_tablecloth-verify.<hostname>`; on match, transitions
+  need a background job) → live TXT lookup at `_garnishtable-verify.<hostname>`; on match, transitions
   to `verified`. Idempotent, and **never** auto-activates — activation is always a separate, explicit
   action.
 - **Activate** (only from `verified`) → `active`. A concurrent activate against a location that
@@ -2662,7 +2662,7 @@ authorization layer was correct throughout — only the frontend had the bug).
   compromised/careless admin account could spam one invitee's inbox unthrottled. Added a shared
   `inviteResendLimiter` (10/15min, IP-keyed, same pattern as every other limiter in this codebase).
 - **`EMAIL_FROM` now required when `EMAIL_PROVIDER=smtp`** — used to silently default to a
-  placeholder address (`no-reply@tablecloth.local`) that could ship to production if an operator
+  placeholder address (`no-reply@garnishtable.local`) that could ship to production if an operator
   forgot to override it. `getEmailService()` now throws the same clear config error it already does
   for missing `SMTP_HOST`/`PORT`.
 - **Receipt/kitchen-ticket logo** — `Restaurant.logo` existed on the model but `getOrder`'s
@@ -2705,3 +2705,48 @@ no email configured" and "order no longer exists" edge cases), new cases in `men
 (multi-location `getOrder` access). `SafepayProvider.test.ts` updated for the new required
 `returnUrl`/`cancelUrl` params and corrected endpoint path. Full Jest suite and a targeted Playwright
 sweep (`online-payment`, `payment-settings-and-loyalty`, `order-notification-toast`) re-run clean.
+
+## Self-serve Owner signup audit — real, correctly separated from Agency, one real concurrency bug fixed
+
+Note on staleness: this file's own §"Explicitly deferred" above (Phase 29) still lists "Self-serve
+Owner signup" as absent by design — that was true at the time, but the feature was built in a later
+phase not otherwise reflected in this file (`business.controller.ts`'s `createBusinessSelfServe`,
+`OwnerSignupWizardPage.tsx`, `POST /businesses/self-serve`, real email verification, a real
+no-card trial `Subscription`). This section doesn't attempt to backfill everything that happened in
+between — only records what a fresh, dedicated audit of that flow found and changed.
+
+**Audit conclusion**: the self-serve Owner path and the Agency-provisioning path (`createAgencyBusiness`)
+are and remain two genuinely separate, non-overlapping identity/provisioning flows, exactly as
+Section 12 of that audit's own brief required — `RegisterPage.tsx` (`/register`) is explicitly agency-
+only ("For starting an agency that manages multiple businesses"); `OwnerSignupWizardPage.tsx`
+(`/signup`) is the only self-serve path that ends in `restaurant_owner`; an agency-provisioned owner
+is created via `createAgencyBusiness`'s own invite/direct-access flow and never touches `/signup` at
+all. Email verification, password hashing/JWT, refresh-token rotation-with-reuse-detection, the real
+Plan catalog, trial creation (a pure local `Subscription` record, no billing provider touched), and
+duplicate-email handling (`User.email`'s unique index + a clean 409 translation of the race, already
+fixed in an earlier phase) were all confirmed already correct.
+
+**Real bug found and fixed — `createBusinessSelfServe`'s duplicate-provisioning guard wasn't race-safe**:
+the "does this caller already have a business" check read the `User` document *before* opening the
+Mongo transaction, then mutated that same, now-stale, outer-scope object inside it. Under a genuine
+race (two overlapping requests for the same caller — a double-submitted network retry, or two
+browser tabs), MongoDB's own transaction write-conflict detection aborts and auto-retries the losing
+transaction via `withTransaction`'s built-in retry — but the retry re-ran the same callback against
+the SAME stale in-memory `caller` object, which never saw the winner's already-committed
+`businessId`. The retry then created a second, real, silently orphaned Business + Restaurant instead
+of failing cleanly — exactly the "duplicate restaurant creation" scenario a self-serve provisioning
+endpoint must guard against. Fixed by moving the read-and-check inside the transaction, scoped to its
+own session (`User.findById(...).session(session)`): on a retry, this now sees the winner's
+committed write and throws the same clean 409 the outer pre-check gives a slightly-slower request —
+critically, *before* either Business or Restaurant document is created, so a losing retry creates
+nothing at all. Proven by a new concurrency test (`business.controller.test.ts`) firing two real,
+concurrent HTTP requests for the same caller with different restaurant names/slugs and asserting
+exactly one 201/one 409 and exactly one Business document ever exists for that owner — this is also
+now proven through a real, authenticated browser session (not just a raw API test) in
+`e2e/owner-self-serve-session-persistence.spec.ts`, alongside browser-refresh session persistence,
+logout/login-again showing the same restaurant, no `agencyId` association, and cross-business access
+denial for a self-serve owner.
+
+**Not touched**: pricing, the Plan catalog, the trial-duration constant, the billing-provider
+abstraction/mock boundary, and the Agency provisioning flow — all confirmed already correct and left
+exactly as they were.

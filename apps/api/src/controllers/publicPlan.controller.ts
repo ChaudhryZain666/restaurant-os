@@ -10,9 +10,14 @@ import { resolveTrialDays } from "../services/subscription.service.js";
  * as a genuinely public, unauthenticated read of the SAME Plan catalog — never a second, duplicated
  * pricing source — stripped to only what a pricing page needs (no providerPriceId/providerProductId
  * plumbing, no free-form metadata that was never meant to be public-facing).
+ *
+ * Phase 63 — also excludes `isPubliclyListed: false` plans (default true, so every existing plan is
+ * unaffected). A future negotiated/custom agency plan can exist as a real, functional Plan document
+ * without ever appearing here or in the self-serve signup wizard's plan picker, both of which read
+ * this exact endpoint.
  */
 export async function listPublicPlans(_req: Request, res: Response) {
-  const plans = await Plan.find({ isActive: true }).sort({ code: 1 });
+  const plans = await Plan.find({ isActive: true, isPubliclyListed: { $ne: false } }).sort({ code: 1 });
   sendSuccess(res, {
     plans: plans.map((p) => ({
       code: p.code,

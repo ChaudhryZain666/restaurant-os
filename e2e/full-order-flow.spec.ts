@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -20,6 +21,37 @@ import { test, expect } from "@playwright/test";
  * true in production too: the restaurant owner and the customer are different people on
  * different browsers.
  */
+/**
+ * Phase 75 — this test's own in-body cleanup (below, right before the final `finally`) only ever
+ * runs if every earlier step succeeds; a failure anywhere in the middle of this long UI-driven flow
+ * skipped it and left the category/item/order behind permanently. Confirmed against the shared dev
+ * database: three real "E2E Category <timestamp>"/"E2E Burger <timestamp>" sets (each with a real
+ * Order and ModifierGroup) had accumulated this way directly on demo-restaurant's own live,
+ * customer-facing menu — worse than mere admin-view clutter, since this is the actual flagship
+ * sales-demo restaurant. A database-level `afterAll` safety net (independent of wherever the UI
+ * flow stops) closes this regardless of which step fails; the original in-body UI-driven delete
+ * stays too, since clicking through the real "Delete" buttons is itself a real, separate proof this
+ * spec is already built to make.
+ */
+test.afterAll(async () => {
+  const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
+  try {
+    const categories = await conn.db.collection("categories").find({ name: { $regex: "^E2E Category " } }).project({ _id: 1 }).toArray();
+    const items = await conn.db.collection("menuitems").find({ name: { $regex: "^E2E Burger " } }).project({ _id: 1 }).toArray();
+    const itemIds = items.map((i) => i._id);
+    if (itemIds.length) {
+      await conn.db.collection("orders").deleteMany({ "items.menuItemId": { $in: itemIds } });
+      await conn.db.collection("modifiergroups").deleteMany({ menuItemId: { $in: itemIds } });
+      await conn.db.collection("menuitems").deleteMany({ _id: { $in: itemIds } });
+    }
+    if (categories.length) {
+      await conn.db.collection("categories").deleteMany({ _id: { $in: categories.map((c) => c._id) } });
+    }
+  } finally {
+    await conn.close();
+  }
+});
+
 test("category -> menu item -> customer order -> restaurant status lifecycle -> tracking -> reorder", async ({
   browser,
 }) => {
@@ -37,7 +69,9 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     await ownerPage.getByLabel("Email").fill("owner@demo-restaurant.local");
     await ownerPage.getByLabel("Password").fill("Owner123!");
     await ownerPage.getByRole("button", { name: "Sign in" }).click();
-    await ownerPage.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query).
+    await ownerPage.locator("aside nav").getByRole("link", { name: "Menu" }).click();
     await expect(ownerPage.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 
     await ownerPage.getByPlaceholder("New category name").fill(categoryName);
@@ -52,17 +86,19 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     await ownerPage.getByPlaceholder("Base price").fill("9");
     await ownerPage.getByRole("combobox").selectOption({ label: categoryName });
     await ownerPage.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(ownerPage.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    // Scoped to the modifier-groups panel specifically — the "Basic information" section above it
-    // also has a numeric $ input (base price) with the same type/step, so an unscoped page-wide
-    // locator for "the number input" would silently hit the wrong field.
-    const modifierSection = ownerPage.locator("div", { hasText: "Sizes & add-ons (modifier groups)" }).last();
+    await expect(ownerPage.getByText("Customize this item")).toBeVisible();
+    // Scoped to the modifier-groups panel specifically — the "Basics" section above it also has a
+    // numeric $ input (base price) with the same type/step, so an unscoped page-wide locator for
+    // "the number input" would silently hit the wrong field.
+    const modifierSection = ownerPage.locator("div", { hasText: "Customize this item" }).last();
 
-    // Configure a required "Size" modifier group with a priced option, in the same panel.
+    // Configure a required "Size" modifier group with a priced option, in the same panel. The
+    // group-creation form is a reveal (progressive disclosure), not always-on.
+    await modifierSection.getByRole("button", { name: "+ New option group" }).click();
     await modifierSection.getByPlaceholder("e.g. Size, Toppings").fill("Size");
-    await modifierSection.getByLabel("Min select").fill("1");
-    await modifierSection.getByLabel("Max select").fill("1");
-    await modifierSection.getByRole("button", { name: "Add modifier group" }).click();
+    await modifierSection.getByLabel("Minimum choices").fill("1");
+    await modifierSection.getByLabel("Maximum choices").fill("1");
+    await modifierSection.getByRole("button", { name: "Create option group" }).click();
     await expect(modifierSection.getByText("Required")).toBeVisible();
 
     await modifierSection.getByPlaceholder("Option name").fill("Large");
@@ -75,7 +111,7 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     await expect(modifierSection.getByPlaceholder("Option name").first()).toHaveValue("Large", { timeout: 10_000 });
     await expect(modifierSection.getByPlaceholder("Option name").nth(1)).toHaveValue("Regular");
 
-    await modifierSection.getByRole("button", { name: "Done" }).click();
+    await ownerPage.getByRole("button", { name: "Back to menu" }).click();
 
     // --- Customer places an order for that item via the real storefront UI ---
     await customerPage.goto("http://localhost:5173/login");
@@ -99,15 +135,20 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     await expect(customerPage.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
     const itemRow = customerPage.locator("li", { hasText: itemName });
     await itemRow.scrollIntoViewIfNeeded();
-    await itemRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
+    await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
 
-    // This item has a required "Size" modifier group, so "Add to cart" expands an in-place
-    // selector rather than adding directly — this is the real proof that the unified Part 2
-    // create-item-and-configure-modifiers workflow produces a genuinely working modifier, not
-    // just one that looks configured in the admin UI.
-    await expect(itemRow.getByText("Size", { exact: false })).toBeVisible();
-    await itemRow.getByText("Large", { exact: false }).click();
-    await itemRow.getByRole("button", { name: "Confirm add to cart" }).click();
+    // This item has a required "Size" modifier group, so "Add to order" opens the item-detail
+    // overlay's modifier selector rather than adding directly — this is the real proof that the
+    // unified Part 2 create-item-and-configure-modifiers workflow produces a genuinely working
+    // modifier, not just one that looks configured in the admin UI.
+    //
+    // Phase 65 — Cinematic (demo-restaurant's real theme) presents this as a large-photograph
+    // overlay (role="dialog"), not an inline row expansion, so these controls are scoped to the
+    // dialog rather than `itemRow`.
+    const detailDialog = customerPage.getByRole("dialog");
+    await expect(detailDialog.getByText("Size", { exact: false })).toBeVisible();
+    await detailDialog.getByText("Large", { exact: false }).click();
+    await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 
     await customerPage.getByRole("link", { name: /Cart/ }).click();
     await expect(customerPage.getByText(itemName, { exact: false })).toBeVisible();
@@ -130,7 +171,9 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     // on the same not-yet-rotated cookie can revoke the session, intermittently bouncing this page
     // back to /login under parallel test load. Clicking in-app nav/links avoids the reload (and
     // thus the race) entirely on both the owner and customer sides throughout this test.
-    await ownerPage.getByRole("link", { name: "Orders" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+    // also matches a bare page-wide "Orders" substring query).
+    await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
     const orderGroup = ownerPage.getByRole("group", { name: `Order ${orderNumber}` });
     await expect(orderGroup).toBeVisible();
 
@@ -168,7 +211,9 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     // Clean up the category/item this run created — the demo-restaurant is shared with other
     // e2e specs (see storefront.spec.ts), and leaving them behind would keep growing the
     // dataset and shift "first item" assumptions in other tests on every local run.
-    await ownerPage.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query).
+    await ownerPage.locator("aside nav").getByRole("link", { name: "Menu" }).click();
     const itemLi = ownerPage.locator("li", { hasText: itemName });
     ownerPage.once("dialog", (dialog) => dialog.accept());
     await itemLi.getByRole("button", { name: "Delete" }).click();

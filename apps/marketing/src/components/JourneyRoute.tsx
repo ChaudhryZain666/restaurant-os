@@ -30,7 +30,7 @@ function legFor(stepIndex: number) {
  *  creation, so this is the one genuinely new (but minimal, non-decorative) UI fragment here. */
 function CreateRestaurantMoment() {
   return (
-    <div className="flex flex-col gap-2 rounded-sm border border-white/10 bg-[#0f0d0c] p-3 font-mono text-xs">
+    <div className="flex flex-col gap-2 rounded-sm border border-white/10 bg-[color:var(--color-surface)] p-3 font-mono text-xs">
       <div className="flex items-center justify-between border-b border-white/10 pb-2">
         <span className="text-white/40">Restaurant name</span>
         <span className="text-white">Bella Vista</span>
@@ -48,9 +48,9 @@ function CreateRestaurantMoment() {
 }
 
 function CustomizeMoment() {
-  const colors = ["#e08a3e", "#0f766e", "#7c3aed", "#be123c"];
+  const colors = ["#c9838d", "#0f766e", "#7c3aed", "#be123c"];
   return (
-    <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-[#0f0d0c] p-3">
+    <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-[color:var(--color-surface)] p-3">
       {colors.map((c, i) => (
         <span key={c} className="h-6 w-6 rounded-full border-2" style={{ background: c, borderColor: i === 0 ? "white" : "transparent" }} />
       ))}
@@ -61,9 +61,9 @@ function CustomizeMoment() {
 
 function PublishMoment() {
   return (
-    <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-[#0f0d0c] p-3 font-mono text-xs">
+    <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-[color:var(--color-surface)] p-3 font-mono text-xs">
       <span className="h-2 w-2 rounded-full bg-success" style={{ boxShadow: "0 0 8px var(--color-success)" }} />
-      <span className="text-white">bellavista.tablecloth.app</span>
+      <span className="text-white">bellavista.garnishtable.app</span>
       <span className="ml-auto text-[10px] uppercase tracking-wide text-success">Live</span>
     </div>
   );
@@ -71,7 +71,7 @@ function PublishMoment() {
 
 function OrdersMoment() {
   return (
-    <div className="flex flex-col gap-1.5 rounded-sm border border-white/10 bg-[#0f0d0c] p-3 font-mono text-xs">
+    <div className="flex flex-col gap-1.5 rounded-sm border border-white/10 bg-[color:var(--color-surface)] p-3 font-mono text-xs">
       <div className="flex items-center justify-between">
         <span className="text-white/70">#1047 · Pickup</span>
         <span className="text-primary">New</span>
@@ -86,7 +86,7 @@ function OrdersMoment() {
 
 function ManageMoment() {
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-sm border border-white/10 bg-[#0f0d0c] p-3 font-mono text-xs">
+    <div className="grid grid-cols-2 gap-2 rounded-sm border border-white/10 bg-[color:var(--color-surface)] p-3 font-mono text-xs">
       <div>
         <p className="text-white/40">Revenue</p>
         <p className="text-white">$8,420</p>
@@ -111,7 +111,7 @@ function StepNode({ index, active }: { index: number; active: boolean }) {
         className="absolute left-6 top-1 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border font-mono text-[10px] transition-all duration-500 sm:left-8"
         style={{
           borderColor: active ? "var(--color-primary)" : "rgba(255,255,255,0.2)",
-          background: active ? "var(--color-primary)" : "#0f0d0c",
+          background: active ? "var(--color-primary)" : "var(--color-surface)",
           color: active ? "var(--color-primary-foreground)" : "rgba(255,255,255,0.4)",
         }}
       >

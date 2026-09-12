@@ -494,4 +494,35 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
     const storedUser = await User.findById(customer._id);
     expect(storedUser!.businessId).toBeUndefined();
   });
+
+  it("Phase 60 — under true concurrency, two simultaneous self-serve requests from the SAME caller (distinct slugs, e.g. two browser tabs) yield exactly one real business, never a silently orphaned second one", async () => {
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    cleanupUserIds.push(customer._id);
+    const token = tokenFor(customer);
+    const stamp = Date.now();
+
+    const [a, b] = await Promise.all([
+      request(app)
+        .post("/api/v1/businesses/self-serve")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: "Race A", slug: `race-a-${stamp}` }),
+      request(app)
+        .post("/api/v1/businesses/self-serve")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: "Race B", slug: `race-b-${stamp}` }),
+    ]);
+
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    const winner = a.status === 201 ? a : b;
+    cleanupBusinessIds.push(new mongoose.Types.ObjectId(winner.body.data.business.id));
+    cleanupRestaurantIds.push(new mongoose.Types.ObjectId(winner.body.data.restaurant.id));
+
+    // The real, authoritative check: exactly one Business document exists for this caller, never
+    // a second one silently orphaned by the loser retrying past a stale in-memory "do I already
+    // have a business" check.
+    expect(await Business.countDocuments({ ownerId: customer._id })).toBe(1);
+    const storedUser = await User.findById(customer._id);
+    expect(storedUser!.businessId?.toString()).toBe(winner.body.data.business.id);
+  });
 });

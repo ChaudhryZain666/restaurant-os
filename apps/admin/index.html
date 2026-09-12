@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tablecloth — Restaurant Admin</title>
+    <title>GarnishTable — Restaurant Admin</title>
+    <!-- Phase 66 — same GarnishTable typeface pairing as the marketing site (Playfair Display for
+         headings, Inter for body/UI), so the platform admin reads as the same brand, not a
+         separate product. The restaurant-facing storefront (apps/web) is deliberately untouched. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <!-- Phase 40.1 — Paddle's own documented integration requires loading Paddle.js directly from
          cdn.paddle.com (never a bundled/proxied copy, per Paddle's own security guidance) for the
          overlay checkout BillingPage.tsx drives. No token lives here — Paddle.Initialize is only

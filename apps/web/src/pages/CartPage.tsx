@@ -9,7 +9,7 @@ import type {
   OrderType,
   PromoValidationResult,
 } from "@restaurant/types";
-import { Alert, Button, Card, EmptyState } from "@restaurant/ui";
+import { Alert, Button, Card, EmptyState, Reveal } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useCart } from "../context/CartContext";
@@ -18,6 +18,7 @@ import { useRestaurant } from "../context/RestaurantContext";
 import { useTable } from "../context/TableContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { PlateIcon } from "../theme/icons";
 
 const ORDER_TYPE_LABELS: Record<OrderType, string> = { pickup: "Pickup", delivery: "Delivery", dine_in: "Dine-in" };
 
@@ -399,21 +400,42 @@ export function CartPage() {
     );
   }
 
+  const lineCount = lines.reduce((sum, l) => sum + l.quantity, 0);
+
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4">
-      <h1 className="font-heading text-2xl font-semibold text-foreground">Cart</h1>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+      <div className="border-b border-border pb-4">
+        <h1 className="font-heading text-3xl font-semibold text-foreground sm:text-4xl">Cart</h1>
+        <p className="mt-1 text-sm text-muted">
+          {lineCount} item{lineCount === 1 ? "" : "s"} from {restaurant?.name ?? "this restaurant"}
+        </p>
+      </div>
       {reorderNotice && (
         <Alert tone="warning" role="alert">
           {reorderNotice}
         </Alert>
       )}
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-4">
         <ul className="flex flex-col divide-y divide-border">
-          {lines.map((line) => (
-            <li key={line.lineId} className="flex items-center justify-between gap-3 py-3 text-sm first:pt-0 last:pb-0">
-              <div className="min-w-0">
-                <p className="truncate font-medium text-foreground">{line.menuItem.name}</p>
+          {lines.map((line, i) => (
+            <Reveal as="li" index={i} key={line.lineId} className="flex items-center gap-4 py-4 text-sm first:pt-0 last:pb-0">
+              <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-secondary/10">
+                {line.menuItem.imageUrl ? (
+                  <img
+                    src={line.menuItem.imageUrl}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-muted/40">
+                    <PlateIcon className="h-6 w-6" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-heading text-base font-medium text-foreground">{line.menuItem.name}</p>
                 {line.selectedModifiers.length > 0 && (
                   <p className="truncate text-muted">
                     {line.selectedModifiers
@@ -434,7 +456,7 @@ export function CartPage() {
                   each
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
+              <div className="flex shrink-0 flex-col items-end gap-2">
                 <input
                   type="number"
                   min={1}
@@ -445,13 +467,13 @@ export function CartPage() {
                 />
                 <button
                   onClick={() => removeItem(line.lineId)}
-                  className="text-sm font-medium text-danger transition-opacity duration-fast hover:opacity-70"
+                  className="text-xs font-medium text-danger transition-opacity duration-fast hover:opacity-70"
                   type="button"
                 >
                   Remove
                 </button>
               </div>
-            </li>
+            </Reveal>
           ))}
         </ul>
         <div className="flex flex-col gap-1 border-t border-border pt-3">

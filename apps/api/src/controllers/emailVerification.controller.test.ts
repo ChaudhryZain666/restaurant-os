@@ -197,7 +197,7 @@ describe("register — the verification link's origin follows the calling fronte
       track(res.body.data.user.id);
 
       const call = infoSpy.mock.calls.find(
-        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your Tablecloth email address")
+        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your GarnishTable email address")
       );
       expect(call).toBeTruthy();
       const loggedText = (call![1] as { text: string }).text;
@@ -219,7 +219,7 @@ describe("register — the verification link's origin follows the calling fronte
       track(res.body.data.user.id);
 
       const call = infoSpy.mock.calls.find(
-        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your Tablecloth email address")
+        (args) => typeof (args[1] as { text?: string } | undefined)?.text === "string" && (args[1] as { text: string }).text.includes("Verify your GarnishTable email address")
       );
       expect(call).toBeTruthy();
       const loggedText = (call![1] as { text: string }).text;

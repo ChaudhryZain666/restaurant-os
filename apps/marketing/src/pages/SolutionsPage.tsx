@@ -99,8 +99,8 @@ function ScenarioChapter({ scenario, index }: { scenario: Scenario; index: numbe
 
 export function SolutionsPage() {
   usePageMeta({
-    title: "Solutions — Tablecloth",
-    description: "How different restaurants — independents, counter service, pickup-heavy kitchens, growing multi-location businesses and agencies — use Tablecloth.",
+    title: "Solutions — GarnishTable",
+    description: "How different restaurants — independents, counter service, pickup-heavy kitchens, growing multi-location businesses and agencies — use GarnishTable.",
   });
   return (
     <>

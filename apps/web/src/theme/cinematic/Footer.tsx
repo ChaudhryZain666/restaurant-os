@@ -12,6 +12,17 @@ const WEEKDAY_LABELS: Record<string, string> = {
   sunday: "Sun",
 };
 
+/** `open === close` is this platform's real 24-hours-open representation (see
+ *  businessHours.service.ts / seed-demo-data.ts's own comment on why demo-restaurant uses it) —
+ *  rendering it as the literal stored strings would show "00:00 – 00:00", which reads as a broken
+ *  or unconfigured schedule rather than "always open." */
+function formatHoursRange(open: string, close: string): string {
+  return open === close ? "Open 24 hours" : `${open} – ${close}`;
+}
+function formatHoursCompact(open: string, close: string): string {
+  return open === close ? "24 hours" : `${open}–${close}`;
+}
+
 /** Cinematic — a dark, structured close to the page (matching Hero/Cta's register): identity and
  *  today's hours on one side, address/contact on the other, a quiet branding line beneath — never a
  *  single centered sentence. */
@@ -31,7 +42,11 @@ export function CinematicFooter({ restaurant, hideBranding }: FooterProps) {
           <span className="font-heading text-lg font-semibold uppercase tracking-[0.14em]">{restaurant?.name ?? "Restaurant"}</span>
           {today && (
             <p className="text-xs text-secondary-foreground/60">
-              {today.isClosed ? "Closed today" : `Open today · ${today.open} – ${today.close}`}
+              {today.isClosed || !today.open || !today.close
+                ? "Closed today"
+                : today.open === today.close
+                  ? "Open 24 hours"
+                  : `Open today · ${formatHoursRange(today.open, today.close)}`}
             </p>
           )}
         </div>
@@ -54,7 +69,7 @@ export function CinematicFooter({ restaurant, hideBranding }: FooterProps) {
             if (!day) return null;
             return (
               <span key={key} className={key === TODAY_KEY ? "text-accent" : undefined}>
-                {WEEKDAY_LABELS[key]} {day.isClosed ? "closed" : `${day.open}–${day.close}`}
+                {WEEKDAY_LABELS[key]} {day.isClosed || !day.open || !day.close ? "closed" : formatHoursCompact(day.open, day.close)}
               </span>
             );
           })}

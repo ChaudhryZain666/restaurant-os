@@ -93,9 +93,12 @@ test.describe.serial("business hours are never silently invented by an unrelated
     expect(restaurantAfterRealChange?.settings?.businessHours.every((h: { isClosed: boolean }) => h.isClosed)).toBe(true);
 
     // The active tab is local component state, not URL-driven, so a reload lands back on General —
-    // the "Current status" badge only renders inside the Business Hours tab itself.
+    // the "Current status" badge only renders inside the Business Hours tab itself. Scoped to
+    // "main" (Phase 71 — the sidebar's own real availability readout can legitimately show this
+    // exact same "reason" text for the active location, so a bare page-wide getByText is ambiguous
+    // now; "main" is unambiguously the Settings page's own badge, not the sidebar).
     await page.reload();
     await page.getByRole("button", { name: "Business Hours", exact: true }).click();
-    await expect(page.getByText("Outside business hours")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("main").getByText("Outside business hours")).toBeVisible({ timeout: 10_000 });
   });
 });

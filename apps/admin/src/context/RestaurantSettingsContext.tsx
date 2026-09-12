@@ -1,10 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Restaurant } from "@restaurant/types";
+import type { Restaurant, RestaurantAvailability } from "@restaurant/types";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "./LocationContext";
 
 interface RestaurantSettingsContextValue {
   restaurant: Restaurant | null;
+  /** Phase 71 — GET /restaurants/:id already returns this alongside `restaurant`; previously
+   *  discarded here, forcing DashboardPage to re-fetch the same endpoint a second time just to get
+   *  it. Captured here too (DashboardPage's own fetch is untouched, to avoid changing its loading
+   *  behavior) so Layout.tsx's sidebar can show a real "is this restaurant open right now" readout
+   *  without a second new endpoint or a duplicate request of its own. */
+  availability: RestaurantAvailability | null;
   loading: boolean;
   /** Phase 28 — SettingsPage.tsx calls this after a successful save so the Kitchen/Staff nav items
    *  (and any other settings-flag-gated UI) update immediately, without a full page reload. Without
@@ -26,6 +32,7 @@ const RestaurantSettingsContext = createContext<RestaurantSettingsContextValue |
 export function RestaurantSettingsProvider({ children }: { children: ReactNode }) {
   const restaurantId = useActiveLocationId();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
@@ -35,10 +42,12 @@ export function RestaurantSettingsProvider({ children }: { children: ReactNode }
     }
     setLoading(true);
     try {
-      const res = await apiClient.request<{ restaurant: Restaurant }>(`/restaurants/${restaurantId}`);
+      const res = await apiClient.request<{ restaurant: Restaurant; availability: RestaurantAvailability }>(`/restaurants/${restaurantId}`);
       setRestaurant(res.restaurant);
+      setAvailability(res.availability);
     } catch {
       setRestaurant(null);
+      setAvailability(null);
     } finally {
       setLoading(false);
     }
@@ -48,7 +57,7 @@ export function RestaurantSettingsProvider({ children }: { children: ReactNode }
     refetch();
   }, [refetch]);
 
-  const value = useMemo(() => ({ restaurant, loading, refetch }), [restaurant, loading, refetch]);
+  const value = useMemo(() => ({ restaurant, availability, loading, refetch }), [restaurant, availability, loading, refetch]);
   return <RestaurantSettingsContext.Provider value={value}>{children}</RestaurantSettingsContext.Provider>;
 }
 

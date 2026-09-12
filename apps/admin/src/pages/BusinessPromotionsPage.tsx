@@ -8,6 +8,7 @@ import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { IconTag } from "../components/icons";
+import { PlanRequiredNotice } from "../components/PlanRequiredNotice";
 import { ScopeBadge } from "../components/ScopeBadge";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
@@ -140,7 +141,7 @@ export function BusinessPromotionsPage() {
     }
   }
 
-  // Phase 39 — a locked/upgrade state, resolved via the same entitlement the server's
+  // Phase 39/64 — a locked/recovery state, resolved via the same entitlement the server's
   // requireEntitlement("business_promotions") guard checks (businessPromotion.routes.ts), so this
   // can never disagree with what the API actually allows. The server guard remains authoritative.
   if (!entitlementsLoading && !canView) {
@@ -149,15 +150,7 @@ export function BusinessPromotionsPage() {
         <div>
           <h1 className="font-heading text-2xl font-semibold text-foreground">Business Promotions</h1>
         </div>
-        <Card className="flex flex-col gap-2">
-          <Badge tone="warning" className="self-start">
-            Upgrade required
-          </Badge>
-          <p className="text-sm text-foreground">
-            Business-wide promotions aren't included on your current plan. Upgrade to Owner — Growth (or an agency
-            plan that grants it) to run a promotion across every location.
-          </p>
-        </Card>
+        <PlanRequiredNotice featureLabel="Business-wide promotions" />
       </div>
     );
   }

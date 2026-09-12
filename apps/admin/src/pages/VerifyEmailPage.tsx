@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -71,11 +71,8 @@ export function VerifyEmailPage() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm animate-scale-in">
-        <div className="mb-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-            T
-          </span>
-          <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+        <div className="mb-5">
+          <Logo />
         </div>
 
         {status === "verifying" && <p className="text-sm text-muted">Verifying your email address...</p>}

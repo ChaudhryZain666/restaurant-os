@@ -16,7 +16,7 @@ import { IconArrowRight } from "../components/icons";
 
 export function HomePage() {
   usePageMeta({
-    title: "Tablecloth — Online Ordering for Independent Restaurants",
+    title: "GarnishTable — Online Ordering for Independent Restaurants",
     description:
       "Launch your own branded online ordering experience. Menu, orders, delivery, loyalty and analytics — one platform, no commission-hungry marketplace.",
   });
@@ -68,7 +68,7 @@ export function HomePage() {
               <span className="italic text-white/85">Running on your terms.</span>
             </h1>
             <p className="mt-6 max-w-md animate-fade-up text-lg text-white/75" style={{ animationDelay: "60ms" }}>
-              Tablecloth gives your restaurant a branded ordering page, a real order-management dashboard, and the
+              GarnishTable gives your restaurant a branded ordering page, a real order-management dashboard, and the
               customer data a marketplace app never hands back to you.
             </p>
             <div className="mt-8 flex animate-fade-up flex-wrap items-center gap-3" style={{ animationDelay: "120ms" }}>
@@ -118,7 +118,7 @@ export function HomePage() {
           repeated icon/title/paragraph card grid. Deliberately its own dark near-black canvas
           (not the Hero's blueprint grid) — same visual world, different composition, per the
           approved direction. */}
-      <section id="offer" className="bg-[#0b0a08] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
+      <section id="offer" className="bg-[color:var(--gt-ink-fixed)] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
         <OperationsBoard />
       </section>
 
@@ -127,14 +127,14 @@ export function HomePage() {
           (watching it run); this is a monitor wall (looking directly into it) — its own accent
           (cool info-blue, not amber) so the whole site doesn't collapse into one repeated
           dark+amber formula. */}
-      <section id="showcase" className="bg-[#0f0d0c] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
+      <section id="showcase" className="bg-[color:var(--gt-ink-fixed)] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
         <ProductShowcase />
       </section>
 
       {/* How it works — "the route": a fourth distinct composition (a single continuous scroll-
           linked path, not a card grid) that still shares the Hero's neutral blueprint language
           rather than introducing a new dominant color. */}
-      <section className="bg-[#0b0a08] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
+      <section className="bg-[color:var(--gt-ink-fixed)] px-5 py-20 sm:px-8 sm:py-28 lg:px-14">
         <JourneyRoute />
       </section>
 
@@ -146,7 +146,7 @@ export function HomePage() {
           the section's height, rather than an abrupt hard cut between two backgrounds. */}
       <section
         className="px-5 py-24 sm:px-8 lg:px-14"
-        style={{ background: "linear-gradient(180deg, #0b0a08 0%, #eee7d7 14%, #eee7d7 100%)" }}
+        style={{ background: "linear-gradient(180deg, var(--gt-ink-fixed) 0%, var(--gt-parchment-fixed) 14%, var(--gt-parchment-fixed) 100%)" }}
       >
         <ScaleSelector />
       </section>
@@ -156,7 +156,7 @@ export function HomePage() {
           not a random bounce. */}
       <section
         className="px-5 py-24 sm:px-8 lg:px-14"
-        style={{ background: "linear-gradient(180deg, #eee7d7 0%, #0b0a08 16%, #0b0a08 100%)" }}
+        style={{ background: "linear-gradient(180deg, var(--gt-parchment-fixed) 0%, var(--gt-ink-fixed) 16%, var(--gt-ink-fixed) 100%)" }}
       >
         <WhyWeExist />
       </section>
@@ -166,18 +166,18 @@ export function HomePage() {
           collapse) rather than two more dark sections in a row. */}
       <section
         className="px-5 py-24 sm:px-8 lg:px-14"
-        style={{ background: "linear-gradient(180deg, #0b0a08 0%, #eee7d7 16%, #eee7d7 100%)" }}
+        style={{ background: "linear-gradient(180deg, var(--gt-ink-fixed) 0%, var(--gt-parchment-fixed) 16%, var(--gt-parchment-fixed) 100%)" }}
       >
         <WhyUseful />
       </section>
-      <section className="px-5 pb-24 pt-4 sm:px-8 lg:px-14" style={{ background: "#eee7d7" }}>
+      <section className="px-5 pb-24 pt-4 sm:px-8 lg:px-14" style={{ background: "var(--gt-parchment-fixed)" }}>
         <WhatWeReplace />
       </section>
 
       {/* The main goal — the mission, back in the dark cinematic register for the closing beat. */}
       <section
         className="px-5 py-28 sm:px-8 lg:px-14"
-        style={{ background: "linear-gradient(180deg, #eee7d7 0%, #0b0a08 16%, #0b0a08 100%)" }}
+        style={{ background: "linear-gradient(180deg, var(--gt-parchment-fixed) 0%, var(--gt-ink-fixed) 16%, var(--gt-ink-fixed) 100%)" }}
       >
         <MainGoal />
       </section>

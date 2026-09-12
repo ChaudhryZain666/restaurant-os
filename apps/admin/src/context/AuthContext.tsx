@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import type { PublicUser } from "@restaurant/types";
 import { apiClient } from "../lib/api";
 import { socket } from "../lib/socket";
@@ -54,6 +55,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // A request elsewhere in the app can discover the session is genuinely over (refresh token
@@ -145,6 +147,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await apiClient.request("/auth/logout", { method: "POST", skipRefresh: true });
     apiClient.setAccessToken(null);
     setUser(null);
+    // Phase 73 — navigates explicitly, with no state, rather than leaving it to RequireAuth's own
+    // reactive "no user" redirect. That redirect now carries the page the user was ON as
+    // location.state.from (see RequireAuth.tsx), so a subsequent login returns there — exactly
+    // what a cold, direct hit to a protected URL should do, but NOT what an explicit "Log out"
+    // should do: a user who deliberately signs out and back in expects their normal landing page,
+    // not to be dropped back on whatever page they happened to be viewing when they logged out.
+    navigate("/login", { replace: true });
   }
 
   async function refreshUser() {

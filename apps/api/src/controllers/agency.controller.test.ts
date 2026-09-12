@@ -391,6 +391,88 @@ describe("POST /agencies/:agencyId/businesses — creation, transactional owner-
       const reloaded = await Agency.findById(raceAgency._id);
       expect(reloaded!.businessCount).toBe(1);
     });
+
+    it("Phase 61 — a TRIALING agency is capacity-limited by its trial plan exactly like an active one, never treated as unlimited or as no-subscription", async () => {
+      const trialAgency = await createTestAgency();
+      const trialOwner = await createTestUser("agency_member");
+      await createTestAgencyMembership(trialAgency._id, trialOwner._id, { role: "agency_owner" });
+      const trialToken = tokenFor(trialOwner, [{ agencyId: trialAgency.id, role: "agency_owner" }]);
+      await Subscription.create({
+        ownerType: "agency",
+        ownerId: trialAgency._id,
+        planId: limitedPlan._id, // max_businesses: 1
+        status: "trialing",
+        billingInterval: "monthly",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        provider: "mock",
+      });
+      agencyIds.push(trialAgency.id);
+      userIds.push(trialOwner.id);
+
+      const first = await request(app)
+        .post(`/api/v1/agencies/${trialAgency.id}/businesses`)
+        .set("Authorization", `Bearer ${trialToken}`)
+        .send(createBody("trial-first"));
+      expect(first.status).toBe(201);
+      businessIds.push(first.body.data.business.id);
+      restaurantIds.push(first.body.data.restaurant.id);
+      userIds.push(first.body.data.business.ownerId as string);
+
+      const second = await request(app)
+        .post(`/api/v1/agencies/${trialAgency.id}/businesses`)
+        .set("Authorization", `Bearer ${trialToken}`)
+        .send(createBody("trial-second"));
+      expect(second.status).toBe(409);
+    });
+
+    it("Phase 63 — an EXPIRED agency is frozen at its current business count, never the generous no-subscription default and never a retroactive block on businesses it already has", async () => {
+      const expiredAgency = await createTestAgency();
+      const expiredOwner = await createTestUser("agency_member");
+      await createTestAgencyMembership(expiredAgency._id, expiredOwner._id, { role: "agency_owner" });
+      const expiredToken = tokenFor(expiredOwner, [{ agencyId: expiredAgency.id, role: "agency_owner" }]);
+
+      // Give this agency one real, pre-existing managed business BEFORE its subscription expires —
+      // proves the freeze preserves what already exists rather than deleting/blocking it.
+      await Subscription.create({
+        ownerType: "agency",
+        ownerId: expiredAgency._id,
+        planId: limitedPlan._id, // max_businesses: 1
+        status: "active",
+        billingInterval: "monthly",
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        provider: "mock",
+      });
+      agencyIds.push(expiredAgency.id);
+      userIds.push(expiredOwner.id);
+
+      const firstWhileActive = await request(app)
+        .post(`/api/v1/agencies/${expiredAgency.id}/businesses`)
+        .set("Authorization", `Bearer ${expiredToken}`)
+        .send(createBody("expired-preexisting"));
+      expect(firstWhileActive.status).toBe(201);
+      businessIds.push(firstWhileActive.body.data.business.id);
+      restaurantIds.push(firstWhileActive.body.data.restaurant.id);
+      userIds.push(firstWhileActive.body.data.business.ownerId as string);
+
+      // Now the subscription expires.
+      await Subscription.updateOne({ ownerType: "agency", ownerId: expiredAgency._id, status: "active" }, { $set: { status: "expired" } });
+
+      // Phase 63 — an agency with real subscription history that is no longer live is "lapsed", not
+      // "never subscribed": its capacity is frozen at whatever it already manages (1), never the
+      // generous NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES=3 that would apply to an agency that had
+      // never subscribed at all. Existing managed business (asserted above) is untouched by this —
+      // only NEW provisioning is blocked.
+      const secondAfterExpiry = await request(app)
+        .post(`/api/v1/agencies/${expiredAgency.id}/businesses`)
+        .set("Authorization", `Bearer ${expiredToken}`)
+        .send(createBody("expired-blocked"));
+      expect(secondAfterExpiry.status).toBe(409);
+
+      const reloadedAgency = await Agency.findById(expiredAgency._id);
+      expect(reloadedAgency!.businessCount).toBe(1); // still exactly the one pre-existing business
+    });
   });
 });
 
@@ -982,5 +1064,60 @@ describe("Payment security — agency workspace access never reaches payment cre
       .get(`/api/v1/restaurants/${managedLocation.id}/payment-account`)
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("Phase 64 Section 15 — agency-inherited entitlement enforced at the real HTTP layer, not just the UI", () => {
+  it("a managed business (no subscription of its own) inherits business_analytics from its agency's live plan; loses it the instant the agency lapses; regains it on reactivation — proven via the real gated route + a real agency-staff auth token, not the service function directly", async () => {
+    const grantingPlan = await createTestPlan({
+      type: "AGENCY",
+      entitlements: [
+        { key: "business_analytics", value: true },
+        { key: "max_businesses", value: 5 },
+      ],
+    });
+    planIds.push(grantingPlan.id);
+
+    const freshAgency = await createTestAgency();
+    agencyIds.push(freshAgency.id);
+    const freshOwner = await createTestUser("agency_member");
+    userIds.push(freshOwner.id);
+    await createTestAgencyMembership(freshAgency._id, freshOwner._id, { role: "agency_owner" });
+    const freshToken = tokenFor(freshOwner, [{ agencyId: freshAgency.id, role: "agency_owner" }]);
+
+    const sub = await Subscription.create({
+      ownerType: "agency",
+      ownerId: freshAgency._id,
+      planId: grantingPlan._id,
+      status: "active",
+      billingInterval: "monthly",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      provider: "mock",
+    });
+
+    const freshBusiness = await createTestBusiness({ agencyId: freshAgency._id });
+    businessIds.push(freshBusiness.id);
+    const freshLocation = await createTestRestaurant({ businessId: freshBusiness._id });
+    restaurantIds.push(freshLocation.id);
+
+    const liveRes = await request(app)
+      .get(`/api/v1/businesses/${freshBusiness.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${freshToken}`);
+    expect(liveRes.status).toBe(200);
+
+    await Subscription.updateOne({ _id: sub._id }, { $set: { status: "expired" } });
+
+    const lapsedRes = await request(app)
+      .get(`/api/v1/businesses/${freshBusiness.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${freshToken}`);
+    expect(lapsedRes.status).toBe(403);
+
+    await Subscription.updateOne({ _id: sub._id }, { $set: { status: "active" } });
+
+    const reactivatedRes = await request(app)
+      .get(`/api/v1/businesses/${freshBusiness.id}/analytics/overview`)
+      .set("Authorization", `Bearer ${freshToken}`);
+    expect(reactivatedRes.status).toBe(200);
   });
 });

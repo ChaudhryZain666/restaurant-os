@@ -56,8 +56,8 @@ function FaqItem({ q, a, index }: { q: string; a: string; index: number }) {
 
 export function FaqPage() {
   usePageMeta({
-    title: "FAQ — Tablecloth",
-    description: "Answers to common questions about setting up and running online ordering with Tablecloth.",
+    title: "FAQ — GarnishTable",
+    description: "Answers to common questions about setting up and running online ordering with GarnishTable.",
   });
   useFaqStructuredData();
   return (

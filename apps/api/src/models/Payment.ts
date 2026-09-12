@@ -12,10 +12,15 @@ export const PAYMENT_STATUSES = [
   "partially_refunded",
 ] as const;
 
-// Cash intentionally has no Payment documents — see Order.paymentMethod's doc comment in
-// models/Order.ts for why. This collection exists only for payments that actually go through a
-// provider, where a reference/status/refund lifecycle is meaningful.
-export const PAYMENT_METHODS = ["online"] as const;
+// Cash, and staff-attested POS card (the Phase 73 default, no terminal configured), intentionally
+// have no Payment documents — see Order.paymentMethod's doc comment in models/Order.ts for why.
+// This collection exists only for payments that actually go through a provider, where a
+// reference/status/refund lifecycle is meaningful. "pos_terminal" (Phase 74) is the one case where
+// an in-person POS sale DOES get a real Payment document: a physical card-terminal attempt has a
+// genuine provider reference and a real pending/authorized/paid/failed lifecycle, exactly like an
+// online payment — it just never redirects a browser anywhere. See
+// apps/api/src/payments/terminal/ and docs/pos-architecture.md's Phase 74 section.
+export const PAYMENT_METHODS = ["online", "pos_terminal"] as const;
 
 const paymentSchema = new Schema(
   {

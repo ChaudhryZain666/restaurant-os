@@ -27,8 +27,8 @@ const WALKTHROUGH_COVERS = ["Online ordering", "Menu management", "Delivery", "A
 
 export function DemoPage() {
   usePageMeta({
-    title: "Live Demo — Tablecloth",
-    description: "Switch themes, customize the brand, and place a real order — try the actual Tablecloth product on a real restaurant.",
+    title: "Live Demo — GarnishTable",
+    description: "Switch themes, customize the brand, and place a real order — try the actual GarnishTable product on a real restaurant.",
   });
   return (
     <>

@@ -118,6 +118,54 @@ describe("modifier groups", () => {
   });
 });
 
+describe("Phase 68 — canonical modifier-group counts", () => {
+  it("returns a per-menu-item count scoped to the calling business, and 0 items get no entry", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+    const category = await createTestCategory(restaurant._id, { businessId: business._id });
+    const itemWithGroups = await createTestMenuItem(restaurant._id, category._id, { businessId: business._id });
+    const itemWithNoGroups = await createTestMenuItem(restaurant._id, category._id, { businessId: business._id });
+    await createTestModifierGroup(restaurant._id, itemWithGroups._id, { businessId: business._id });
+    await createTestModifierGroup(restaurant._id, itemWithGroups._id, { businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", restaurant._id, { businessId: business._id });
+    const ownerToken = tokenFor(owner);
+
+    const res = await request(app)
+      .get(`/api/v1/businesses/${business.id}/menu/modifier-counts`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.counts[itemWithGroups.id]).toBe(2);
+    expect(res.body.data.counts[itemWithNoGroups.id]).toBeUndefined();
+    // A different business's own canonical groups (restaurantA/menuItemA from the top-level
+    // beforeAll) must never leak into this business's counts.
+    expect(res.body.data.counts[menuItemA.id]).toBeUndefined();
+
+    await Promise.all([
+      ModifierGroup.deleteMany({ businessId: business._id }),
+      MenuItem.deleteMany({ businessId: business._id }),
+      Category.deleteMany({ businessId: business._id }),
+      User.deleteOne({ _id: owner._id }),
+      Restaurant.deleteOne({ _id: restaurant._id }),
+    ]);
+  });
+
+  it("restaurant B's owner cannot read restaurant A's business modifier-group counts (cross-tenant)", async () => {
+    const businessA = await createTestBusiness();
+    const restaurantForB = await createTestRestaurant();
+    const ownerForB = await createTestUser("restaurant_owner", restaurantForB._id);
+    const ownerForBToken = tokenFor(ownerForB);
+
+    const res = await request(app)
+      .get(`/api/v1/businesses/${businessA.id}/menu/modifier-counts`)
+      .set("Authorization", `Bearer ${ownerForBToken}`);
+
+    expect(res.status).toBe(403);
+
+    await Promise.all([User.deleteOne({ _id: ownerForB._id }), Restaurant.deleteOne({ _id: restaurantForB._id })]);
+  });
+});
+
 describe("Phase 21 — legacy modifier-group writes are retired (410) once the business is migrated", () => {
   it("createModifierGroup/updateModifierGroup/deleteModifierGroup all 410 for a migrated business, but stay 200 for an unmigrated one", async () => {
     const business = await createTestBusiness();

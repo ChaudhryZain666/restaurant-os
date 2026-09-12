@@ -104,7 +104,7 @@ describe("POST /businesses/:businessId/subscription/checkout — payment-method-
       .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
       .set("Authorization", `Bearer ${tokenFor(owner)}`)
       .send({ planCode: plan.code, billingInterval: "monthly" });
-    const token = (checkoutRes.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const token = (checkoutRes.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
 
     const completeRes = await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`);
     expect(completeRes.status).toBe(200);
@@ -149,8 +149,8 @@ describe("POST /businesses/:businessId/subscription/checkout — payment-method-
         billingInterval: "monthly",
       }),
     ]);
-    const tokenA = (sessionA.body.data.checkout.url as string).split("/mock-checkout/")[1];
-    const tokenB = (sessionB.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const tokenA = (sessionA.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
+    const tokenB = (sessionB.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
 
     const [completeA, completeB] = await Promise.all([
       request(app).post(`/api/v1/billing/mock-checkout/${tokenA}/complete`),
@@ -216,7 +216,7 @@ describe("Agency checkout — mirrors the business flow, isolated per agency", (
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ planCode: plan.code, billingInterval: "monthly" });
     expect(checkoutRes.status).toBe(200);
-    const token = (checkoutRes.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const token = (checkoutRes.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
 
     await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`).expect(200);
 
@@ -277,7 +277,7 @@ describe("checkout provider-customer reuse — the real 409 class of bug", () =>
       .send({ planCode: plan.code, billingInterval: "monthly" });
     expect(retry.status).toBe(200);
 
-    const token = (retry.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const token = (retry.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
     await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`).expect(200);
 
     const stored = await Subscription.findOne({ ownerType: "business", ownerId: business._id });
@@ -312,7 +312,7 @@ describe("checkout provider-customer reuse — the real 409 class of bug", () =>
       .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
       .set("Authorization", authHeader)
       .send({ planCode: plan.code, billingInterval: "monthly" });
-    const firstToken = (firstCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const firstToken = (firstCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
     await request(app).post(`/api/v1/billing/mock-checkout/${firstToken}/complete`).expect(200);
     const firstSub = await Subscription.findOne({ ownerType: "business", ownerId: business._id });
     const firstCustomerId = firstSub!.providerCustomerId;
@@ -327,7 +327,7 @@ describe("checkout provider-customer reuse — the real 409 class of bug", () =>
       .set("Authorization", authHeader)
       .send({ planCode: plan.code, billingInterval: "monthly" });
     expect(secondCheckout.status).toBe(200);
-    const secondToken = (secondCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1];
+    const secondToken = (secondCheckout.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
     await request(app).post(`/api/v1/billing/mock-checkout/${secondToken}/complete`).expect(200);
 
     const secondSub = await Subscription.findOne({ ownerType: "business", ownerId: business._id, status: "active" });

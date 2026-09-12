@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { BusinessAnalyticsOverview, BusinessAnalyticsProducts, BusinessAnalyticsTrends } from "@restaurant/types";
-import { Badge, Card, EmptyState, Skeleton } from "@restaurant/ui";
+import { Card, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveBusinessId } from "../context/BusinessContext";
 import { useBusinessEntitlements } from "../hooks/useBusinessEntitlements";
+import { PlanRequiredNotice } from "../components/PlanRequiredNotice";
 import { ScopeBadge } from "../components/ScopeBadge";
 import { IconChart } from "../components/icons";
 
@@ -74,7 +75,7 @@ export function BusinessAnalyticsPage() {
       .finally(() => setLoading(false));
   }, [businessId, from, to, entitlementsLoading, canView]);
 
-  // Phase 39 — a locked/upgrade state, resolved via the same entitlement the server's
+  // Phase 39/64 — a locked/recovery state, resolved via the same entitlement the server's
   // requireEntitlement("business_analytics") guard checks (businessAnalytics.routes.ts), so this
   // can never disagree with what the API actually allows. The server guard remains authoritative;
   // this only avoids surfacing a raw 403 as the page's content.
@@ -84,15 +85,7 @@ export function BusinessAnalyticsPage() {
         <div>
           <h1 className="font-heading text-2xl font-semibold text-foreground">Business Analytics</h1>
         </div>
-        <Card className="flex flex-col gap-2">
-          <Badge tone="warning" className="self-start">
-            Upgrade required
-          </Badge>
-          <p className="text-sm text-foreground">
-            Business-wide analytics aren't included on your current plan. Upgrade to Owner — Growth (or an agency
-            plan that grants it) to see performance across every location.
-          </p>
-        </Card>
+        <PlanRequiredNotice featureLabel="Business-wide analytics" />
       </div>
     );
   }

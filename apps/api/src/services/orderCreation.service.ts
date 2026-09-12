@@ -48,6 +48,11 @@ export interface CreateOrderForCustomerParams {
    *  so there is no way a customer request body could set it. Ignored for "online" (that lifecycle
    *  is exclusively driven by the Payment webhook, same as always). */
   markPaidImmediately?: boolean;
+  /** Phase 75 — the authenticated staff member who rang this up, always `req.user!.id` from
+   *  pos.controller.ts, never a request-body field (createPosOrderSchema has no field for this —
+   *  there is no way a POS request body could set/spoof it). Always undefined for the
+   *  customer-facing path (order.controller.ts's createOrder never passes it). */
+  createdByUserId?: string;
 }
 
 export interface CreatedOrderResult {
@@ -81,6 +86,7 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
     promoCode,
     isDemoAccount = false,
     markPaidImmediately = false,
+    createdByUserId,
   } = params;
 
   const restaurant = await Restaurant.findOne({ _id: restaurantId, status: "active" });
@@ -189,6 +195,7 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
             customerNotes,
             statusHistory: [{ status: "pending", at: new Date() }],
             isDemo: isDemoAccount,
+            createdByUserId,
           },
         ],
         { session }

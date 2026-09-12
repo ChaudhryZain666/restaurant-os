@@ -7,7 +7,7 @@ import { usePageMeta } from "../hooks/usePageMeta";
 
 export function HowItWorksPage() {
   usePageMeta({
-    title: "How It Works — Tablecloth",
+    title: "How It Works — GarnishTable",
     description: "From signup to your first order in six steps — no developer required, no separate website to maintain.",
   });
   return (

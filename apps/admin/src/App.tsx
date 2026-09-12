@@ -22,6 +22,7 @@ import { RegisterPage as PosRegisterPage } from "./pos/RegisterPage";
 import { PosTablesPage } from "./pos/TablesPage";
 import { PosCustomersPage } from "./pos/CustomersPage";
 import { PosOrdersPage } from "./pos/OrdersPage";
+import { PendingSalesPage } from "./pos/PendingSalesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -146,6 +147,7 @@ export function App() {
         <Route path="/pos/tables" element={<PosTablesPage />} />
         <Route path="/pos/customers" element={<PosCustomersPage />} />
         <Route path="/pos/orders" element={<PosOrdersPage />} />
+        <Route path="/pos/pending" element={<PendingSalesPage />} />
       </Route>
       <Route element={<Layout />}>
         <Route

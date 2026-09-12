@@ -99,7 +99,7 @@ test.describe.serial("multi-location staff isolation (Phase 19)", () => {
       await expect(staffPage).toHaveURL(/\/orders$/, { timeout: 10_000 });
 
       // Only ever authorized for one location — the switcher must not even appear.
-      await expect(staffPage.getByRole("combobox", { name: "Active location" })).toHaveCount(0);
+      await expect(staffPage.getByRole("button", { name: /Switch location/ })).toHaveCount(0);
 
       // --- Tamper: directly set localStorage to claim Location B is active, then reload. ---
       const restaurantB = await db.collection("restaurants").findOne({ slug: slugB });
@@ -115,7 +115,7 @@ test.describe.serial("multi-location staff isolation (Phase 19)", () => {
       // staff member (Phase 19's listBusinessLocations fix), so LocationContext's own resolution
       // silently falls back to their real, authorized location instead of trusting localStorage.
       await expect(staffPage).toHaveURL(/\/orders$/, { timeout: 10_000 });
-      await expect(staffPage.getByRole("combobox", { name: "Active location" })).toHaveCount(0);
+      await expect(staffPage.getByRole("button", { name: /Switch location/ })).toHaveCount(0);
 
       // Belt-and-suspenders: even if the client somehow displayed B, the server would still 403
       // any real request for it — proven independently at the API level in

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import type { Plan } from "@restaurant/types";
-import { Alert, Badge, Button, Card } from "@restaurant/ui";
+import { Alert, Badge, Button, Card, Logo } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -251,11 +251,8 @@ export function OwnerSignupWizardPage() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
       <Card className="w-full max-w-lg animate-scale-in">
-        <div className="mb-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-            T
-          </span>
-          <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+        <div className="mb-5">
+          <Logo />
         </div>
 
         <ol className="mb-6 flex flex-wrap gap-2 text-xs text-muted">

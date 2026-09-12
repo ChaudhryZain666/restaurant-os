@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 
 /**
@@ -46,11 +46,11 @@ export function AcceptAgencyInvitePage() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
                 T
               </span>
-              <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+              <Logo hideText size="sm" />
             </div>
             <h1 className="font-heading text-2xl font-semibold text-foreground">Accept your agency invitation</h1>
             <p className="text-sm text-muted">
-              If you don't have a Tablecloth account yet, set a password below. If you already do, leave it blank.
+              If you don't have a GarnishTable account yet, set a password below. If you already do, leave it blank.
             </p>
             <form onSubmit={handleSubmit} className="flex flex-col gap-3 text-left">
               <label className="flex flex-col gap-1 text-sm text-foreground">

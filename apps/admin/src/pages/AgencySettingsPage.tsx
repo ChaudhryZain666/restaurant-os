@@ -114,7 +114,7 @@ export function AgencySettingsPage() {
   if (!activeAgencyId) return null;
   if (loading) return <p className="text-muted">Loading settings...</p>;
 
-  const verificationRecordHost = agency?.domain ? `_tablecloth-verify.${agency.domain}` : null;
+  const verificationRecordHost = agency?.domain ? `_garnishtable-verify.${agency.domain}` : null;
 
   return (
     <div className="flex flex-col gap-6">

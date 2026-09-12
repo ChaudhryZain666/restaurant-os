@@ -10,6 +10,7 @@ import {
   listCanonicalMenu,
   updateCanonicalMenuItem,
 } from "../controllers/menu.controller.js";
+import { getCanonicalModifierGroupCounts } from "../controllers/modifier.controller.js";
 
 /**
  * Phase 21 — the canonical (business-wide) counterpart to menu.routes.ts. Mounted at
@@ -23,6 +24,13 @@ export const businessMenuRouter = Router({ mergeParams: true });
 
 businessMenuRouter.use(requireAuth, requireBusinessMatch());
 businessMenuRouter.get("/", requireBusinessPermission("restaurant.menu.read"), asyncHandler(listCanonicalMenu));
+// Registered before POST "/" only for readability — there's no GET "/:id" on this router for
+// "modifier-counts" to ever collide with.
+businessMenuRouter.get(
+  "/modifier-counts",
+  requireBusinessPermission("restaurant.menu.read"),
+  asyncHandler(getCanonicalModifierGroupCounts)
+);
 businessMenuRouter.post(
   "/",
   requireBusinessPermission("restaurant.menu.write"),

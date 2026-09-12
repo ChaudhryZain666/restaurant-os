@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 
 export function AcceptInvitePage() {
@@ -35,11 +35,8 @@ export function AcceptInvitePage() {
           </Alert>
         ) : (
           <Card className="animate-scale-in flex flex-col gap-4">
-            <div className="mb-1 flex items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-                T
-              </span>
-              <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+            <div className="mb-1">
+              <Logo />
             </div>
             <h1 className="font-heading text-2xl font-semibold text-foreground">Set your password</h1>
             <p className="text-sm text-muted">Choose a password to finish accepting your invitation.</p>

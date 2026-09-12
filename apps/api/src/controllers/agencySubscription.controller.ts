@@ -1,14 +1,14 @@
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { ChangeSubscriptionPlanInput, CreateSubscriptionInput, PaginationQueryInput } from "@restaurant/validation";
-import { Plan, type PlanDoc } from "../models/Plan.js";
+import { Plan } from "../models/Plan.js";
 import type { SubscriptionDoc } from "../models/Subscription.js";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { sendSuccess } from "../common/response.js";
 import { paginateQuery } from "../utils/pagination.js";
 import { env } from "../config/env.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
-import { getEntitlements } from "../services/entitlement.service.js";
+import { resolveAgencyEntitlements } from "../services/entitlementLimit.service.js";
 import { getAgencyEntitlements as getAgencyBusinessUsage } from "../services/agencyEntitlement.service.js";
 import {
   cancelAgencySubscription,
@@ -114,16 +114,18 @@ export async function changeAgencyPlanHandler(req: Request, res: Response) {
  * plan feature flags. The usage figure is meaningful even with no live subscription (the
  * no-subscription-default fallback applies), so this no longer 404s in that case — only the
  * feature-entitlements half is omitted when there's no plan to read them from.
+ *
+ * Phase 76 — this used to read getSubscriptionForAgency (the most recent subscription regardless
+ * of status) and hand back that plan's entitlements unconditionally, so an expired/cancelled/
+ * silently-past-trialEnd agency subscription still reported full plan entitlements. Now routes
+ * through resolveAgencyEntitlements, the same live/lapsed/never resolver every other entitlement
+ * decision in this codebase uses — mirrors subscription.controller.ts's own
+ * getEntitlementsHandler/resolveBusinessEntitlements exactly.
  */
 export async function getAgencyEntitlementsHandler(req: Request, res: Response) {
   const { agencyId } = req.params;
-  const [subscription, usage] = await Promise.all([getSubscriptionForAgency(agencyId), getAgencyBusinessUsage(agencyId)]);
-  if (!subscription) {
-    sendSuccess(res, { entitlements: null, usage });
-    return;
-  }
-  const plan = await Plan.findById(subscription.planId);
-  sendSuccess(res, { entitlements: plan ? getEntitlements(plan as PlanDoc) : null, usage });
+  const [{ entitlements, source }, usage] = await Promise.all([resolveAgencyEntitlements(agencyId), getAgencyBusinessUsage(agencyId)]);
+  sendSuccess(res, { entitlements, source, usage });
 }
 
 export async function createAgencyCheckoutHandler(req: Request, res: Response) {

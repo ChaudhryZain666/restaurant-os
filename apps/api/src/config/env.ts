@@ -56,7 +56,7 @@ const baseEnvSchema = z.object({
   // Email (optional — unset or "console" logs the rendered email instead of sending it; see
   // apps/api/src/email/index.ts. No real provider is wired up yet — this is the extension point).
   EMAIL_PROVIDER: z.enum(["console", "smtp"]).default("console"),
-  // No default (Phase 29 — was a placeholder "Tablecloth <no-reply@tablecloth.local>" address that
+  // No default (Phase 29 — was a placeholder "GarnishTable <no-reply@garnishtable.local>" address that
   // could silently ship to production if an operator forgot to override it): getEmailService()
   // requires this explicitly whenever EMAIL_PROVIDER=smtp, same fail-loud pattern as SMTP_HOST/PORT.
   // The console provider (dev/test default) never sends anything, so it has no real need for a
@@ -67,7 +67,7 @@ const baseEnvSchema = z.object({
   // failing loud: it's a best-effort internal notification (already wrapped in try/catch at the
   // call site — a contact-form submission must never fail because this env var was never set), not
   // a customer-facing send where a wrong address would be a real incident.
-  CONTACT_NOTIFICATION_EMAIL: z.string().email().default("hello@tablecloth.local"),
+  CONTACT_NOTIFICATION_EMAIL: z.string().email().default("hello@garnishtable.local"),
   // Same "local-dev/test escape hatch" pattern as AUTH_RATE_LIMIT_MAX/GLOBAL_RATE_LIMIT_MAX — the
   // real default (5 per 15 minutes) is a genuine anti-spam limit for the public contact endpoint,
   // but a single Jest file exercising several request shapes against the same in-memory limiter
@@ -99,6 +99,16 @@ const baseEnvSchema = z.object({
   // and any restaurant the eligibility engine can't confidently route).
   PAYMENT_PROVIDER: z.enum(["mock", "safepay", "stripe"]).default("mock"),
   MOCK_PAYMENT_WEBHOOK_SECRET: z.string().default("mock-payment-webhook-secret-dev-only"),
+  // Phase 74 — the physical POS card-terminal boundary, deliberately separate from PAYMENT_PROVIDER
+  // above (a different financial domain: in-person hardware, not online checkout). Defaults to
+  // "none" — NOT "mock" — because this is the one provider boundary in this codebase where the
+  // honest default must be "no capability exists," not "a mock stands in for it": every existing
+  // deployment/dev/demo environment must keep showing card payment as staff-attested (Phase 73's
+  // existing, correct behavior) unless a deployment explicitly opts into exercising the terminal
+  // state machine. "mock" (apps/api/src/payments/terminal/MockTerminalProvider.ts) is deterministic
+  // and test/dev-only — see docs/payment-provider-decision.md's Phase 74 section for exactly what a
+  // real provider would require and why none is implemented yet.
+  POS_TERMINAL_PROVIDER: z.enum(["none", "mock"]).default("none"),
   // Safepay: real network-capable adapter as of Phase 15 (apps/api/src/payments/SafepayProvider.ts),
   // but never exercised against a live account — see that file's header comment and
   // docs/payment-provider-decision.md for exactly what's verified vs. assumed. SAFEPAY_ENV picks
@@ -256,6 +266,19 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         message: `Production ${key} is still a localhost address (${value}) — every emailed link uses this to build a real, clickable URL. Set it to the real deployed frontend origin.`,
       });
     }
+  }
+  // Phase 76 — a different failure mode than the email-link risk above, but the same root cause
+  // (a localhost default silently surviving into production): app.ts's CORS allow-list is built
+  // directly from MARKETING_ORIGIN. Left on localhost in production, the real deployed marketing
+  // site's own credentialed requests (e.g. its live pricing page's GET /public/plans) would be
+  // silently rejected by CORS — a real-but-confusing production outage, not a security hole, but
+  // one this same "catch it at boot" pattern already prevents for the other two origins.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(data.MARKETING_ORIGIN)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["MARKETING_ORIGIN"],
+      message: `Production MARKETING_ORIGIN is still a localhost address (${data.MARKETING_ORIGIN}) — the CORS allow-list is built directly from this value. Set it to the real deployed marketing-site origin.`,
+    });
   }
 });
 

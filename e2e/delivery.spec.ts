@@ -28,12 +28,19 @@ async function registerAndLand(page: Page, email: string) {
  * item with any modifier group (even an optional one, like Caesar Salad's "Add protein") opens a
  * selection panel first. Never selects an option, so the item is added at its base price — this
  * is what keeps the exact-total assertions in this spec (e.g. test 5) deterministic.
+ *
+ * Phase 65 — this helper is called against BOTH demo-restaurant (Cinematic — its item detail is a
+ * large-photograph overlay, role="dialog") and spice-route/bella-vista (still Classic — an inline
+ * row expansion), so both the trigger and confirm button lookups stay theme-agnostic rather than
+ * assuming either structure.
  */
 async function addItemToCart(page: Page, itemName: string) {
   const row = page.locator("li", { hasText: itemName }).first();
   await row.scrollIntoViewIfNeeded();
-  await row.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-  const confirmButton = row.getByRole("button", { name: "Confirm add to cart" });
+  await row.getByRole("button", { name: /Add to (cart|order)/ }).click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog");
+  const confirmScope = (await dialog.count()) > 0 ? dialog : row;
+  const confirmButton = confirmScope.getByRole("button", { name: /^Confirm add to cart$|Add to order — \$/ });
   if (await confirmButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
     await confirmButton.click();
   }
@@ -103,7 +110,16 @@ test.describe("delivery (Phase 9)", () => {
       await expect(page.getByText("$3.99")).toBeVisible();
       await expect(page.getByText("Distance")).toBeVisible();
       await expect(page.getByText(/km$/)).toBeVisible();
-      await expect(page.getByText(/1200 S 6th St/)).toBeVisible();
+      // Phase 65 — Cinematic's Footer (demo-restaurant's real theme, rendered on every page via
+      // Layout.tsx) now also shows the restaurant's own address, which happens to share this same
+      // "1200 S 6th St, Springfield" fixture string with the customer's chosen delivery address —
+      // scoped to the order detail's own "Delivery address" row specifically, not a bare page-wide
+      // text search, so this never ambiguously matches the footer too.
+      const deliveryAddressValue = page
+        .locator("span", { hasText: "Delivery address", exact: true })
+        .locator("xpath=following-sibling::span")
+        .first();
+      await expect(deliveryAddressValue).toContainText("1200 S 6th St");
     } finally {
       await customerContext.close();
     }

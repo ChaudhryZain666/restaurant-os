@@ -22,12 +22,18 @@ async function registerAndLand(page: Page, email: string) {
 
 /** Handles both cases: an item with no modifier groups adds directly, while one with any
  *  modifier group (even optional) opens a selection panel first — see delivery.spec.ts (Phase 9)
- *  for why this can't just assume "no panel". Never selects an option, so price stays at base. */
+ *  for why this can't just assume "no panel". Never selects an option, so price stays at base.
+ *
+ *  Phase 65 — called against BOTH demo-restaurant (Cinematic — a large-photograph overlay,
+ *  role="dialog") and spice-route/bella-vista (still Classic — an inline row expansion), so both
+ *  the trigger and confirm button lookups stay theme-agnostic. */
 async function addItemToCart(page: Page, itemName: string) {
   const row = page.locator("li", { hasText: itemName }).first();
   await row.scrollIntoViewIfNeeded();
-  await row.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-  const confirmButton = row.getByRole("button", { name: "Confirm add to cart" });
+  await row.getByRole("button", { name: /Add to (cart|order)/ }).click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog");
+  const confirmScope = (await dialog.count()) > 0 ? dialog : row;
+  const confirmButton = confirmScope.getByRole("button", { name: /^Confirm add to cart$|Add to order — \$/ });
   if (await confirmButton.isVisible({ timeout: 2_000 }).catch(() => false)) {
     await confirmButton.click();
   }
@@ -74,7 +80,16 @@ test.describe("geocoding-driven delivery checkout (Phase 10)", () => {
 
     // OrderDetailPage shows the geocoded, snapshotted delivery info.
     await expect(page.getByText("Delivery fee")).toBeVisible();
-    await expect(page.getByText(/1200/)).toBeVisible();
+    // Phase 65 — Cinematic's Footer (demo-restaurant's real theme, rendered on every page via
+    // Layout.tsx) now also shows the restaurant's own address, which happens to share the "1200"
+    // house-number prefix with the customer's geocoded delivery address — scoped to the order
+    // detail's own "Delivery address" row specifically, not a bare page-wide text search, so this
+    // never ambiguously matches the footer too.
+    const deliveryAddressValue = page
+      .locator("span", { hasText: "Delivery address", exact: true })
+      .locator("xpath=following-sibling::span")
+      .first();
+    await expect(deliveryAddressValue).toContainText("1200");
     await expect(page.getByText("Distance")).toBeVisible();
   });
 

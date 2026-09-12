@@ -128,6 +128,14 @@ const restaurantSettingsSchema = new Schema(
     // ring up an order with it, even though the permission alone would otherwise allow it. See
     // docs/pos-architecture.md.
     posEnabled: { type: Boolean, default: false },
+    // Phase 74 — same opt-in-off-by-default precedent as posEnabled itself: a location must
+    // explicitly have physical card-terminal hardware AND opt in here before the POS's terminal
+    // payment flow activates for it, checked independently server-side alongside
+    // env.POS_TERMINAL_PROVIDER (posTerminalPayment.service.ts) — never inferred from posEnabled
+    // alone, since a location can run POS with cash/staff-confirmed-card only, no terminal at all.
+    // No Settings UI toggle exists for this yet (nothing to configure without a real provider) —
+    // see docs/pos-architecture.md's Phase 74 section.
+    posTerminalEnabled: { type: Boolean, default: false },
     // Delivery-integrations phase — which courier DISPATCHES a delivery order, independent of
     // deliveryEnabled/deliveryFee above (those govern whether/how much a CUSTOMER is charged;
     // this governs who actually shows up to carry the food — see docs/delivery-integrations.md).

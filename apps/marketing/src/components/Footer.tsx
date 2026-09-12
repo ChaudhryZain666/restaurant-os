@@ -69,7 +69,7 @@ export function Footer() {
       </Container>
 
       <Container className="flex flex-col gap-3 border-t border-border py-6 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-        <p>&copy; {new Date().getFullYear()} Tablecloth. A demo restaurant-commerce platform.</p>
+        <p>&copy; {new Date().getFullYear()} GarnishTable. A demo restaurant-commerce platform.</p>
         <div className="flex items-center gap-4">
           <a href={STOREFRONT_URL} className="transition-colors hover:text-foreground">
             View live demo restaurant

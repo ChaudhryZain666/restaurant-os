@@ -1,7 +1,6 @@
 import { Agency } from "../models/Agency.js";
-import { Plan } from "../models/Plan.js";
-import { Subscription } from "../models/Subscription.js";
 import { getEntitlements } from "./entitlement.service.js";
+import { resolveSubscriptionState } from "./subscriptionResolution.service.js";
 import { ApiError } from "../utils/ApiError.js";
 
 /**
@@ -22,20 +21,20 @@ const NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES = 3;
 async function getMaxBusinesses(agencyId: string): Promise<number> {
   // Phase 27 — provider:"internal" (grandfathered/comped, no real commercial relationship) is
   // deliberately excluded here too, treated identically to "no subscription at all" — the same
-  // fix entitlementLimit.service.ts's resolveOwnerPlan needed, for the identical reason: a
-  // grandfathered subscription must never introduce a NEW restriction a real one would.
-  const subscription = await Subscription.findOne({
-    ownerType: "agency",
-    ownerId: agencyId,
-    status: { $in: ["trialing", "active", "past_due", "cancelling"] },
-    provider: { $ne: "internal" },
-  });
-  if (!subscription) return NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES;
+  // reasoning resolveSubscriptionState itself already applies: a grandfathered subscription must
+  // never introduce a NEW restriction a real one would.
+  const state = await resolveSubscriptionState("agency", agencyId);
+  if (state.kind === "never") return NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES;
+  if (state.kind === "lapsed") {
+    // Phase 63 — an agency whose own subscription ended (expired trial, cancelled/expired paid)
+    // must not keep the generous default's capacity to create MORE businesses — frozen at whatever
+    // it already manages, never destructive to existing managed businesses, never a commercial
+    // number invented here.
+    const agency = await Agency.findById(agencyId).select("businessCount");
+    return agency?.businessCount ?? 0;
+  }
 
-  const plan = await Plan.findById(subscription.planId);
-  if (!plan) return NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES;
-
-  const value = getEntitlements(plan).max_businesses;
+  const value = getEntitlements(state.plan).max_businesses;
   return typeof value === "number" && value > 0 ? value : NO_SUBSCRIPTION_DEFAULT_MAX_BUSINESSES;
 }
 

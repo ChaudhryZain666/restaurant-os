@@ -35,9 +35,12 @@ test("owner can view the restaurant audit log, and a real status change appears 
     }
     await customerPage.goto("http://localhost:5173/r/demo-restaurant");
     const pizzaRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
-    await pizzaRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-    await pizzaRow.getByText("Small", { exact: false }).click();
-    await pizzaRow.getByRole("button", { name: "Confirm add to cart" }).click();
+    await pizzaRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
+    // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a large-photograph
+    // overlay (role="dialog"), not an inline row expansion — scoped to the dialog, not `pizzaRow`.
+    const detailDialog = customerPage.getByRole("dialog");
+    await detailDialog.getByText("Small", { exact: false }).click();
+    await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
     await customerPage.getByRole("link", { name: /Cart/ }).click();
     await customerPage.getByRole("button", { name: /Place order/ }).click();
     await expect(customerPage).toHaveURL(/\/orders\/[a-f0-9]+$/, { timeout: 10_000 });

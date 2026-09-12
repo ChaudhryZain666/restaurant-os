@@ -11,7 +11,9 @@ export type PaymentRecordStatus =
   | "refunded"
   | "partially_refunded";
 
-export type PaymentMethod = "online";
+// "pos_terminal" (Phase 74) — a physical POS card-terminal attempt; see
+// apps/api/src/payments/terminal/ and docs/pos-architecture.md.
+export type PaymentMethod = "online" | "pos_terminal";
 
 export interface Payment {
   id: string;

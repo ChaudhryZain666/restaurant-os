@@ -37,6 +37,16 @@ const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
   expired: "Trial expired",
 };
 
+// Phase 64 — mirrors notification.queue.ts's own TRIAL_REMINDER_WINDOW_DAYS exactly (a backend-only
+// file this frontend can't import from directly), so the in-app "ending soon" treatment always
+// agrees with when the real reminder email already fires — never a second, invented threshold.
+const TRIAL_REMINDER_WINDOW_DAYS = 3;
+
+function isEndingSoon(trialEnd: string | Date): boolean {
+  const msRemaining = new Date(trialEnd).getTime() - Date.now();
+  return msRemaining > 0 && msRemaining <= TRIAL_REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
 function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): string | null {
   const entry = pricing.find((p) => p.interval === interval);
   if (!entry?.amountCents || !entry.currency) return null;
@@ -230,6 +240,15 @@ export function BillingPage() {
 
   if (loading) return <p className="text-muted">Loading billing...</p>;
 
+  // Phase 64 — `expired`/`cancelled` are terminal: before this fix, a lapsed subscription still
+  // satisfied `subscription && plan` below, so the owner saw a "Trial expired" status card with NO
+  // way to actually resubscribe (the action buttons/change-plan dropdown all deliberately exclude
+  // these two statuses, correctly — but nothing replaced them). Reusing the exact same plan-picker
+  // this page already shows for "no subscription yet" closes that dead end, rather than building a
+  // second one.
+  const needsPlanSelection = !subscription || !plan || subscription.status === "expired" || subscription.status === "cancelled";
+  const isEndedNotNew = Boolean(subscription && (subscription.status === "expired" || subscription.status === "cancelled"));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -248,6 +267,13 @@ export function BillingPage() {
       {error && (
         <Alert tone="danger" role="alert">
           {error}
+        </Alert>
+      )}
+
+      {isEndedNotNew && (
+        <Alert tone="warning">
+          Your restaurant and all your data are still here — menu, orders, customers, and settings are safe. Choose
+          a plan below to continue using online ordering and unlock your restaurant's full features.
         </Alert>
       )}
 
@@ -273,6 +299,26 @@ export function BillingPage() {
             </Alert>
           )}
 
+          {/* Phase 64 Section 11 — reuses the exact same 3-day window the existing trial-ending
+              reminder EMAIL already fires on (TRIAL_REMINDER_WINDOW_DAYS, notification.queue.ts),
+              computed client-side from the trialEnd this page already has — no new backend field,
+              no redesign of the reminder email itself, just a consistent in-app echo of it.
+              Real gap found and fixed alongside it: a no-card trial (the only path a self-serve
+              signup ever takes) previously had NO checkout button anywhere while still trialing —
+              createCheckoutSessionCore already allows it server-side ("a local-only trial is
+              explicitly ALLOWED to proceed to checkout"), nothing here ever surfaced it. */}
+          {subscription.status === "trialing" && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
+            <Alert tone="warning" className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()} — add a payment method now to
+                keep your restaurant's full features without interruption.
+              </span>
+              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy}>
+                Subscribe now
+              </Button>
+            </Alert>
+          )}
+
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {subscription.trialEnd && subscription.status === "trialing" && (
               <div>
@@ -292,7 +338,9 @@ export function BillingPage() {
             )}
           </dl>
 
-          {canManage ? (
+          {isEndedNotNew ? (
+            <p className="text-sm text-muted">Choose a plan below to pick up where you left off.</p>
+          ) : canManage ? (
             <div className="flex flex-wrap gap-3">
               {subscription.status === "cancelling" && (
                 <Button size="sm" onClick={reactivate} disabled={busy}>
@@ -348,12 +396,18 @@ export function BillingPage() {
             <p className="text-xs text-muted">Only the restaurant owner can change or cancel this subscription.</p>
           )}
         </Card>
-      ) : (
+      ) : null}
+
+      {needsPlanSelection && (
         <Card className="flex flex-col gap-4">
           <div>
-            <p className="text-sm text-muted">No subscription yet.</p>
+            <p className="text-sm text-muted">{isEndedNotNew ? "Ready to pick back up?" : "No subscription yet."}</p>
             <p className="font-heading text-lg font-medium text-foreground">Choose a plan</p>
-            <p className="text-sm text-muted">You won't be charged until your trial ends, and you can cancel anytime before then.</p>
+            <p className="text-sm text-muted">
+              {isEndedNotNew
+                ? "Your restaurant and data are exactly as you left them — pick a plan to continue."
+                : "You won't be charged until your trial ends, and you can cancel anytime before then."}
+            </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">

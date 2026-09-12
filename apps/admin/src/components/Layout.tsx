@@ -2,13 +2,16 @@ import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { agencyRoleGrantsPermission, roleHasPermission, type AgencyMembershipRole, type Permission, type UserRole } from "@restaurant/types";
 import { Logo, useToast } from "@restaurant/ui";
+import { describeAvailability } from "@restaurant/utils";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useAgency } from "../context/AgencyContext";
 import { useBusiness } from "../context/BusinessContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
 import { RestaurantSettingsProvider, useRestaurantSettings } from "../context/RestaurantSettingsContext";
+import { LocationSwitcher } from "./LocationSwitcher";
 import {
+  IconArrowLeft,
   IconBook,
   IconChart,
   IconClipboard,
@@ -251,11 +254,18 @@ const ROLE_LABELS: Record<string, string> = {
   agency_member: "Agency",
 };
 
-function navLinkClass({ isActive }: { isActive: boolean }) {
-  return [
-    "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-fast",
-    isActive ? "bg-primary/10 text-primary" : "text-foreground/75 hover:bg-black/[0.04] hover:text-foreground",
-  ].join(" ");
+// Phase 68 — the active state is a solid GT Wine pill with GT Ivory text/icon (the brand's own
+// established "wine = selected" convention, reused rather than inventing a second signal); hover on
+// an inactive item is a quiet plum wash, never the active color itself, so the two states stay
+// unambiguous at a glance. Both colors come from the sidebar's own token set (see index.css) —
+// never a raw hex literal here.
+function navLinkClass(collapsed: boolean) {
+  return ({ isActive }: { isActive: boolean }) =>
+    [
+      "group relative flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium transition-colors duration-fast ease-premium",
+      collapsed ? "justify-center px-2" : "px-3",
+      isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-sidebar-foreground-dim hover:bg-sidebar-hover hover:text-sidebar-foreground",
+    ].join(" ");
 }
 
 function itemVisible(
@@ -281,6 +291,7 @@ function NavGroupList({
   agencyRole = null,
   restaurantSettings,
   onNavigate,
+  collapsed = false,
 }: {
   groups: NavGroup[];
   role: UserRole;
@@ -293,6 +304,12 @@ function NavGroupList({
    *  posEnabled added for the POS nav item, same pattern. */
   restaurantSettings?: { kitchenEnabled?: boolean; staffEnabled?: boolean; posEnabled?: boolean };
   onNavigate?: () => void;
+  /** Phase 71 — icon-only mode (desktop sidebar collapse). Group labels disappear (a divider still
+   *  separates groups) and each item grows a small CSS-only tooltip, shown on hover AND keyboard
+   *  focus (a real accessibility requirement a hover-only tooltip would fail), so the item's label is
+   *  never actually lost, just not permanently on screen. Never applied to the mobile drawer, which
+   *  always renders expanded regardless of this flag (see LayoutContent). */
+  collapsed?: boolean;
 }) {
   // Filtering here (rather than trusting each NavGroup array to already be role-correct) is what
   // keeps "what's shown in nav" and "what the route/API actually allows" from drifting apart again
@@ -307,18 +324,31 @@ function NavGroupList({
     }))
     .filter((group) => group.items.length > 0);
 
+  const linkClass = navLinkClass(collapsed);
+
   return (
-    <nav className="flex flex-col gap-4">
-      {visibleGroups.map((group) => (
-        <div key={group.label} className="flex flex-col gap-0.5">
-          <div className="px-3 pb-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
-            {group.description && <p className="text-[11px] text-muted/70">{group.description}</p>}
-          </div>
+    <nav className="flex flex-col gap-5">
+      {visibleGroups.map((group, i) => (
+        <div key={group.label} className={i > 0 ? "flex flex-col gap-0.5 border-t border-sidebar-border pt-4" : "flex flex-col gap-0.5"}>
+          {!collapsed && (
+            <div className="px-3 pb-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted">{group.label}</p>
+              {group.description && <p className="mt-0.5 text-[11px] leading-snug text-sidebar-muted-soft">{group.description}</p>}
+            </div>
+          )}
           {group.items.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass} onClick={onNavigate}>
+            <NavLink key={item.to} to={item.to} end={item.end} className={linkClass} onClick={onNavigate}>
               <item.icon className="h-[18px] w-[18px] shrink-0" />
-              {item.label}
+              {collapsed ? (
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-sidebar px-2.5 py-1.5 text-xs font-medium text-sidebar-foreground opacity-0 shadow-elevated ring-1 ring-sidebar-border transition-opacity duration-fast group-hover:opacity-100 group-focus-visible:opacity-100"
+                >
+                  {item.label}
+                </span>
+              ) : (
+                item.label
+              )}
             </NavLink>
           ))}
         </div>
@@ -353,7 +383,7 @@ export function Layout() {
 
 function LayoutContent() {
   const { user, logout } = useAuth();
-  const { activeLocationId, locations, switchLocation } = useActiveLocation();
+  const { activeLocationId, locations } = useActiveLocation();
   const { activeAgencyId, agencies, switchAgency } = useAgency();
   const { activeBusinessId, isActingAsAgency, agencyRoleForActiveBusiness, activeBusinessName, activeAgencyName, exitBusiness } = useBusiness();
   const isPlatformAdmin = user?.role === "platform_admin";
@@ -368,8 +398,35 @@ function LayoutContent() {
   // Phase 28 — only fetched when actually restaurant-scoped (the hook itself no-ops without a
   // resolved activeLocationId, but there's no reason to even attempt it for a platform_admin or an
   // agency member who hasn't entered a business yet).
-  const { restaurant: activeRestaurant } = useRestaurantSettings();
+  const { restaurant: activeRestaurant, availability: activeAvailability } = useRestaurantSettings();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Phase 71 — desktop-only sidebar collapse (icon-only, with tooltips — see NavGroupList). Read
+  // once on mount, matching every other "remembered UI preference" in this app (activeLocationId,
+  // entered-business) — never an authorization input, purely a display choice. effectiveCollapsed
+  // additionally forces expanded whenever the MOBILE drawer is open: the desktop <aside> and the
+  // mobile drawer are the exact same DOM subtree (only repositioned by breakpoint, see the JSX
+  // below), so without this a collapsed desktop preference would otherwise also collapse the mobile
+  // drawer, which must always show full labels — mobileOpen is only ever true from the hamburger
+  // button, itself hidden at the desktop widths where collapse applies.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const effectiveCollapsed = collapsed && !mobileOpen;
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebarCollapsed", next ? "1" : "0");
+      } catch {
+        /* best-effort only */
+      }
+      return next;
+    });
+  }
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -385,60 +442,95 @@ function LayoutContent() {
     });
   });
 
+  // Phase 68 — a small "what am I looking at" readout in the main workspace's own header, so the
+  // dark sidebar isn't the only place that answers "who/what am I currently managing" (Section 9's
+  // principle). Restaurant name only, for a restaurant-scoped session — confirmed against every
+  // restaurant-scoped page this phase touched that nothing else on screen already shows that name
+  // as its own heading. Deliberately NOT extended to the agency-scoped case: AgencyDashboardPage
+  // (and others) already render the active agency's own name as their page h1, so a second copy
+  // here would duplicate visible text and break `getByText(agencyName)` across several existing
+  // e2e specs (agency-management.spec.ts) that assert on it as a single match.
+  const headerContext = isRestaurantScoped ? activeRestaurant?.name : null;
+
   const sidebarContent = (
     <>
-      <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
-        <Logo hideText />
-        <div className="min-w-0">
-          <p className="truncate font-heading text-sm font-semibold text-foreground">Tablecloth</p>
-          <p className="truncate text-xs text-muted">
-            {isPlatformAdmin
-              ? "Platform admin"
-              : isActingAsAgency
-                ? "Managing via agency"
-                : isAgencyScoped
-                  ? "Agency admin"
-                  : "Restaurant admin"}
-          </p>
-        </div>
+      <div className="flex items-center gap-2.5 border-b border-sidebar-border px-5 py-4">
+        <Logo hideText variant="light" size="sm" />
+        {!effectiveCollapsed && (
+          <div className="min-w-0">
+            <p className="truncate font-heading text-sm font-semibold text-sidebar-foreground">GarnishTable</p>
+            <p className="truncate text-xs text-sidebar-muted">
+              {isPlatformAdmin
+                ? "Platform admin"
+                : isActingAsAgency
+                  ? "Managing via agency"
+                  : isAgencyScoped
+                    ? "Agency admin"
+                    : "Restaurant admin"}
+            </p>
+          </div>
+        )}
         <button
           onClick={() => setMobileOpen(false)}
           aria-label="Close menu"
-          className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 hover:bg-black/[0.04] lg:hidden"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground-dim transition-colors duration-fast hover:bg-sidebar-hover hover:text-sidebar-foreground lg:hidden"
         >
           <IconClose className="h-5 w-5" />
         </button>
+        {/* Phase 71 — desktop-only sidebar collapse toggle. Occupies the same visual slot the
+            mobile close button does (ml-auto), but the two are complementary breakpoint-gated
+            (lg:hidden vs hidden lg:flex) so exactly one is ever rendered at a given viewport. */}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="ml-auto hidden h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground-dim transition-colors duration-fast hover:bg-sidebar-hover hover:text-sidebar-foreground lg:flex"
+        >
+          <IconArrowLeft className={`h-4 w-4 transition-transform duration-normal ease-premium ${collapsed ? "rotate-180" : ""}`} />
+        </button>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      {/* Phase 71 — "which restaurant am I managing" answered right at the top of the sidebar, not
+          just in the main workspace's own header (headerContext below) — the brief's own worked
+          example. Real, already-fetched data only: RestaurantSettingsContext's own availability
+          (Phase 71 addition to that context, same GET /restaurants/:id call it already made).
+          Hidden when collapsed (no room, and the main header's own readout already covers it) and
+          for non-restaurant-scoped sessions (platform admin / agency not yet inside a business). */}
+      {isRestaurantScoped && !effectiveCollapsed && activeRestaurant && (
+        <div className="border-b border-sidebar-border px-5 py-3">
+          <p className="truncate text-sm font-semibold text-sidebar-foreground">{activeRestaurant.name}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-sidebar-muted">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                !activeAvailability || activeAvailability.status === "open"
+                  ? "bg-success"
+                  : activeAvailability.status === "paused"
+                    ? "bg-warning"
+                    : "bg-sidebar-muted"
+              }`}
+            />
+            {describeAvailability(activeAvailability, activeRestaurant.settings.timezone)}
+          </p>
+        </div>
+      )}
+      <div className="flex-1 overflow-y-auto overflow-x-visible px-3 py-4">
         {/* Portal UX phase — the location/agency switchers used to only exist in the desktop
             header (sm:flex-gated, Layout.tsx's header block below), so a multi-location owner or
             multi-agency user on a phone had no way at all to switch. Mirrored here, lg:hidden since
-            the header's own copies already cover desktop/tablet — same selects, same handlers. */}
-        {isRestaurantScoped && locations.length > 1 && (
-          <label className="mb-3 flex flex-col gap-1 text-sm lg:hidden">
-            <span className="text-xs font-medium text-muted">Location</span>
-            <select
-              value={activeLocationId ?? ""}
-              onChange={(e) => switchLocation(e.target.value)}
-              aria-label="Active location"
-              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-            >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            the header's own copies already cover desktop/tablet. Phase 71 — the location half is
+            now the same LocationSwitcher component the header uses, not a second bespoke select. */}
+        {isRestaurantScoped && (
+          <div className="mb-3 lg:hidden">
+            <LocationSwitcher theme="dark" />
+          </div>
         )}
         {isAgencyScoped && agencies.length > 1 && (
           <label className="mb-3 flex flex-col gap-1 text-sm lg:hidden">
-            <span className="text-xs font-medium text-muted">Agency</span>
+            <span className="text-xs font-medium text-sidebar-muted">Agency</span>
             <select
               value={activeAgencyId ?? ""}
               onChange={(e) => switchAgency(e.target.value)}
               aria-label="Active agency"
-              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+              className="rounded-lg border border-sidebar-border bg-white/[0.04] px-2.5 py-1.5 text-sm text-sidebar-foreground"
             >
               {agencies.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -448,16 +540,16 @@ function LayoutContent() {
             </select>
           </label>
         )}
-        {isActingAsAgency && (
-          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
-            <p className="font-medium text-foreground">Managing {activeBusinessName}</p>
-            <p className="text-muted">via {activeAgencyName}</p>
+        {isActingAsAgency && !effectiveCollapsed && (
+          <div className="mb-4 rounded-lg border border-sidebar-border bg-white/[0.05] px-3 py-2.5 text-xs">
+            <p className="font-medium text-sidebar-foreground">Managing {activeBusinessName}</p>
+            <p className="text-sidebar-muted">via {activeAgencyName}</p>
             <button
               onClick={() => {
                 exitBusiness();
                 navigate("/agency/businesses");
               }}
-              className="mt-1.5 font-medium text-primary hover:underline"
+              className="mt-1.5 font-medium text-sidebar-foreground underline decoration-sidebar-border underline-offset-2 transition-colors duration-fast hover:decoration-sidebar-foreground"
             >
               ← Back to Agency
             </button>
@@ -471,15 +563,58 @@ function LayoutContent() {
             agencyRole={agencyRoleForActiveBusiness}
             restaurantSettings={activeRestaurant?.settings}
             onNavigate={() => setMobileOpen(false)}
+            collapsed={effectiveCollapsed}
           />
         )}
         {isPlatformAdmin && user && (
-          <NavGroupList groups={PLATFORM_GROUPS} role={user.role} isMultiLocation={false} onNavigate={() => setMobileOpen(false)} />
+          <NavGroupList
+            groups={PLATFORM_GROUPS}
+            role={user.role}
+            isMultiLocation={false}
+            onNavigate={() => setMobileOpen(false)}
+            collapsed={effectiveCollapsed}
+          />
         )}
         {isAgencyScoped && user && (
-          <NavGroupList groups={AGENCY_GROUPS} role={user.role} isMultiLocation={false} onNavigate={() => setMobileOpen(false)} />
+          <NavGroupList
+            groups={AGENCY_GROUPS}
+            role={user.role}
+            isMultiLocation={false}
+            onNavigate={() => setMobileOpen(false)}
+            collapsed={effectiveCollapsed}
+          />
         )}
       </div>
+      {/* Phase 68 — identity + logout live at the sidebar's own foot (the "premium app" convention
+          Section 9 asks for), not the top header, which now carries page/location context instead.
+          A plain flex sibling after the flex-1 scroll region above, so it's always pinned to the
+          bottom without needing its own mt-auto. */}
+      {user && (
+        <div className="border-t border-sidebar-border px-3 py-3">
+          <div className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 ${effectiveCollapsed ? "flex-col" : ""}`}>
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-heading text-xs font-semibold text-primary-foreground"
+              title={effectiveCollapsed ? `${user.name} — ${ROLE_LABELS[user.role] ?? user.role}` : undefined}
+            >
+              {user.name?.[0]?.toUpperCase() ?? "?"}
+            </span>
+            {!effectiveCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-sidebar-foreground">{user.name}</p>
+                <p className="truncate text-xs text-sidebar-muted">{ROLE_LABELS[user.role] ?? user.role}</p>
+              </div>
+            )}
+            <button
+              onClick={() => logout()}
+              aria-label="Log out"
+              title="Log out"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground-dim transition-colors duration-fast hover:bg-sidebar-hover hover:text-sidebar-foreground"
+            >
+              <IconLogout className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -489,14 +624,14 @@ function LayoutContent() {
         <button
           aria-label="Close menu overlay"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 transition-opacity duration-normal ease-premium lg:hidden"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-border bg-surface transition-transform duration-normal lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-sidebar transition-[transform,width] duration-normal ease-premium lg:static lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } ${effectiveCollapsed ? "lg:w-[4.5rem]" : "lg:w-64"}`}
       >
         {sidebarContent}
       </aside>
@@ -513,35 +648,24 @@ function LayoutContent() {
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-foreground lg:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-foreground transition-colors duration-fast hover:bg-black/[0.03] lg:hidden"
           >
             <IconMenuHamburger className="h-5 w-5" />
           </button>
-          <span className="lg:hidden" />
+          {headerContext && (
+            <p className="min-w-0 truncate font-heading text-sm font-semibold text-foreground sm:text-base">{headerContext}</p>
+          )}
           {user && (
             <div className="ml-auto flex items-center gap-3">
               {/* Phase 19 — only ever rendered when there's an actual choice to make
-                  (locations.length > 1): a single-location business must never see this, matching
-                  Section 5's "don't complicate the single-location product" requirement. A native
-                  <select>, matching the only existing picker precedent in this app (SettingsPage's
-                  timezone field) — no dropdown component exists in packages/ui and this phase
-                  doesn't justify building one. */}
-              {isRestaurantScoped && locations.length > 1 && (
-                <label className="hidden items-center gap-1.5 text-sm sm:flex">
-                  <span className="text-muted">Location:</span>
-                  <select
-                    value={activeLocationId ?? ""}
-                    onChange={(e) => switchLocation(e.target.value)}
-                    aria-label="Active location"
-                    className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-                  >
-                    {locations.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  (locations.length > 1, checked inside LocationSwitcher itself): a single-location
+                  business must never see this, matching Section 5's "don't complicate the
+                  single-location product" requirement. Phase 71 — now the same refined disclosure
+                  the sidebar's mobile copy uses, instead of a bare native <select>. */}
+              {isRestaurantScoped && (
+                <div className="hidden sm:block">
+                  <LocationSwitcher theme="light" />
+                </div>
               )}
               {isAgencyScoped && agencies.length > 1 && (
                 <label className="hidden items-center gap-1.5 text-sm sm:flex">
@@ -560,22 +684,6 @@ function LayoutContent() {
                   </select>
                 </label>
               )}
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary font-heading text-xs font-semibold text-secondary-foreground">
-                  {user.name?.[0]?.toUpperCase() ?? "?"}
-                </span>
-                <div className="hidden text-right sm:block">
-                  <p className="text-sm font-medium text-foreground">{user.name}</p>
-                  <p className="text-xs text-muted">{ROLE_LABELS[user.role] ?? user.role}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => logout()}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors duration-fast hover:bg-black/[0.03]"
-              >
-                <IconLogout className="h-4 w-4" />
-                <span className="hidden sm:inline">Log out</span>
-              </button>
             </div>
           )}
         </header>

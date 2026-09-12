@@ -18,14 +18,14 @@ describe("SmtpEmailService", () => {
   it("sends through nodemailer with the configured from-address and message fields", async () => {
     const sendMail = mockTransport(async () => ({}));
 
-    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, user: "u", password: "p", from: "Tablecloth <no-reply@tablecloth.local>" });
+    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, user: "u", password: "p", from: "GarnishTable <no-reply@garnishtable.local>" });
     await service.send({ to: "owner@example.com", subject: "Hello", html: "<p>hi</p>", text: "hi" });
 
     expect(nodemailer.createTransport).toHaveBeenCalledWith(
       expect.objectContaining({ host: "smtp.example.com", port: 587, secure: false, auth: { user: "u", pass: "p" } })
     );
     expect(sendMail).toHaveBeenCalledWith({
-      from: "Tablecloth <no-reply@tablecloth.local>",
+      from: "GarnishTable <no-reply@garnishtable.local>",
       to: "owner@example.com",
       subject: "Hello",
       html: "<p>hi</p>",
@@ -35,13 +35,13 @@ describe("SmtpEmailService", () => {
 
   it("uses secure:true for port 465", async () => {
     mockTransport(async () => ({}));
-    new SmtpEmailService({ host: "smtp.example.com", port: 465, from: "no-reply@tablecloth.local" });
+    new SmtpEmailService({ host: "smtp.example.com", port: 465, from: "no-reply@garnishtable.local" });
     expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({ secure: true }));
   });
 
   it("omits auth when no user/password is configured", async () => {
     mockTransport(async () => ({}));
-    new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "no-reply@tablecloth.local" });
+    new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "no-reply@garnishtable.local" });
     expect(nodemailer.createTransport).toHaveBeenCalledWith(expect.objectContaining({ auth: undefined }));
   });
 
@@ -49,7 +49,7 @@ describe("SmtpEmailService", () => {
     mockTransport(async () => {
       throw new Error("connection refused");
     });
-    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "no-reply@tablecloth.local" });
+    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "no-reply@garnishtable.local" });
 
     await expect(
       service.send({ to: "owner@example.com", subject: "Hello", html: "<p>hi</p>", text: "hi" })

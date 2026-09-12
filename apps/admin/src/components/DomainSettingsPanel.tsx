@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { DomainMapping, DomainMappingStatus } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -148,6 +149,21 @@ export function DomainSettingsPanel() {
           <legend className="px-1 text-sm font-medium">{d.hostname}</legend>
           <Badge tone={STATUS_TONE[d.status]}>{STATUS_LABEL[d.status]}</Badge>
 
+          {/* Phase 64 — the domain mapping itself is never touched by a lapsed plan (nothing here
+              deletes or disables it), but the storefront stops actually resolving it while the plan
+              is unmet (restaurant.controller.ts's getRestaurantByDomain). Say so plainly rather than
+              silently leaving an "Active" badge that no longer reflects what a customer would see. */}
+          {!entitlementsLoading && !canAddDomain && d.status === "active" && (
+            <p className="text-xs text-amber-700">
+              Currently unavailable to customers — this domain's configuration is saved, and will work again once
+              you{" "}
+              <Link to="/billing" className="font-medium underline">
+                choose a plan
+              </Link>
+              .
+            </p>
+          )}
+
           {d.status === "pending_verification" && (
             <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-3 text-xs">
               <p className="text-foreground">
@@ -206,11 +222,14 @@ export function DomainSettingsPanel() {
         {!entitlementsLoading && !canAddDomain ? (
           <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-3 text-sm">
             <p className="flex items-center gap-1.5 font-medium text-foreground">
-              <Badge tone="warning">Upgrade required</Badge>
+              <Badge tone="warning">Requires an active plan</Badge>
             </p>
             <p className="text-muted">
-              Custom domains aren't included on your current plan. Upgrade to Owner — Growth (or an agency plan that
-              grants it) to connect your own domain to this storefront.
+              Custom domains require an active plan on this account.{" "}
+              <Link to="/billing" className="font-medium text-primary hover:underline">
+                Choose a plan
+              </Link>{" "}
+              to connect your own domain to this storefront.
             </p>
           </div>
         ) : (

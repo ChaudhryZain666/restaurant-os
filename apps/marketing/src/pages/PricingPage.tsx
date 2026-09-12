@@ -44,7 +44,7 @@ function planMonthlyCents(plan: PublicPlan): number {
  */
 export function PricingPage() {
   usePageMeta({
-    title: "Pricing — Tablecloth",
+    title: "Pricing — GarnishTable",
     description: "Simple, transparent pricing for restaurant online ordering. Start free, upgrade as you grow — no per-order commission.",
   });
 

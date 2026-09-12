@@ -1,5 +1,112 @@
 # Payment Provider Decision
 
+## Update — Phase 74: the terminal-ready architecture, and a structured provider-requirements breakdown
+
+Phase 73 (below) researched *whether* to integrate a real terminal and correctly concluded not to,
+for lack of any real account/hardware/market decision. Phase 74's job was narrower: build the
+architecture a real integration would plug into, without picking (or faking) a provider. What was
+built: `apps/api/src/payments/terminal/PaymentTerminalProvider.ts` (a provider-neutral interface —
+`POS -> Payment Terminal Service (posTerminalPayment.service.ts) -> Provider Adapter -> Physical
+Terminal`, exactly the boundary shape the brief asked for) and `MockTerminalProvider.ts`, a
+deterministic, clearly-fake, test/dev-only adapter (`env.POS_TERMINAL_PROVIDER=mock`) that makes
+the full state machine (pending/requires_action/authorized/paid/failed/cancelled + a client-side
+polling timeout) genuinely exercisable end to end in Playwright, without pretending real hardware
+exists anywhere the env var isn't explicitly set. See `docs/pos-architecture.md`'s own Phase 74
+section for the full architecture writeup, endpoints, and the two-factor (`POS_TERMINAL_PROVIDER`
++ `Restaurant.settings.posTerminalEnabled`) opt-in gate.
+
+**International architecture — deliberately provider-neutral, not Pakistan- or Stripe-shaped.** The
+interface has zero country- or provider-specific concepts in it (no "Safepay reader," no "Stripe
+location") — it is just `createPayment`/`retrieve`/`cancel` against an opaque `providerRef`, the
+same shape `PaymentProvider.ts` already proved works for two structurally different online
+providers (Safepay's hosted checkout, Stripe's Checkout Sessions). Adding a real adapter for
+whichever market/provider a future phase targets is additive (a new class implementing the same
+interface, registered in `payments/terminal/index.ts` exactly like `MockTerminalProvider` is today)
+— never a reason to touch the POS UI, the `Payment` model, or any other provider's adapter.
+
+**Real-provider requirements — structured by confidence, not asserted as fact:**
+
+| Requirement | Stripe Terminal | Status |
+|---|---|---|
+| Merchant/provider account | A Stripe account (same one `StripeProvider`/BYOC already integrates against for online payments) | **Confirmed** (from Stripe's public docs) — but see country gate below |
+| Country availability | Must be one of Stripe's ~46 fully-supported countries | **Confirmed not Pakistan** — this platform's primary documented market (see "Why Safepay" below) |
+| Device/reader registration | A `Location` and `Reader` object per physical device, registered via Stripe's API | **Confirmed** (public API reference) — not implemented |
+| Connection token | A server endpoint the Terminal SDK calls to authenticate the reader — distinct from the existing Checkout-Session-based `StripeProvider.createIntent` | **Confirmed as a real, additional requirement** — no such endpoint exists in this codebase yet |
+| Payment intent/capture flow | A `PaymentIntent` created with an in-person `capture_method`, confirmed by the reader itself | **Confirmed shape, not implemented** |
+| Webhook/event reconciliation | Same webhook infrastructure `StripeProvider`'s online flow already uses | **Confirmed reusable** — `processProviderEvent`'s idempotent-event pattern would apply directly |
+| Refunds | Same Stripe refund API `StripeProvider.refund` already implements | **Confirmed reusable**, unverified against a live Terminal transaction specifically |
+| Hardware | A physical Stripe Terminal reader (e.g. WisePOS E, BBPOS) must be purchased/provisioned | **Requires a real purchase/account** — cannot be verified in this environment |
+| Certification | None beyond a standard Stripe account, per Stripe's public docs | **Confirmed (public docs)**, not independently verified against a live integration |
+
+| Requirement | Pakistan (this platform's stated primary market) | Status |
+|---|---|---|
+| A "Safepay Terminal" equivalent | Does not exist — Safepay is online/hosted-checkout only | **Confirmed** (fresh search this phase, and Phase 74's own re-check) |
+| Bank-issued EDC hardware (Meezan/HBL/MCB/Bank Alfalah, etc.) | Each bank sells its own terminal with its own proprietary ECR/API integration; no cross-bank standard found | **Confirmed to exist**, but which bank, what its real API contract is, and the resulting merchant/reseller agreement are **unknown — requires a direct partnership with a specific bank to even begin verifying** |
+| A market-wide aggregator (a single API in front of multiple banks' EDC networks) | Searched for, not found | **Unknown / not found in this pass's research** — may not exist; would need direct outreach to confirm |
+
+No credentials, sandbox account, or physical hardware for any of the above were available in this
+environment this phase either. Nothing in the codebase claims otherwise — `MockTerminalProvider` is
+the only implementation, is never the default, and its own class doc comment states plainly that no
+physical device is ever contacted.
+
+## Update — Phase 73: physical card-terminal (POS) integration — researched, not built
+
+Phase 73 asked whether the POS register should integrate a real physical card-terminal provider
+(the brief's own example: Stripe Terminal) so a card payment rung up in person is actually
+confirmed by hardware before an order is marked paid, instead of a staff member's own attestation.
+
+**What was audited first**: before this phase, a POS card payment was already honestly documented
+(see `docs/pos-architecture.md`'s original "Payment" section) as functionally identical to cash —
+staff taps "Card", the order is marked paid immediately, nothing is charged or verified by this
+system. That is still true after this phase in one respect (no hardware is actually wired up) but
+no longer true in another: **every POS payment, cash or card, now requires an explicit staff
+confirmation step before the order is marked paid** (`PaymentConfirmation.tsx`,
+`pos.controller.ts`'s `createPosOrder` now always receives `markPaidImmediately: false` from the
+register) — a mis-tap can no longer instantly mark a sale paid the way it could before.
+
+**Why a real terminal integration was not attempted this phase — evidence, not assumption**:
+
+1. This platform's payment architecture is already Pakistan-first by explicit prior decision (see
+   "Why Safepay" below) — `apps/api/src/payments/eligibility.ts` routes Pakistan to Safepay and
+   everywhere else to Stripe, precisely because **Stripe does not operate in Pakistan** at all.
+   Stripe Terminal is a feature of a Stripe account; a country Stripe doesn't serve gets no Stripe
+   Terminal either, by construction — confirmed against Stripe's own current (2026) supported-
+   country list (46 fully supported countries; Pakistan is not among them), not merely re-asserting
+   the earlier Phase 15 finding.
+2. **Safepay has no physical-terminal or card-reader product at all** (confirmed via a fresh web
+   search this phase) — it is, and has only ever been documented as, an online/hosted-checkout
+   gateway. There is no "Safepay Terminal" to integrate against.
+3. The real physical card-terminal landscape in Pakistan today is bank-issued EDC/POS hardware
+   (Meezan Bank, HBL, MCB, Bank Alfalah, and others each sell their own terminal with their own
+   proprietary ECR/API integration) — there is no single cross-bank SDK equivalent to Stripe
+   Terminal's, and integrating one specific bank's proprietary protocol would require a direct
+   merchant/reseller agreement with that one bank, serving only restaurants banked there. That is a
+   business-partnership decision, not an engineering one, and this phase has no basis to make it.
+4. No real credentials, sandbox account, or hardware for ANY terminal provider (Stripe Terminal
+   included) were available in this environment. Per the brief's explicit Section 31 instruction,
+   this phase does not simulate a fake "terminal" success state to paper over that gap.
+
+**What this means concretely, and what a future phase would need**:
+
+- For a Stripe-eligible restaurant (US/UK/Canada/etc.), **Stripe Terminal is the correct
+  recommendation** once a real need exists: it reuses the exact Stripe account/credentials this
+  platform's `StripeProvider`/BYOC (`RestaurantPaymentAccount`) already handles for online payment,
+  needs a `location`/`reader` object registered per restaurant location, a server-side
+  `connection_token` endpoint (new, small — Stripe's terminal SDK calls this to authenticate the
+  reader, distinct from the existing Checkout-Session-based `StripeProvider`), and a
+  `PaymentIntent` created with `capture_method` suited to in-person capture; the POS's new
+  `PaymentConfirmation` step is already shaped to slot a real "waiting for terminal" /
+  success / declined / timeout state machine in without a redesign — it just has no hardware to
+  drive that state machine with yet.
+- For Pakistan (this platform's primary market), **there is no drop-in equivalent today**. Building
+  one means picking a specific partner bank (or a payment aggregator that itself wraps multiple
+  banks' EDC networks, if one with a public API can be found and verified — none was located in
+  this pass's research) and is a genuinely separate, larger initiative than this phase's scope.
+- Until either is built, in-person card payment on this platform remains, correctly and
+  transparently, staff-attested — the register's own copy now says exactly that ("Charge $X on
+  your card terminal, then confirm the result here") rather than implying any software-side
+  verification is happening.
+
 ## Update — restaurant-owned payment accounts (BYOC)
 
 The "Per-restaurant payment accounts: not built, deliberately deferred" line in the summary table

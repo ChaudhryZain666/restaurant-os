@@ -2,10 +2,16 @@ import mongoose from "mongoose";
 import { test, expect } from "@playwright/test";
 
 /**
- * Phase 59 (entitlement/pricing audit) — proves, through the real browser UI (not just the Jest
- * service-level tests in agencyEntitlementInheritance.service.test.ts), that a managed business's
- * entitlement-gated pages actually reflect its managing agency's real, live subscription — and that
- * the storefront/functionality is never broken when that agency subscription later expires.
+ * Phase 59 (entitlement/pricing audit), corrected by Phase 63 — proves, through the real browser UI
+ * (not just the Jest service-level tests in agencyEntitlementInheritance.service.test.ts and
+ * subscriptionResolution.service.ts's own tests), that a managed business's entitlement-gated pages
+ * actually reflect its managing agency's real, live subscription — and, critically, that once that
+ * agency subscription expires, the managed business does NOT silently regain the feature through the
+ * generous no-subscription fallback. Phase 61/Phase 59 originally asserted the OPPOSITE (expiring
+ * "unlocks" the feature again) — that was the exact commercial-safety bug Phase 63 found and fixed:
+ * an agency that HAS had a real subscription is never treated the same as one that never subscribed.
+ * Core operability (the restaurant/storefront itself) is still never broken — only the specific
+ * paid-tier feature this plan excludes stays gated, exactly as it should.
  *
  * No restrictive AGENCY-type plan is selectable through the real signup/checkout UI (the only
  * active agency plan in the real catalog, agency_growth_v2, grants custom_domains), so this test
@@ -16,6 +22,15 @@ import { test, expect } from "@playwright/test";
  */
 test.describe.serial("agency-managed business entitlement inheritance, live in the UI (Phase 59)", () => {
   let db: mongoose.Connection;
+  // Phase 61 audit fix — this spec seeds a real AGENCY-type Plan (isActive:true) directly via
+  // MongoDB (no restrictive agency plan is selectable through the real UI). The original version
+  // of this test never deleted it, leaking a real, isActive:true "Test Plan" into the shared dev
+  // database's actual /public/plans catalog on every run — the exact class of pollution
+  // e2e/agency-management.spec.ts's own Phase 40.1 fix and apps/api/src/scripts/
+  // cleanupOrphanedTestPlans.ts already exist to prevent elsewhere. Tracked and deleted here now,
+  // matching that established convention.
+  const createdPlanIds: mongoose.mongo.BSON.ObjectId[] = [];
+  const createdSubscriptionIds: mongoose.mongo.BSON.ObjectId[] = [];
 
   test.beforeAll(async () => {
     const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
@@ -23,10 +38,12 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
   });
 
   test.afterAll(async () => {
+    if (createdSubscriptionIds.length) await db.collection("subscriptions").deleteMany({ _id: { $in: createdSubscriptionIds } });
+    if (createdPlanIds.length) await db.collection("plans").deleteMany({ _id: { $in: createdPlanIds } });
     await db.close();
   });
 
-  test("a restrictive agency plan locks Domains in-workspace; the agency's subscription expiring unlocks it again, never breaking the page", async ({
+  test("a restrictive agency plan locks Domains in-workspace; the agency's subscription expiring keeps it locked — it must never silently unlock via the no-subscription fallback (Phase 63)", async ({
     page,
   }) => {
     test.setTimeout(90_000);
@@ -82,6 +99,7 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    createdPlanIds.push(planResult.insertedId);
     const now = new Date();
     const subResult = await db.collection("subscriptions").insertOne({
       ownerType: "agency",
@@ -95,6 +113,7 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
       createdAt: now,
       updatedAt: now,
     });
+    createdSubscriptionIds.push(subResult.insertedId);
 
     // --- Enter the client workspace and open Settings > Domain — the entitlement this agency's
     // restrictive plan excludes. ---
@@ -109,14 +128,15 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
 
     await page.getByRole("link", { name: "Settings" }).click();
     await page.getByRole("button", { name: "Domain", exact: true }).click();
-    await expect(page.getByText("Upgrade required")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Custom domains aren't included on your current plan/i)).toBeVisible();
+    await expect(page.getByText("Requires an active plan")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Custom domains require an active plan on this account/i)).toBeVisible();
     await expect(page.getByPlaceholder("orders.yourrestaurant.com")).toHaveCount(0);
 
     // --- The agency's subscription expires (the real, existing state machine — no second lifecycle
-    // invented). Inherited entitlements must stop immediately, falling through to the generous
-    // no-subscription default, so the managed business's storefront/functionality is never broken by
-    // its agency's billing lapsing (Section 5's explicit safety requirement). ---
+    // invented). Phase 63 fix: this business's managed-entitlement source is now "lapsed" — the
+    // agency HAS a real subscription history, just not a live one — which must NEVER be treated the
+    // same as "this business's chain never had a subscription at all." The feature must stay denied,
+    // not silently re-granted through the generous no-subscription fallback. ---
     await db.collection("subscriptions").updateOne({ _id: subResult.insertedId }, { $set: { status: "expired" } });
 
     // A full page.reload() races AuthProvider's mount-time refresh under React StrictMode and can
@@ -126,7 +146,10 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
     await page.getByRole("link", { name: "Menu", exact: true }).click();
     await page.getByRole("link", { name: "Settings" }).click();
     await page.getByRole("button", { name: "Domain", exact: true }).click();
-    await expect(page.getByText("Upgrade required")).toHaveCount(0, { timeout: 10_000 });
-    await expect(page.getByPlaceholder("orders.yourrestaurant.com")).toBeVisible();
+    // Still locked — the core Phase 63 safety proof, live in the real UI, not just at the Jest
+    // service level. Core operability (this page rendering at all, Menu/Locations still reachable)
+    // is unaffected either way — only this specific paid-tier feature stays gated.
+    await expect(page.getByText("Requires an active plan")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByPlaceholder("orders.yourrestaurant.com")).toHaveCount(0);
   });
 });

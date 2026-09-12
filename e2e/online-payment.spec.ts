@@ -18,14 +18,17 @@ import { test, expect } from "@playwright/test";
  * database shortcut.
  */
 
-/** Margherita Pizza has a required "Size" modifier group in seed data — "Add to cart" expands an
- *  in-place selector rather than adding directly, exactly like full-order-flow.spec.ts's item. */
+/** Margherita Pizza has a required "Size" modifier group in seed data — "Add to order" opens the
+ *  item-detail overlay's selector rather than adding directly, exactly like full-order-flow.spec.ts's
+ *  item. Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a
+ *  large-photograph overlay (role="dialog"), not an inline row expansion. */
 async function addMargheritaToCart(page: import("@playwright/test").Page) {
   const itemRow = page.locator("li", { hasText: "Margherita Pizza" });
   await itemRow.scrollIntoViewIfNeeded();
-  await itemRow.getByRole("button", { name: "Add to cart" }).click({ timeout: 15_000 });
-  await itemRow.getByText("Small", { exact: false }).click();
-  await itemRow.getByRole("button", { name: "Confirm add to cart" }).click();
+  await itemRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
+  const detailDialog = page.getByRole("dialog");
+  await detailDialog.getByText("Small", { exact: false }).click();
+  await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 }
 
 test.describe("online payment", () => {
@@ -42,7 +45,9 @@ test.describe("online payment", () => {
       await ownerPage.getByLabel("Email").fill("owner@demo-restaurant.local");
       await ownerPage.getByLabel("Password").fill("Owner123!");
       await ownerPage.getByRole("button", { name: "Sign in" }).click();
-      await ownerPage.getByRole("link", { name: "Orders" }).click();
+      // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+      // also matches a bare page-wide "Orders" substring query while the owner sits on Dashboard).
+      await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       await expect(ownerPage.getByRole("heading", { name: "Orders" })).toBeVisible();
 
       await customerPage.goto("http://localhost:5173/login");
@@ -80,7 +85,9 @@ test.describe("online payment", () => {
       // The owner's Orders page was loaded before this order existed and doesn't poll — a
       // client-side nav (not a full reload, see the comment further down) re-fetches it.
       await ownerPage.getByRole("link", { name: "Dashboard" }).click();
-      await ownerPage.getByRole("link", { name: "Orders" }).click();
+      // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+      // also matches a bare page-wide "Orders" substring query while the owner sits on Dashboard).
+      await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       const orderGroup = ownerPage.getByRole("group", { name: `Order ${orderNumber}` });
       await expect(orderGroup).toBeVisible({ timeout: 10_000 });
       await expect(orderGroup.getByText("Waiting for payment")).toBeVisible();
@@ -100,7 +107,9 @@ test.describe("online payment", () => {
       // bounce back to /login (see the identical comment in full-order-flow.spec.ts). Navigating
       // away and back remounts OrdersManagementPage's own data fetch without touching auth.
       await ownerPage.getByRole("link", { name: "Dashboard" }).click();
-      await ownerPage.getByRole("link", { name: "Orders" }).click();
+      // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+      // also matches a bare page-wide "Orders" substring query while the owner sits on Dashboard).
+      await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       const orderGroupAfter = ownerPage.getByRole("group", { name: `Order ${orderNumber}` });
       await expect(orderGroupAfter).toBeVisible();
       await expect(orderGroupAfter.getByRole("button", { name: "Accept" })).toBeVisible({ timeout: 10_000 });

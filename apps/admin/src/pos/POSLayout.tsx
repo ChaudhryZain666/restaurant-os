@@ -1,10 +1,34 @@
+import { useEffect, useState } from "react";
 import { useNavigate, NavLink, Outlet } from "react-router-dom";
 import { useToast } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { RestaurantSettingsProvider, useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useRestaurantOrderEvents } from "../hooks/useRestaurantOrderEvents";
-import { IconArrowLeft, IconClipboard, IconRegister, IconTable, IconUsers } from "../components/icons";
+import { IconArrowLeft, IconClipboard, IconClock, IconLock, IconRegister, IconTable, IconUsers } from "../components/icons";
+import { LockScreen } from "./components/LockScreen";
+
+/** Phase 73 — sessionStorage (not localStorage): a locked terminal should demand re-auth again
+ *  after this browser tab is closed and reopened, but shouldn't need a second, independent
+ *  "remember to lock it" mechanism from the one the OS/browser session already provides. Keyed
+ *  per-tab by design (sessionStorage's own semantics), not per-user — the point is "is THIS
+ *  terminal currently locked," not which account locked it. */
+const LOCK_KEY = "pos.locked";
+
+/** Phase 75 — a per-device preference (localStorage, like LOCK_KEY's own sessionStorage), not a
+ *  server-side/Restaurant.settings field: this is "how long before THIS screen locks itself,"
+ *  not a business policy that needs to sync across devices — the same reasoning that kept Phase
+ *  74 from inventing a persistent terminal/device entity applies here too. Off (0) by default —
+ *  the safest choice for every existing deployment, which had no idle-lock behavior at all before
+ *  this phase. */
+const IDLE_TIMEOUT_KEY = "pos.idleTimeoutMinutes";
+const IDLE_TIMEOUT_OPTIONS = [
+  { minutes: 0, label: "Off" },
+  { minutes: 5, label: "5 minutes" },
+  { minutes: 10, label: "10 minutes" },
+  { minutes: 15, label: "15 minutes" },
+  { minutes: 30, label: "30 minutes" },
+];
 
 /**
  * Dedicated POS application shell — a genuinely separate frontend surface from the admin portal's
@@ -33,6 +57,10 @@ const NAV_ITEMS = [
   { to: "/pos/tables", label: "Tables", icon: IconTable },
   { to: "/pos/customers", label: "Customers", icon: IconUsers },
   { to: "/pos/orders", label: "Orders", icon: IconClipboard },
+  // Phase 75 — deliberately its own nav destination, not folded into "Orders": Orders is a
+  // read-only reference list of everything; Pending is the actionable recovery surface (Resume/
+  // Cancel) for specifically unpaid POS sales — see PendingSalesPage.tsx.
+  { to: "/pos/pending", label: "Pending", icon: IconClock },
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
@@ -48,6 +76,41 @@ function POSLayoutContent() {
   const { restaurant } = useRestaurantSettings();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [locked, setLocked] = useState(() => sessionStorage.getItem(LOCK_KEY) === "1");
+  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState(() => Number(localStorage.getItem(IDLE_TIMEOUT_KEY) ?? "0") || 0);
+
+  useEffect(() => {
+    if (locked) sessionStorage.setItem(LOCK_KEY, "1");
+    else sessionStorage.removeItem(LOCK_KEY);
+  }, [locked]);
+
+  useEffect(() => {
+    localStorage.setItem(IDLE_TIMEOUT_KEY, String(idleTimeoutMinutes));
+  }, [idleTimeoutMinutes]);
+
+  // Phase 75 — auto-lock after real mouse/keyboard/touch inactivity. Deliberately disabled while
+  // already locked: the register underneath is `inert` (no events reach it), and there is nothing
+  // useful for an idle timer to do until it's unlocked again — starting one here would just be
+  // dead weight, not a race, since LockScreen's own inputs aren't tracked by this listener anyway.
+  // Never touches `pendingPaymentOrder`/in-flight payment state — locking only ever mounts the
+  // LockScreen overlay alongside the existing register tree (see the JSX below), so an in-flight
+  // terminal-payment poll (TerminalCardPayment.tsx) keeps running underneath exactly as it does
+  // during a manual lock.
+  useEffect(() => {
+    if (locked || idleTimeoutMinutes <= 0) return;
+    let timer: ReturnType<typeof setTimeout>;
+    function reset() {
+      clearTimeout(timer);
+      timer = setTimeout(() => setLocked(true), idleTimeoutMinutes * 60_000);
+    }
+    const events: Array<keyof WindowEventMap> = ["mousemove", "keydown", "touchstart", "click"];
+    events.forEach((event) => window.addEventListener(event, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((event) => window.removeEventListener(event, reset));
+    };
+  }, [locked, idleTimeoutMinutes]);
 
   useRestaurantOrderEvents((event) => {
     if (event.type !== "order.created") return;
@@ -90,6 +153,29 @@ function POSLayoutContent() {
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {user?.name?.[0]?.toUpperCase() ?? "?"}
           </span>
+          <label className="hidden items-center gap-1 text-xs text-muted md:flex">
+            Auto-lock
+            <select
+              value={idleTimeoutMinutes}
+              onChange={(e) => setIdleTimeoutMinutes(Number(e.target.value))}
+              aria-label="Auto-lock after inactivity"
+              className="rounded-md border border-border bg-background px-1.5 py-1 text-xs font-medium text-foreground"
+            >
+              {IDLE_TIMEOUT_OPTIONS.map((opt) => (
+                <option key={opt.minutes} value={opt.minutes}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={() => setLocked(true)}
+            aria-label="Lock POS"
+            className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+          >
+            <IconLock className="h-3.5 w-3.5" />
+            Lock
+          </button>
           <button
             onClick={() => logout()}
             aria-label="Log out"
@@ -100,7 +186,9 @@ function POSLayoutContent() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {locked && <LockScreen onUnlock={() => setLocked(false)} />}
+
+      <div className="flex min-h-0 flex-1" inert={locked}>
         {/* The nav rail — narrow, dark, operational. Deliberately the opposite of Layout.tsx's
             240px labeled-group sidebar: four destinations, icon-first, no section headers. */}
         <nav

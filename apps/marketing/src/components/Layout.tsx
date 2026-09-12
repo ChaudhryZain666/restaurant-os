@@ -15,13 +15,13 @@ function useSiteStructuredData() {
       "@graph": [
         {
           "@type": "Organization",
-          name: "Tablecloth",
+          name: "GarnishTable",
           url: window.location.origin,
           logo: `${window.location.origin}/favicon.svg`,
         },
         {
           "@type": "WebSite",
-          name: "Tablecloth",
+          name: "GarnishTable",
           url: window.location.origin,
         },
       ],

@@ -11,8 +11,7 @@ import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderSubs
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
 import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 import { resolveOwnerIdentity } from "./ownerIdentity.service.js";
-
-const LIVE_STATUSES: SubscriptionStatus[] = ["trialing", "active", "past_due", "cancelling"];
+import { LIVE_STATUSES } from "./subscriptionResolution.service.js";
 
 const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
 
@@ -641,5 +640,54 @@ export async function processBillingProviderEvent(providerName: string, event: P
       { $set: { processingError: (err as Error).message }, $unset: { processingStartedAt: "" } }
     );
     throw err;
+  }
+}
+
+/**
+ * Phase 63 — the autonomous mechanism this codebase was missing entirely. Before this phase, the
+ * ONLY thing that ever transitioned a `"trialing"` subscription to `"expired"` was a real billing
+ * provider's webhook reporting the trial ended unconverted (resolveTransitionTarget above) — a
+ * trigger that has never fired once, in any environment, since no environment has ever had a live,
+ * connected provider. That meant every trial silently stayed `"trialing"` — a LIVE status carrying
+ * full plan entitlements — forever, regardless of how much real time had actually passed.
+ *
+ * entitlementLimit.service.ts's/agencyEntitlement.service.ts's own real-time boundary check
+ * (subscriptionResolution.service.ts's isSubscriptionLive) already makes entitlement/capacity
+ * DECISIONS correct the instant a trial's `trialEnd` passes, independent of this job's cadence — so
+ * this sweep is not itself the source of correctness. Its job is to eventually persist
+ * `status: "expired"` on the document too, so billing history, the admin/billing-page display, and
+ * any other code that reads `status` directly (rather than through the boundary-aware resolver) also
+ * reflects reality — and so a real, later provider webhook transition finds the expected prior state
+ * instead of a permanently-stale `"trialing"`.
+ *
+ * Registered as a repeatable job (registerTrialExpirationJob, notification.queue.ts) — mirrors
+ * runTrialEndingReminderSweep's exact shape: a plain query for candidates, then one atomic
+ * findOneAndUpdate per candidate guarded by `status: "trialing"` in the filter (not a check-then-
+ * write), so a real concurrent conversion or cancellation racing this sweep can never be clobbered —
+ * whichever one lands first wins, and the sweep silently skips anything it no longer matches.
+ */
+export async function runTrialExpirationSweep(): Promise<void> {
+  const now = new Date();
+  const candidates = await Subscription.find({
+    status: "trialing",
+    trialEnd: { $lte: now },
+    provider: { $ne: "internal" },
+  }).select("_id");
+
+  for (const candidate of candidates) {
+    const updated = await Subscription.findOneAndUpdate(
+      { _id: candidate._id, status: "trialing" },
+      { $set: { status: "expired" } },
+      { new: true }
+    );
+    if (!updated) continue; // a real conversion/cancellation/reactivation already moved this one
+
+    await recordBillingHistoryEvent({
+      ownerType: updated.ownerType as SubscriptionOwnerType,
+      ownerId: updated.ownerId.toString(),
+      subscriptionId: updated._id,
+      type: "expired",
+      provider: updated.provider,
+    });
   }
 }

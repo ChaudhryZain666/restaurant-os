@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { roleHomePath } from "../lib/roleHome";
 
@@ -9,6 +9,7 @@ const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,16 @@ export function LoginPage() {
     setError(null);
     try {
       const user = await login(email, password);
-      navigate(roleHomePath(user.role));
+      // Phase 73 — a direct, unauthenticated hit to a route like /pos gets bounced here by
+      // RequireAuth with the original path in location.state.from; returning there (rather than
+      // always going to the role's generic home) is what makes "open the POS URL, sign in, land
+      // on POS" work without an Owner Portal detour. Falls back to the normal role-home mapping
+      // when there was no specific destination (e.g. navigating to /login directly). RequireAuth
+      // independently re-checks permission on render, so an invalid/unauthorized `from` (stale,
+      // tampered, or simply a page this role can't reach) just bounces to the role's home exactly
+      // as before — this is a UX convenience, never a second authorization path.
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from || roleHomePath(user.role));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -31,11 +41,8 @@ export function LoginPage() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm animate-scale-in">
-        <div className="mb-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-bold text-primary-foreground">
-            T
-          </span>
-          <span className="font-heading text-lg font-semibold text-foreground">Tablecloth</span>
+        <div className="mb-5">
+          <Logo />
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
           <h1 className="font-heading text-2xl font-semibold text-foreground">Sign in</h1>

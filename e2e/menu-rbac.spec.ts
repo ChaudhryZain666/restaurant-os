@@ -15,7 +15,9 @@ test.describe("menu page — role-based write controls", () => {
     await page.locator('input[type="email"]').fill("staff@demo-restaurant.local");
     await page.locator('input[type="password"]').fill("Staff123!");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query for the owner case below).
+    await page.locator("aside nav").getByRole("link", { name: "Menu" }).click();
     await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 
     // Staff can see the menu content itself...
@@ -50,7 +52,9 @@ test.describe("menu page — role-based write controls", () => {
     await page.locator('input[type="email"]').fill("owner@demo-restaurant.local");
     await page.locator('input[type="password"]').fill("Owner123!");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query for the owner case below).
+    await page.locator("aside nav").getByRole("link", { name: "Menu" }).click();
     await expect(page.getByRole("button", { name: "+ Add menu item" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add category" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit", exact: true }).first()).toBeVisible();

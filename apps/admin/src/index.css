@@ -3,18 +3,21 @@
 @tailwind utilities;
 
 /**
- * Design tokens — identical values to apps/web and apps/marketing, so the whole product (public
- * site, customer storefront, restaurant dashboard) shares one visual language. Each Vite app
- * needs its own copy (Tailwind's static config can't share a runtime CSS file across workspace
- * packages) — see packages/ui/src/theme/tokens.ts for the typed shape all three satisfy.
+ * Design tokens. Layout/spacing/shadow/motion tokens below are still shared with apps/web (the
+ * restaurant storefront's own default theme) since they're not brand-specific. The brand colors
+ * and typefaces, however, are GarnishTable's own (Phase 66) — this admin app is a platform-owned
+ * surface, not a restaurant's storefront, so it carries the platform brand rather than the
+ * storefront default. apps/web's own index.css is deliberately left on the old warm palette: a
+ * restaurant's storefront must never inherit the platform's own branding (white-label separation).
+ * See packages/ui/src/theme/tokens.ts for the typed shape all three satisfy.
  */
 :root {
-  --color-primary: #c2410c;
-  --color-primary-foreground: #fffaf5;
-  --color-secondary: #292524;
+  --color-primary: #611b28;
+  --color-primary-foreground: #fcfaf5;
+  --color-secondary: #171416;
   --color-secondary-foreground: #fafaf9;
-  --color-accent: #b45309;
-  --color-accent-foreground: #fffaf5;
+  --color-accent: #7a4550;
+  --color-accent-foreground: #fcfaf5;
   --color-background: #fbf9f7;
   --color-surface: #ffffff;
   --color-surface-elevated: #ffffff;
@@ -25,8 +28,23 @@
   --color-warning: #b45309;
   --color-danger: #dc2626;
 
-  --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* Phase 68 — the desktop/mobile nav shell's own dark anchor (GT Deep), so Layout.tsx never
+     hardcodes brand hex literals. Active state deliberately reuses --color-primary/
+     --color-primary-foreground (GT Wine/GT Ivory) rather than a third color, per the brand
+     system's own "wine = active/selected" convention already established elsewhere in the app. */
+  --color-sidebar: #24171b;
+  --color-sidebar-foreground: #fcfaf5;
+  /* A literal, pre-dimmed ivory (not `text-sidebar-foreground/NN`) — Tailwind opacity modifiers
+     can't be applied to a custom color already defined as a raw var() string (see Footer.tsx's
+     Phase 51/66 nav-bar-contrast fix for the same underlying limitation). */
+  --color-sidebar-foreground-dim: rgba(252, 250, 245, 0.72);
+  --color-sidebar-muted: rgba(246, 240, 226, 0.56);
+  --color-sidebar-muted-soft: rgba(246, 240, 226, 0.38);
+  --color-sidebar-border: rgba(246, 240, 226, 0.1);
+  --color-sidebar-hover: rgba(122, 69, 80, 0.28);
+
+  --font-heading: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.625rem;

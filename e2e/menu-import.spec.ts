@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -7,12 +8,42 @@ import { test, expect } from "@playwright/test";
  * scenario" requirement. Uses the seeded demo-restaurant owner account (already-canonical
  * business, per menu-rbac.spec.ts) rather than a fresh restaurant, since that's the realistic case
  * a real owner with an existing menu would be in.
+ *
+ * Phase 65 — this spec imports directly into the SHARED demo-restaurant fixture (the same one the
+ * marketing site's live storefront embed shows real prospects), and previously never cleaned up
+ * after itself: every run left a permanent "Imported Category <timestamp>"/"Error Test Category"
+ * category sitting in that restaurant's real, public menu. Confirmed live — 14 such categories and
+ * 26 items had accumulated in the dev database and were visibly polluting the actual marketing
+ * demo before this fix. Now tracked and deleted in `afterAll`, the same pollution-prevention
+ * pattern already established elsewhere in this suite (e.g. agency-management.spec.ts).
  */
 test.describe("menu importer", () => {
+  let db: mongoose.Connection;
+  const categoryNamesToClean: string[] = [];
+
+  test.beforeAll(async () => {
+    const conn = await mongoose.createConnection(process.env.MONGO_URI ?? "mongodb://localhost:27017/restaurant_platform").asPromise();
+    db = conn;
+  });
+
+  test.afterAll(async () => {
+    if (categoryNamesToClean.length) {
+      const categories = await db.collection("categories").find({ name: { $in: categoryNamesToClean } }).toArray();
+      const categoryIds = categories.map((c) => c._id);
+      const items = await db.collection("menuitems").find({ categoryId: { $in: categoryIds } }).toArray();
+      const itemIds = items.map((i) => i._id);
+      await db.collection("modifiergroups").deleteMany({ menuItemId: { $in: itemIds } });
+      await db.collection("menuitems").deleteMany({ _id: { $in: itemIds } });
+      await db.collection("categories").deleteMany({ _id: { $in: categoryIds } });
+    }
+    await db.close();
+  });
+
   test("owner imports a CSV menu, reviews the preview, confirms, and the new items appear in the admin editor and the storefront", async ({ page }) => {
     const suffix = Date.now();
     const categoryName = `Imported Category ${suffix}`;
     const itemName = `Imported Burger ${suffix}`;
+    categoryNamesToClean.push(categoryName);
     const csv = [
       "category,item_name,description,price,available,sort_order",
       `${categoryName},${itemName},A freshly imported item,13.50,true,1`,
@@ -22,7 +53,9 @@ test.describe("menu importer", () => {
     await page.locator('input[type="email"]').fill("owner@demo-restaurant.local");
     await page.locator('input[type="password"]').fill("Owner123!");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByRole("link", { name: "Menu" }).click();
+    // Scoped to the nav landmark (Phase 71 — Dashboard's own "Add menu item" quick-action link
+    // also matches a bare page-wide "Menu" substring query once the owner lands there post-login).
+    await page.locator("aside nav").getByRole("link", { name: "Menu" }).click();
     await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 
     await page.getByRole("link", { name: "Import menu" }).click();
@@ -67,6 +100,9 @@ test.describe("menu importer", () => {
     const suffix = Date.now();
     const goodItemName = `Valid Item ${suffix}`;
     const badItemName = `Bad Price Item ${suffix}`;
+    // Fixed name (not timestamped, unlike the category above) — pushed once per run regardless;
+    // the afterAll cleanup query is idempotent either way.
+    if (!categoryNamesToClean.includes("Error Test Category")) categoryNamesToClean.push("Error Test Category");
     const csv = [
       "category,item_name,description,price,available,sort_order",
       `Error Test Category,${goodItemName},Fine,9.99,true,1`,

@@ -55,6 +55,18 @@ const planSchema = new Schema(
     // dedicated field of its own yet. Never read for authorization/entitlement decisions.
     metadata: { type: Schema.Types.Mixed },
     isActive: { type: Boolean, default: true },
+    // Phase 63 — additive, defaults to true so every existing plan is completely unaffected. Lets a
+    // future negotiated/custom agency arrangement (Phase 62/63's "larger agencies contact us for
+    // volume pricing" strategy) exist as a REAL, fully-functional Plan document — selectable for a
+    // subscription, its entitlements resolved through the exact same resolver as any other plan —
+    // without ever appearing on the public marketing pricing page or the self-serve signup wizard's
+    // plan picker (both read GET /public/plans, which now filters on this). Deliberately NOT wired
+    // into self-serve subscription creation's own `isActive` check — that stays unchanged; treat an
+    // unlisted plan's `code` as not-for-casual-sharing until/unless a future phase decides that gap
+    // needs closing too. No pricing tiers, ranges, or assignment flow were invented here — only the
+    // one flag needed so such a plan CAN exist safely later, per this phase's own explicit scope
+    // boundary against building a full enterprise pricing engine now.
+    isPubliclyListed: { type: Boolean, default: true },
   },
   { timestamps: true, toJSON: idTransform }
 );

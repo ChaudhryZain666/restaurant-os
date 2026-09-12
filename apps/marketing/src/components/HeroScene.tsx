@@ -91,7 +91,7 @@ export function HeroScene() {
             z-ordering unpredictably across browsers, so "in front of" has to mean "not
             overlapping," not "a higher translateZ"). */}
         <div
-          className="absolute -bottom-6 -right-3 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[#171310]/95 px-3.5 py-2.5 shadow-lg backdrop-blur sm:flex"
+          className="absolute -bottom-6 -right-3 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[color:var(--color-surface)]/95 px-3.5 py-2.5 shadow-lg backdrop-blur sm:flex"
           style={{ transform: `translateZ(60px)` }}
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-success/15 text-success">
@@ -106,7 +106,7 @@ export function HeroScene() {
         </div>
 
         <div
-          className="absolute -right-6 top-8 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[#171310]/95 px-3.5 py-2.5 shadow-lg backdrop-blur lg:flex"
+          className="absolute -right-6 top-8 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[color:var(--color-surface)]/95 px-3.5 py-2.5 shadow-lg backdrop-blur lg:flex"
           style={{ transform: `translateZ(60px)` }}
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-info/15 text-info">

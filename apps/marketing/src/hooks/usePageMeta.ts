@@ -58,7 +58,7 @@ export function usePageMeta({ title, description }: PageMeta): void {
     addMeta("property", "og:description", description);
     addMeta("property", "og:type", "website");
     addMeta("property", "og:url", url);
-    addMeta("property", "og:site_name", "Tablecloth");
+    addMeta("property", "og:site_name", "GarnishTable");
     addMeta("property", "og:image", `${window.location.origin}/favicon.svg`);
 
     addMeta("name", "twitter:card", "summary");

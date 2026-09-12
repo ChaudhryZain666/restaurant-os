@@ -1,10 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 import type { SubscriptionOwnerType } from "@restaurant/types";
 import { Business } from "../models/Business.js";
-import { Plan, type PlanDoc } from "../models/Plan.js";
+import type { PlanDoc } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
-import { Subscription } from "../models/Subscription.js";
 import { getEntitlements, hasEntitlement, type EntitlementValue } from "./entitlement.service.js";
+import { resolveSubscriptionState } from "./subscriptionResolution.service.js";
 import { ApiError } from "../utils/ApiError.js";
 
 /**
@@ -23,8 +23,6 @@ import { ApiError } from "../utils/ApiError.js";
  */
 export { canCreateAnotherBusiness, reserveBusinessSlot, getAgencyEntitlements } from "./agencyEntitlement.service.js";
 
-const LIVE_STATUSES = ["trialing", "active", "past_due", "cancelling"] as const;
-
 /**
  * No commercial "included locations" limit has been finalized. When a business has no subscription
  * at all — true of every business that existed before this phase, and of any brand-new business
@@ -41,73 +39,68 @@ const LIVE_STATUSES = ["trialing", "active", "past_due", "cancelling"] as const;
  */
 const NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS = 20;
 
-/**
- * Resolves the live, REAL (non-"internal") subscription's Plan for an owner, or null if there is
- * none — the one shared lookup every entitlement/limit check in this module goes through.
- *
- * `provider: "internal"` subscriptions are deliberately EXCLUDED here, treated identically to "no
- * subscription at all." The same real regression testing that set NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS
- * above also found this: Phase 24's backfillSubscriptions.ts grandfathers every pre-existing
- * business onto a real, live `provider:"internal"` Subscription pointed at the shared "owner" Plan
- * — so the moment that Plan's own entitlements gained a real `max_locations` value, EVERY
- * grandfathered business (including ones with far more locations already than that number) would
- * have been retroactively capped. "internal" exists specifically to mean "comped, no real
- * commercial relationship" — it must never introduce a NEW restriction a real subscription would.
- */
-async function resolveOwnerPlan(ownerType: SubscriptionOwnerType, ownerId: string): Promise<PlanDoc | null> {
-  const subscription = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES }, provider: { $ne: "internal" } });
-  if (!subscription) return null;
-  return Plan.findById(subscription.planId);
-}
+export type BusinessPlanResolution =
+  | { plan: PlanDoc; source: "business" | "agency" }
+  /** This business (or its managing agency) has a real subscription history, but nothing live right
+   *  now — Phase 63's critical fix. Must NEVER be treated the same as "never subscribed": that
+   *  would let an expired trial or a cancelled paid subscription silently keep receiving the
+   *  generous grandfathering default forever. */
+  | { source: "lapsed" }
+  /** No real subscription has ever existed anywhere in the chain — the only case the generous
+   *  no-subscription default (below) is meant to cover. */
+  | null;
 
 /**
- * Phase 39 — the precedence model the founder decision requires: (1) the business's own direct
- * subscription, if it has one; (2) failing that, an agency-inherited entitlement source, if the
- * business is agency-managed AND that agency has a live, real subscription (LIVE_STATUSES already
- * includes "cancelling" and "past_due", so this reuses the existing state machine as the grace
- * period rather than inventing a second one — a cancelling agency subscription keeps granting
- * inherited entitlements through its paid period, exactly like a business's own subscription would);
- * (3) failing both, `null` — callers fall back to the existing generous no-subscription defaults
- * below, UNCHANGED, so grandfathered/pre-existing businesses are never retroactively capped.
+ * Phase 39 (inheritance precedence) + Phase 63 (lapsed-vs-never distinction) — the precedence:
+ * (1) the business's own subscription history, if any exists — a LIVE one wins outright; a LAPSED
+ *     one (had one, not live now) resolves to `{source:"lapsed"}` immediately, never falling through
+ *     to check the agency — a business that had its own direct commercial relationship end is not
+ *     entitled to quietly inherit its agency's plan instead.
+ * (2) only when the business has NEVER had its own subscription: an agency-inherited entitlement
+ *     source, if the business is agency-managed AND that agency's subscription history resolves
+ *     live — a LAPSED agency subscription resolves the managed business to `{source:"lapsed"}` too
+ *     (Phase 63 — an agency whose own subscription ended must not keep silently granting its managed
+ *     businesses premium access).
+ * (3) failing both — neither the business nor (if applicable) its agency has EVER had a real
+ *     subscription — `null`, and callers fall back to the existing generous no-subscription default,
+ *     UNCHANGED, so grandfathered/pre-existing accounts are never retroactively capped.
  *
- * This closes the gap the Phase 39 audit found: previously an agency-managed business with no
- * subscription of its own always hit the generous defaults for free, regardless of whether its
- * managing agency was itself a paying customer. It does NOT change behavior for a business that
- * isn't agency-managed, or whose agency has no live subscription — both still fall through to the
- * same defaults as before. Supersedes docs/commercial-decisions.md §14's original "an agency-created
- * business does not inherit its managing agency's subscription" decision — see that doc's Phase 39
- * section for the reversal and reasoning.
+ * See docs/commercial-decisions.md §14/§19 for the original inheritance decision and reversal this
+ * builds on, and docs/entitlement-architecture.md for the full, current picture.
  */
-async function resolveBusinessPlanWithInheritance(businessId: string): Promise<{ plan: PlanDoc; source: "business" | "agency" } | null> {
-  const directPlan = await resolveOwnerPlan("business", businessId);
-  if (directPlan) return { plan: directPlan, source: "business" };
+async function resolveBusinessPlanWithInheritance(businessId: string): Promise<BusinessPlanResolution> {
+  const ownState = await resolveSubscriptionState("business", businessId);
+  if (ownState.kind === "live") return { plan: ownState.plan, source: "business" };
+  if (ownState.kind === "lapsed") return { source: "lapsed" };
 
   const business = await Business.findById(businessId).select("agencyId");
   if (!business?.agencyId) return null;
 
-  const agencyPlan = await resolveOwnerPlan("agency", business.agencyId.toString());
-  if (!agencyPlan) return null;
-
-  return { plan: agencyPlan, source: "agency" };
+  const agencyState = await resolveSubscriptionState("agency", business.agencyId.toString());
+  if (agencyState.kind === "live") return { plan: agencyState.plan, source: "agency" };
+  if (agencyState.kind === "lapsed") return { source: "lapsed" };
+  return null;
 }
 
 /**
- * Boolean feature-entitlement check. No subscription (or a subscription whose plan lacks the key)
- * defaults to TRUE — deliberately generous, so this phase's enforcement can never retroactively
- * break an existing business or agency that never subscribed at all. It becomes a REAL, meaningful
- * gate only once an owner/agency has an active subscription on a plan that explicitly excludes the
- * feature — see docs/commercial-decisions.md. For a `"business"` owner, this now resolves through
- * the agency-inheritance precedence above before falling back to the generous default.
+ * Boolean feature-entitlement check. Genuinely NO subscription history anywhere in the chain
+ * defaults to TRUE — deliberately generous, so an account that predates the commercial catalog is
+ * never retroactively broken (see docs/commercial-decisions.md §6/§19). A LAPSED subscription
+ * (Phase 63) defaults to FALSE instead — an expired trial or a cancelled/expired paid subscription
+ * must never keep receiving paid-only features merely because resolution "found nothing live." Only
+ * a genuinely live, real plan grants a feature on its own explicit terms.
  */
 export async function hasFeatureEntitlement(ownerType: SubscriptionOwnerType, ownerId: string, key: string): Promise<boolean> {
   if (ownerType === "business") {
     const resolved = await resolveBusinessPlanWithInheritance(ownerId);
     if (!resolved) return true;
+    if (resolved.source === "lapsed") return false;
     return hasEntitlement(resolved.plan, key);
   }
-  const plan = await resolveOwnerPlan(ownerType, ownerId);
-  if (!plan) return true;
-  return hasEntitlement(plan, key);
+  const state = await resolveSubscriptionState(ownerType, ownerId);
+  if (state.kind === "never") return true;
+  if (state.kind === "lapsed") return false;
+  return hasEntitlement(state.plan, key);
 }
 
 /**
@@ -115,14 +108,35 @@ export async function hasFeatureEntitlement(ownerType: SubscriptionOwnerType, ow
  * GET .../subscription/entitlements) — never 404s for "no direct subscription," since an
  * agency-managed business can have real, meaningful entitlements without one. `source` tells the
  * caller which relationship the entitlements came from, purely informational (never itself an
- * authorization decision).
+ * authorization decision) — `"lapsed"` (Phase 63) lets the UI honestly distinguish "you've never
+ * subscribed" from "your subscription ended," rather than presenting both identically as "default".
  */
 export async function resolveBusinessEntitlements(
   businessId: string
-): Promise<{ entitlements: Record<string, EntitlementValue> | null; source: "business" | "agency" | "default" }> {
+): Promise<{ entitlements: Record<string, EntitlementValue> | null; source: "business" | "agency" | "lapsed" | "default" }> {
   const resolved = await resolveBusinessPlanWithInheritance(businessId);
   if (!resolved) return { entitlements: null, source: "default" };
+  if (resolved.source === "lapsed") return { entitlements: null, source: "lapsed" };
   return { entitlements: getEntitlements(resolved.plan), source: resolved.source };
+}
+
+/**
+ * Phase 76 — the agency-level counterpart to resolveBusinessEntitlements, closing a real gap this
+ * launch audit found: agencySubscription.controller.ts's getAgencyEntitlementsHandler used to read
+ * getSubscriptionForAgency directly (the most recent subscription regardless of status) and hand
+ * back that plan's entitlements unconditionally — so an EXPIRED, CANCELLED, or silently-past-
+ * trialEnd agency subscription still reported full plan entitlements, never routing through
+ * isSubscriptionLive/resolveSubscriptionState the way every other entitlement decision in this
+ * codebase does. Same "lapsed vs. never" honesty this businesses's own resolver already has (Phase
+ * 63) — an agency has no further inheritance level above it, so there's no third branch to add.
+ */
+export async function resolveAgencyEntitlements(
+  agencyId: string
+): Promise<{ entitlements: Record<string, EntitlementValue> | null; source: "agency" | "lapsed" | "default" }> {
+  const state = await resolveSubscriptionState("agency", agencyId);
+  if (state.kind === "never") return { entitlements: null, source: "default" };
+  if (state.kind === "lapsed") return { entitlements: null, source: "lapsed" };
+  return { entitlements: getEntitlements(state.plan), source: "agency" };
 }
 
 /**
@@ -168,6 +182,13 @@ export function requireEntitlement(key: string, from: "businessId" | "restaurant
 async function getMaxLocations(businessId: string): Promise<number> {
   const resolved = await resolveBusinessPlanWithInheritance(businessId);
   if (!resolved) return NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS;
+  if (resolved.source === "lapsed") {
+    // Phase 63 — frozen at whatever the business already has: never destructive (existing locations
+    // are never touched or disabled), but never allows further growth without a live subscription
+    // either. The technically-minimal, non-commercial floor — not a plan's specific number.
+    const business = await Business.findById(businessId).select("locationCount");
+    return business?.locationCount ?? 0;
+  }
   const key = resolved.source === "agency" ? "managed_business_max_locations" : "max_locations";
   const value = getEntitlements(resolved.plan)[key];
   return typeof value === "number" && value > 0 ? value : NO_SUBSCRIPTION_DEFAULT_MAX_LOCATIONS;

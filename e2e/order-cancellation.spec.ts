@@ -19,9 +19,12 @@ test("customer can cancel their own pending order, and cannot cancel it twice", 
 
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
   const pizzaRow = page.locator("li", { hasText: "Margherita Pizza" });
-  await pizzaRow.getByRole("button", { name: "Add to cart" }).click();
-  await page.getByRole("radio").first().check();
-  await page.getByRole("button", { name: "Confirm add to cart" }).click();
+  await pizzaRow.getByRole("button", { name: "Add to order" }).click();
+  // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a large-photograph
+  // overlay (role="dialog"), not an inline row expansion.
+  const detailDialog = page.getByRole("dialog");
+  await detailDialog.getByRole("radio").first().check();
+  await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
 
   await page.getByRole("link", { name: /Cart/ }).click();
   await page.getByRole("button", { name: "Place order" }).click();

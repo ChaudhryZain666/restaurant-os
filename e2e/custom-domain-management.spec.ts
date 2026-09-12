@@ -42,7 +42,7 @@ test.describe.serial("custom domain management (Phase 22)", () => {
     await page.context().grantPermissions(["clipboard-write", "clipboard-read"], { origin: "http://localhost:5174" });
     const stamp = Date.now();
     const hostname = `orders-${stamp}.e2e-test.example`;
-    const verificationRecordHost = `_tablecloth-verify.${hostname}`;
+    const verificationRecordHost = `_garnishtable-verify.${hostname}`;
 
     await page.goto("http://localhost:5174/login");
     await page.locator('input[type="email"]').fill("amara@spice-route.local");

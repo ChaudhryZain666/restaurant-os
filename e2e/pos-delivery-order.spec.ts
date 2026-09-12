@@ -106,8 +106,8 @@ test.describe.serial("POS delivery order flow (Phase 47)", () => {
     await page.getByPlaceholder("Base price").fill("25");
     await page.getByRole("combobox").selectOption({ label: categoryName });
     await page.getByRole("button", { name: "Create item & continue" }).click();
-    await expect(page.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByText("Customize this item")).toBeVisible();
+    await page.getByRole("button", { name: "Back to menu" }).click();
 
     // --- Publish (a pending restaurant can't take any order, POS included). ---
     await page.getByRole("link", { name: "Setup" }).click();
@@ -132,6 +132,11 @@ test.describe.serial("POS delivery order flow (Phase 47)", () => {
     await expect(page.getByText(/Address confirmed — 1200 S 6th St, Springfield/)).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("button", { name: /Take .* cash/ }).click();
+    // Phase 73 — order creation now always leaves the order unpaid pending an explicit cash-received
+    // confirmation (see PaymentConfirmation.tsx), rather than marking it paid the instant the sale
+    // button is tapped. $50 comfortably covers the $25 item + delivery fee.
+    await page.getByLabel("Cash received").fill("50");
+    await page.getByRole("button", { name: "Complete payment" }).click();
     await expect(page.getByRole("heading", { name: /^Order #/ })).toBeVisible({ timeout: 10_000 });
 
     // --- Verify server-side: real coordinates, real computed fee, no (0, 0) anywhere. ---

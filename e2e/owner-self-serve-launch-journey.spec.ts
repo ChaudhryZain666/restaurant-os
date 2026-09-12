@@ -104,8 +104,8 @@ test.describe.serial("owner self-serve launch journey (Phase 60)", () => {
       await ownerPage.getByPlaceholder("Base price").fill("11");
       await ownerPage.getByRole("combobox").selectOption({ label: categoryName });
       await ownerPage.getByRole("button", { name: "Create item & continue" }).click();
-      await expect(ownerPage.getByText("Sizes & add-ons (modifier groups)")).toBeVisible();
-      await ownerPage.getByRole("button", { name: "Done" }).click();
+      await expect(ownerPage.getByText("Customize this item")).toBeVisible();
+      await ownerPage.getByRole("button", { name: "Back to menu" }).click();
 
       // --- Publish, via the real Setup page (matches restaurant-provisioning-golden-path.spec.ts's
       // already-proven publish assertions). ---
@@ -141,7 +141,9 @@ test.describe.serial("owner self-serve launch journey (Phase 60)", () => {
 
       // --- The order is visible to the owner in their own, real Orders page — proving the whole
       // provisioning-to-order loop lands in the SAME tenant this owner actually owns. ---
-      await ownerPage.getByRole("link", { name: "Orders" }).click();
+      // Scoped to the nav landmark (Phase 71 — Dashboard's own "View orders" quick-action link
+      // also matches a bare page-wide "Orders" substring query).
+      await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       await expect(ownerPage.getByRole("group", { name: `Order ${orderNumber}` })).toBeVisible({ timeout: 10_000 });
     } finally {
       await ownerContext.close();

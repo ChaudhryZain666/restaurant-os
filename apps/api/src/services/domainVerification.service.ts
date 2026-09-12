@@ -10,7 +10,7 @@ export function generateVerificationToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-const VERIFICATION_TXT_PREFIX = "_tablecloth-verify";
+const VERIFICATION_TXT_PREFIX = "_garnishtable-verify";
 
 export function verificationRecordHost(hostname: string): string {
   return `${VERIFICATION_TXT_PREFIX}.${hostname}`;

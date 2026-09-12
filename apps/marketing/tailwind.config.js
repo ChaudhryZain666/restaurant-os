@@ -4,12 +4,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: { DEFAULT: "var(--color-primary)", foreground: "var(--color-primary-foreground)" },
+        // Phase 66 — `primary`/`background`/`surface` gained extra keys (hover/soft/soft/elevated)
+        // for the new GarnishTable tokens that have no pre-existing Tailwind class of their own
+        // (`--gt-brand-hover`, `--gt-brand-soft`, `--gt-bg-soft`). Every key that already existed
+        // keeps generating the EXACT same class name as before (`bg-primary`, `bg-background`,
+        // `bg-surface-elevated`, ...) — this is additive, not a rename; see index.css's own
+        // `--gt-*`/`--color-*` alias block for where the values actually live now.
+        primary: {
+          DEFAULT: "var(--color-primary)",
+          hover: "var(--gt-brand-hover)",
+          soft: "var(--gt-brand-soft)",
+          foreground: "var(--color-primary-foreground)",
+        },
         secondary: { DEFAULT: "var(--color-secondary)", foreground: "var(--color-secondary-foreground)" },
         accent: { DEFAULT: "var(--color-accent)", foreground: "var(--color-accent-foreground)" },
-        background: "var(--color-background)",
-        surface: "var(--color-surface)",
-        "surface-elevated": "var(--color-surface-elevated)",
+        background: { DEFAULT: "var(--color-background)", soft: "var(--gt-bg-soft)" },
+        surface: { DEFAULT: "var(--color-surface)", elevated: "var(--color-surface-elevated)" },
         foreground: "var(--color-foreground)",
         muted: "var(--color-muted)",
         border: "var(--color-border)",

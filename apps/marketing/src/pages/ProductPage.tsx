@@ -302,7 +302,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
 
 export function ProductPage() {
   usePageMeta({
-    title: "Product — Tablecloth",
+    title: "Product — GarnishTable",
     description: "Everything a restaurant needs to sell direct: digital menu, ordering, delivery, loyalty, promotions and analytics in one platform.",
   });
   return (

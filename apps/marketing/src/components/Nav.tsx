@@ -142,9 +142,17 @@ export function Nav() {
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b bg-surface/90 backdrop-blur transition-[box-shadow,border-color] duration-300 supports-[backdrop-filter]:bg-surface/70 ${
+      className={`sticky top-0 z-40 border-b backdrop-blur transition-[box-shadow,border-color] duration-300 ${
         scrolled ? "border-border shadow-sm" : "border-transparent"
       }`}
+      // Tailwind can't generate an opacity-modifier utility (`bg-surface/90`) for a color defined
+      // as a raw `var(--color-surface)` reference (its `/N` syntax needs an rgb-channel or hex
+      // literal it can splice an alpha into) — `bg-surface/90` silently compiled to nothing, so the
+      // header had NO background at all and read whatever page content scrolled underneath it
+      // (confirmed: unreadable nav text once scrolled past the dark hero). color-mix() works with
+      // any valid color, opaque var() included, so it's the safe fix here without touching every
+      // other place this app's tokens are consumed as plain `var(--color-*)` colors.
+      style={{ backgroundColor: "color-mix(in srgb, var(--color-surface) 90%, transparent)" }}
     >
       <div
         className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 transition-[padding] duration-300 sm:px-6 ${

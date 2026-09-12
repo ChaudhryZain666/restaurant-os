@@ -28,17 +28,17 @@ describe("normalizeHostname / isValidHostname", () => {
 
 describe("isSelfClaim", () => {
   it("rejects a hostname that exactly matches the platform's own configured origin", () => {
-    expect(isSelfClaim("app.tablecloth.example", "app.tablecloth.example")).toBe(true);
+    expect(isSelfClaim("app.garnishtable.example", "app.garnishtable.example")).toBe(true);
   });
 
   it("allows any hostname that doesn't match the platform's own origin", () => {
-    expect(isSelfClaim("orders.acme-restaurants.com", "app.tablecloth.example")).toBe(false);
+    expect(isSelfClaim("orders.acme-restaurants.com", "app.garnishtable.example")).toBe(false);
   });
 });
 
 describe("verificationRecordHost / generateVerificationToken", () => {
   it("builds the expected TXT record host", () => {
-    expect(verificationRecordHost("orders.example.com")).toBe("_tablecloth-verify.orders.example.com");
+    expect(verificationRecordHost("orders.example.com")).toBe("_garnishtable-verify.orders.example.com");
   });
 
   it("generates an unpredictable, fixed-length hex token each call", () => {

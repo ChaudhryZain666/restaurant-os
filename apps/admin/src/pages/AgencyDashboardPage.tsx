@@ -37,6 +37,15 @@ const SUBSCRIPTION_STATUS_TONE: Record<Subscription["status"], "success" | "neut
   expired: "neutral",
 };
 
+const SUBSCRIPTION_STATUS_LABEL: Record<Subscription["status"], string> = {
+  trialing: "Trial",
+  active: "Active",
+  past_due: "Payment failed",
+  cancelling: "Cancelling",
+  cancelled: "Cancelled",
+  expired: "Trial expired",
+};
+
 /**
  * Phase 25 — the agency-scoped landing page. Two very different states: an account with no agency
  * yet sees a minimal self-serve "create an agency" form (see agency.controller.ts's createAgency —
@@ -187,7 +196,9 @@ export function AgencyDashboardPage() {
                 {data.subscription && data.plan ? (
                   <p className="flex items-center gap-2 text-sm text-muted">
                     {data.plan.name}
-                    <Badge tone={SUBSCRIPTION_STATUS_TONE[data.subscription.status]}>{data.subscription.status}</Badge>
+                    <Badge tone={SUBSCRIPTION_STATUS_TONE[data.subscription.status]}>
+                      {SUBSCRIPTION_STATUS_LABEL[data.subscription.status]}
+                    </Badge>
                   </p>
                 ) : (
                   <p className="text-sm text-muted">No subscription yet.</p>
@@ -197,6 +208,24 @@ export function AgencyDashboardPage() {
                 Manage billing
               </Link>
             </Card>
+
+            {/* Phase 64 — the one clear, primary recovery message on this dashboard, never a
+                full-page takeover. The rest of the dashboard (client list, usage, team) still
+                renders normally below — the agency's own portfolio isn't destroyed by a lapsed
+                subscription, only the AgencyBillingPage.tsx route is where recovery actually happens. */}
+            {data.subscription && ["expired", "cancelled"].includes(data.subscription.status) && (
+              <Card className="flex flex-col items-start gap-2 border-amber-200 bg-amber-50">
+                <Badge tone="warning">Subscription ended</Badge>
+                <p className="font-heading text-lg font-medium text-foreground">Your agency subscription has ended</p>
+                <p className="text-sm text-foreground">
+                  Your agency account, every managed client, and their restaurant data are all still here. Choose a
+                  plan to restore your managed businesses' full features.
+                </p>
+                <Link to="/agency/billing">
+                  <Button size="sm">Choose a plan</Button>
+                </Link>
+              </Card>
+            )}
 
             {data.attentionBusinesses.length > 0 && (
               <Card className="flex flex-col gap-2">

@@ -238,7 +238,7 @@ describe("Phase 39 — agency-inherited entitlements for a managed business with
     expect(await canCreateLocation(business.id as string)).toBe(false); // caps at 4, not the agency's 1
   });
 
-  it("cancelling agency subscription still grants inherited entitlements through its live grace period (LIVE_STATUSES), but a cancelled/expired one does not", async () => {
+  it("cancelling agency subscription still grants inherited entitlements through its live grace period (LIVE_STATUSES), but a cancelled/expired one does not — and Phase 63 corrects what 'does not' means", async () => {
     const agencyPlan = await createTestPlan({
       type: "AGENCY",
       entitlements: [{ key: "custom_domains", value: false }, { key: "max_businesses", value: 5 }, { key: "managed_business_max_locations", value: 1 }],
@@ -257,10 +257,13 @@ describe("Phase 39 — agency-inherited entitlements for a managed business with
     await createTestSubscription("agency", expiredAgency._id, agencyPlan._id, { status: "expired" });
     const managedByExpired = await createTestBusiness({ agencyId: expiredAgency._id });
     businessIds.push(managedByExpired.id);
-    // No live agency subscription -> falls through to the generous default (true), NOT the expired
-    // agency plan's restrictive custom_domains:false — a business must not permanently retain (or
-    // lose) an entitlement from a subscription that is no longer live.
-    expect(await hasFeatureEntitlement("business", managedByExpired.id as string, "custom_domains")).toBe(true);
+    // Phase 61 originally asserted `true` here — treating a lapsed agency subscription identically
+    // to "never subscribed at all" (the generous no-subscription default). Phase 63 found and fixed
+    // exactly this: an agency that HAS had a real subscription, now not live, is not the same case
+    // as an agency that never subscribed — the managed business must be denied the feature, not
+    // silently granted it via the grandfathering fallback. See resolveSubscriptionState's "lapsed"
+    // vs "never" distinction (subscriptionResolution.service.ts).
+    expect(await hasFeatureEntitlement("business", managedByExpired.id as string, "custom_domains")).toBe(false);
   });
 });
 

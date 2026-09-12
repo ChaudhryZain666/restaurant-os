@@ -85,6 +85,23 @@ export async function listCanonicalModifierGroups(req: Request, res: Response) {
   sendSuccess(res, { modifierGroups: groups.map((g) => g.toJSON()) });
 }
 
+/** Phase 68 — a single lightweight read the admin Menu page uses to show a real "N options"
+ *  indicator per item in its list view. Deliberately its own endpoint rather than embedding
+ *  modifier data in listCanonicalMenu: that would force every menu-item read (including the
+ *  public-facing paths that share MenuItem's shape) to carry modifier payloads it doesn't need.
+ *  A menu with 100+ items would otherwise need either an N+1 fetch (one /modifiers call per row)
+ *  or this one aggregate — scoped by businessId exactly like listCanonicalModifierGroups above. */
+export async function getCanonicalModifierGroupCounts(req: Request, res: Response) {
+  const { businessId } = req.params;
+  const groups = await ModifierGroup.find({ businessId }, { menuItemId: 1 });
+  const counts: Record<string, number> = {};
+  for (const group of groups) {
+    const key = group.menuItemId.toString();
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  sendSuccess(res, { counts });
+}
+
 export async function createCanonicalModifierGroup(req: Request, res: Response) {
   const { businessId, menuItemId } = req.params;
   await assertMenuItemInBusiness(businessId, menuItemId);

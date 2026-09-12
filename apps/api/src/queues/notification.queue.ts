@@ -22,6 +22,7 @@ import {
 } from "../email/templates.js";
 import { resolveOwnerIdentity } from "../services/ownerIdentity.service.js";
 import { reconcileStalePayments } from "../services/payment.service.js";
+import { runTrialExpirationSweep } from "../services/subscription.service.js";
 import type { OrderEventPayload, OrderEventType } from "../events/orderEvents.js";
 import type { TicketEventPayload, TicketEventType } from "../events/ticketEvents.js";
 
@@ -47,6 +48,7 @@ export type NotificationJobName =
   | TicketEventType
   | "billing.lifecycle"
   | "billing.trial_reminder_tick"
+  | "billing.trial_expiration_tick"
   | "payment.reconciliation_tick"
   | "delivery.dispatch_create";
 
@@ -260,6 +262,23 @@ export async function registerTrialReminderJob(): Promise<void> {
   );
 }
 
+/**
+ * Phase 63 — registers runTrialExpirationSweep's repeatable tick, same idempotent-registration
+ * pattern as registerTrialReminderJob above. Runs every 15 minutes rather than daily: unlike the
+ * reminder email (where a few hours' slack is harmless), this sweep is what eventually persists
+ * `status: "expired"` for display/history purposes — the ENTITLEMENT boundary itself is already
+ * exact-to-the-second regardless of this cadence (subscriptionResolution.service.ts's
+ * isSubscriptionLive), so 15 minutes is about keeping the visible `status` field reasonably fresh,
+ * not a correctness requirement.
+ */
+export async function registerTrialExpirationJob(): Promise<void> {
+  await notificationQueue.add(
+    "billing.trial_expiration_tick",
+    {},
+    { repeat: { pattern: "*/15 * * * *" }, jobId: "billing-trial-expiration-every-15-min" }
+  );
+}
+
 /** Phase 35 audit fix — registers the payment-reconciliation polling fallback (see
  *  payment.service.ts's reconcileStalePayments doc comment for why this exists at all) as a
  *  repeatable job, same idempotent-registration pattern as registerTrialReminderJob above. Runs
@@ -295,6 +314,12 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
           await runTrialEndingReminderSweep();
         } catch (err) {
           logger.error("trial-ending reminder sweep failed", { jobId: job.id, error: (err as Error).message });
+        }
+      } else if (job.name === "billing.trial_expiration_tick") {
+        try {
+          await runTrialExpirationSweep();
+        } catch (err) {
+          logger.error("trial-expiration sweep failed", { jobId: job.id, error: (err as Error).message });
         }
       } else if (job.name === "payment.reconciliation_tick") {
         try {

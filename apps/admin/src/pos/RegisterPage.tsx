@@ -12,6 +12,7 @@ import { ModifierSheet } from "./components/ModifierSheet";
 import { OrderPanel } from "./components/OrderPanel";
 import { CustomerPicker, type WalkInDraft } from "./components/CustomerPicker";
 import { CompletedSale } from "./components/CompletedSale";
+import { PaymentConfirmation } from "./components/PaymentConfirmation";
 import type { CartLine, CustomerHit, MenuResponse, OrderTypeSel, PosDeliveryAddress, PosPaymentMethod, SelectedModifier } from "./types";
 import { lineKey, lineTotal } from "./types";
 
@@ -29,6 +30,10 @@ export function RegisterPage() {
   const [searchParams] = useSearchParams();
   const routerLocation = useLocation();
   const handoffCustomer = (routerLocation.state as { customer?: CustomerHit } | null)?.customer ?? null;
+  // Phase 75 — PendingSalesPage.tsx's "Resume" hands the existing, already-priced order here via
+  // router state, the same handoff idiom as handoffCustomer above. Read once — this page never
+  // needs to notice a LATER change to this same history entry's state.
+  const [resumeOrder] = useState<Order | null>(() => (routerLocation.state as { resumeOrder?: Order } | null)?.resumeOrder ?? null);
 
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [tables, setTables] = useState<TableWithStatus[]>([]);
@@ -42,7 +47,12 @@ export function RegisterPage() {
 
   const [orderType, setOrderType] = useState<OrderTypeSel>(() => (searchParams.get("table") ? "dine_in" : "pickup"));
   const [tableId, setTableId] = useState(() => searchParams.get("table") ?? "");
-  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("cash");
+  // Phase 75 — resuming reuses the sale's own already-chosen payment method (cash vs. card) rather
+  // than asking staff to re-pick it; PaymentConfirmation/TerminalCardPayment key off this exactly
+  // as they already do for a freshly-rung-up sale.
+  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>(() =>
+    resumeOrder?.paymentMethod === "card" ? "card" : "cash"
+  );
   const [promoCode, setPromoCode] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
 
@@ -55,6 +65,11 @@ export function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  // Phase 73 — the order created by handleSubmit below is now always `unpaid` (markPaidImmediately:
+  // false); this holds it between creation and the staff's explicit payment confirmation (see
+  // PaymentConfirmation) rather than treating "order created" and "payment complete" as the same
+  // moment the way this page did before.
+  const [pendingPaymentOrder, setPendingPaymentOrder] = useState<Order | null>(resumeOrder);
 
   useEffect(() => {
     // On a cold full-page load (refresh, direct link, bookmark) this effect can run once before
@@ -118,6 +133,7 @@ export function RegisterPage() {
     setDeliveryAddress(null);
     setDeliveryNotes("");
     setCompletedOrder(null);
+    setPendingPaymentOrder(null);
     setSubmitError(null);
     setOrderType("pickup");
     setMobileOrderOpen(false);
@@ -173,14 +189,50 @@ export function RegisterPage() {
               : undefined,
           customerNotes: customerNotes || undefined,
           promoCode: promoCode || undefined,
+          // Phase 73 — always confirm payment as its own explicit step (see PaymentConfirmation)
+          // instead of the previous one-click-instantly-paid behavior for both cash and card.
+          markPaidImmediately: false,
         },
       });
-      setCompletedOrder(order);
+      setPendingPaymentOrder(order);
     } catch (err) {
       setSubmitError((err as Error).message);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handlePaymentConfirmed(paidOrder: Order) {
+    setPendingPaymentOrder(null);
+    setCompletedOrder(paidOrder);
+  }
+
+  function handlePaymentCancelled() {
+    // The order itself is already cancelled server-side by PaymentConfirmation — this just
+    // returns the cashier to a fresh sale rather than the (now-cancelled) order's cart state.
+    resetSale();
+  }
+
+  // Phase 75 — a resumed sale (see PendingSalesPage.tsx's "Resume") never needs the menu/tables
+  // fetch at all — it's jumping straight to payment for an order whose items are already final.
+  // Checked before the loading/error gates below so resuming never waits on an unrelated fetch.
+  if (completedOrder) return <CompletedSale order={completedOrder} onNewSale={resetSale} />;
+  if (pendingPaymentOrder) {
+    // Phase 74 — both factors are required: this deployment must have a card-terminal provider
+    // configured at all (env.POS_TERMINAL_PROVIDER, deployment-wide), AND this specific location
+    // must have opted in (settings.posTerminalEnabled) — mirrors posEnabled's own two-factor
+    // opt-in precedent. Neither on its own is treated as "configured."
+    const terminalConfigured = Boolean(restaurant?.posTerminalProviderConfigured && restaurant?.settings.posTerminalEnabled);
+    return (
+      <PaymentConfirmation
+        order={pendingPaymentOrder}
+        restaurantId={restaurantId}
+        paymentMethod={paymentMethod}
+        terminalConfigured={terminalConfigured}
+        onConfirmed={handlePaymentConfirmed}
+        onCancelled={handlePaymentCancelled}
+      />
+    );
   }
 
   if (loading) {
@@ -218,7 +270,6 @@ export function RegisterPage() {
       </div>
     );
   }
-  if (completedOrder) return <CompletedSale order={completedOrder} onNewSale={resetSale} />;
 
   const customerLabel = selectedCustomer
     ? { name: selectedCustomer.name, detail: selectedCustomer.phone ?? selectedCustomer.email }

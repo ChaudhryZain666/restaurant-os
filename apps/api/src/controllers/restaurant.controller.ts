@@ -18,7 +18,7 @@ import { computeReadiness, computeSetupChecklist } from "../services/restaurantR
 import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
-import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
+import { hasFeatureEntitlement, releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
 import { getPaymentProvider } from "../payments/index.js";
 import { canProcessOnlinePayments, hasActiveRestaurantPaymentAccount } from "../payments/restaurantProvider.js";
 import { logger } from "../common/logger.js";
@@ -361,6 +361,14 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
  * actual address bar), exactly the same threat model as a customer typing any slug into /r/:slug:
  * this only ever returns data that's already public for whatever restaurant genuinely owns that
  * hostname (proven by DNS verification, not by anything checked in this handler).
+ *
+ * Phase 64 — a real gap the post-lapse audit found: this handler never checked the `custom_domains`
+ * entitlement at all, so a business whose plan lapsed kept a previously-configured, previously-active
+ * custom domain fully working indefinitely — the one place in the whole custom-domain feature where
+ * the paid gate wasn't actually enforced (DomainSettingsPanel.tsx's own "Add domain" action always
+ * was). The DomainMapping document itself is never touched here — never deleted, never marked
+ * inactive — so it resumes working immediately the moment the entitlement is live again; this only
+ * stops it from being SERVED while it isn't.
  */
 export async function getRestaurantByDomain(req: Request, res: Response) {
   const hostname = normalizeHostname(req.params.hostname);
@@ -369,6 +377,11 @@ export async function getRestaurantByDomain(req: Request, res: Response) {
 
   const restaurant = await Restaurant.findOne({ _id: mapping.locationId, status: "active" });
   if (!restaurant) throw ApiError.notFound("No storefront is configured for this domain");
+
+  if (restaurant.businessId) {
+    const hasCustomDomains = await hasFeatureEntitlement("business", restaurant.businessId.toString(), "custom_domains");
+    if (!hasCustomDomains) throw ApiError.notFound("No storefront is configured for this domain");
+  }
 
   sendSuccess(res, {
     restaurant: toPublicRestaurant(restaurant),
@@ -401,7 +414,10 @@ export async function getRestaurantById(req: Request, res: Response) {
   const restaurant = await Restaurant.findById(req.params.restaurantId);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
   sendSuccess(res, {
-    restaurant: restaurant.toJSON(),
+    // Phase 74 — computed, not persisted (see Restaurant type's doc comment): staff-only, so this
+    // is attached here (the authenticated GET /restaurants/:id path POS's RestaurantSettingsContext
+    // actually calls) rather than on any public/storefront restaurant response.
+    restaurant: { ...restaurant.toJSON(), posTerminalProviderConfigured: env.POS_TERMINAL_PROVIDER !== "none" },
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
   });

@@ -6,21 +6,28 @@ import { test, expect } from "@playwright/test";
  * one), publishing makes it live on the real customer-facing storefront, and a completely
  * different restaurant is never affected by another restaurant's theme change.
  *
- * Phase 33 — switches to Cinematic (not Editorial): Theme Studio's picker now only offers the five
- * current directions (Cinematic/Luxury/Contemporary/Urban/Minimal — see apps/admin's
- * themeCatalog.ts), even though the Classic/Modern/Editorial registry entries themselves are still
- * kept and still render correctly for any restaurant with one already persisted (see
- * apps/web/src/theme/registry.tsx's own doc comment on why they were deliberately NOT deleted).
- * "Reserve the menu" (Cinematic's Hero CTA) and "View the menu" (Cinematic's closing Cta link) are
- * two different, Cinematic-specific strings used as the structural fingerprint here, replacing the
- * old Editorial-specific "View the menu"-appears-twice trick.
+ * Phase 33 — switches through Theme Studio's five current showcase directions (Cinematic/Luxury/
+ * Contemporary/Urban/Minimal — see apps/admin's themeCatalog.ts), even though the Classic/Modern/
+ * Editorial registry entries themselves are still kept and still render correctly for any
+ * restaurant with one already persisted (see apps/web/src/theme/registry.tsx's own doc comment on
+ * why they were deliberately NOT deleted).
+ *
+ * Phase 65 — demo-restaurant's real PUBLISHED theme is now Cinematic (the platform's flagship —
+ * see seed-demo-data.ts), not Classic, since this is also what the marketing site's real live
+ * iframe renders. The baseline/fingerprint below is updated accordingly: "Reserve the menu"
+ * (Cinematic's own Hero CTA) is now the PUBLISHED-state fingerprint, and the draft below switches
+ * to Contemporary ("Start an order" — a string no other theme in this test's path uses, so it
+ * can't collide with Cinematic's own "Reserve the menu"/"View the menu" vocabulary) as the
+ * DRAFT-state fingerprint instead. The Featured ("Popular picks") toggle now starts ON (Cinematic's
+ * real published config enables it), so this test proves the toggle mechanism by switching it OFF
+ * in the draft instead of on — an equally real proof the control works, just the other direction.
  *
  * Runs as ONE serial test (not several independent ones) because it deliberately mutates
  * demo-restaurant's PUBLISHED theme mid-run — the one piece of shared state other e2e specs also
- * render against — and explicitly reverts it to Classic (with no overrides, every section on) in a
- * `finally` block so a failed assertion still leaves the shared fixture clean for the rest of the
- * regression suite, matching this repo's existing small-batch-with-restart discipline around
- * demo-restaurant.
+ * render against — and explicitly reverts it to the real Cinematic flagship baseline (matching
+ * seed-demo-data.ts exactly) in a `finally` block so a failed assertion still leaves the shared
+ * fixture clean for the rest of the regression suite, matching this repo's existing
+ * small-batch-with-restart discipline around demo-restaurant.
  */
 test.describe("storefront theme engine", () => {
   test.describe.configure({ timeout: 180_000 });
@@ -47,46 +54,49 @@ test.describe("storefront theme engine", () => {
       await page.goto("http://localhost:5174/theme-studio");
       await expect(page.getByRole("heading", { name: "Theme Studio" })).toBeVisible();
 
-      // Baseline: the public storefront starts on Classic (this repo's default), with the Classic
-      // hero's own CTA copy — used below as a structural fingerprint of WHICH theme actually
-      // rendered, not just a color check. "Popular picks" (the new optional Featured section) is
-      // OFF by default — an un-configured restaurant must render exactly what it always has, never
-      // gaining a new section it never asked for.
+      // Baseline (Phase 65): the public storefront starts on Cinematic (this platform's real
+      // flagship theme, matching seed-demo-data.ts), with Cinematic's own hero CTA copy — used
+      // below as a structural fingerprint of WHICH theme actually rendered, not just a color check.
+      // "Popular picks" (the optional Featured section) starts ON — the real published config this
+      // phase deliberately set, so the fuller flagship storefront is what a real visitor sees.
       await publicPage.goto("http://localhost:5173/r/demo-restaurant");
-      await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
-      await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Reserve the menu" }).first()).toBeVisible();
+      await expect(publicPage.getByLabel("Featured items")).toBeVisible();
 
-      const cinematicCard = page.getByRole("button", { name: "Select Cinematic theme" });
-      await cinematicCard.click();
-      await expect(cinematicCard).toHaveAttribute("aria-pressed", "true");
+      const contemporaryCard = page.getByRole("button", { name: "Select Contemporary theme" });
+      await contemporaryCard.click();
+      await expect(contemporaryCard).toHaveAttribute("aria-pressed", "true");
 
       const primaryHexInput = page.locator('input[placeholder="Theme default"]').first();
       await primaryHexInput.fill("#0ea5e9");
 
-      // Explicitly opt IN to the Featured section — proves the toggle actually works, not just
-      // that the default is off.
+      // Explicitly opt OUT of the Featured section this time — the draft inherits the published
+      // config's sections (themeKey alone changes; ThemeStudioPage.tsx never resets `sections` on
+      // a theme switch), so it starts checked here too — unchecking it proves the toggle mechanism
+      // in the other direction from this file's original "opt in" proof.
       await page
         .getByText("Popular picks", { exact: true })
         .locator("xpath=ancestor::label")
         .locator('input[type="checkbox"]')
-        .check();
+        .uncheck();
 
       await page.getByRole("button", { name: "Save draft" }).click();
       await expect(page.getByText("Draft saved")).toBeVisible();
       await expect(page.getByText("Unpublished changes")).toBeVisible();
 
-      // "Reserve the menu" is Cinematic's own Hero CTA copy — no other theme uses it, so its
-      // presence alone is proof Cinematic actually rendered (replacing the old Editorial-specific
-      // "View the menu"-appears-twice fingerprint).
+      // "Start an order" is Contemporary's own Hero CTA copy — distinct from Cinematic's own
+      // "Reserve the menu"/"View the menu" vocabulary (Cinematic's closing Cta section is also
+      // live on the published baseline above), so its presence alone is unambiguous proof
+      // Contemporary actually rendered.
       async function primaryColorRgb(target: typeof publicPage): Promise<string> {
         return target.evaluate(() => getComputedStyle(document.querySelector("main")!).getPropertyValue("--color-primary").trim());
       }
 
       // --- The public storefront is completely unaffected by an unpublished draft ---
       await publicPage.reload();
-      await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
-      await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
-      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).not.toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Reserve the menu" }).first()).toBeVisible();
+      await expect(publicPage.getByLabel("Featured items")).toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Start an order" })).not.toBeVisible();
       expect(await primaryColorRgb(publicPage)).not.toBe("#0ea5e9");
 
       // --- Preview (same authenticated browser context as the admin login) DOES show the draft —
@@ -94,38 +104,40 @@ test.describe("storefront theme engine", () => {
       const previewPage = await page.context().newPage();
       await previewPage.goto("http://localhost:5173/r/demo-restaurant/preview");
       await expect(previewPage.getByText("Preview mode")).toBeVisible();
-      await expect(previewPage.getByRole("button", { name: "Reserve the menu" })).toBeVisible();
-      await expect(previewPage.getByLabel("Featured items")).toBeVisible();
+      await expect(previewPage.getByRole("button", { name: "Start an order" })).toBeVisible();
+      await expect(previewPage.getByLabel("Featured items")).not.toBeVisible();
       expect(await primaryColorRgb(previewPage)).toBe("#0ea5e9");
       await previewPage.close();
 
-      // --- Publish: the real storefront now shows Cinematic, with the custom color and the
-      //     newly-enabled section, for a genuinely anonymous visitor. ---
+      // --- Publish: the real storefront now shows Contemporary, with the custom color and the
+      //     newly-disabled section, for a genuinely anonymous visitor. ---
       await page.getByRole("button", { name: "Publish" }).click();
       await expect(page.getByText("Theme published")).toBeVisible();
       await expect(page.getByText("Unpublished changes")).not.toBeVisible();
 
       await publicPage.reload();
-      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).toBeVisible();
-      await expect(publicPage.getByLabel("Featured items")).toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Start an order" })).toBeVisible();
+      await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
       expect(await primaryColorRgb(publicPage)).toBe("#0ea5e9");
 
       // --- Tenant isolation: a completely different restaurant is untouched by the above. ---
       await publicPage.goto("http://localhost:5173/r/spice-route");
       await expect(publicPage.getByRole("heading", { name: "Spice Route" })).toBeVisible();
-      await expect(publicPage.getByRole("button", { name: "Reserve the menu" })).not.toBeVisible();
+      await expect(publicPage.getByRole("button", { name: "Start an order" })).not.toBeVisible();
       await expect(publicPage.getByLabel("Featured items")).not.toBeVisible();
       await expect(publicPage.getByRole("button", { name: "Start your order" }).first()).toBeVisible();
       expect(await primaryColorRgb(publicPage)).not.toBe("#0ea5e9");
     } finally {
-      // Revert demo-restaurant to a clean Classic baseline regardless of pass/fail above, so the
-      // rest of the regression suite keeps seeing the DOM structure it was written against. Done
-      // via direct API calls (a fresh login, not the already-used `page`) rather than re-driving
-      // the Theme Studio UI: the preview page above shares its refresh-token cookie (same
-      // hostname, different port) with the admin session, and the two independently refreshing
-      // around the same time can rotate the admin session's token out from under it — a real but
-      // narrow cross-origin-dev-session interaction, not worth fighting for a cleanup step that's
-      // more robust as a direct API call anyway.
+      // Revert demo-restaurant to the real Cinematic flagship baseline (Phase 65 — matching
+      // seed-demo-data.ts exactly, every optional section on) regardless of pass/fail above, so
+      // the rest of the regression suite — and the marketing site's own live iframe — keeps seeing
+      // the same flagship storefront this phase deliberately set, not a stale Classic fallback.
+      // Done via direct API calls (a fresh login, not the already-used `page`) rather than
+      // re-driving the Theme Studio UI: the preview page above shares its refresh-token cookie
+      // (same hostname, different port) with the admin session, and the two independently
+      // refreshing around the same time can rotate the admin session's token out from under it —
+      // a real but narrow cross-origin-dev-session interaction, not worth fighting for a cleanup
+      // step that's more robust as a direct API call anyway.
       const loginRes = await fetch("http://localhost:4000/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,7 +149,11 @@ test.describe("storefront theme engine", () => {
       await fetch(`http://localhost:4000/api/v1/restaurants/${restaurantId}/theme/draft`, {
         method: "PATCH",
         headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({ themeKey: "classic", colors: {}, sections: {} }),
+        body: JSON.stringify({
+          themeKey: "cinematic",
+          colors: {},
+          sections: { featured: true, about: true, gallery: true, cta: true },
+        }),
       });
       await fetch(`http://localhost:4000/api/v1/restaurants/${restaurantId}/theme/publish`, {
         method: "POST",

@@ -4,7 +4,12 @@ import { env } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { redis } from "./config/redis.js";
 import { queueConnection } from "./queues/connection.js";
-import { startNotificationWorker, registerTrialReminderJob, registerPaymentReconciliationJob } from "./queues/notification.queue.js";
+import {
+  startNotificationWorker,
+  registerTrialReminderJob,
+  registerTrialExpirationJob,
+  registerPaymentReconciliationJob,
+} from "./queues/notification.queue.js";
 import { createSocketServer } from "./realtime/socket.js";
 import { registerOrderEventListeners } from "./events/orderEventListeners.js";
 import { registerTicketEventListeners } from "./events/ticketEventListeners.js";
@@ -57,7 +62,7 @@ async function main() {
   // started at all: a background-job registration hang was silently taking the entire API down
   // with it, not just disabling notifications. The API accepting requests must never depend on
   // this succeeding.
-  Promise.all([registerTrialReminderJob(), registerPaymentReconciliationJob()]).catch((err) => {
+  Promise.all([registerTrialReminderJob(), registerTrialExpirationJob(), registerPaymentReconciliationJob()]).catch((err) => {
     logger.error("[queue] could not register background jobs, continuing without them", { error: (err as Error).message });
   });
 

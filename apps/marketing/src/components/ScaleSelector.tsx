@@ -160,10 +160,10 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
   return (
     <div
       className="relative overflow-hidden rounded-sm border"
-      style={{ borderColor: "#d9cdb0", background: "linear-gradient(160deg,#faf6ec,#f2ebd9)" }}
+      style={{ borderColor: "var(--gt-border-fixed)", background: "linear-gradient(160deg,#faf6ec,#f2ebd9)" }}
     >
-      <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: "#d9cdb0" }}>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7a4550]">
+      <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: "var(--gt-border-fixed)" }}>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--gt-accent-fixed)]">
           Floor plan — {STAGE_LABEL[stageIndex]}
         </span>
         <span className="text-[10px] uppercase tracking-[0.12em] text-[#8f8570]">
@@ -175,8 +175,8 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
         <svg viewBox="0 0 400 320" className="absolute inset-0 h-full w-full" aria-hidden>
           <defs>
             <radialGradient id={idWarmGlow} cx="35%" cy="25%" r="75%">
-              <stop offset="0%" stopColor="#611b28" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="#611b28" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--gt-brand-fixed)" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="var(--gt-brand-fixed)" stopOpacity="0" />
             </radialGradient>
             <filter id={idSoftDrop} x="-40%" y="-40%" width="180%" height="180%">
               <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#3d0f16" floodOpacity="0.18" />
@@ -202,14 +202,14 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               width="220"
               height="200"
               rx="3"
-              fill="#fffdf8"
-              stroke="#611b28"
+              fill="var(--gt-brand-foreground-fixed)"
+              stroke="var(--gt-brand-fixed)"
               strokeWidth="1.6"
               filter={`url(#${idSoftDrop})`}
             />
             {/* kitchen zone — Prove and up */}
-            <rect x="90" y="60" width="70" height="70" rx="2" fill="#611b28" opacity={stageIndex >= 1 ? 0.12 : 0} style={{ transition: "opacity 500ms ease" }} />
-            <text x="98" y="80" fontSize="8" fontWeight="600" fill="#7a4550" opacity={stageIndex >= 1 ? 1 : 0} style={{ transition: "opacity 500ms ease" }}>
+            <rect x="90" y="60" width="70" height="70" rx="2" fill="var(--gt-brand-fixed)" opacity={stageIndex >= 1 ? 0.12 : 0} style={{ transition: "opacity 500ms ease" }} />
+            <text x="98" y="80" fontSize="8" fontWeight="600" fill="var(--gt-accent-fixed)" opacity={stageIndex >= 1 ? 1 : 0} style={{ transition: "opacity 500ms ease" }}>
               KITCHEN
             </text>
 
@@ -239,8 +239,8 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
 
             {/* order ticket marker — Prove and up */}
             <g opacity={stageIndex >= 1 ? 1 : 0} style={{ transition: "opacity 500ms ease 200ms" }}>
-              <rect x="222" y="20" width="58" height="28" rx="2" fill="#fffdf8" stroke="#c7a6ab" strokeWidth="1" filter={`url(#${idSoftDrop})`} />
-              <text x="228" y="33" fontSize="7" fill="#611b28">
+              <rect x="222" y="20" width="58" height="28" rx="2" fill="var(--gt-brand-foreground-fixed)" stroke="#c7a6ab" strokeWidth="1" filter={`url(#${idSoftDrop})`} />
+              <text x="228" y="33" fontSize="7" fill="var(--gt-brand-fixed)">
                 #1047 · New
               </text>
               <text x="228" y="43" fontSize="6" fill="#8f8570">
@@ -258,30 +258,30 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               <polyline
                 points="90,290 130,278 170,284 210,266 250,272 310,255"
                 fill="none"
-                stroke="#611b28"
+                stroke="var(--gt-brand-fixed)"
                 strokeWidth="1.6"
                 strokeLinecap="round"
                 strokeDasharray="230"
                 strokeDashoffset={t(hasAnalytics ? 0 : 230, 0)}
                 style={{ transition: reducedMotion ? "none" : "stroke-dashoffset 900ms cubic-bezier(0.16,1,0.3,1) 260ms" }}
               />
-              <text x="90" y="305" fontSize="7" fill="#7a4550">
+              <text x="90" y="305" fontSize="7" fill="var(--gt-accent-fixed)">
                 Revenue trending up
               </text>
             </g>
 
             {/* promotions tag — only if the real plan includes business_promotions */}
             <g opacity={hasPromotions ? 1 : 0} style={{ transition: "opacity 500ms ease 320ms" }}>
-              <rect x="20" y="140" width="56" height="20" rx="10" fill="#fffdf8" stroke="#611b28" strokeWidth="1" />
-              <text x="30" y="153" fontSize="7" fill="#611b28">
+              <rect x="20" y="140" width="56" height="20" rx="10" fill="var(--gt-brand-foreground-fixed)" stroke="var(--gt-brand-fixed)" strokeWidth="1" />
+              <text x="30" y="153" fontSize="7" fill="var(--gt-brand-fixed)">
                 WELCOME10
               </text>
             </g>
 
             {/* custom domain tag */}
             <g opacity={hasDomain ? 1 : 0} style={{ transition: "opacity 500ms ease 380ms" }}>
-              <text x="90" y="50" fontSize="7" fill="#611b28">
-                bellavista.tablecloth.app
+              <text x="90" y="50" fontSize="7" fill="var(--gt-brand-fixed)">
+                bellavista.garnishtable.app
               </text>
             </g>
           </g>
@@ -303,14 +303,14 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               <g key={i} opacity={on ? 1 : 0} style={{ transition: `opacity 550ms ease ${i * 140 + 120}ms` }}>
                 <line x1={p.lx1} y1={p.ly1} x2={p.lx2} y2={p.ly2} stroke="#c7a6ab" strokeWidth="1.2" strokeDasharray="3 3" />
                 {on && !reducedMotion && (
-                  <circle r="2.4" fill="#611b28">
+                  <circle r="2.4" fill="var(--gt-brand-fixed)">
                     <animateMotion dur="1.1s" begin={`${i * 0.14 + 0.3}s`} fill="freeze" path={`M${p.lx1},${p.ly1} L${p.lx2},${p.ly2}`} />
                     <animate attributeName="opacity" values="0;1;0" dur="1.1s" begin={`${i * 0.14 + 0.3}s`} fill="freeze" />
                   </circle>
                 )}
-                <rect x={p.x} y={p.y} width="50" height="42" rx="3" fill="#fffdf8" stroke="#611b28" strokeWidth="1.2" filter={`url(#${idSoftDrop})`} />
+                <rect x={p.x} y={p.y} width="50" height="42" rx="3" fill="var(--gt-brand-foreground-fixed)" stroke="var(--gt-brand-fixed)" strokeWidth="1.2" filter={`url(#${idSoftDrop})`} />
                 <circle cx={p.x + 25} cy={p.y + 24} r="4" fill={`url(#${idTableFill})`} opacity="0.9" />
-                <text x={p.x + 7} y={p.y + 14} fontSize="6.5" fontWeight="600" fill="#7a4550">
+                <text x={p.x + 7} y={p.y + 14} fontSize="6.5" fontWeight="600" fill="var(--gt-accent-fixed)">
                   Location {i + 2}
                 </text>
               </g>
@@ -325,16 +325,16 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
       </div>
 
       {/* the oversized transforming price — the dominant typographic object in the scene */}
-      <div className="flex items-end justify-between border-t px-5 py-5" style={{ borderColor: "#d9cdb0" }}>
+      <div className="flex items-end justify-between border-t px-5 py-5" style={{ borderColor: "var(--gt-border-fixed)" }}>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#7a4550]">{plan?.name ?? ""}</p>
-          <p className="font-heading text-5xl leading-none text-[#2b2116] sm:text-6xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gt-accent-fixed)]">{plan?.name ?? ""}</p>
+          <p className="font-heading text-5xl leading-none text-[var(--gt-text-fixed)] sm:text-6xl">
             {plan ? `$${Math.round(t(tweenedCents, price / 100)).toLocaleString()}` : priceLabel}
             <span className="ml-1 text-base font-sans text-[#8f8570]">/mo</span>
           </p>
         </div>
         {plan?.trialDays && (
-          <span className="rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#611b28]" style={{ borderColor: "#611b28" }}>
+          <span className="rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--gt-brand-fixed)]" style={{ borderColor: "var(--gt-brand-fixed)" }}>
             {plan.trialDays}-day trial
           </span>
         )}
@@ -361,21 +361,21 @@ function TierPanel({
       <button onClick={onSelect} className="group flex flex-col items-start gap-3 text-left">
         <span
           className="text-[11px] font-semibold uppercase tracking-[0.22em] transition-colors duration-300"
-          style={{ color: isActive ? "#611b28" : "#a89a86" }}
+          style={{ color: isActive ? "var(--gt-brand-fixed)" : "var(--gt-text-muted-fixed)" }}
         >
           {String(index + 1).padStart(2, "0")} — {STAGE_LABEL[index]}
         </span>
         <h3
           className="font-heading text-3xl transition-all duration-300 sm:text-4xl"
-          style={{ color: isActive ? "#2b2116" : "#a89a86", fontStyle: isActive ? "italic" : "normal" }}
+          style={{ color: isActive ? "var(--gt-text-fixed)" : "var(--gt-text-muted-fixed)", fontStyle: isActive ? "italic" : "normal" }}
         >
           {plan.name}
         </h3>
         <p className="max-w-sm text-sm text-[#5c4f3d]">{STAGE_NARRATIVE[index]}</p>
         <ul className="mt-2 flex flex-col gap-1.5">
           {planFeatures(plan).map((f) => (
-            <li key={f} className="flex items-center gap-2 text-sm text-[#2b2116]">
-              <IconCheck className="h-3.5 w-3.5 shrink-0 text-[#611b28]" />
+            <li key={f} className="flex items-center gap-2 text-sm text-[var(--gt-text-fixed)]">
+              <IconCheck className="h-3.5 w-3.5 shrink-0 text-[var(--gt-brand-fixed)]" />
               {f}
             </li>
           ))}
@@ -385,7 +385,7 @@ function TierPanel({
         <Link
           to="/start-trial"
           className="mt-6 inline-flex w-fit items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-[#f8f4ea] transition-transform duration-200 hover:-translate-y-0.5"
-          style={{ background: "#611b28" }}
+          style={{ background: "var(--gt-brand-fixed)" }}
         >
           Start Free Trial <IconArrowRight className="h-4 w-4" />
         </Link>
@@ -409,14 +409,14 @@ export function ScaleSelector() {
   return (
     <div>
       <div className="mx-auto max-w-2xl text-center">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#7a4550]">Pricing</span>
-        <h2 className="mt-3 font-heading text-4xl italic text-[#2b2116] sm:text-5xl">Choose the scale of your restaurant.</h2>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--gt-accent-fixed)]">Pricing</span>
+        <h2 className="mt-3 font-heading text-4xl italic text-[var(--gt-text-fixed)] sm:text-5xl">Choose the scale of your restaurant.</h2>
         <p className="mt-4 text-[#5c4f3d]">
           The same system, growing with the business — no per-order commission at any tier.
         </p>
       </div>
 
-      {error && <p className="mt-10 text-center text-sm text-[#7a4550]">Couldn't load pricing right now — please try again shortly.</p>}
+      {error && <p className="mt-10 text-center text-sm text-[var(--gt-accent-fixed)]">Couldn't load pricing right now — please try again shortly.</p>}
       {!plans && !error && <p className="mt-10 text-center text-sm text-[#5c4f3d]">Loading pricing…</p>}
 
       {sorted.length > 0 && (
@@ -443,7 +443,7 @@ export function ScaleSelector() {
       )}
 
       <div className="mt-4 flex justify-center">
-        <Link to="/pricing" className="text-sm font-medium text-[#7a4550] underline-offset-4 hover:underline">
+        <Link to="/pricing" className="text-sm font-medium text-[var(--gt-accent-fixed)] underline-offset-4 hover:underline">
           See full pricing
         </Link>
       </div>
