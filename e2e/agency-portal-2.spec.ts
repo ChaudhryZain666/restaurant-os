@@ -22,6 +22,7 @@ test.describe.serial("Agency Portal 2.0 — search/filter, location drill-down, 
     await page.getByLabel("Full name").fill("Portfolio Owner");
     await page.getByLabel("Email").fill(`portfolio-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("PortfolioOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 
@@ -130,6 +131,7 @@ test.describe.serial("Agency Portal 2.0 — search/filter, location drill-down, 
     await otherPage.getByLabel("Full name").fill("Rival Agency Owner");
     await otherPage.getByLabel("Email").fill(`rival-owner-${stamp}@test.local`);
     await otherPage.getByLabel("Password").fill("RivalOwner1!");
+    await otherPage.getByRole("checkbox").check();
     await otherPage.getByRole("button", { name: "Create account" }).click();
     await expect(otherPage).toHaveURL(/\/agency$/, { timeout: 10_000 });
     await otherPage.getByLabel("Agency name").fill(`Rival Agency ${stamp}`);

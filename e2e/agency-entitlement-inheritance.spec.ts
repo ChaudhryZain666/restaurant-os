@@ -56,6 +56,7 @@ test.describe.serial("agency-managed business entitlement inheritance, live in t
     await page.getByLabel("Full name").fill("Entitlement Agency Owner");
     await page.getByLabel("Email").fill(`entitlement-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("EntitlementOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 

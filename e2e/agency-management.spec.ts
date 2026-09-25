@@ -24,6 +24,7 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
     await page.getByLabel("Full name").fill("Agency Owner");
     await page.getByLabel("Email").fill(`agency-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("AgencyOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 
@@ -94,6 +95,7 @@ test.describe.serial("agency foundation — create, manage businesses, invite te
     await otherPage.getByLabel("Full name").fill("Other Agency Owner");
     await otherPage.getByLabel("Email").fill(`other-agency-owner-${stamp}@test.local`);
     await otherPage.getByLabel("Password").fill("OtherAgency1!");
+    await otherPage.getByRole("checkbox").check();
     await otherPage.getByRole("button", { name: "Create account" }).click();
     await expect(otherPage).toHaveURL(/\/agency$/, { timeout: 10_000 });
 
@@ -152,6 +154,7 @@ test.describe.serial("agency plan limits — subscribe, hit limit, upgrade, succ
     await page.getByLabel("Full name").fill("Limit Test Owner");
     await page.getByLabel("Email").fill(`agency-limit-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("LimitOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 

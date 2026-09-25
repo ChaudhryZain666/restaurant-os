@@ -36,6 +36,12 @@ test("platform admin can open a restaurant's detail page from the Restaurants li
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Recent activity" })).toBeVisible();
 
+  // Phase 78 — the payment/marketplace connection visibility card, added on top of the pre-existing
+  // sections above: diagnostic detail only, and never a raw secret, regardless of connection state.
+  await expect(page.getByRole("heading", { name: "Payment & marketplace connections" })).toBeVisible();
+  const pageText = await page.locator("body").innerText();
+  expect(pageText).not.toMatch(/sk_test_|sk_live_|whsec_|encryptedCredentials/);
+
   // Navigating back to the list still works — this page didn't strand the admin.
   await page.getByRole("button", { name: "← All restaurants" }).click();
   await expect(page.getByRole("heading", { name: "Restaurants" })).toBeVisible();

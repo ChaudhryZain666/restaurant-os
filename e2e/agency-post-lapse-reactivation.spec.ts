@@ -42,6 +42,7 @@ test.describe.serial("agency post-lapse experience and reactivation (Phase 64)",
     await page.getByLabel("Full name").fill("Agency Lapse Owner");
     await page.getByLabel("Email").fill(`agency-lapse-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("AgencyLapseOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 

@@ -70,6 +70,22 @@ const statusHistoryEntrySchema = new Schema(
   { _id: false }
 );
 
+// Provenance for a marketplace-sourced order — see Order.channel/paymentMethod's own comments for
+// why this is a SIBLING of channel, not a replacement: channel answers "what kind" (drives the
+// existing paymentMethod/pricing branching), this subdocument answers "which specific external
+// order" (drives webhook-event correlation and staff-facing "View on Uber Eats"-style display).
+const orderMarketplaceSchema = new Schema(
+  {
+    provider: { type: String, enum: ["uber_eats", "doordash", "foodpanda"], required: true },
+    integrationId: { type: Schema.Types.ObjectId, ref: "RestaurantMarketplaceIntegration", required: true },
+    externalOrderId: { type: String, required: true },
+    externalStoreId: { type: String, required: true },
+    externalStatus: { type: String },
+    externalCreatedAt: { type: Date },
+  },
+  { _id: false }
+);
+
 const orderSchema = new Schema(
   {
     // No standalone index on restaurantId: both compound indexes below lead with it, so a
@@ -84,8 +100,10 @@ const orderSchema = new Schema(
     // POS phase — which surface created this order, orthogonal to orderType (see types/order.ts's
     // OrderChannel doc comment: a dine-in order can be self-ordered via QR just as easily as rung
     // up by staff for a walk-in table). Defaults to "online" so the entire pre-POS dataset is
-    // correctly, implicitly online with zero migration required.
-    channel: { type: String, enum: ["online", "pos"], default: "online" },
+    // correctly, implicitly online with zero migration required. "marketplace" (see the
+    // `marketplace` subdocument below) is a third surface: an order a customer placed through
+    // Uber Eats/DoorDash/foodpanda, ingested by marketplaceOrderIngestion.service.ts.
+    channel: { type: String, enum: ["online", "pos", "marketplace"], default: "online" },
     // Phase 75 — who rang this order up, for staff accountability/reporting (sales by staff member,
     // cash accountability, a future shift-reconciliation view — none of which are built this phase).
     // Nullable by design: every pre-Phase-75 order (and every "online" order, forever — a customer
@@ -112,9 +130,15 @@ const orderSchema = new Schema(
     // reader isn't integrated with this platform, so a card payment collected at the register is,
     // from this system's point of view, identical to cash: staff confirms it happened, nothing is
     // charged or refunded through this app. updateOrderPaymentStatus already generalizes to "any
-    // non-online method" and needed zero changes to support this.
-    paymentMethod: { type: String, enum: ["cash", "card", "online"], default: "cash" },
+    // non-online method" and needed zero changes to support this. "marketplace" is a FOURTH such
+    // method, same manual paid/unpaid flip again: a marketplace order arrives already paid — the
+    // customer paid Uber Eats/DoorDash/foodpanda directly, never this app's own Payment/
+    // PaymentProvider machinery — so it has no Payment document either, exactly like cash/card.
+    // marketplaceOrderIngestion.service.ts always passes markPaidImmediately:true for these.
+    paymentMethod: { type: String, enum: ["cash", "card", "online", "marketplace"], default: "cash" },
     paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid" },
+    // Present only when channel is "marketplace" — see orderMarketplaceSchema above.
+    marketplace: { type: orderMarketplaceSchema },
     // Snapshotted from Restaurant.settings.currency at order creation time — the same
     // snapshot-over-live-reference principle as orderItemSchema's price fields above. Without
     // this, a cash order (which never gets a Payment document — see paymentMethod's comment
@@ -168,6 +192,15 @@ orderSchema.index({ restaurantId: 1, tableId: 1, status: 1 }, { sparse: true });
 // index, paginating a customer's order history by createdAt would require an in-memory sort of
 // every matching document before skip/limit could apply. This backs that query directly.
 orderSchema.index({ customerId: 1, createdAt: -1 });
+// Mirrors Payment.ts's {provider,providerRef} partial-unique-index precedent: the DB-level
+// backstop against a duplicate-delivered marketplace webhook (or a retried ingestion job) ever
+// creating two Order documents for the same external order. Partial on the field actually being a
+// string (not `sparse: true`) for the same reason Payment.ts's index isn't sparse either — an
+// explicit stored `null` would otherwise collide across every non-marketplace order.
+orderSchema.index(
+  { "marketplace.provider": 1, "marketplace.externalOrderId": 1 },
+  { unique: true, partialFilterExpression: { "marketplace.externalOrderId": { $type: "string" } } }
+);
 
 export type OrderDoc = InferSchemaType<typeof orderSchema> & { _id: Types.ObjectId };
 export const Order = model<OrderDoc>("Order", orderSchema);

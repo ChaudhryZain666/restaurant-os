@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import type { Category, CategoryLocationOverride, MenuItem, MenuItemLocationOverride } from "@restaurant/types";
-import { Badge, Button, Card, EmptyState, Skeleton, Spinner, useToast } from "@restaurant/ui";
+import { Badge, Button, EmptyState, Skeleton, Spinner, useToast } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useCan } from "../hooks/useCan";
@@ -10,6 +10,8 @@ import { useActiveLocationId } from "../context/LocationContext";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { useRestaurantCurrency } from "../hooks/useRestaurantCurrency";
 import { ItemEditorDrawer, type ItemDraft } from "../components/ItemEditorDrawer";
+import { MenuBuilderLayout } from "../components/menu-builder/MenuBuilderLayout";
+import { CategoryNavRail, type AvailabilityFilter } from "../components/menu-builder/CategoryNavRail";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { previewUrl, storefrontUrl } from "../lib/links";
 import { IconChevronDown, IconGripVertical, IconImage, IconMenuBook, IconSearch, IconX } from "../components/icons";
@@ -20,8 +22,6 @@ const rowActionClass = "text-sm font-medium text-foreground/70 transition-colors
 /** Sentinel expandedItemId meaning "the create-item panel is open" — before a real item exists to
  *  key the panel on. Chosen so it can never collide with a real Mongo ObjectId string. */
 const CREATING = "__creating__";
-
-type AvailabilityFilter = "all" | "available" | "unavailable";
 
 function draftFromItem(item: MenuItem): ItemDraft {
   return {
@@ -140,10 +140,13 @@ export function MenuManagementPage() {
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
+  const [hasModifiersOnly, setHasModifiersOnly] = useState(false);
+  const [noImageOnly, setNoImageOnly] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const previewCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previewDialogRef = useRef<HTMLDivElement>(null);
+  const categoryRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Drag-and-drop reorder state — which row is currently being dragged, purely for the drop
   // handlers below; arrow-key reordering never touches this at all.
@@ -201,6 +204,26 @@ export function MenuManagementPage() {
 
   function effectiveItemAvailability(item: MenuItem): boolean {
     return itemOverrideById.get(item.id)?.isAvailable ?? item.isAvailable;
+  }
+
+  /** Scrolls the center canvas to a category's header (or to the very top for "" = All items),
+   *  expanding it first if it was collapsed — the left rail's category list is a real jump-nav,
+   *  not just a read-only count summary. */
+  function scrollToCategory(categoryId: string) {
+    if (!categoryId) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setCollapsedCategoryIds((prev) => {
+      if (!prev.has(categoryId)) return prev;
+      const next = new Set(prev);
+      next.delete(categoryId);
+      return next;
+    });
+    // Collapse state change reflows layout — wait a tick before measuring/scrolling to it.
+    requestAnimationFrame(() => {
+      categoryRefs.current.get(categoryId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleCreateCategory(e: FormEvent) {
@@ -467,6 +490,11 @@ export function MenuManagementPage() {
   }
 
   function closePanel() {
+    // Modifier-group edits happen inside ModifierGroupsEditor, a nested component with its own
+    // local reload() — it has no way to tell this page its modifierCounts are now stale. Always
+    // reloading on close (not just after saveDraft's own item-field changes) keeps the item list's
+    // "N options" indicator accurate regardless of which part of the drawer actually changed.
+    void reload();
     setExpandedItemId(null);
     setDraft(null);
   }
@@ -552,6 +580,8 @@ export function MenuManagementPage() {
     const effectiveAvailable = effectiveItemAvailability(item);
     if (availabilityFilter === "available" && !effectiveAvailable) return false;
     if (availabilityFilter === "unavailable" && effectiveAvailable) return false;
+    if (hasModifiersOnly && (modifierCounts[item.id] ?? 0) === 0) return false;
+    if (noImageOnly && item.imageUrl) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       if (!item.name.toLowerCase().includes(q) && !(item.description ?? "").toLowerCase().includes(q)) return false;
@@ -574,13 +604,15 @@ export function MenuManagementPage() {
 
   const unavailableCount = items.filter((item) => !effectiveItemAvailability(item)).length;
   const itemsWithoutPhotoCount = items.filter((item) => !item.imageUrl).length;
-  const isFiltering = search.trim() !== "" || availabilityFilter !== "all";
+  const isFiltering = search.trim() !== "" || availabilityFilter !== "all" || hasModifiersOnly || noImageOnly;
   const totalVisibleItems = items.filter(itemMatchesFilters).length;
   const previewHref = restaurant?.slug ? (restaurant.status === "active" ? storefrontUrl(restaurant.slug) : previewUrl(restaurant.slug)) : null;
 
   function clearFilters() {
     setSearch("");
     setAvailabilityFilter("all");
+    setHasModifiersOnly(false);
+    setNoImageOnly(false);
   }
 
   function renderItemRow(item: MenuItem, siblings: MenuItem[], itemIndex: number) {
@@ -656,8 +688,10 @@ export function MenuManagementPage() {
     );
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6">
+  const itemCountByCategory = new Map(categories.map((c) => [c.id, (itemsByCategoryId.get(c.id) ?? []).length]));
+
+  const centerCanvas = (
+    <div className="flex w-full flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-3xl font-semibold text-foreground">Menu</h1>
@@ -719,59 +753,27 @@ export function MenuManagementPage() {
 
       {/* Always rendered, even with zero categories — this is the ONLY place the add-category
           form lives, so it must never be gated behind categories.length > 0. */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-3">
-          <label className="relative flex min-w-[200px] flex-1 items-center">
-            <IconSearch className="pointer-events-none absolute left-3 h-4 w-4 text-muted" />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search items by name or description"
-              aria-label="Search menu items"
-              className={`w-full py-1.5 pl-9 pr-3 ${inputClass}`}
-            />
-          </label>
-          <div role="group" aria-label="Filter by availability" className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
-            {(["all", "available", "unavailable"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setAvailabilityFilter(value)}
-                aria-pressed={availabilityFilter === value}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-fast ${
-                  availabilityFilter === value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground/70 hover:bg-black/[0.04] hover:text-foreground"
-                }`}
-              >
-                {value === "all" ? "All" : value === "available" ? "Available" : "Unavailable"}
-              </button>
-            ))}
-          </div>
-        </div>
-        {canWrite && (
-          <form onSubmit={handleCreateCategory} className="flex flex-wrap gap-2">
-            <input
-              id="new-category-input"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="New category name"
-              required
-              className={inputClass}
-            />
-            <input
-              value={newCategoryDescription}
-              onChange={(e) => setNewCategoryDescription(e.target.value)}
-              placeholder="Description (optional)"
-              className={inputClass}
-            />
-            <Button type="submit" size="sm">
-              Add category
-            </Button>
-          </form>
-        )}
-      </div>
+      {canWrite && (
+        <form onSubmit={handleCreateCategory} className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-border p-3.5">
+          <input
+            id="new-category-input"
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            placeholder="New category name"
+            required
+            className={inputClass}
+          />
+          <input
+            value={newCategoryDescription}
+            onChange={(e) => setNewCategoryDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className={inputClass}
+          />
+          <Button type="submit" size="sm">
+            Add category
+          </Button>
+        </form>
+      )}
 
       {categories.length === 0 ? (
         <EmptyState
@@ -826,162 +828,171 @@ export function MenuManagementPage() {
           )}
 
           {!(items.length > 0 && isFiltering && totalVisibleItems === 0) && (
-          <div className="flex flex-col gap-4">
-            {categories.map((category, categoryIndex) => {
-              const categoryOverride = categoryOverrideById.get(category.id);
-              const effectiveCategoryActive = categoryOverride?.isActive ?? category.isActive;
-              const allCategoryItems = itemsByCategoryId.get(category.id) ?? [];
-              const visibleCategoryItems = allCategoryItems.filter(itemMatchesFilters);
-              const collapsed = collapsedCategoryIds.has(category.id);
-              const isCategoryDropTarget = draggedCategoryId !== null && draggedCategoryId !== category.id;
-              const isItemCrossCategoryDropTarget = draggedItem !== null && draggedItem.categoryId !== category.id;
-              const isValidDropTarget = isCategoryDropTarget || isItemCrossCategoryDropTarget;
+            /* Phase 81 Stage 2 — a category "chapter" now reads like an actual menu section (a
+               heading + a single rule beneath it) instead of a bordered, shadowed admin card —
+               every control that was inside the old Card (grip, collapse, rename, delete,
+               location-override row, the items themselves) is unchanged, just re-skinned. */
+            <div className="flex flex-col gap-8">
+              {categories.map((category, categoryIndex) => {
+                const categoryOverride = categoryOverrideById.get(category.id);
+                const effectiveCategoryActive = categoryOverride?.isActive ?? category.isActive;
+                const allCategoryItems = itemsByCategoryId.get(category.id) ?? [];
+                const visibleCategoryItems = allCategoryItems.filter(itemMatchesFilters);
+                const collapsed = collapsedCategoryIds.has(category.id);
+                const isCategoryDropTarget = draggedCategoryId !== null && draggedCategoryId !== category.id;
+                const isItemCrossCategoryDropTarget = draggedItem !== null && draggedItem.categoryId !== category.id;
+                const isValidDropTarget = isCategoryDropTarget || isItemCrossCategoryDropTarget;
 
-              return (
-                <Card
-                  key={category.id}
-                  onDragOver={(e) => {
-                    if (isValidDropTarget) e.preventDefault();
-                  }}
-                  onDragEnter={(e) => {
-                    if (isValidDropTarget) {
+                return (
+                  <div
+                    key={category.id}
+                    id={`category-${category.id}`}
+                    ref={(el) => {
+                      if (el) categoryRefs.current.set(category.id, el);
+                      else categoryRefs.current.delete(category.id);
+                    }}
+                    onDragOver={(e) => {
+                      if (isValidDropTarget) e.preventDefault();
+                    }}
+                    onDragEnter={(e) => {
+                      if (isValidDropTarget) {
+                        e.preventDefault();
+                        setDropHighlightCategoryId(category.id);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      setDropHighlightCategoryId((current) => (current === category.id ? null : current));
+                    }}
+                    onDrop={(e) => {
                       e.preventDefault();
-                      setDropHighlightCategoryId(category.id);
-                    }
-                  }}
-                  onDragLeave={() => {
-                    setDropHighlightCategoryId((current) => (current === category.id ? null : current));
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggedCategoryId) handleMoveCategoryTo(draggedCategoryId, category.id);
-                    else if (draggedItem && draggedItem.categoryId !== category.id) handleMoveItemToCategory(draggedItem.itemId, category.id);
-                    setDraggedCategoryId(null);
-                    setDraggedItem(null);
-                    setDropHighlightCategoryId(null);
-                  }}
-                  className={`!p-0 overflow-hidden animate-fade-up transition-shadow duration-fast ${
-                    dropHighlightCategoryId === category.id ? "ring-2 ring-primary/50" : ""
-                  }`}
-                >
-                  {/* Wrapped in its own <ul> (a real, single-item list) rather than a bare div —
-                      full-order-flow.spec.ts locates a freshly-created category via
-                      `page.locator("li", {hasText: categoryName})`. This <li> deliberately does NOT
-                      also wrap the items list further down — see this file's own Phase 68 notes. */}
-                  <ul>
-                    <li className="flex flex-wrap items-start gap-3 p-4">
-                      {canWrite && (
-                        <GripHandle
-                          label={category.name}
-                          onMoveUp={() => handleReorderCategory(category, "up")}
-                          onMoveDown={() => handleReorderCategory(category, "down")}
-                          disableUp={categoryIndex === 0}
-                          disableDown={categoryIndex === categories.length - 1}
-                          onDragStart={() => setDraggedCategoryId(category.id)}
-                          onDragEnd={() => setDraggedCategoryId(null)}
-                        />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleCategoryCollapsed(category.id)}
-                        aria-expanded={!collapsed}
-                        aria-label={`${collapsed ? "Expand" : "Collapse"} ${category.name}`}
-                        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground"
-                      >
-                        <IconChevronDown className={`h-4 w-4 transition-transform duration-fast ${collapsed ? "-rotate-90" : ""}`} />
-                      </button>
-
-                      {editingCategoryId === category.id ? (
-                        <form
-                          className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            saveRenameCategory(category.id);
-                          }}
-                        >
-                          <input
-                            autoFocus
-                            value={editingCategoryName}
-                            onChange={(e) => setEditingCategoryName(e.target.value)}
-                            className={`flex-1 ${inputClass}`}
+                      if (draggedCategoryId) handleMoveCategoryTo(draggedCategoryId, category.id);
+                      else if (draggedItem && draggedItem.categoryId !== category.id) handleMoveItemToCategory(draggedItem.itemId, category.id);
+                      setDraggedCategoryId(null);
+                      setDraggedItem(null);
+                      setDropHighlightCategoryId(null);
+                    }}
+                    className={`scroll-mt-6 animate-fade-up rounded-lg transition-shadow duration-fast ${
+                      dropHighlightCategoryId === category.id ? "ring-2 ring-primary/50 ring-offset-2 ring-offset-background" : ""
+                    }`}
+                  >
+                    {/* Wrapped in its own <ul> (a real, single-item list) rather than a bare div —
+                        full-order-flow.spec.ts locates a freshly-created category via
+                        `page.locator("li", {hasText: categoryName})`. This <li> deliberately does
+                        NOT also wrap the items list further down — see this file's own Phase 68
+                        notes. */}
+                    <ul>
+                      <li className="flex flex-wrap items-start gap-3 border-b-2 border-border pb-2.5">
+                        {canWrite && (
+                          <GripHandle
+                            label={category.name}
+                            onMoveUp={() => handleReorderCategory(category, "up")}
+                            onMoveDown={() => handleReorderCategory(category, "down")}
+                            disableUp={categoryIndex === 0}
+                            disableDown={categoryIndex === categories.length - 1}
+                            onDragStart={() => setDraggedCategoryId(category.id)}
+                            onDragEnd={() => setDraggedCategoryId(null)}
                           />
-                          <input
-                            value={editingCategoryDescription}
-                            onChange={(e) => setEditingCategoryDescription(e.target.value)}
-                            placeholder="Description (optional)"
-                            className={`flex-1 ${inputClass}`}
-                          />
-                          <div className="flex gap-2">
-                            <button type="submit" className="text-sm font-medium text-primary hover:underline">
-                              Save
-                            </button>
-                            <button type="button" onClick={cancelRenameCategory} className={rowActionClass}>
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="min-w-[140px] flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="truncate font-heading text-lg font-semibold text-foreground">{category.name}</h2>
-                            <span className="text-xs text-muted">
-                              {allCategoryItems.length} item{allCategoryItems.length === 1 ? "" : "s"}
-                            </span>
-                            {!category.isActive && <Badge tone="neutral">Hidden (all locations)</Badge>}
-                            {categoryOverride && <Badge tone="info">Overridden here</Badge>}
-                          </div>
-                          {category.description && <p className="mt-0.5 text-sm italic text-muted">{category.description}</p>}
-                        </div>
-                      )}
-
-                      {canWrite && editingCategoryId !== category.id && (
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Switch
-                            checked={category.isActive}
-                            onChange={() => handleToggleCategoryActive(category)}
-                            label={`${category.name} visible to customers`}
-                          />
-                          <button onClick={() => openCreatePanel(category.id)} className={rowActionClass} disabled={expandedItemId === CREATING}>
-                            + Quick add
-                          </button>
-                          <button onClick={() => startRenameCategory(category)} className={rowActionClass}>
-                            Rename
-                          </button>
-                          <button onClick={() => handleDeleteCategory(category)} className="text-sm font-medium text-danger hover:underline">
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  </ul>
-
-                  {canWrite && editingCategoryId !== category.id && (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-border bg-black/[0.015] px-4 py-1.5 text-xs text-muted">
-                      <span>This location:</span>
-                      <button
-                        onClick={() => handleSaveCategoryOverride(category.id, { isActive: !effectiveCategoryActive })}
-                        className="font-medium text-foreground/70 hover:text-foreground hover:underline"
-                      >
-                        {effectiveCategoryActive ? "hide only here" : "show only here"}
-                      </button>
-                      {categoryOverride && (
+                        )}
                         <button
-                          onClick={() => handleResetCategoryOverride(category.id)}
+                          type="button"
+                          onClick={() => toggleCategoryCollapsed(category.id)}
+                          aria-expanded={!collapsed}
+                          aria-label={`${collapsed ? "Expand" : "Collapse"} ${category.name}`}
+                          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground"
+                        >
+                          <IconChevronDown className={`h-4 w-4 transition-transform duration-fast ${collapsed ? "-rotate-90" : ""}`} />
+                        </button>
+
+                        {editingCategoryId === category.id ? (
+                          <form
+                            className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              saveRenameCategory(category.id);
+                            }}
+                          >
+                            <input
+                              autoFocus
+                              value={editingCategoryName}
+                              onChange={(e) => setEditingCategoryName(e.target.value)}
+                              className={`flex-1 ${inputClass}`}
+                            />
+                            <input
+                              value={editingCategoryDescription}
+                              onChange={(e) => setEditingCategoryDescription(e.target.value)}
+                              placeholder="Description (optional)"
+                              className={`flex-1 ${inputClass}`}
+                            />
+                            <div className="flex gap-2">
+                              <button type="submit" className="text-sm font-medium text-primary hover:underline">
+                                Save
+                              </button>
+                              <button type="button" onClick={cancelRenameCategory} className={rowActionClass}>
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="min-w-[140px] flex-1">
+                            <div className="flex flex-wrap items-baseline gap-2">
+                              <h2 className="truncate font-heading text-lg font-semibold uppercase tracking-[0.03em] text-foreground">{category.name}</h2>
+                              <span className="text-xs text-muted">
+                                {allCategoryItems.length} item{allCategoryItems.length === 1 ? "" : "s"}
+                              </span>
+                              {!category.isActive && <Badge tone="neutral">Hidden (all locations)</Badge>}
+                              {categoryOverride && <Badge tone="info">Overridden here</Badge>}
+                            </div>
+                            {category.description && <p className="mt-0.5 text-sm italic text-muted">{category.description}</p>}
+                          </div>
+                        )}
+
+                        {canWrite && editingCategoryId !== category.id && (
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Switch
+                              checked={category.isActive}
+                              onChange={() => handleToggleCategoryActive(category)}
+                              label={`${category.name} visible to customers`}
+                            />
+                            <button onClick={() => openCreatePanel(category.id)} className={rowActionClass} disabled={expandedItemId === CREATING}>
+                              + Quick add
+                            </button>
+                            <button onClick={() => startRenameCategory(category)} className={rowActionClass}>
+                              Rename
+                            </button>
+                            <button onClick={() => handleDeleteCategory(category)} className="text-sm font-medium text-danger hover:underline">
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    </ul>
+
+                    {canWrite && editingCategoryId !== category.id && (
+                      <div className="flex flex-wrap items-center gap-2 py-1.5 text-xs text-muted">
+                        <span>This location:</span>
+                        <button
+                          onClick={() => handleSaveCategoryOverride(category.id, { isActive: !effectiveCategoryActive })}
                           className="font-medium text-foreground/70 hover:text-foreground hover:underline"
                         >
-                          reset to canonical
+                          {effectiveCategoryActive ? "hide only here" : "show only here"}
                         </button>
-                      )}
-                    </div>
-                  )}
+                        {categoryOverride && (
+                          <button
+                            onClick={() => handleResetCategoryOverride(category.id)}
+                            className="font-medium text-foreground/70 hover:text-foreground hover:underline"
+                          >
+                            reset to canonical
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-                  {/* A CSS grid-template-rows transition (0fr <-> 1fr) rather than a plain
-                      mount/unmount — the standard way to animate to/from `height: auto`. Always
-                      rendered so prefers-reduced-motion (which zeroes transition-duration globally)
-                      still applies correctly. */}
-                  <div className={`grid transition-[grid-template-rows] duration-normal ease-premium ${collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
-                    <div className="overflow-hidden">
-                      <div className="border-t border-border px-4">
+                    {/* A CSS grid-template-rows transition (0fr <-> 1fr) rather than a plain
+                        mount/unmount — the standard way to animate to/from `height: auto`. Always
+                        rendered so prefers-reduced-motion (which zeroes transition-duration
+                        globally) still applies correctly. */}
+                    <div className={`grid transition-[grid-template-rows] duration-normal ease-premium ${collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
+                      <div className="overflow-hidden">
                         {allCategoryItems.length === 0 ? (
                           <p className="py-3 text-sm text-muted">No items in this category yet.</p>
                         ) : visibleCategoryItems.length === 0 ? (
@@ -994,46 +1005,69 @@ export function MenuManagementPage() {
                       </div>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+                );
+              })}
 
-            {orphanedItems.length > 0 && (
-              <Card className="!p-0 overflow-hidden animate-fade-up">
-                <div className="p-4">
-                  <h2 className="font-heading text-lg font-semibold text-foreground">Uncategorized</h2>
-                  <p className="text-xs text-muted">These items point to a category that no longer exists — move them to a real category.</p>
-                </div>
-                <div className="border-t border-border px-4">
+              {orphanedItems.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="border-b-2 border-border pb-2.5">
+                    <h2 className="font-heading text-lg font-semibold uppercase tracking-[0.03em] text-foreground">Uncategorized</h2>
+                    <p className="text-xs text-muted">These items point to a category that no longer exists — move them to a real category.</p>
+                  </div>
                   <ul className="flex flex-col divide-y divide-border">
                     {orphanedItems.filter(itemMatchesFilters).map((item, itemIndex) => renderItemRow(item, orphanedItems, itemIndex))}
                   </ul>
                 </div>
-              </Card>
-            )}
-          </div>
+              )}
+            </div>
           )}
         </>
       )}
+    </div>
+  );
 
-      <ItemEditorDrawer
-        open={draft !== null}
-        mode={expandedItemId === CREATING ? "create" : "edit"}
-        draft={draft}
-        setDraft={setDraft}
-        categories={categories}
-        saving={saving}
-        justSaved={justSaved}
-        saveDraft={saveDraft}
-        closePanel={closePanel}
-        businessId={businessId}
-        restaurantId={restaurantId}
-        expandedItemId={expandedItemId === CREATING ? null : expandedItemId}
-        override={expandedItemId ? itemOverrideById.get(expandedItemId) : undefined}
-        onSaveOverride={(patch) => expandedItemId && expandedItemId !== CREATING && handleSaveItemOverride(expandedItemId, patch)}
-        onResetOverride={() => expandedItemId && expandedItemId !== CREATING && handleResetItemOverride(expandedItemId)}
-        currency={currency}
-      />
+  return (
+    <>
+      <MenuBuilderLayout
+        leftRail={
+          <CategoryNavRail
+            categories={categories}
+            itemCountByCategory={itemCountByCategory}
+            totalItemCount={items.length}
+            search={search}
+            onSearchChange={setSearch}
+            availabilityFilter={availabilityFilter}
+            onAvailabilityFilterChange={setAvailabilityFilter}
+            hasModifiersOnly={hasModifiersOnly}
+            onHasModifiersOnlyChange={setHasModifiersOnly}
+            noImageOnly={noImageOnly}
+            onNoImageOnlyChange={setNoImageOnly}
+            onJumpToCategory={scrollToCategory}
+          />
+        }
+        rightPanel={
+          <ItemEditorDrawer
+            open={draft !== null}
+            mode={expandedItemId === CREATING ? "create" : "edit"}
+            draft={draft}
+            setDraft={setDraft}
+            categories={categories}
+            saving={saving}
+            justSaved={justSaved}
+            saveDraft={saveDraft}
+            closePanel={closePanel}
+            businessId={businessId}
+            restaurantId={restaurantId}
+            expandedItemId={expandedItemId === CREATING ? null : expandedItemId}
+            override={expandedItemId ? itemOverrideById.get(expandedItemId) : undefined}
+            onSaveOverride={(patch) => expandedItemId && expandedItemId !== CREATING && handleSaveItemOverride(expandedItemId, patch)}
+            onResetOverride={() => expandedItemId && expandedItemId !== CREATING && handleResetItemOverride(expandedItemId)}
+            currency={currency}
+          />
+        }
+      >
+        {centerCanvas}
+      </MenuBuilderLayout>
 
       {/* Live preview — the real running storefront in an iframe, not a second renderer. Escape
           and the backdrop both close it, same convention as the item editor drawer. */}
@@ -1072,6 +1106,6 @@ export function MenuManagementPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

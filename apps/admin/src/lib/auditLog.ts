@@ -42,4 +42,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "printer.updated": "Printer updated",
   "printer.deleted": "Printer removed",
   "print_job.failed": "Print job failed",
+  "marketplace_integration.connected": "Marketplace integration connected",
+  "marketplace_integration.disconnected": "Marketplace integration disconnected",
+  "marketplace_integration.menu_sync_triggered": "Marketplace menu sync triggered",
 };

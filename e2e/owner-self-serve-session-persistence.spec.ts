@@ -46,6 +46,7 @@ test.describe.serial("owner self-serve session persistence, isolation, and dupli
     await page.getByLabel("Full name").fill("E2E Persistence Owner");
     await page.getByLabel("Email").fill(ownerEmail);
     await page.getByLabel("Password").fill(password);
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({ timeout: 10_000 });

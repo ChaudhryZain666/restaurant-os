@@ -1,16 +1,23 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Alert, Badge, Button, Card, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
 import { IconArrowRight, IconHeadset, IconMapPin, IconPhone, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { apiClient } from "../lib/api";
 
+// Phase 80 consistency fix — this page's own REASONS/RESTAURANT_TYPES never had an explicit
+// "agency" option, inconsistent with LeadForm.tsx's ROLES list (which already includes "Agency")
+// for the exact same contact flow used from DemoPage.tsx. Real gap found during the redesign
+// audit, not new scope: agencies are a named, real customer segment (Solutions#agencies, the new
+// Home "Who it's for" section, StartTrialPage's own agency CTA) that had no matching path here.
 const REASONS = [
   { value: "starting", label: "I'm interested in starting" },
   { value: "demo", label: "I want a product demo" },
   { value: "support", label: "I have a support question" },
   { value: "multi-location", label: "I manage multiple restaurants" },
+  { value: "agency", label: "I run an agency" },
   { value: "partnership", label: "Partnership" },
   { value: "general", label: "General question" },
 ] as const;
@@ -21,6 +28,7 @@ const RESTAURANT_TYPES = [
   "Takeaway / fast food",
   "Pizzeria",
   "Multi-location group",
+  "Agency",
   "Other",
 ] as const;
 
@@ -36,6 +44,8 @@ function reasonHelpText(reason: string): string {
       return "Describe what's happening and what you expected instead. If you're already a customer, the in-product help center usually gets you an answer faster.";
     case "multi-location":
       return "Tell us how many locations you run and whether they'd share a menu or need separate ones.";
+    case "agency":
+      return "Tell us how many restaurant clients you manage and what you're looking to do on their behalf.";
     case "partnership":
       return "Tell us who you are and what kind of partnership you have in mind.";
     default:
@@ -88,14 +98,12 @@ export function ContactPage() {
 
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Company"
-          title="Let's build a better ordering experience for your restaurant"
-          description="Whether you're just curious, ready to start, or already a customer with a question — tell us what you need and the right person will get back to you."
-        />
-      </Section>
+      <MarketingPageHero
+        eyebrow="Company"
+        title="Let's build a better ordering experience for your restaurant"
+        description="Whether you're just curious, ready to start, or already a customer with a question — tell us what you need and the right person will get back to you."
+        hideCta
+      />
 
       <Section tone="surface">
         <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-[1fr_1.3fr]">

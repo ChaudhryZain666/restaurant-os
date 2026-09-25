@@ -1,5 +1,7 @@
 import { Card, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import { LeadForm } from "../components/LeadForm";
 import { STOREFRONT_URL } from "../lib/links";
 import { IconArrowRight, IconCheck, IconHeadset, IconPalette, IconStore } from "../components/icons";
@@ -32,14 +34,11 @@ export function DemoPage() {
   });
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Proof, not promises"
-          title="Play with a real restaurant, not a mockup"
-          description="Switch its theme, change its colors, browse its real menu, and place a real (zero-cost) order — everything below is the actual product."
-        />
-      </Section>
+      <MarketingPageHero
+        eyebrow="Proof, not promises"
+        title="Play with a real restaurant, not a mockup"
+        description="Switch its theme, change its colors, browse its real menu, and place a real (zero-cost) order — everything below is the actual product."
+      />
 
       <Section tone="surface">
         <Reveal className="mx-auto flex max-w-4xl flex-col items-center gap-6 overflow-hidden rounded-2xl border border-border bg-surface p-8 text-center shadow-elevated sm:p-12">
@@ -154,6 +153,11 @@ export function DemoPage() {
           </Reveal>
         </div>
       </Section>
+
+      <MarketingClosingCta
+        title="Liked what you saw?"
+        description="Your own restaurant's storefront can be live in minutes — no waiting on a callback."
+      />
     </>
   );
 }

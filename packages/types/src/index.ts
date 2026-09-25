@@ -31,5 +31,7 @@ export * from "./types/agencyAuditLog.js";
 export * from "./types/clientCommercialTerms.js";
 export * from "./types/billingHistory.js";
 export * from "./types/menuImport.js";
+export * from "./types/menuImportJob.js";
 export * from "./types/theme.js";
 export * from "./types/printer.js";
+export * from "./types/marketplace.js";

@@ -54,6 +54,13 @@ interface RestaurantContextValue {
    *  uses this to decide whether to render the real page directly (domain) or fall back to the
    *  VITE_RESTAURANT_SLUG redirect (none). Never meaningful while `loading` is true. */
   resolvedVia: "slug" | "domain" | "none";
+  /** SEO audit fix — only ever set when resolved via `slug` (getRestaurantBySlug's response), the
+   *  active custom domain hostname this restaurant ALSO has, if any — always null when resolvedVia
+   *  is "domain" (you're already ON it) or "none". MenuPage.tsx uses this so a /r/:slug visitor's
+   *  canonical tag correctly points at the custom domain instead of self-referencing, closing a
+   *  duplicate-content gap: previously only a visitor already ON the custom domain got that
+   *  canonical, one that arrived via /r/:slug never did even though the domain was active. */
+  activeCustomDomain: string | null;
 }
 
 const RestaurantContext = createContext<RestaurantContextValue | undefined>(undefined);
@@ -76,6 +83,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedVia, setResolvedVia] = useState<"slug" | "domain" | "none">("none");
+  const [activeCustomDomain, setActiveCustomDomain] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug && !isBareStorefrontPath) {
@@ -101,21 +109,24 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const skipRefresh = !(slug && isPreview);
 
     apiClient
-      .request<{ restaurant: Restaurant; availability: RestaurantAvailability; supportIdentity: SupportIdentity }>(path, {
-        skipRefresh,
-      })
+      .request<{ restaurant: Restaurant; availability: RestaurantAvailability; supportIdentity: SupportIdentity; activeCustomDomain?: string | null }>(
+        path,
+        { skipRefresh }
+      )
       .then((data) => {
         if (cancelled) return;
         setRestaurant(data.restaurant);
         setAvailability(data.availability);
         setSupportIdentity(data.supportIdentity);
         setResolvedVia(slug ? "slug" : "domain");
+        setActiveCustomDomain(data.activeCustomDomain ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
         setRestaurant(null);
         setAvailability(null);
         setResolvedVia("none");
+        setActiveCustomDomain(null);
         // A failed by-domain lookup (this hostname isn't an active custom domain) is the routine,
         // expected outcome for anyone on the platform's own bare domain — not a real error state.
         // LegacyRedirect falls back silently rather than surfacing this `error` value anywhere.
@@ -131,7 +142,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
   return (
     <RestaurantContext.Provider
-      value={{ restaurant, availability, supportIdentity, loading, error, slug, isPreview, resolvedVia }}
+      value={{ restaurant, availability, supportIdentity, loading, error, slug, isPreview, resolvedVia, activeCustomDomain }}
     >
       {children}
     </RestaurantContext.Provider>

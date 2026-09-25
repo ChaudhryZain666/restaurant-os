@@ -4,6 +4,8 @@ Disallow: /cart
 Disallow: /r/*/t/
 Disallow: /r/*/cart
 Disallow: /r/*/loyalty
+Disallow: /r/*/preview
+Disallow: /r/*/experience
 Disallow: /orders
 Disallow: /account
 Disallow: /login
@@ -11,6 +13,8 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /confirm-email-change
+Disallow: /verify-email
+Disallow: /loyalty
 Disallow: /support/tickets
 
 Sitemap: /sitemap.xml

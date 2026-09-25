@@ -21,6 +21,7 @@ import { MyTicketsPage } from "./pages/MyTicketsPage";
 import { CreateTicketPage } from "./pages/CreateTicketPage";
 import { TicketDetailPage } from "./pages/TicketDetailPage";
 import { PrintReceiptPage } from "./pages/PrintReceiptPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 
 // Phase 32 — lazy-loaded so the qrcode dependency and the playground UI never ship in the bundle
 // real restaurants' normal /r/:slug traffic downloads; only a visitor who actually opens the
@@ -200,6 +201,11 @@ export function App() {
             </RequireAuth>
           }
         />
+
+        {/* Phase 79 (second pass) — catch-all for any URL that isn't one of the routes above and
+            isn't /r/:restaurantSlug/* either (that pattern has its own resolution failure UI, see
+            Layout.tsx's restaurantNotFound). Must stay last. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );

@@ -23,6 +23,15 @@ export function WhyWeExist() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>();
   const reducedMotion = useReducedMotion();
   const p = reducedMotion ? 1 : Math.min(1, progress * 1.4);
+  // Phase 80 — the chips converge toward the same center point as p -> 1, but their own opacity
+  // used to only fade to 0.15 (never fully gone), so at any scroll position where a reader pauses
+  // near full convergence, six half-visible labels overlap directly on the Logo — a genuinely
+  // illegible jumble, not just a fleeting transitional frame (confirmed via a static screenshot
+  // caught mid-scroll). Reaching true 0 well before the labels are close enough to overlap (by
+  // p=0.55, while they're still ~45% of the way out from center) means there is no scroll position
+  // where overlapping-but-still-visible text can occur at all — not a faster animation, a resting
+  // state that's clean at every point along it.
+  const chipOpacity = Math.max(0, 1 - p / 0.55);
 
   return (
     <div ref={ref}>
@@ -70,7 +79,7 @@ export function WhyWeExist() {
               className="absolute left-1/2 top-1/2 whitespace-nowrap rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-white/55 backdrop-blur-sm"
               style={{
                 transform: `translate(-50%,-50%) translate(${x}%,${y}%) scale(${scale})`,
-                opacity: 1 - p * 0.85,
+                opacity: chipOpacity,
                 transition: reducedMotion ? "none" : "transform 150ms linear, opacity 150ms linear",
               }}
             >

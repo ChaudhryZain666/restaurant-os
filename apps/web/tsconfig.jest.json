@@ -7,7 +7,7 @@
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["jest"],
+    "types": ["vite/client", "jest"],
     "noEmit": true
   },
   "include": ["src"]

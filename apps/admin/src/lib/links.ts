@@ -10,6 +10,14 @@ const MARKETING_ORIGIN = import.meta.env.VITE_MARKETING_URL ?? "http://localhost
  *  over, since the marketing contact form is itself unauthenticated. */
 export const MARKETING_CONTACT_URL = `${MARKETING_ORIGIN}/contact`;
 
+/** Phase 77 — the real, public legal pages, linked from every self-serve signup flow's required
+ *  consent checkbox (RegisterPage.tsx, OwnerSignupWizardPage.tsx, AgencySignupWizardPage.tsx).
+ *  Same "lives on the marketing site, opened in a new tab, no auth carried over" pattern as
+ *  MARKETING_CONTACT_URL above — a signup form should never navigate the user away from their
+ *  half-filled form to read a policy. */
+export const MARKETING_TERMS_URL = `${MARKETING_ORIGIN}/terms`;
+export const MARKETING_PRIVACY_URL = `${MARKETING_ORIGIN}/privacy`;
+
 /** The customer storefront's real, public URL for this restaurant — only valid once published. */
 export function storefrontUrl(slug: string): string {
   return `${STOREFRONT_ORIGIN}/r/${slug}`;

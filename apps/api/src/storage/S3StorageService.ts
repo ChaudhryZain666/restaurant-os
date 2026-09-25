@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { StorageService, UploadResult } from "./StorageService.js";
 
 export interface S3StorageConfig {
@@ -41,6 +41,13 @@ export class S3StorageService implements StorageService {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }));
+  }
+
+  async download(key: string): Promise<Buffer> {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.config.bucket, Key: key }));
+    if (!res.Body) throw new Error(`Object "${key}" has no body.`);
+    const bytes = await res.Body.transformToByteArray();
+    return Buffer.from(bytes);
   }
 
   getUrl(key: string): string {

@@ -5,6 +5,7 @@ import { useCart } from "../context/CartContext";
 import { useRestaurant } from "../context/RestaurantContext";
 import { useActiveTheme } from "../theme/useActiveTheme";
 import { useCartPop } from "../theme/useCartPop";
+import { useNoIndex } from "../hooks/useNoIndex";
 import { AvailabilityBanner } from "./AvailabilityBanner";
 import { TableBanner } from "./TableBanner";
 import { HelpWidget } from "./HelpWidget";
@@ -56,6 +57,10 @@ export function Layout() {
   // the whole page body rather than letting each page under /r/:slug/* handle it separately.
   const onRestaurantRoute = Boolean(useMatch("/r/:restaurantSlug/*"));
   const restaurantNotFound = onRestaurantRoute && !restaurantLoading && !restaurant && Boolean(restaurantError);
+  // Phase 79 (second pass, SEO audit) — a bad/mistyped/dead restaurant slug previously got no
+  // robots signal at all (useStorefrontSeo only ever runs when a restaurant resolves), so this
+  // thin, identical-looking error page was indexable by default at a unique URL per bad slug.
+  useNoIndex(restaurantNotFound);
 
   return (
     <div className="flex min-h-svh flex-col bg-background">

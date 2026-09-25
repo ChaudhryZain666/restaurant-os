@@ -66,7 +66,12 @@ const NAV_ITEMS = [
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return [
     "group relative flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-[11px] font-medium transition-colors duration-fast",
-    isActive ? "bg-white/10 text-primary" : "text-white/55 hover:bg-white/5 hover:text-white/85",
+    // Phase 78 — was `bg-white/10 text-primary`: dark wine TEXT on a barely-lightened near-black
+    // background, effectively unreadable for whichever section is active. The main admin sidebar's
+    // own active state (Layout.tsx's navLinkClass) already gets this right — a solid
+    // --color-primary fill with --color-primary-foreground (ivory) text — matching that instead of
+    // inventing a second, broken convention here.
+    isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-white/55 hover:bg-white/5 hover:text-white/85",
   ].join(" ");
 }
 

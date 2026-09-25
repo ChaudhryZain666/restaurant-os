@@ -49,7 +49,7 @@ function rowsFromMatrix(headers: string[], matrix: string[][]): Array<Record<str
  * later opens in Excel — see menuImportReport.ts's own sanitization for that.
  */
 export function parseCsv(buffer: Buffer): ParsedSheet {
-  const text = buffer.toString("utf-8").replace(/^﻿/, ""); // strip a UTF-8 BOM if present
+  const text = buffer.toString("utf-8").replace(/^\uFEFF/, ""); // strip a UTF-8 BOM if present
   const result = Papa.parse<string[]>(text, { skipEmptyLines: true });
   if (result.errors.length > 0 && result.data.length === 0) {
     throw ApiError.badRequest(`Could not parse this CSV file: ${result.errors[0].message}`);

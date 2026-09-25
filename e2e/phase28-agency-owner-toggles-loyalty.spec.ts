@@ -36,6 +36,7 @@ test.describe.serial("agency signup wizard (Phase 28)", () => {
     await page.getByLabel("Full name").fill("Wizard Agency Owner");
     await page.getByLabel("Email").fill(`wizard-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("WizardOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await expect(page.getByRole("heading", { name: "Tell us about your agency" })).toBeVisible({ timeout: 10_000 });
@@ -66,6 +67,7 @@ test.describe.serial("agency-provisioned owner direct access (Phase 28)", () => 
     await page.getByLabel("Full name").fill("Direct Mode Agency Owner");
     await page.getByLabel("Email").fill(`direct-mode-agency-${stamp}@test.local`);
     await page.getByLabel("Password").fill("DirectModeAgency1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 

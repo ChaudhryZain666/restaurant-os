@@ -1,7 +1,8 @@
-import { Link } from "react-router-dom";
 import type { ComponentType } from "react";
-import { Button, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Reveal } from "@restaurant/ui";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import {
   MockFrame,
   AgencyMock,
@@ -10,7 +11,6 @@ import {
   ModifierMock,
   OrdersMock,
 } from "../components/FeatureMocks";
-import { IconArrowRight } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 
 interface Scenario {
@@ -104,14 +104,13 @@ export function SolutionsPage() {
   });
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Solutions"
-          title="How different restaurants use the system"
-          description="Same platform underneath — but a café's rush hour, a pizzeria's modifier list, and an agency's client roster don't look anything alike. Here's how each one actually uses it."
-        />
-        <Reveal className="mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-2">
+      <MarketingPageHero
+        eyebrow="Solutions"
+        title="How different restaurants use the system"
+        description="Same platform underneath — but a café's rush hour, a pizzeria's modifier list, and an agency's client roster don't look anything alike. Here's how each one actually uses it."
+      />
+      <Section className="py-10 sm:py-12">
+        <Reveal className="mx-auto flex max-w-2xl flex-wrap justify-center gap-2">
           {SCENARIOS.map((s) => (
             <a
               key={s.id}
@@ -128,17 +127,10 @@ export function SolutionsPage() {
         <ScenarioChapter key={scenario.id} scenario={scenario} index={i} />
       ))}
 
-      <Section>
-        <Reveal className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface p-10 text-center shadow-md">
-          <h2 className="font-heading text-2xl font-semibold text-foreground">Not sure which fits your restaurant?</h2>
-          <p className="max-w-lg text-muted">Every plan includes the same core platform — start free and grow into it.</p>
-          <Link to="/start-trial">
-            <Button size="lg">
-              Start Free Trial <IconArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </Reveal>
-      </Section>
+      <MarketingClosingCta
+        title="Not sure which fits your restaurant?"
+        description="Every plan includes the same core platform — start free and grow into it."
+      />
     </>
   );
 }

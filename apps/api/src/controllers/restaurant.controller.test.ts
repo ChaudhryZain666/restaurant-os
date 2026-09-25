@@ -484,6 +484,59 @@ describe("restaurant retrieval", () => {
     expect(res.body.data.restaurant.settings).toBeDefined();
   });
 
+  it("SEO audit fix — activeCustomDomain is null when no custom domain is active for this restaurant", async () => {
+    const res = await request(app).get(`/api/v1/restaurants/by-slug/${restaurantA.slug}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.activeCustomDomain).toBeNull();
+  });
+
+  it("SEO audit fix — activeCustomDomain reflects the hostname when an active DomainMapping exists, so /r/:slug's own canonical tag can point at it instead of self-referencing (duplicate-content fix)", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+    const hostname = `custom-${Date.now()}.example.com`;
+    await DomainMapping.create({
+      hostname,
+      businessId: business._id,
+      locationId: restaurant._id,
+      status: "active",
+      verificationToken: "irrelevant-for-this-test",
+      verifiedAt: new Date(),
+      activatedAt: new Date(),
+    });
+    try {
+      const res = await request(app).get(`/api/v1/restaurants/by-slug/${restaurant.slug}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.activeCustomDomain).toBe(hostname);
+    } finally {
+      await DomainMapping.deleteOne({ hostname });
+      await Restaurant.deleteOne({ _id: restaurant._id });
+      await Business.deleteOne({ _id: business._id });
+    }
+  });
+
+  it("SEO audit fix — a pending/verified (not yet active) DomainMapping does not surface as activeCustomDomain", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+    const hostname = `pending-${Date.now()}.example.com`;
+    await DomainMapping.create({
+      hostname,
+      businessId: business._id,
+      locationId: restaurant._id,
+      status: "verified",
+      verificationToken: "irrelevant-for-this-test",
+      verifiedAt: new Date(),
+    });
+    try {
+      const res = await request(app).get(`/api/v1/restaurants/by-slug/${restaurant.slug}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.activeCustomDomain).toBeNull();
+    } finally {
+      await DomainMapping.deleteOne({ hostname });
+      await Restaurant.deleteOne({ _id: restaurant._id });
+      await Business.deleteOne({ _id: business._id });
+    }
+  });
+
   it("the public availability reflects businessHours, with a nextOpenAt, when closed for hours (Phase 51)", async () => {
     const ALL_CLOSED = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => ({
       day,

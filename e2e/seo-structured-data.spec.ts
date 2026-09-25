@@ -33,8 +33,32 @@ test("private pages carry a real noindex meta tag, not just a robots.txt entry",
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
 });
 
-test("the storefront itself is NOT noindexed", async ({ page }) => {
+test("Phase 79 SEO fix — the seeded demo-restaurant storefront IS noindexed", async ({ page }) => {
   await page.goto("http://localhost:5173/r/demo-restaurant");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+});
+
+test("a real (non-demo) restaurant storefront is NOT noindexed", async ({ page }) => {
+  await page.goto("http://localhost:5173/r/spice-route");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+});
+
+// Phase 79 (second pass) — this app previously had no catch-all route at all: an unmatched URL
+// rendered a blank page, no noindex signal, exactly the "404 accidentally becomes indexable"
+// failure mode this audit pass flagged.
+test("an unmatched URL shows a real not-found page and is noindexed", async ({ page }) => {
+  await page.goto(`http://localhost:5173/this-page-does-not-exist-${Date.now()}`);
+  await expect(page.getByRole("heading", { name: "Page not found", level: 1 })).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+});
+
+// A bad/mistyped restaurant slug previously showed the same real "we can't find that restaurant"
+// message with no noindex tag — a thin, identical-looking error page indexable by default at a
+// unique URL per bad slug.
+test("a bad restaurant slug shows the not-found state and is noindexed", async ({ page }) => {
+  await page.goto(`http://localhost:5173/r/this-slug-does-not-exist-${Date.now()}`);
+  await expect(page.getByText("We can't find that restaurant")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
 });

@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Alert, Badge, Button, Card, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { FAQS } from "../lib/content";
@@ -48,7 +50,7 @@ export function PricingPage() {
     description: "Simple, transparent pricing for restaurant online ordering. Start free, upgrade as you grow — no per-order commission.",
   });
 
-  const { plans, error } = usePublicPlans();
+  const { plans, error, retry } = usePublicPlans();
 
   const ownerPlans = plans?.filter((p) => p.type === "OWNER").sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)) ?? [];
   const agencyPlans = plans?.filter((p) => p.type === "AGENCY").sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)) ?? [];
@@ -56,19 +58,19 @@ export function PricingPage() {
 
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Pricing"
-          title="Simple pricing, built to grow with you"
-          description="No credit card required to start your 14-day trial — cancel anytime before it ends."
-        />
-      </Section>
+      <MarketingPageHero
+        eyebrow="Pricing"
+        title="Simple pricing, built to grow with you"
+        description="No credit card required to start your 14-day trial — cancel anytime before it ends."
+      />
 
       <Section tone="surface">
         {error && (
-          <Alert tone="danger" role="alert" className="mx-auto mb-6 max-w-xl">
-            Couldn't load pricing right now — please try again shortly.
+          <Alert tone="danger" role="alert" className="mx-auto mb-6 flex max-w-xl items-center justify-between gap-4">
+            <span>Couldn't load pricing right now — please try again shortly.</span>
+            <Button variant="outline" size="sm" onClick={retry}>
+              Try again
+            </Button>
           </Alert>
         )}
         {!plans && !error ? (
@@ -100,7 +102,9 @@ export function PricingPage() {
                     ))}
                   </ul>
                   <Link to="/start-trial">
-                    <Button className="w-full">Start free trial</Button>
+                    {/* Phase 80 CTA-consistency pass: was "Start free trial" — every other primary
+                        CTA on the site says "Start Free Trial." */}
+                    <Button className="w-full">Start Free Trial</Button>
                   </Link>
                 </Card>
               </Reveal>
@@ -130,6 +134,11 @@ export function PricingPage() {
           ))}
         </div>
       </Section>
+
+      <MarketingClosingCta
+        title="Start your 14-day trial today"
+        description="No credit card required — see your own restaurant's numbers before you decide."
+      />
     </>
   );
 }

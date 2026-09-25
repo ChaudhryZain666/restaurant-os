@@ -39,9 +39,13 @@ const FIELD_LABEL: Record<MenuImportFieldKey, string> = {
   modifierMaxSelect: "Modifier max select",
 };
 
+// "merge" is a Phase 81 addition to the shared MenuImportRowAction type, used by the async
+// pdf/url/image import job flow (see ImportReviewList.tsx) — the CSV wizard's own resolveImport()
+// never produces it, but the Record must stay exhaustive against the shared type.
 const ACTION_LABEL: Record<MenuImportRowAction, string> = {
   create: "New item",
   update: "Will update",
+  merge: "Will fill in gaps",
   skip: "Already exists — skipped",
   error: "Needs fixing",
 };
@@ -49,6 +53,7 @@ const ACTION_LABEL: Record<MenuImportRowAction, string> = {
 const ACTION_TONE: Record<MenuImportRowAction, "success" | "info" | "neutral" | "danger"> = {
   create: "success",
   update: "info",
+  merge: "info",
   skip: "neutral",
   error: "danger",
 };
@@ -160,10 +165,13 @@ export function MenuImportPage() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Import menu</h1>
+        <Link to="/menu/import" className="mb-2 flex w-fit items-center gap-1.5 text-sm font-medium text-foreground/70 transition-colors duration-fast hover:text-foreground">
+          ← Other ways to import
+        </Link>
+        <h1 className="font-heading text-2xl font-semibold text-foreground">Import from a spreadsheet</h1>
         <p className="text-sm text-muted">
-          Upload a spreadsheet of your menu to create categories and items in bulk, instead of adding them one at a
-          time.
+          Upload a CSV or spreadsheet of your menu to create categories and items in bulk, instead of adding them one
+          at a time.
         </p>
       </div>
 

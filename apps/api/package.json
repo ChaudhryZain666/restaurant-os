@@ -20,6 +20,8 @@
     "cleanup:demo-data": "tsx src/scripts/cleanupDemoData.ts",
     "cleanup:test-plans": "tsx src/scripts/cleanupOrphanedTestPlans.ts",
     "cleanup:e2e-orders": "tsx src/scripts/cleanupE2eOrders.ts",
+    "backup": "tsx src/scripts/backupDatabase.ts",
+    "restore": "tsx src/scripts/restoreDatabase.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

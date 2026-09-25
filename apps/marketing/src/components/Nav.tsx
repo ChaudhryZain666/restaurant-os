@@ -1,8 +1,15 @@
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Button, Logo } from "@restaurant/ui";
 import { ADMIN_LOGIN_URL } from "../lib/links";
 import { useScrolled } from "../hooks/useScrolled";
+
+// Phase 80 — routes whose hero renders on HomePage's dark `.theme-obsidian` canvas. Nav lives in
+// Layout.tsx, OUTSIDE that wrapper, so it needs its own explicit list rather than inferring "dark
+// hero" from page content — a synchronous, route-keyed check (not a context + effect) so there's
+// zero flash-of-wrong-state on first paint. Extend this set as other routes get their own dark
+// cinematic openers in a later stage.
+const DARK_HERO_ROUTES = new Set(["/"]);
 
 interface DropdownLink {
   label: string;
@@ -59,7 +66,15 @@ function Dropdown({ menu }: { menu: NavDropdown }) {
   return (
     <div className="group relative">
       <button
-        className="flex items-center gap-1 rounded-pill px-3.5 py-2 text-sm font-medium text-foreground/80 transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground"
+        // Phase 80 note: was `text-foreground/80`. Tailwind can't generate an opacity-modifier
+        // utility for a color defined as a raw `var(--color-foreground)` reference (same class of
+        // bug as this file's own header-background comment below, for `bg-surface/90`) — the class
+        // silently failed to generate at all, so this button had no `color` rule of its own and
+        // inherited whatever `:root` resolved to at load, frozen even after `.theme-obsidian`
+        // overrides the custom property further down the tree (confirmed: nav links stayed dark
+        // brown over the dark hero, unreadable). `text-muted` needs no opacity modifier — it's
+        // already the correct "de-emphasized foreground" token, and it's theme-aware for real.
+        className="flex items-center gap-1 rounded-pill px-3.5 py-2 text-sm font-medium text-muted transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground"
         aria-haspopup="true"
       >
         {menu.label}
@@ -88,7 +103,11 @@ function Dropdown({ menu }: { menu: NavDropdown }) {
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return [
     "rounded-pill px-3.5 py-2 text-sm font-medium transition-colors duration-fast",
-    isActive ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-black/[0.04] hover:text-foreground",
+    // Phase 80: `text-foreground/80` -> `text-muted`, same fix as Dropdown's button above.
+    // `bg-primary/10` (active state) has the identical opacity-on-var() issue and was already
+    // silently not generating before this phase — pre-existing, out of this stage's scope; the
+    // active link's `text-primary` (no opacity modifier) still colors correctly either way.
+    isActive ? "bg-primary/10 text-primary" : "text-muted hover:bg-black/[0.04] hover:text-foreground",
   ].join(" ");
 }
 
@@ -99,7 +118,7 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-pill px-3.5 py-2 text-sm font-medium text-foreground/80 hover:bg-black/[0.04] hover:text-foreground"
+        className="flex w-full items-center justify-between rounded-pill px-3.5 py-2 text-sm font-medium text-muted hover:bg-black/[0.04] hover:text-foreground"
       >
         {menu.label}
         <svg
@@ -120,7 +139,7 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
               key={link.to}
               to={link.to}
               onClick={onNavigate}
-              className="rounded-lg px-2.5 py-1.5 text-sm text-foreground/70 hover:bg-black/[0.03] hover:text-foreground"
+              className="rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-black/[0.03] hover:text-foreground"
             >
               {link.label}
             </Link>
@@ -133,17 +152,21 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
 
 export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  // The one piece of chrome every page shares — a small scroll-reactive tightening (shorter
-  // padding, a real shadow instead of just the always-on border) so the header reads as reacting
-  // to the page rather than sitting on top of it, without changing its actual translucent-blur
-  // treatment (already present at rest, unlike the storefront's Cinematic header, which had no
-  // background at all until scrolled — a different problem this isn't fixing).
-  const scrolled = useScrolled(10);
+  const { pathname } = useLocation();
+  const overDarkHero = DARK_HERO_ROUTES.has(pathname);
+  // Raised from 10 to 24 (Phase 80) — at 10px the transparent-vs-solid swap felt twitchy right at
+  // rest; 24px gives the dark hero a moment to actually read before the bar commits to solid.
+  const scrolled = useScrolled(24);
+  // Phase 80 — mirrors apps/web/src/theme/cinematic/Header.tsx's exact `solid = scrolled ||
+  // mobileOpen || !hasHeroBehindIt` shape: a page with no dark hero is solid from pixel one (every
+  // route but Home, today), an open mobile panel is always solid regardless of scroll position,
+  // and Home itself only goes solid once actually scrolled.
+  const solid = scrolled || mobileOpen || !overDarkHero;
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b backdrop-blur transition-[box-shadow,border-color] duration-300 ${
-        scrolled ? "border-border shadow-sm" : "border-transparent"
+      className={`sticky top-0 z-40 border-b backdrop-blur transition-[background-color,box-shadow,border-color] duration-300 ${
+        solid ? "border-border shadow-sm" : "theme-obsidian border-transparent"
       }`}
       // Tailwind can't generate an opacity-modifier utility (`bg-surface/90`) for a color defined
       // as a raw `var(--color-surface)` reference (its `/N` syntax needs an rgb-channel or hex
@@ -152,7 +175,14 @@ export function Nav() {
       // (confirmed: unreadable nav text once scrolled past the dark hero). color-mix() works with
       // any valid color, opaque var() included, so it's the safe fix here without touching every
       // other place this app's tokens are consumed as plain `var(--color-*)` colors.
-      style={{ backgroundColor: "color-mix(in srgb, var(--color-surface) 90%, transparent)" }}
+      //
+      // Phase 80 — transparent mode (`!solid`) additionally applies the `.theme-obsidian` class
+      // right here on the header itself. Nav renders in Layout.tsx, OUTSIDE HomePage's own
+      // `.theme-obsidian` wrapper, so without this every `var(--color-foreground)`/`var(--color-
+      // muted)`/`var(--color-primary)` reference below would resolve to :root's LIGHT palette —
+      // dark-brown-on-near-black nav text over the dark hero. This is the exact ghost-nav bug
+      // apps/web/src/theme/cinematic/Header.tsx already hit and fixed once; same fix here.
+      style={{ backgroundColor: solid ? "color-mix(in srgb, var(--color-surface) 90%, transparent)" : "transparent" }}
     >
       <div
         className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 transition-[padding] duration-300 sm:px-6 ${
@@ -160,7 +190,7 @@ export function Nav() {
         }`}
       >
         <Link to="/">
-          <Logo />
+          <Logo variant={solid ? "default" : "light"} />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
@@ -178,7 +208,7 @@ export function Nav() {
         <div className="flex items-center gap-2">
           <a
             href={ADMIN_LOGIN_URL}
-            className="hidden rounded-pill px-3 py-2 text-sm font-medium text-foreground/80 hover:text-foreground sm:inline-block"
+            className="hidden rounded-pill px-3 py-2 text-sm font-medium text-muted hover:text-foreground sm:inline-block"
           >
             Log in
           </a>
@@ -203,6 +233,16 @@ export function Nav() {
         </div>
       </div>
 
+      {/* Phase 80 note: an earlier draft of this panel used Framer Motion (LazyMotion + m +
+          AnimatePresence) for a real exit animation. Measured against a real production build,
+          that pulled motion/react's core into THIS app's entry chunk regardless — Nav.tsx is
+          shared chrome, reachable synchronously from main.tsx via Layout.tsx, so nothing imported
+          here can be deferred by LazyMotion's `features` prop (that only defers the
+          domAnimation/domMax feature bundle, not the base package). Entry chunk grew by +30KB
+          gzip, well past this stage's own +10KB budget. Reverted to the plain CSS entrance
+          animation (`animate-slide-up`, see index.css) this panel already shipped with — no exit
+          animation on close, same as before this phase. Framer Motion stays installed for Stage 2,
+          where it belongs in route-level lazy-loaded components, not here. */}
       {mobileOpen && (
         <nav
           id="mobile-nav"
@@ -227,7 +267,7 @@ export function Nav() {
             Company
           </Link>
           <div className="mt-2 flex items-center justify-between border-t border-border pt-3">
-            <a href={ADMIN_LOGIN_URL} className="text-sm font-medium text-foreground/80">
+            <a href={ADMIN_LOGIN_URL} className="text-sm font-medium text-muted">
               Log in
             </a>
             <Link to="/start-trial" onClick={() => setMobileOpen(false)}>

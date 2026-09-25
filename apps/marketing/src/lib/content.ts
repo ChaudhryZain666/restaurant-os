@@ -52,8 +52,11 @@ export const FAQS = [
   { q: "Can I manage multiple locations?", a: "Yes — one dashboard for every location, each with its own menu overrides, staff, hours and orders, plus a business-wide view across all of them." },
   { q: "Can I offer promotions and loyalty?", a: "Yes — both are available today. Loyalty points accrue automatically, and you can create your own percentage or fixed-amount discount codes." },
   { q: "Do you take a commission on my orders?", a: "No. It's a flat monthly subscription — 0% commission on every direct order, however many you take." },
+  { q: "How do I get paid?", a: "Payments run through your own Stripe account, connected via a guided, Stripe-hosted setup — no API keys to manage. Stripe's own processing fees apply, same as they would anywhere else." },
+  { q: "Can I connect Uber Eats, DoorDash or foodpanda?", a: "Uber Eats connects directly from your dashboard today. DoorDash's self-serve connection is coming soon. foodpanda doesn't offer an individual sign-in step, so our team completes that connection on your behalf." },
   { q: "Can I use my own domain for ordering?", a: "Yes — connect your own domain (like order.yourrestaurant.com) so your ordering page lives under your own brand, not ours." },
   { q: "Can agencies manage multiple restaurant clients?", a: "Yes — an agency account manages every client business it oversees from one login, each with its own storefront, staff and owner, under consolidated agency billing." },
   { q: "Can I change plans later?", a: "Yes, anytime — upgrade or change plans directly from your billing settings as your restaurant grows." },
   { q: "Is there a free trial?", a: "Yes — a 14-day trial, no credit card required. Create your account on the Start Free Trial page and your restaurant is ready to set up immediately." },
+  { q: "Can I cancel anytime?", a: "Yes — cancel anytime from your billing settings. Your subscription stays active through the end of your current billing period, and you can undo a scheduled cancellation anytime before it takes effect." },
 ] as const;

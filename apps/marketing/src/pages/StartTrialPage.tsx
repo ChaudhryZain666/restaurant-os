@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { ADMIN_START_URL, ADMIN_SIGNUP_URL } from "../lib/links";
@@ -29,14 +30,15 @@ export function StartTrialPage() {
     description: "Create your restaurant's branded storefront, add your menu, and start accepting online orders directly — no commission-hungry marketplace.",
   });
   return (
-    <Section className="pt-14 sm:pt-20">
-      <SectionHeading
-        as="h1"
+    <>
+      <MarketingPageHero
         eyebrow="Start Free"
         title="Get your restaurant online without the complexity"
         description="Create your account and your restaurant goes live in minutes — no sales call, no credit card."
+        hideCta
       />
-      <div className="mx-auto mt-12 grid max-w-5xl gap-10 lg:grid-cols-2">
+      <Section>
+        <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2">
         <Reveal className="flex flex-col gap-8">
           <div className="flex flex-col gap-3">
             <h3 className="font-heading text-lg font-semibold text-foreground">What's included</h3>
@@ -110,6 +112,7 @@ export function StartTrialPage() {
           </div>
         </Reveal>
       </div>
-    </Section>
+      </Section>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 import type { ComponentType, ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { Badge, Button, Card, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Badge, Card, Reveal } from "@restaurant/ui";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import {
   MockFrame,
   AnalyticsMock,
@@ -16,7 +17,6 @@ import {
   SupportMock,
 } from "../components/FeatureMocks";
 import {
-  IconArrowRight,
   IconCart,
   IconChart,
   IconClipboard,
@@ -307,13 +307,12 @@ export function ProductPage() {
   });
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Product"
-          title="Look inside the machine"
-          description="One platform, three vantage points — what customers see, what your team runs, and what you grow with. What's live today, and what's next — no feature marked available unless it actually works."
-        />
+      <MarketingPageHero
+        eyebrow="Product"
+        title="Look inside the machine"
+        description="One platform, three vantage points — what customers see, what your team runs, and what you grow with. What's live today, and what's next — no feature marked available unless it actually works."
+      />
+      <Section className="py-10 sm:py-12">
         <LayerNavigator />
       </Section>
 
@@ -342,23 +341,10 @@ export function ProductPage() {
         );
       })}
 
-      <Section tone="dark">
-        <Reveal className="flex flex-col items-center gap-5 text-center">
-          <h2 className="font-heading text-3xl font-semibold text-secondary-foreground">See it running, not just described</h2>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/demo">
-              <Button size="lg" variant="secondary">
-                Try the live demo
-              </Button>
-            </Link>
-            <Link to="/start-trial">
-              <Button size="lg" variant="outline" className="border-white/30 text-secondary-foreground hover:bg-white/10">
-                Start Free Trial <IconArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </Reveal>
-      </Section>
+      <MarketingClosingCta
+        title="See it running, not just described"
+        description="Every feature above is either live today or clearly marked as roadmap — walk through the real product before you commit."
+      />
     </>
   );
 }

@@ -334,7 +334,7 @@ describe("GET /restaurants/by-domain/:hostname — public storefront resolution"
   it.each(["pending_verification", "verified", "unknown", "removed"])(
     "never resolves a %s domain — 404, no fallthrough to any restaurant",
     async (kind) => {
-      let hostname = uniqueHostname(`public-${kind}`);
+      const hostname = uniqueHostname(`public-${kind}`);
       if (kind === "unknown") {
         // never created at all
       } else {

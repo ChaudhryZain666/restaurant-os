@@ -14,7 +14,9 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { jsonRateLimitHandler } from "./middleware/rateLimitHandler.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { sitemapRouter } from "./routes/sitemap.routes.js";
+import { localStorageRouter } from "./routes/localStorage.routes.js";
 import { apiRouter } from "./routes/index.js";
+import { isLocalDiskStorageActive } from "./storage/index.js";
 
 const API_VERSION_PREFIX = "/api/v1";
 
@@ -62,8 +64,27 @@ export function createApp() {
   app.use("/health", healthRouter);
   app.use("/sitemap.xml", sitemapRouter);
 
+  // Dev-only: serves LocalDiskStorageService's files back over HTTP when no real S3/R2 storage is
+  // configured (never mounted in production — see storage/index.ts's isLocalDiskStorageActive()).
+  if (isLocalDiskStorageActive()) {
+    app.use("/local-storage", localStorageRouter);
+  }
+
   try {
-    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(loadOpenApiDocument()));
+    // Phase 79 SEO audit fix — the API's own OpenAPI/Swagger UI has no auth gate (by design, it's
+    // internal-developer documentation, not sensitive data) but was also never marked non-indexable;
+    // a crawler that found it would have no reason not to index it. X-Robots-Tag is the HTTP-header
+    // equivalent of a <meta name="robots"> tag for content that isn't HTML with a <head> to put one
+    // in.
+    app.use(
+      "/api/docs",
+      (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+        res.setHeader("X-Robots-Tag", "noindex, nofollow");
+        next();
+      },
+      swaggerUi.serve,
+      swaggerUi.setup(loadOpenApiDocument())
+    );
   } catch (err) {
     console.error("[swagger] failed to load docs/openapi.yaml", err);
   }

@@ -16,6 +16,11 @@ import { test, expect } from "@playwright/test";
  * 26 items had accumulated in the dev database and were visibly polluting the actual marketing
  * demo before this fix. Now tracked and deleted in `afterAll`, the same pollution-prevention
  * pattern already established elsewhere in this suite (e.g. agency-management.spec.ts).
+ *
+ * Phase 81 Stage 3 — "Import menu" now lands on ImportEntryPage's 5-option chooser rather than
+ * this CSV wizard directly (the wizard moved to /menu/import/csv, one path among five). Updated
+ * to route through the chooser's "Import a CSV" tile / navigate straight to the new URL; the
+ * wizard's own mapping/preview/confirm mechanics below are completely unchanged.
  */
 test.describe("menu importer", () => {
   let db: mongoose.Connection;
@@ -59,7 +64,9 @@ test.describe("menu importer", () => {
     await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 
     await page.getByRole("link", { name: "Import menu" }).click();
-    await expect(page.getByRole("heading", { name: "Import menu" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bring your menu to GarnishTable" })).toBeVisible();
+    await page.getByRole("button", { name: "Import a CSV" }).click();
+    await expect(page.getByRole("heading", { name: "Import from a spreadsheet" })).toBeVisible();
 
     const fileInput = page.locator('input[type="file"]');
     // The importer disables this input until the active location has resolved (LocationContext is
@@ -117,7 +124,7 @@ test.describe("menu importer", () => {
     // to page.goto() here raced ahead of the pending login/redirect and got bounced right back to
     // /login by RequireAuth (a real bug in this test, not the product).
     await expect(page).not.toHaveURL(/\/login$/, { timeout: 10_000 });
-    await page.goto("http://localhost:5174/menu/import");
+    await page.goto("http://localhost:5174/menu/import/csv");
 
     const fileInput = page.locator('input[type="file"]');
     await expect(fileInput).toBeEnabled({ timeout: 10_000 });

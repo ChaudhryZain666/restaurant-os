@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Static sitemap for the 10 fixed marketing routes (this is a client-rendered SPA with no
+  Static sitemap for the 13 fixed marketing routes (this is a client-rendered SPA with no
   server-side route generation, unlike apps/api's dynamic per-restaurant sitemap.routes.ts).
 
   NOTE: <loc> uses https://www.garnishtable.app as a placeholder production origin — no real
@@ -18,4 +18,7 @@
   <url><loc>https://www.garnishtable.app/about</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.garnishtable.app/contact</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.garnishtable.app/start-trial</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.garnishtable.app/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.garnishtable.app/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.garnishtable.app/refund-policy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>

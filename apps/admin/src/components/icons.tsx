@@ -298,3 +298,28 @@ export const IconLock = (p: SVGProps<SVGSVGElement>) => (
     <path d="M8 11V7a4 4 0 0 1 8 0v4" />
   </Icon>
 );
+
+export const IconFileText = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M8 13h8M8 17h8M8 9h2" />
+  </Icon>
+);
+
+export const IconLink = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M9 17H7a5 5 0 0 1 0-10h2" />
+    <path d="M15 7h2a5 5 0 0 1 0 10h-2" />
+    <path d="M8 12h8" />
+  </Icon>
+);
+
+export const IconGrid3 = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+  </Icon>
+);

@@ -17,14 +17,20 @@ export type PaymentStatus = "unpaid" | "paid";
  *  staff-recorded method with the identical manual paid/unpaid lifecycle as "cash" — this platform
  *  has no live card-terminal integration, so a card payment collected at the register is recorded
  *  the same way cash is; "online" is backed by the Payment domain (see types/payment.ts) and can
- *  only become "paid" via a verified provider event. */
-export type OrderPaymentMethod = "cash" | "card" | "online";
+ *  only become "paid" via a verified provider event. "marketplace" (Uber Eats/DoorDash/foodpanda)
+ *  reuses the exact same manual paid/unpaid flip as "cash"/"card" — the money already changed hands
+ *  entirely inside the marketplace's own systems before the order ever reaches GarnishTable, so
+ *  there is nothing for this app's own Payment/PaymentProvider machinery to do; see
+ *  Order.paymentMethod's doc comment in apps/api/src/models/Order.ts. */
+export type OrderPaymentMethod = "cash" | "card" | "online" | "marketplace";
 
 /** Which surface created this order — orthogonal to orderType (a dine-in order can be
  *  self-ordered via QR (`"online"`) or rung up by staff for a walk-in table (`"pos"`)). Defaults
  *  to "online" so every pre-POS order (the entire existing dataset) is correctly, implicitly
- *  online with zero migration. */
-export type OrderChannel = "online" | "pos";
+ *  online with zero migration. "marketplace" answers "what kind of order is this" — the `marketplace`
+ *  field below answers "which specific external order," the two are complementary, not
+ *  alternatives. */
+export type OrderChannel = "online" | "pos" | "marketplace";
 
 export interface OrderItem {
   menuItemId: string;
@@ -123,6 +129,9 @@ export interface Order {
    *  customer-facing subset of the internal Delivery record (see types/delivery.ts's
    *  CustomerFacingDelivery for exactly what's excluded and why). */
   delivery?: import("./delivery.js").CustomerFacingDelivery;
+  /** Present only for channel "marketplace" — which external order this is and which integration
+   *  ingested it. See types/marketplace.ts's OrderMarketplaceProvenance. */
+  marketplace?: import("./marketplace.js").OrderMarketplaceProvenance;
 }
 
 /** Preview returned by POST /orders/:id/reorder — not an order, a cart-population template. */

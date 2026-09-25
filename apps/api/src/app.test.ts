@@ -31,6 +31,11 @@ describe("app", () => {
     expect(res.text).toContain("swagger");
   });
 
+  it("Phase 79 SEO fix — marks /api/docs non-indexable via X-Robots-Tag", async () => {
+    const res = await request(app).get("/api/docs/");
+    expect(res.headers["x-robots-tag"]).toBe("noindex, nofollow");
+  });
+
   it("rejects unauthenticated access to a protected route", async () => {
     const res = await request(app)
       .post("/api/v1/restaurants")

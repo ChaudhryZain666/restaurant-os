@@ -19,6 +19,13 @@ export interface NormalizedImportRow {
   imageUrl?: string;
   modifierGroups: MenuImportModifierGroupPreview[];
   issues: MenuImportRowIssue[];
+  /** Phase 81 — optional, set only by AI-sourced rows (see extractionResultToRows.ts); always
+   *  undefined for every CSV/XLSX row, exactly as before this phase. resolveImport.ts builds every
+   *  result row via object-spread, so these pass through to preview/draft rows automatically with
+   *  zero changes needed there. */
+  overallConfidence?: number;
+  fieldConfidence?: Array<{ field: string; score: number }>;
+  sourcePageIndex?: number;
 }
 
 function buildFieldToColumn(mapping: MenuImportColumnMapping): Partial<Record<MenuImportFieldKey, string>> {
@@ -40,8 +47,10 @@ const TRUE_VALUES = new Set(["true", "yes", "y", "1", "available", "in stock"]);
 const FALSE_VALUES = new Set(["false", "no", "n", "0", "unavailable", "out of stock"]);
 
 /** Returns undefined only for a non-empty value that doesn't match a recognized boolean word —
- *  caller treats undefined as an "invalid availability" issue, never a silent default. */
-function normalizeBoolean(raw: string): boolean | undefined {
+ *  caller treats undefined as an "invalid availability" issue, never a silent default. Exported
+ *  (Phase 81) so extractionResultToRows.ts can apply the exact same guard to AI-sourced rows —
+ *  provider output is still untrusted input, never assumed pre-validated. */
+export function normalizeBoolean(raw: string): boolean | undefined {
   const v = raw.trim().toLowerCase();
   if (TRUE_VALUES.has(v)) return true;
   if (FALSE_VALUES.has(v)) return false;
@@ -50,8 +59,9 @@ function normalizeBoolean(raw: string): boolean | undefined {
 
 /** Strips a single optional leading currency symbol/code and thousands-separator commas, then
  *  requires a clean non-negative decimal. Returns undefined for anything that isn't confidently a
- *  price — this never guesses at a suspicious value (e.g. "12.99.99", "twelve", "-5"). */
-function normalizePrice(raw: string): number | undefined {
+ *  price — this never guesses at a suspicious value (e.g. "12.99.99", "twelve", "-5"). Exported
+ *  (Phase 81) — see normalizeBoolean's comment above for why. */
+export function normalizePrice(raw: string): number | undefined {
   const cleaned = raw
     .trim()
     .replace(/^(rs\.?|pkr|\$|£|€)\s*/i, "")

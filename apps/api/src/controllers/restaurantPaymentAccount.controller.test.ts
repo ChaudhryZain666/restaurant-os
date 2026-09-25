@@ -256,6 +256,25 @@ describe("POST /restaurants/:restaurantId/payment-account/connect/stripe (Phase 
     expect(stored!.status).toBe("pending_verification");
   });
 
+  it("sends refresh_url/return_url pointing at a route that actually exists in apps/admin (bare /settings, never /restaurants/:id/settings — apps/admin has no tenant-scoped routing, so a mismatched path would strand the owner on an unmatched page after Stripe redirects them back)", async () => {
+    const { restaurant, ownerToken } = await connectableRestaurant();
+    const spy = mockFetchSequence(
+      { status: 200, body: { id: "acct_urlcheck" } },
+      { status: 200, body: { url: "https://connect.stripe.com/setup/c/acct_urlcheck/abc" } }
+    );
+
+    await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/payment-account/connect/stripe`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+
+    const accountLinkCall = spy.mock.calls.find((call) => (call[0] as string).includes("/v1/account_links"));
+    const body = new URLSearchParams((accountLinkCall![1] as { body: string }).body);
+    expect(body.get("refresh_url")).toMatch(/\/settings\?stripeConnect=refresh$/);
+    expect(body.get("return_url")).toMatch(/\/settings\?stripeConnect=return$/);
+    expect(body.get("refresh_url")).not.toContain("/restaurants/");
+    expect(body.get("return_url")).not.toContain("/restaurants/");
+  });
+
   it("resuming an in-progress connection reuses the same connected account (no duplicate Stripe accounts created)", async () => {
     const { restaurant, ownerToken } = await connectableRestaurant();
     mockFetchSequence(

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RestaurantPaymentAccount } from "@restaurant/types";
 import { Alert, Badge, Button, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
+import { describeStripeRequirement } from "../lib/stripeRequirementLabels";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -27,6 +28,11 @@ export function PaymentAccountSettingsPanel() {
   const [showManage, setShowManage] = useState(false);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [safepayDraft, setSafepayDraft] = useState({ apiKey: "", secretKey: "", webhookSecret: "", env: "sandbox" as "sandbox" | "production" });
+  // Guards the one-time "read stripeConnect= from the URL, strip it" step below against React
+  // StrictMode's deliberate dev-mode double-invoke of effects, which would otherwise read an
+  // already-stripped query string on the second run and silently skip sync-stripe-status/refresh
+  // (confirmed live via Playwright while building the analogous Uber Eats OAuth callback page).
+  const startedRef = useRef(false);
 
   async function reload() {
     const res = await apiClient.request<{ account: RestaurantPaymentAccount | null; webhookUrl: string | null }>(
@@ -43,9 +49,12 @@ export function PaymentAccountSettingsPanel() {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams(window.location.search);
-        const stripeConnect = params.get("stripeConnect");
+        // Only the FIRST invocation ever reads/strips the query param — StrictMode's second
+        // invocation would otherwise see an already-stripped, empty query string.
+        const stripeConnect = startedRef.current ? null : new URLSearchParams(window.location.search).get("stripeConnect");
+        startedRef.current = true;
         if (stripeConnect === "return" || stripeConnect === "refresh") {
+          const params = new URLSearchParams(window.location.search);
           // Clean the query param immediately so a page refresh doesn't re-trigger this.
           params.delete("stripeConnect");
           const next = params.toString();
@@ -177,9 +186,20 @@ export function PaymentAccountSettingsPanel() {
               {isStripeConnect ? (
                 <>
                   {!account.chargesEnabled && (
-                    <p className="text-foreground">
-                      Stripe still needs a bit more information from you before payments are fully enabled.
-                    </p>
+                    <div className="flex flex-col gap-1">
+                      <p className="text-foreground">
+                        Stripe still needs a bit more information from you before payments are fully enabled:
+                      </p>
+                      {account.requirementsDue && account.requirementsDue.length > 0 ? (
+                        <ul className="list-disc space-y-0.5 pl-4 text-foreground">
+                          {account.requirementsDue.map((code) => (
+                            <li key={code}>{describeStripeRequirement(code)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted">Continue setup below to see what's left.</p>
+                      )}
+                    </div>
                   )}
                   {account.lastVerifiedAt && <p className="text-muted">Last checked: {new Date(account.lastVerifiedAt).toLocaleString()}</p>}
                   <div className="flex flex-wrap gap-2">

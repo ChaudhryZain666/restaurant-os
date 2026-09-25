@@ -189,33 +189,71 @@ malformed/cross-tenant IDs fail the same way every other tenant-scoped route alr
 `menuImport.controller.test.ts` for the full authorization test matrix (owner, staff, agency
 owner/admin/staff, cross-agency, cross-restaurant IDOR, malformed import ids).
 
-## Explicitly deferred
+## Explicitly deferred (as of Phase 30)
 
 - **Per-row duplicate resolution** — today's `duplicateStrategy` (skip/update) applies uniformly to
   every detected duplicate in one import; choosing differently per row is a real, useful future
-  enhancement, not built this phase.
+  enhancement, not built this phase. **Built in Phase 81** — see below.
 - **Bulk image association by filename** — a real feature, deliberately not faked; the current
-  `image` column only accepts an already-hosted URL.
+  `image` column only accepts an already-hosted URL. Still deferred as of Phase 81.
 - **Reusable/shared modifier templates** — `ModifierGroup` stays item-specific, matching the
   existing schema; a template system that lets one "Size" group be reused across many items is a
-  genuinely bigger feature, not attempted here.
-- **PDF / image (OCR) / AI-assisted menu extraction** — see below.
+  genuinely bigger feature, not attempted here. Still deferred as of Phase 81.
+- **PDF / image (OCR) / AI-assisted menu extraction** — see below. **Built in Phase 81.**
 
-## Future importer architecture (PDF / OCR / AI)
+## Phase 81 — PDF / URL / image extraction, built on this exact seam
 
-The parser boundary was built specifically so a future source never needs its own validation,
-duplicate-detection, category-resolution, preview, or commit logic:
+The parser boundary described in the original Phase 30 design worked exactly as intended: a new
+source only had to produce `NormalizedImportRow[]`, and every downstream stage —
+`resolveImport.ts`, `buildPreview.ts`, the transactional writer — needed **zero changes** to accept
+it. Confirmed directly by reading `resolveImport.ts` before building anything: it takes only
+`NormalizedImportRow[]`, no source-type awareness anywhere in it.
 
 ```
-CSV parser ──┐
-XLSX parser ─┼──▶ NormalizedImportRow[] ──▶ same resolveImport() ──▶ same preview/commit
-(future) PDF parser ─┤
-(future) OCR parser ─┤
-(future) AI parser ──┘
+CSV parser ────┐
+XLSX parser ───┼──▶ NormalizedImportRow[] ──▶ same resolveImport() ──▶ writeResolvedImport() (new, shared)
+PDF/image/URL ─┘         ▲
+  (via MenuExtractionProvider,      Async only: PDF/image/URL sources go through a new
+   apps/api/src/menuExtraction/)    MenuImportJob (apps/api/src/models/MenuImportJob.ts) —
+                                    pending → processing → extracting → normalizing →
+                                    ready_for_review → publishing → completed/failed/cancelled —
+                                    processed by the existing shared BullMQ "notifications" queue
+                                    (job name "menu_import.extract"), never inline in the request.
 ```
 
-A PDF/OCR/AI extractor's only job would be producing the same `NormalizedImportRow[]` shape
-(`apps/api/src/services/menuImport/normalizeRows.ts`) that `normalizeRows()` already produces from
-a parsed spreadsheet — everything downstream (`resolveImport.ts`, `buildPreview.ts`,
-`commitImport.ts`, the wizard UI) is already source-agnostic and needs no changes to support it.
-No AI/PDF/OCR extraction exists yet — this section documents the seam, not a built capability.
+**Why async, unlike CSV**: CSV/XLSX parsing is fast and synchronous-safe; AI vision/document
+extraction is not (a real network call, seconds not milliseconds). The job document is the durable
+"draft" a human reviews (PATCHes individual rows, sets a `userAction` override) before an explicit
+`POST .../publish` call — the ONLY thing that ever writes to the live menu. `publishMenuImportJob`
+re-runs `resolveImport()` fresh against the job's current draft rows (never trusts the
+extraction-time snapshot — live data may have changed since), exactly mirroring CSV commit's own
+"never trust a client-echoed preview" discipline.
+
+**Per-row duplicate resolution** (previously deferred) is now real: a reviewed row's action can be
+`create` (even overriding a detected match — "create new anyway"), `update` (full replace, CSV's
+existing behavior), `merge` (fills only fields currently empty on the matched item — e.g. adds a
+missing photo without touching an existing price), or `skip`.
+
+**Extraction provider**: `apps/api/src/menuExtraction/MenuExtractionProvider.ts` — one interface,
+mirroring `payments/PaymentProvider.ts`'s exact shape. `MockMenuExtractionProvider` (default,
+`MENU_EXTRACTION_PROVIDER_MODE=mock`) makes the whole pipeline exercisable with zero credentials.
+`ClaudeMenuExtractionProvider` targets Anthropic's real, documented Messages API (vision + native
+PDF input, structured output via forced tool-use) — real, network-capable code, but, like every
+other external provider adapter in this codebase, never exercised against a live account since no
+credentials exist in this development environment.
+
+**URL source security**: `apps/api/src/utils/safeUrlFetch.ts` — a from-scratch SSRF-safe fetcher
+(nothing like it existed anywhere in this codebase before Phase 81, since no prior feature ever
+fetched a restaurant-owner-supplied URL server-side). DNS-resolves and validates every hop
+(rejecting private/loopback/link-local/metadata ranges, including `169.254.169.254` explicitly)
+BEFORE connecting, then dials the validated IP literally — never a second, independent DNS lookup
+at connect time — closing the DNS-rebinding gap rather than merely narrowing its window. See that
+file's own header comment and `safeUrlFetch.test.ts` for the full threat-model test matrix.
+
+**Retention**: an uploaded source file (PDF/images; a URL job has none) is deleted 14 days after its
+job reaches a terminal state, via a new daily repeatable job on the same shared queue
+(`menuImportRetention.service.ts`) — the job document itself (draft rows, confidence, published
+report) is kept indefinitely, same as `AuditLog`.
+
+See `PHASE_81_MENU_IMPORTER_BUILDER_FINAL_REPORT.md` (repo root) for the full architecture writeup,
+test coverage, and known limitations once Stage 1 (this backend pipeline) is complete.

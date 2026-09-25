@@ -1,5 +1,6 @@
 import mongoose, { type HydratedDocument } from "mongoose";
 import type { CreateOrderInput } from "@restaurant/validation";
+import type { OrderMarketplaceProvenance } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
 import { Order } from "../models/Order.js";
 import { Table, type TableDoc } from "../models/Table.js";
@@ -19,12 +20,13 @@ function roundCurrency(amount: number): number {
 export interface CreateOrderForCustomerParams {
   restaurantId: string;
   customerId: string;
-  /** "online" for the customer-facing checkout, "pos" for the staff terminal — see
-   *  types/order.ts's OrderChannel doc comment. */
-  channel: "online" | "pos";
+  /** "online" for the customer-facing checkout, "pos" for the staff terminal, "marketplace" for an
+   *  order ingested from Uber Eats/DoorDash/foodpanda (see marketplaceOrderIngestion.service.ts) —
+   *  see types/order.ts's OrderChannel doc comment. */
+  channel: "online" | "pos" | "marketplace";
   items: CreateOrderInput["items"];
   orderType: CreateOrderInput["orderType"];
-  paymentMethod: "cash" | "card" | "online";
+  paymentMethod: "cash" | "card" | "online" | "marketplace";
   deliveryAddress?: CreateOrderInput["deliveryAddress"];
   /** The QR token a customer's own session resolved — re-validated from scratch here, never
    *  trusted. Mutually exclusive with `tableId` below; exactly one is used per orderType dine_in
@@ -53,6 +55,9 @@ export interface CreateOrderForCustomerParams {
    *  there is no way a POS request body could set/spoof it). Always undefined for the
    *  customer-facing path (order.controller.ts's createOrder never passes it). */
   createdByUserId?: string;
+  /** channel "marketplace" only — always supplied by marketplaceOrderIngestion.service.ts, never
+   *  reachable from any request body. See Order.marketplace's own doc comment. */
+  marketplace?: OrderMarketplaceProvenance;
 }
 
 export interface CreatedOrderResult {
@@ -87,6 +92,7 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
     isDemoAccount = false,
     markPaidImmediately = false,
     createdByUserId,
+    marketplace,
   } = params;
 
   const restaurant = await Restaurant.findOne({ _id: restaurantId, status: "active" });
@@ -196,6 +202,7 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
             statusHistory: [{ status: "pending", at: new Date() }],
             isDemo: isDemoAccount,
             createdByUserId,
+            marketplace,
           },
         ],
         { session }

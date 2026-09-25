@@ -60,6 +60,7 @@ test.describe.serial("owner self-serve signup -> trial activation (Phase 44)", (
     await page.getByLabel("Full name").fill("E2E Self-Serve Owner");
     await page.getByLabel("Email").fill(ownerEmail);
     await page.getByLabel("Password").fill("SelfServeOwner123!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Continue" }).click();
 
     // --- Step 3: verify email — the real 403-on-unverified gate (business.controller.ts's

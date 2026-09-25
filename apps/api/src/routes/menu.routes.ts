@@ -22,6 +22,14 @@ import {
   updateMenuItem,
 } from "../controllers/menu.controller.js";
 import { commitMenuImport, getMenuImportReport, previewMenuImport } from "../controllers/menuImport.controller.js";
+import {
+  createMenuImportJobHandler,
+  listMenuImportJobsHandler,
+  getMenuImportJobHandler,
+  updateMenuImportDraftRowHandler,
+  publishMenuImportJobHandler,
+  cancelMenuImportJobHandler,
+} from "../controllers/menuImportJob.controller.js";
 
 /** Mounted at /restaurants/:restaurantId/menu — mergeParams is required to see :restaurantId. */
 export const menuRouter = Router({ mergeParams: true });
@@ -107,4 +115,50 @@ menuRouter.get(
   requireTenantMatch(),
   requirePermission("restaurant.menu.read"),
   asyncHandler(getMenuImportReport)
+);
+
+// Phase 81 — the async PDF/URL/image menu importer. Same agency-aware requirePermission alias as
+// every other route in this router; nothing here bypasses the tenant boundary CSV import already
+// established.
+menuRouter.post(
+  "/import-jobs",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.write"),
+  asyncHandler(createMenuImportJobHandler)
+);
+menuRouter.get(
+  "/import-jobs",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.read"),
+  asyncHandler(listMenuImportJobsHandler)
+);
+menuRouter.get(
+  "/import-jobs/:jobId",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.read"),
+  asyncHandler(getMenuImportJobHandler)
+);
+menuRouter.patch(
+  "/import-jobs/:jobId/rows/:rowNumber",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.write"),
+  asyncHandler(updateMenuImportDraftRowHandler)
+);
+menuRouter.post(
+  "/import-jobs/:jobId/publish",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.write"),
+  asyncHandler(publishMenuImportJobHandler)
+);
+menuRouter.post(
+  "/import-jobs/:jobId/cancel",
+  requireAuth,
+  requireTenantMatch(),
+  requirePermission("restaurant.menu.write"),
+  asyncHandler(cancelMenuImportJobHandler)
 );

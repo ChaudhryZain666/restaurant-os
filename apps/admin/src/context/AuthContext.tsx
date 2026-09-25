@@ -24,7 +24,7 @@ interface AuthContextValue {
    *  agency (every other admin identity — owner/manager/staff/kitchen_staff — is always invited by
    *  someone already in the system, never self-registered here). Creates a plain "customer"-role
    *  account via the same /auth/register endpoint apps/web's storefront registration already uses. */
-  register: (name: string, email: string, password: string) => Promise<PublicUser>;
+  register: (name: string, email: string, password: string, termsAccepted?: boolean) => Promise<PublicUser>;
   acceptInvite: (token: string, password: string) => Promise<PublicUser>;
   /** Phase 25 — the agency-membership counterpart, hitting /agencies/accept-invite instead. A
    *  password is optional here (only required server-side for a brand-new account — an invite to
@@ -100,10 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user;
   }
 
-  async function register(name: string, email: string, password: string) {
+  async function register(name: string, email: string, password: string, termsAccepted?: boolean) {
     const data = await apiClient.request<AuthResponse>("/auth/register", {
       method: "POST",
-      body: { name, email, password },
+      body: { name, email, password, termsAccepted },
       skipRefresh: true,
     });
     apiClient.setAccessToken(data.accessToken);

@@ -16,7 +16,7 @@ export const READY_CHECK_COPY: Record<string, { title: string; why: string; to: 
   menu: {
     title: "Menu",
     why: "Add the food customers can order. Nobody can check out until at least one item is available.",
-    to: "/menu",
+    to: "/menu/import",
     linkLabel: "Add menu items",
   },
   orderType: {

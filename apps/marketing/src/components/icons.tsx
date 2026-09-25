@@ -131,3 +131,23 @@ export const IconStore = (p: SVGProps<SVGSVGElement>) => (
     <path d="M10 21v-6h4v6" />
   </Icon>
 );
+
+// Phase 80 — two additions for the new "Why GarnishTable" / "Integrations" sections: a plug for
+// provider connections, a percent badge specifically so the 0%-commission message never borrows
+// the existing Tag icon (already established elsewhere for promo codes, a different concept).
+export const IconPlug = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M9 2v5M15 2v5" />
+    <path d="M6 7h12v4a6 6 0 0 1-12 0Z" />
+    <path d="M12 17v3M9 22h6" />
+  </Icon>
+);
+
+export const IconPercentBadge = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9.5" />
+    <path d="M9 15 15 9" />
+    <circle cx="9.3" cy="9.3" r="1" fill="currentColor" />
+    <circle cx="14.7" cy="14.7" r="1" fill="currentColor" />
+  </Icon>
+);

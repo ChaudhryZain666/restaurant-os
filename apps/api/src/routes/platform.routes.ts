@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  linkFoodpandaIntegrationSchema,
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
   paginationQuerySchema,
@@ -17,6 +18,7 @@ import {
   getPlatformOverview,
   getPlatformRestaurantDetail,
   getPlatformRevenue,
+  linkFoodpandaIntegration,
   listPlatformAgencies,
   listPlatformRestaurants,
   listPlatformSubscriptions,
@@ -53,6 +55,12 @@ platformRouter.post(
   inviteResendLimiter,
   requirePermission("platform.restaurants.manage"),
   asyncHandler(resendOwnerInvite)
+);
+platformRouter.post(
+  "/restaurants/:id/marketplace-integrations/foodpanda/link",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(linkFoodpandaIntegrationSchema),
+  asyncHandler(linkFoodpandaIntegration)
 );
 platformRouter.get(
   "/subscriptions",

@@ -266,17 +266,31 @@ leaks the other's data.
 ## SEO / canonical strategy
 
 - Each restaurant-scoped `MenuPage` render sets: `<title>`, a meta description, `og:title` /
-  `og:description` / `og:type` / `og:image` (when a logo exists), Twitter Card tags
-  (`twitter:card`/`title`/`description`/`image`, Phase 12), a `<link rel="canonical">` pointing at
-  `${origin}/r/:slug`, and a schema.org **`Restaurant`** JSON-LD block (Phase 12) — `name`,
+  `og:description` / `og:type` / `og:url` / `og:site_name` / `og:image` (when a logo exists),
+  Twitter Card tags (`twitter:card`/`title`/`description`/`image`, Phase 12), a
+  `<link rel="canonical">`, and a schema.org **`Restaurant`** JSON-LD block (Phase 12) — `name`,
   `description`, `url`, `image`, `telephone`, `address` (`PostalAddress`, when the restaurant has
   one), `geo` (when it has coordinates), and `hasMenu` (a real `Menu`/`MenuSection`/`MenuItem`
   tree built from the same category/item data the page itself renders — never emitted before the
   menu has actually loaded, never placeholder data). All of it restored/cleaned up on unmount,
-  matching the `noindex` tag pattern Phase 7 already established for `/t/:tableToken`.
+  matching the `noindex` tag pattern Phase 7 already established for `/t/:tableToken`. Phase 79
+  extracted this into a dedicated hook (`apps/web/src/hooks/useStorefrontSeo.ts`), built on the DOM
+  mechanics shared with `apps/marketing` via `@restaurant/utils/seoMeta` — see that phase's own
+  section below for the full breakdown.
+- **Canonical URL** (Phase 22, corrected Phase 79): `${origin}/r/:slug` on the platform domain, UNLESS
+  the restaurant has an active custom domain (`DomainMapping.status === "active"`), in which case that
+  domain is canonical instead — `https://:hostname`, preferred regardless of which URL the visitor is
+  currently on (a `/r/:slug` visitor gets the custom domain as canonical too, not just a visitor
+  already on it). The platform URL keeps working (never redirected) so existing links/QR codes don't
+  break, it's just no longer the canonical one once a custom domain is active. Phase 79 fixed the
+  dynamic sitemap to match this same preference (see Sitemap section below) — before that fix, the
+  sitemap always submitted the platform URL even for restaurants with an active custom domain, a
+  mismatch between what was submitted to search engines and what the page itself declared canonical.
 - The QR landing route (`/r/:slug/t/:token`) explicitly skips the title/description/canonical/
   JSON-LD tags (it's the same `MenuPage` component, `isTableRoute` short-circuits the SEO effect)
-  and keeps Phase 7's `noindex, nofollow` meta tag — QR entry points are never indexable.
+  and keeps Phase 7's `noindex, nofollow` meta tag — QR entry points are never indexable. Phase 79
+  added the same treatment for preview mode (`/r/:slug/preview`, authenticated owner/platform_admin
+  only) — it can render restaurant data that isn't published yet and must never be indexable either.
 - **Phase 12:** every private page across `apps/web` (cart, orders + order detail, account,
   login/register, forgot/reset password, confirm-email-change, loyalty, support tickets) now sets
   a real `noindex, nofollow` meta tag via a shared `useNoIndex()` hook
@@ -316,10 +330,18 @@ is deliberately left as a documented gap rather than a rushed partial implementa
 explicitly lists sitemaps as unbuilt future work). `GET /sitemap.xml`
 (`apps/api/src/routes/sitemap.routes.ts`, mounted unprefixed in `app.ts` alongside `/health`) is
 generated on request from real data: one `<url>` per `Restaurant` with `status: "active"` AND
-`settings.orderingEnabled: true`, pointing at `${CLIENT_ORIGIN}/r/:slug`. No table, cart,
+`settings.orderingEnabled: true` (excluding the seeded `demo-restaurant` and any restaurant with
+zero available menu items — both added during the pre-launch SEO audit). No table, cart,
 checkout, or order URLs — ever. `apps/web`'s Vite dev proxy forwards `/sitemap.xml` to the API
 (alongside the existing `/api` proxy) so it's same-origin with `robots.txt`'s `Sitemap:` line in
 dev.
+
+**Phase 79 fix — custom-domain-aware `<loc>`:** each restaurant's URL now points at its active
+custom domain (`https://:hostname`) when `DomainMapping.status === "active"` exists for it, matching
+`MenuPage`'s own canonical preference (see SEO / canonical strategy above) instead of always emitting
+the platform `/r/:slug` URL. One additional batched `DomainMapping.find()` against the
+already-filtered indexable restaurant set — three queries total, still independent of restaurant
+count.
 
 **Deployment note (not implemented, documented as a gap):** in production, `apps/web` is a static
 SPA with no server of its own — an equivalent reverse-proxy/rewrite rule (`/sitemap.xml` → the API
@@ -2750,3 +2772,59 @@ denial for a self-serve owner.
 **Not touched**: pricing, the Plan catalog, the trial-duration constant, the billing-provider
 abstraction/mock boundary, and the Agency provisioning flow — all confirmed already correct and left
 exactly as they were.
+
+## Phase 79 — SEO & Search Architecture
+
+A dedicated audit-then-implement pass over SEO across `apps/marketing`, `apps/web`, and
+`apps/api`, aimed at making the platform launch-grade for organic search without creating
+duplicate-content, tenant-isolation, canonical, or indexing problems. Full breakdown, evidence, and
+test results in `PHASE_79_FINAL_REPORT.md` (repo root) — this section records only the architectural
+shape, matching every other phase's pattern in this file.
+
+**Central SEO system (new):** `packages/utils/src/seoMeta.ts` — `applySeoMeta`/`applyJsonLd`, pure
+DOM-mechanics primitives with no React dependency, unifying what `apps/marketing`'s `usePageMeta` and
+`apps/web`'s `MenuPage` had each independently hand-rolled. Deliberately kept OFF this package's
+default export barrel (`src/index.ts`) and exposed only via a `./seoMeta` subpath export in
+`package.json`'s `exports` map: `apps/api`'s Jest config resolves `@restaurant/utils` to this
+package's TypeScript source, and `apps/api`'s tsconfig has no DOM lib — a DOM-touching file reaching
+its type-checked program at all (even via an unrelated barrel export) breaks its build. `apps/api`
+never imports the `seoMeta` subpath, so this is zero-risk to it. `apps/web/src/hooks/useStorefrontSeo.ts`
+(extracted from `MenuPage.tsx`) and `apps/marketing`'s `usePageMeta`/`Layout`/`FaqPage` all build on
+top of these same two primitives now; schema construction (what the JSON-LD actually contains) stays
+per-page — only the generic inject/cleanup mechanics are shared.
+
+**Real tenant-isolation bug found and fixed:** `MenuPage.tsx`'s menu-fetch effect had no `cancelled`
+guard (unlike `RestaurantContext.tsx`'s own resolution effect, which already had one) — a restaurant
+A menu response that resolved after the page had already navigated to restaurant B could still call
+`setMenu`, painting A's menu content (and its JSON-LD `hasMenu` block) under B's page. Fixed with the
+same `cancelled`-flag pattern `RestaurantContext.tsx` already used. Proven by
+`e2e/seo-tenant-isolation.spec.ts`, which gates restaurant A's real `/menu` response via `page.route()`
+until restaurant B has already fully rendered (a client-side transition forced via `history.pushState`
++ a manually dispatched `popstate`, since this app's `<BrowserRouter>` listens for the latter, not the
+former), then releases A's response and asserts B's content is unaffected.
+
+**Other fixes:** the dynamic sitemap now emits a restaurant's active custom domain instead of its
+platform URL when one exists (matching `MenuPage`'s own canonical preference — see SEO / canonical
+strategy above); preview mode (`/r/:slug/preview`) and `PrintReceiptPage` now get the shared
+`useNoIndex()` treatment; `/api/docs` (Swagger UI, no prior indexing protection) now sends
+`X-Robots-Tag: noindex, nofollow`; `robots.txt` gained `Disallow` entries for `/r/*/preview`,
+`/r/*/experience`, `/loyalty`, and `/verify-email` — real gaps where a route existed with no matching
+disallow rule; a stale e2e assertion (`e2e/seo-structured-data.spec.ts`) that claimed the seeded
+`demo-restaurant` storefront was NOT noindexed — backwards from its actual, already-correct behavior
+— was corrected.
+
+**Explicitly not changed, with reasoning** (all confirmed via direct inspection, not assumed):
+`temporarilyPaused` restaurants stay sitemapped/indexable (a legitimate "closed tonight" state, not a
+publication state); `Agency.domain` remains rendering-inert (verification-only, no code path reads it
+for metadata); the marketing sitemap's placeholder production domain and the `[LEGAL_ENTITY_NAME]`
+placeholders in the legal pages are founder/legal decisions, not SEO code; a real 1200×630 `og:image`
+asset (currently falling back to the SVG favicon) requires a real design asset this phase doesn't
+fabricate. No draft/unpublished/soft-deleted restaurant lifecycle state exists in production code
+(`Restaurant.status` is `pending`/`active`/`suspended` only) — the SEO audit's own "unpublished/deleted
+restaurant absent from sitemap" requirement has no corresponding real state to build a test against;
+the existing `status: "active"` sitemap filter is the real equivalent.
+
+**Known limitation, unchanged by this phase:** the client-side-only rendering gap documented above
+(non-JS-executing crawlers/link-preview bots see the static shell, not the injected metadata) is
+architectural — fixing it requires SSR/prerendering or an edge bot-detection layer, both real
+migrations out of scope for a metadata-correctness phase.

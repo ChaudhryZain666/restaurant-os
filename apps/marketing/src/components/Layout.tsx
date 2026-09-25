@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
+import { applyJsonLd } from "@restaurant/utils/seoMeta";
 import { Nav } from "./Nav";
 import { Footer } from "./Footer";
+import { BackToTop } from "./BackToTop";
 
 /**
  * Organization + WebSite structured data describes the site itself, not any one page — injected
@@ -10,29 +12,23 @@ import { Footer } from "./Footer";
  */
 function useSiteStructuredData() {
   useEffect(() => {
-    const data = {
+    const base: string = import.meta.env.VITE_SITE_URL ?? window.location.origin;
+    return applyJsonLd({
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "Organization",
           name: "GarnishTable",
-          url: window.location.origin,
-          logo: `${window.location.origin}/favicon.svg`,
+          url: base,
+          logo: `${base}/favicon.svg`,
         },
         {
           "@type": "WebSite",
           name: "GarnishTable",
-          url: window.location.origin,
+          url: base,
         },
       ],
-    };
-    const script = document.createElement("script");
-    script.type = "application/ld+json";
-    script.textContent = JSON.stringify(data);
-    document.head.appendChild(script);
-    return () => {
-      document.head.removeChild(script);
-    };
+    });
   }, []);
 }
 
@@ -48,6 +44,7 @@ export function Layout() {
         <Outlet />
       </main>
       <Footer />
+      <BackToTop />
     </div>
   );
 }

@@ -111,20 +111,27 @@ export function ItemEditorDrawer({
 
   return (
     <>
+      {/* Phase 81 Stage 2 — backdrop only makes sense for the mobile/tablet overlay; the desktop
+          pane sits inline in the page, nothing behind it to dim. */}
       <div
         aria-hidden
         onClick={closePanel}
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-normal ease-premium ${
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-normal ease-premium lg:hidden ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
+      {/* One instance, two responsive presentations: below `lg`, an overlay drawer sliding in
+          from the right edge of the viewport (unchanged from before this phase). At `lg` and up,
+          `lg:static` pulls it into MenuBuilderLayout's own flex row as a real third column —
+          `lg:hidden` while closed removes it from that layout entirely (no reserved empty space),
+          appearing the instant an item is selected. See MenuBuilderLayout.tsx. */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="item-editor-title"
-        className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface shadow-elevated transition-transform duration-normal ease-premium sm:max-w-3xl lg:max-w-4xl ${
-          open ? "translate-x-0" : "translate-x-full"
+        className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface shadow-elevated transition-transform duration-normal ease-premium sm:max-w-3xl lg:static lg:z-auto lg:w-[420px] lg:max-w-none lg:shrink-0 lg:border-l lg:border-border lg:shadow-none lg:transition-none ${
+          open ? "translate-x-0" : "translate-x-full lg:hidden lg:translate-x-0"
         }`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-8">

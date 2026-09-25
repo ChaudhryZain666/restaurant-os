@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import mongoose from "mongoose";
 import { createApp } from "../app.js";
@@ -55,6 +55,10 @@ beforeAll(async () => {
   ownerAId = ownerA.id;
   customerToken = tokenFor(customer);
   customerId = customer.id;
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -135,6 +139,110 @@ describe("GET /platform/restaurants/:id — single-restaurant overview (Phase 16
   it("rejects an unauthenticated request", async () => {
     const res = await request(app).get(`/api/v1/platform/restaurants/${restaurantA.id}`);
     expect(res.status).toBe(401);
+  });
+
+  it("(Phase 78) reports no payment account and no marketplace integrations for a restaurant that never connected either", async () => {
+    const res = await request(app)
+      .get(`/api/v1/platform/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.paymentAccount).toBeNull();
+    expect(res.body.data.marketplaceIntegrations).toEqual([]);
+  });
+});
+
+describe("GET /platform/restaurants/:id — payment/marketplace connection visibility (Phase 78)", () => {
+  it("shows a connected payment account and marketplace integration, with every technical field visible but never a raw secret", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id, country: "US", email: "owner@example.com" });
+    const owner = await createTestUser("restaurant_owner", restaurant._id, { businessId: business._id });
+
+    try {
+      jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => ({ data: { token: "tok_verify" } }),
+      } as unknown as Response);
+      await request(app)
+        .post(`/api/v1/restaurants/${restaurant.id}/payment-account`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ provider: "safepay", credentials: { apiKey: "sk_test_visibility", secretKey: "secret_visibility", webhookSecret: "whsec_visibility", env: "sandbox" } });
+
+      await request(app)
+        .post(`/api/v1/restaurants/${restaurant.id}/marketplace-integrations`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ provider: "doordash", externalStoreId: "store_platform_visibility" });
+
+      const res = await request(app)
+        .get(`/api/v1/platform/restaurants/${restaurant.id}`)
+        .set("Authorization", `Bearer ${platformAdminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.paymentAccount.provider).toBe("safepay");
+      expect(res.body.data.paymentAccount.status).toBe("active");
+      expect(res.body.data.paymentAccount.credentialFingerprint).toBeTruthy();
+      expect(res.body.data.marketplaceIntegrations).toHaveLength(1);
+      expect(res.body.data.marketplaceIntegrations[0].provider).toBe("doordash");
+      expect(res.body.data.marketplaceIntegrations[0].externalStoreId).toBe("store_platform_visibility");
+
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toContain("sk_test_visibility");
+      expect(serialized).not.toContain("secret_visibility");
+      expect(serialized).not.toContain("encryptedCredentials");
+    } finally {
+      const { RestaurantPaymentAccount } = await import("../models/RestaurantPaymentAccount.js");
+      const { RestaurantMarketplaceIntegration } = await import("../models/RestaurantMarketplaceIntegration.js");
+      await Promise.all([
+        RestaurantPaymentAccount.deleteMany({ restaurantId: restaurant._id }),
+        RestaurantMarketplaceIntegration.deleteMany({ restaurantId: restaurant._id }),
+        Restaurant.deleteOne({ _id: restaurant._id }),
+        Business.deleteOne({ _id: business._id }),
+        User.deleteOne({ _id: owner._id }),
+      ]);
+    }
+  });
+});
+
+describe("POST /platform/restaurants/:id/marketplace-integrations/foodpanda/link (Phase 78)", () => {
+  it("activates a foodpanda integration on the restaurant's behalf — the real mechanism, since foodpanda has no restaurant-facing OAuth", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+
+    try {
+      const res = await request(app)
+        .post(`/api/v1/platform/restaurants/${restaurant.id}/marketplace-integrations/foodpanda/link`)
+        .set("Authorization", `Bearer ${platformAdminToken}`)
+        .send({ externalStoreId: "store_fp_admin_linked" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.integration.provider).toBe("foodpanda");
+      expect(res.body.data.integration.status).toBe("active");
+      expect(res.body.data.integration.externalStoreId).toBe("store_fp_admin_linked");
+      expect(res.body.data.integration.encryptedCredentials).toBeUndefined();
+    } finally {
+      const { RestaurantMarketplaceIntegration } = await import("../models/RestaurantMarketplaceIntegration.js");
+      await Promise.all([
+        RestaurantMarketplaceIntegration.deleteMany({ restaurantId: restaurant._id }),
+        Restaurant.deleteOne({ _id: restaurant._id }),
+        Business.deleteOne({ _id: business._id }),
+      ]);
+    }
+  });
+
+  it("a restaurant owner cannot use this platform-only linking action (no restaurant.marketplace.* bypass)", async () => {
+    const res = await request(app)
+      .post(`/api/v1/platform/restaurants/${restaurantA.id}/marketplace-integrations/foodpanda/link`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ externalStoreId: "store_fp_owner_attempt" });
+    expect(res.status).toBe(403);
+  });
+
+  it("404s for a restaurant that doesn't exist", async () => {
+    const res = await request(app)
+      .post("/api/v1/platform/restaurants/6a0000000000000000000000/marketplace-integrations/foodpanda/link")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ externalStoreId: "store_fp_missing" });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -517,6 +625,12 @@ describe("GET /platform/config (Phase 28) — read-only diagnostics, never secre
     expect(typeof config.paymentProvider).toBe("string");
     expect(typeof config.trialPeriodDays).toBe("number");
     expect(typeof config.pastDueGracePeriodDays).toBe("number");
+    // Phase 78 — lets a platform_admin see at a glance whether this deployment has live credentials
+    // for a given marketplace provider, selections/booleans only, same as every other field here.
+    expect(["mock", "live"]).toContain(config.marketplaceProviderMode);
+    expect(typeof config.uberEatsConfigured).toBe("boolean");
+    expect(typeof config.doordashConfigured).toBe("boolean");
+    expect(typeof config.foodpandaConfigured).toBe("boolean");
     // The response must never carry anything that looks like a credential — this is the whole
     // point of this endpoint being curated rather than a raw env dump.
     const serialized = JSON.stringify(config).toLowerCase();

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import type { Order } from "@restaurant/types";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
+import { useNoIndex } from "../hooks/useNoIndex";
 
 /**
  * Phase 14 — customer-facing printable receipt. Mirrors apps/admin's PrintOrderPage (same data
@@ -11,6 +12,10 @@ import { apiClient } from "../lib/api";
  * (see order.controller.ts's stripInternalFields), so there's nothing extra to filter here.
  */
 export function PrintReceiptPage() {
+  // Phase 79 SEO audit fix — the one RequireAuth-wrapped page in this app that was missing the
+  // shared noindex hook every other private page already has (see useNoIndex.ts's own call-site
+  // list); a printable receipt is private order data and must never be indexable.
+  useNoIndex();
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);

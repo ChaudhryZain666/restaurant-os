@@ -10,6 +10,9 @@ export default {
     "^@restaurant/ui$": "<rootDir>/../../packages/ui/src/index.ts",
     "^@restaurant/utils$": "<rootDir>/../../packages/utils/src/index.ts",
     "^(\\.{1,2}/.*)\\.js$": "$1",
+    // Logo.tsx (pulled in transitively via registry.tsx -> Header.tsx) imports a real PNG — jest
+    // has no bundler asset transform, so without this it tries to parse the binary file as JS.
+    "\\.(png|jpe?g|gif|svg|webp)$": "<rootDir>/src/test/fileMock.cjs",
   },
   // registry.tsx (imported by the tests below) pulls in every theme's .tsx component files, even
   // though the test files themselves are plain .ts — both need a transform, and Jest needs to be

@@ -55,6 +55,14 @@ export function agencyRoleHasPermission(role: AgencyMembershipRole, permission: 
  * payment-provider credentials stay owner-only) and why `agency_staff`'s explicit
  * `AgencyMembership.businessIds` assignment grants every location under that business rather than
  * introducing a second, location-level assignment axis.
+ *
+ * `restaurant.marketplace.*` (marketplace order-ingestion connections — Uber Eats/DoorDash/
+ * foodpanda) is tiered like `restaurant.menu.write`/`restaurant.promotions.manage` here, NOT
+ * excluded like `restaurant.payments.manage`: unlike a payment/courier BYOC account, a marketplace
+ * integration record never holds a restaurant's own payment credential (see
+ * RestaurantMarketplaceIntegration's doc comment — credentials, where they exist at all, are
+ * platform-level) — worst-case misuse is order/menu-sync disruption, an operational risk agencies
+ * are already trusted with elsewhere, not a financial one.
  */
 export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permission[]> = {
   agency_owner: [
@@ -75,6 +83,8 @@ export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permissio
     "restaurant.printers.manage",
     "restaurant.staff.manage",
     "restaurant.audit.read",
+    "restaurant.marketplace.read",
+    "restaurant.marketplace.manage",
   ],
   agency_admin: [
     "restaurant.settings.manage",
@@ -92,8 +102,16 @@ export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permissio
     "restaurant.pos.operate",
     "restaurant.printers.manage",
     "restaurant.audit.read",
+    "restaurant.marketplace.read",
+    "restaurant.marketplace.manage",
   ],
-  agency_staff: ["billing.read", "restaurant.analytics.read", "restaurant.menu.read", "restaurant.orders.read"],
+  agency_staff: [
+    "billing.read",
+    "restaurant.analytics.read",
+    "restaurant.menu.read",
+    "restaurant.orders.read",
+    "restaurant.marketplace.read",
+  ],
 };
 
 export function agencyRoleGrantsPermission(role: AgencyMembershipRole, permission: Permission): boolean {

@@ -3,6 +3,8 @@ dist/
 build/
 .env
 .env.local
+.env.production
+.env.production.local
 *.log
 *.rdb
 .DS_Store
@@ -14,3 +16,9 @@ jest-out.txt
 .vscode/*
 !.vscode/extensions.json
 .claude/settings.local.json
+# Phase 77 — real database dumps from scripts/backupDatabase.ts. Never committed: a backup
+# necessarily contains real customer/restaurant/user data, not just code.
+backups/
+# Phase 81 — LocalDiskStorageService's dev-only fallback storage root (apps/api/.local-storage/).
+# Never used in production; contains locally-uploaded files, not source.
+.local-storage/

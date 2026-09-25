@@ -9,6 +9,8 @@ import {
   registerTrialReminderJob,
   registerTrialExpirationJob,
   registerPaymentReconciliationJob,
+  registerMarketplaceStuckEventCheckJob,
+  registerMenuImportCleanupJob,
 } from "./queues/notification.queue.js";
 import { createSocketServer } from "./realtime/socket.js";
 import { registerOrderEventListeners } from "./events/orderEventListeners.js";
@@ -62,7 +64,13 @@ async function main() {
   // started at all: a background-job registration hang was silently taking the entire API down
   // with it, not just disabling notifications. The API accepting requests must never depend on
   // this succeeding.
-  Promise.all([registerTrialReminderJob(), registerTrialExpirationJob(), registerPaymentReconciliationJob()]).catch((err) => {
+  Promise.all([
+    registerTrialReminderJob(),
+    registerTrialExpirationJob(),
+    registerPaymentReconciliationJob(),
+    registerMarketplaceStuckEventCheckJob(),
+    registerMenuImportCleanupJob(),
+  ]).catch((err) => {
     logger.error("[queue] could not register background jobs, continuing without them", { error: (err as Error).message });
   });
 

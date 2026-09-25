@@ -33,7 +33,14 @@ export interface MenuImportRowIssue {
   message: string;
 }
 
-export type MenuImportRowAction = "create" | "update" | "skip" | "error";
+/**
+ * Phase 81 — "merge" is additive, produced only by the AI-sourced import-job publish flow (see
+ * menuImportJob.service.ts's writeResolvedImport call), never by resolveImport.ts itself (CSV/XLSX
+ * commit only ever emits create/update/skip/error, exactly as before this phase). A merge only
+ * fills fields currently empty/default on the matched existing item, leaving populated fields
+ * untouched — distinct from "update", which replaces every field unconditionally.
+ */
+export type MenuImportRowAction = "create" | "update" | "skip" | "error" | "merge";
 
 export interface MenuImportModifierOptionPreview {
   name: string;

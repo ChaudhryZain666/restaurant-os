@@ -23,6 +23,7 @@ test.describe.serial("Agency client provisioning, commercial terms, and workspac
     await page.getByLabel("Full name").fill("Provisioning Agency Owner");
     await page.getByLabel("Email").fill(`provisioning-owner-${stamp}@test.local`);
     await page.getByLabel("Password").fill("ProvisioningOwner1!");
+    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/agency$/, { timeout: 10_000 });
 
@@ -133,6 +134,7 @@ test.describe.serial("Agency client provisioning, commercial terms, and workspac
     await rivalPage.getByLabel("Full name").fill("Rival Provisioning Owner");
     await rivalPage.getByLabel("Email").fill(`rival-provisioning-${stamp}@test.local`);
     await rivalPage.getByLabel("Password").fill("RivalProvisioning1!");
+    await rivalPage.getByRole("checkbox").check();
     await rivalPage.getByRole("button", { name: "Create account" }).click();
     await expect(rivalPage).toHaveURL(/\/agency$/, { timeout: 10_000 });
     await rivalPage.getByLabel("Agency name").fill(`Rival Provisioning Agency ${stamp}`);

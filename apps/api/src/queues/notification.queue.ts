@@ -50,7 +50,12 @@ export type NotificationJobName =
   | "billing.trial_reminder_tick"
   | "billing.trial_expiration_tick"
   | "payment.reconciliation_tick"
-  | "delivery.dispatch_create";
+  | "delivery.dispatch_create"
+  | "marketplace.order_ingest"
+  | "marketplace.menu_sync"
+  | "marketplace.stuck_event_check"
+  | "menu_import.extract"
+  | "menu_import.cleanup_tick";
 
 export interface DemoPingPayload {
   message: string;
@@ -64,12 +69,39 @@ export interface DeliveryDispatchCreatePayload {
   restaurantId: string;
 }
 
+/** Enqueued by marketplaceWebhook.controller.ts immediately after acknowledging (200-ing) an
+ *  inbound webhook — see that file's header comment on why processing is decoupled from
+ *  acknowledgment (Uber Eats' 11.5-minute accept/deny SLA in particular). */
+export interface MarketplaceOrderIngestPayload {
+  provider: import("@restaurant/types").MarketplaceProviderName;
+  integrationId: string;
+  externalOrderId: string;
+  /** The originating MarketplaceWebhookEvent's eventId — ingestMarketplaceOrder marks that event
+   *  processedAt/processingError once it actually finishes, not the webhook controller at enqueue
+   *  time (see marketplaceWebhook.controller.ts's header comment on why: processedAt needs to mean
+   *  "ingestion concluded," the signal the stuck-event sweep depends on, not merely "handed off"). */
+  eventId: string;
+}
+
+export interface MarketplaceMenuSyncPayload {
+  integrationId: string;
+}
+
+/** Enqueued by menuImportJob.service.ts's createMenuImportJob, immediately after the job document
+ *  and its source file(s) are persisted — see extractionPipeline.service.ts for the actual work. */
+export interface MenuImportExtractPayload {
+  jobId: string;
+}
+
 export type NotificationJobPayload =
   | DemoPingPayload
   | OrderEventPayload
   | TicketEventPayload
   | BillingLifecycleNotificationPayload
   | DeliveryDispatchCreatePayload
+  | MarketplaceOrderIngestPayload
+  | MarketplaceMenuSyncPayload
+  | MenuImportExtractPayload
   | Record<string, never>;
 
 export const notificationQueue = new Queue<NotificationJobPayload>("notifications", {
@@ -292,6 +324,54 @@ export async function registerPaymentReconciliationJob(): Promise<void> {
   );
 }
 
+// A marketplace webhook event that's been claimed (processingStartedAt set) but never finished
+// (processedAt still unset) for this long is a real, launch-relevant risk — Uber Eats auto-cancels
+// an unconfirmed order after 11.5 minutes, so a stuck job needs a human's attention well before
+// that, not eventual discovery. No auto-remediation is attempted (retrying a partially-processed
+// order-ingestion job blind could double-create work) — this only makes an already-happening
+// problem loudly visible, mirroring worker.on("stalled")'s own "observe, don't act" philosophy.
+const MARKETPLACE_STUCK_EVENT_THRESHOLD_MS = 2 * 60 * 1000;
+
+export async function checkForStuckMarketplaceWebhookEvents(): Promise<void> {
+  const { MarketplaceWebhookEvent } = await import("../models/MarketplaceWebhookEvent.js");
+  const staleBefore = new Date(Date.now() - MARKETPLACE_STUCK_EVENT_THRESHOLD_MS);
+  const stuck = await MarketplaceWebhookEvent.find({
+    processingStartedAt: { $exists: true, $lt: staleBefore },
+    processedAt: { $exists: false },
+  }).select("provider eventId eventType processingStartedAt");
+
+  for (const event of stuck) {
+    logger.error("marketplace webhook event claimed but never finished processing — possible stuck order-ingestion job", {
+      provider: event.provider,
+      eventId: event.eventId,
+      eventType: event.eventType,
+      claimedAt: event.processingStartedAt,
+    });
+  }
+}
+
+/** Registers the stuck-marketplace-event sweep as a repeatable job, same idempotent-registration
+ *  pattern as registerPaymentReconciliationJob above. Runs every 2 minutes — tight enough to catch
+ *  a stuck order well inside Uber Eats' 11.5-minute accept/deny window. */
+export async function registerMarketplaceStuckEventCheckJob(): Promise<void> {
+  await notificationQueue.add(
+    "marketplace.stuck_event_check",
+    {},
+    { repeat: { pattern: "*/2 * * * *" }, jobId: "marketplace-stuck-event-check-every-2-min" }
+  );
+}
+
+/** Registers the daily menu-import source-file retention sweep, same idempotent-registration
+ *  pattern (fixed jobId, BullMQ dedupes) as every other repeatable job in this file. 03:30 —
+ *  a low-traffic window, same reasoning as this file's other overnight/periodic ticks. */
+export async function registerMenuImportCleanupJob(): Promise<void> {
+  await notificationQueue.add(
+    "menu_import.cleanup_tick",
+    {},
+    { repeat: { pattern: "30 3 * * *" }, jobId: "menu-import-cleanup-daily" }
+  );
+}
+
 export function startNotificationWorker(): Worker<NotificationJobPayload> {
   const worker = new Worker<NotificationJobPayload>(
     "notifications",
@@ -336,6 +416,45 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
         const { createDeliveryForOrder } = await import("../services/deliveryDispatch.service.js");
         const { orderId, restaurantId } = job.data as DeliveryDispatchCreatePayload;
         await createDeliveryForOrder(orderId, restaurantId);
+      } else if (job.name === "marketplace.order_ingest") {
+        // Dynamic import — same circular-import dodge as delivery.dispatch_create above
+        // (marketplaceOrderIngestion.service.ts -> orderCreation.service.ts has no reverse edge
+        // back to this queue file today, but the pattern is kept consistent regardless). A thrown
+        // error here is a genuine failure (not the "deny the order" path, which is handled inside
+        // ingestMarketplaceOrder itself and never throws) — BullMQ's own retry/backoff applies.
+        const { ingestMarketplaceOrder } = await import("../services/marketplaceOrderIngestion.service.js");
+        await ingestMarketplaceOrder(job.data as MarketplaceOrderIngestPayload);
+      } else if (job.name === "marketplace.menu_sync") {
+        const { syncMenuToMarketplace } = await import("../services/marketplaceMenuSync.service.js");
+        try {
+          await syncMenuToMarketplace((job.data as MarketplaceMenuSyncPayload).integrationId);
+        } catch (err) {
+          // Already recorded onto the integration's own lastMenuSyncError by
+          // syncMenuToMarketplace — logged here too since a failed background sync would
+          // otherwise be invisible outside that one field.
+          logger.error("marketplace menu sync job failed", { jobId: job.id, error: (err as Error).message });
+        }
+      } else if (job.name === "marketplace.stuck_event_check") {
+        try {
+          await checkForStuckMarketplaceWebhookEvents();
+        } catch (err) {
+          logger.error("marketplace stuck-event check failed", { jobId: job.id, error: (err as Error).message });
+        }
+      } else if (job.name === "menu_import.extract") {
+        // Dynamic import — same circular-import dodge as delivery.dispatch_create/
+        // marketplace.order_ingest above. Always rethrows on failure (unless this was the job's
+        // last configured attempt, in which case the service itself persists status:"failed" onto
+        // the MenuImportJob document before rethrowing) so BullMQ's own retry/backoff still applies.
+        const { runMenuImportExtraction } = await import("../services/menuImport/extractionPipeline.service.js");
+        const { jobId } = job.data as MenuImportExtractPayload;
+        await runMenuImportExtraction(jobId, { attemptsMade: job.attemptsMade, maxAttempts: job.opts.attempts ?? 1 });
+      } else if (job.name === "menu_import.cleanup_tick") {
+        try {
+          const { runMenuImportRetentionSweep } = await import("../services/menuImport/menuImportRetention.service.js");
+          await runMenuImportRetentionSweep();
+        } catch (err) {
+          logger.error("menu import retention sweep failed", { jobId: job.id, error: (err as Error).message });
+        }
       }
     },
     { connection: queueConnection }

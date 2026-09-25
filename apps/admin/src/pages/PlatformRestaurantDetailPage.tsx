@@ -11,6 +11,17 @@ const STATUS_TONE: Record<string, "success" | "neutral" | "danger"> = {
   suspended: "danger",
 };
 
+const CONNECTION_STATUS_TONE: Record<string, "success" | "neutral" | "danger" | "warning"> = {
+  active: "success",
+  pending_verification: "neutral",
+  action_required: "warning",
+  pending_provider_approval: "neutral",
+  invalid: "danger",
+  disconnected: "neutral",
+};
+
+const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
+
 /**
  * Phase 16 — the single-restaurant counterpart to PlatformRestaurantsPage's list, so a platform
  * admin investigating one tenant (a support request, an onboarding stall, a suspension decision)
@@ -26,6 +37,8 @@ export function PlatformRestaurantDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [foodpandaStoreIdDraft, setFoodpandaStoreIdDraft] = useState("");
+  const [linkingFoodpanda, setLinkingFoodpanda] = useState(false);
 
   function reload() {
     return apiClient.request<PlatformRestaurantDetail>(`/platform/restaurants/${id}`).then(setDetail);
@@ -74,6 +87,25 @@ export function PlatformRestaurantDetailPage() {
     }
   }
 
+  async function linkFoodpanda() {
+    setLinkingFoodpanda(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await apiClient.request(`/platform/restaurants/${id}/marketplace-integrations/foodpanda/link`, {
+        method: "POST",
+        body: { externalStoreId: foodpandaStoreIdDraft },
+      });
+      setFoodpandaStoreIdDraft("");
+      setNotice("foodpanda connected for this restaurant.");
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLinkingFoodpanda(false);
+    }
+  }
+
   if (loading) return <p className="text-muted">Loading restaurant...</p>;
   if (error && !detail)
     return (
@@ -83,7 +115,10 @@ export function PlatformRestaurantDetailPage() {
     );
   if (!detail) return null;
 
-  const { restaurant, owner, readiness, analytics, orderCountLifetime, recentAuditLog, businessLocationCount } = detail;
+  const { restaurant, owner, readiness, analytics, orderCountLifetime, recentAuditLog, businessLocationCount, paymentAccount, marketplaceIntegrations } =
+    detail;
+  const foodpandaIntegration = marketplaceIntegrations.find((m) => m.provider === "foodpanda");
+  const foodpandaNeedsLinking = !foodpandaIntegration || foodpandaIntegration.status !== "active";
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
@@ -234,6 +269,109 @@ export function PlatformRestaurantDetailPage() {
           </dl>
         </Card>
       </div>
+
+      <Card>
+        <h2 className="mb-2 font-heading text-sm font-semibold text-foreground">Payment &amp; marketplace connections</h2>
+        <p className="mb-3 text-xs text-muted">
+          Diagnostic visibility only — connecting/disconnecting stays owner-only (or, for foodpanda, the linking action below).
+        </p>
+
+        <div className="mb-3">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Payment account</h3>
+          {paymentAccount ? (
+            <dl className="flex flex-col gap-1 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Provider</dt>
+                <dd className="text-foreground">
+                  {paymentAccount.provider} ({paymentAccount.connectionMode})
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Status</dt>
+                <dd>
+                  <Badge tone={CONNECTION_STATUS_TONE[paymentAccount.status] ?? "neutral"}>{paymentAccount.status}</Badge>
+                </dd>
+              </div>
+              {paymentAccount.connectedAccountId && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Connected account ID</dt>
+                  <dd className="truncate text-foreground">{paymentAccount.connectedAccountId}</dd>
+                </div>
+              )}
+              {paymentAccount.credentialFingerprint && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Credential fingerprint</dt>
+                  <dd className="text-foreground">{paymentAccount.credentialFingerprint}</dd>
+                </div>
+              )}
+              {paymentAccount.requirementsDue && paymentAccount.requirementsDue.length > 0 && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Requirements due</dt>
+                  <dd className="text-right text-foreground">{paymentAccount.requirementsDue.join(", ")}</dd>
+                </div>
+              )}
+              {paymentAccount.disabledReason && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Disabled reason</dt>
+                  <dd className="text-right text-danger">{paymentAccount.disabledReason}</dd>
+                </div>
+              )}
+              {paymentAccount.lastVerificationError && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Last verification error</dt>
+                  <dd className="text-right text-danger">{paymentAccount.lastVerificationError}</dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="text-sm text-muted">Not connected.</p>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Marketplace integrations</h3>
+          {marketplaceIntegrations.length === 0 ? (
+            <p className="text-sm text-muted">Not connected.</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border text-sm">
+              {marketplaceIntegrations.map((m) => (
+                <li key={m.id} className="flex flex-col gap-1 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{m.provider}</span>
+                    <Badge tone={CONNECTION_STATUS_TONE[m.status] ?? "neutral"}>{m.status}</Badge>
+                  </div>
+                  {m.externalStoreId && <p className="text-xs text-muted">Store ID: {m.externalStoreId}</p>}
+                  {m.credentialFingerprint && <p className="text-xs text-muted">Credential: {m.credentialFingerprint}</p>}
+                  <p className="text-xs text-muted">Last menu sync: {m.lastMenuSyncedAt ? new Date(m.lastMenuSyncedAt).toLocaleString() : "Never"}</p>
+                  {m.lastMenuSyncError && <p className="text-xs text-danger">{m.lastMenuSyncError}</p>}
+                  {m.lastVerificationError && <p className="text-xs text-danger">{m.lastVerificationError}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {foodpandaNeedsLinking && (
+            <div className="mt-3 flex flex-col gap-2 rounded-lg border border-dashed border-border bg-background p-3">
+              <p className="text-xs font-medium text-foreground">Link foodpanda for this restaurant</p>
+              <p className="text-xs text-muted">
+                foodpanda has no restaurant-facing sign-in — enter the store ID once foodpanda partner access confirms it.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={foodpandaStoreIdDraft}
+                  onChange={(e) => setFoodpandaStoreIdDraft(e.target.value)}
+                  placeholder="foodpanda store ID"
+                  className={`${inputClass} flex-1`}
+                  autoComplete="off"
+                />
+                <Button type="button" size="sm" disabled={linkingFoodpanda || !foodpandaStoreIdDraft} onClick={linkFoodpanda}>
+                  {linkingFoodpanda ? "Linking..." : "Link"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card>
         <h2 className="mb-2 font-heading text-sm font-semibold text-foreground">Recent activity</h2>

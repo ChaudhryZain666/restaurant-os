@@ -54,7 +54,12 @@ function useIsMobile() {
 }
 
 export function ProductShowcase() {
-  const [active, setActive] = useState<TabId>("dashboard");
+  // Phase 80 — defaults to the real live storefront tab, not the dashboard mock. The add-on brief
+  // is explicit that the live demo iframe is "the product proof" and must not sit too far down the
+  // page or be buried behind other content on first view — this is the minimal, non-duplicative
+  // way to honor that (no second iframe, no new section competing with this one for the same real
+  // estate; just opening on the tab that already exists for exactly this purpose).
+  const [active, setActive] = useState<TabId>("storefront");
   const reducedMotion = useReducedMotion();
   const mobile = useIsMobile();
   const activeIndex = TABS.findIndex((t) => t.id === active);
@@ -65,10 +70,11 @@ export function ProductShowcase() {
     <div>
       <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-lg">
-          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-info">The control room</span>
-          <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">This is what your restaurant could look like</h2>
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-info">See it in action</span>
+          <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">This is Wildwood Kitchen, live</h2>
           <p className="mt-3 text-white/55">
-            A real owner dashboard, real menu management, and the actual live customer ordering experience.
+            Our demo restaurant, running on the real platform — not a screenshot. Explore the menu, then switch
+            over to see the owner dashboard, menu management, and order queue behind it.
           </p>
         </div>
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-white/40">

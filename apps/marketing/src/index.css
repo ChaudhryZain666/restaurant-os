@@ -33,8 +33,8 @@
   --gt-text-muted: #6b5d48;
   --gt-border: #d9cdb0;
 
-  --gt-brand: #611b28; /* GT Wine */
-  --gt-brand-hover: #4a141f;
+  --gt-brand: #4e1d25; /* GT Wine — Phase 78: matched to the real logo mark's sampled fill color */
+  --gt-brand-hover: #3c151d;
   --gt-brand-soft: #f2e2e1;
   --gt-brand-foreground: #f8f4ea;
 
@@ -88,7 +88,7 @@
   --gt-border-fixed: #d9cdb0;
   --gt-text-fixed: #2b2116;
   --gt-text-muted-fixed: #6b5d48;
-  --gt-brand-fixed: #611b28;
+  --gt-brand-fixed: #4e1d25;
   --gt-brand-foreground-fixed: #f8f4ea;
   --gt-accent-fixed: #7a4550;
 
@@ -230,7 +230,7 @@ h3 {
    brand rather than reading as the same one in a different light. Now a genuine dark reading of the
    SAME GarnishTable wine family: near-black plum ground, a warm dusty-rose brand highlight (lifted
    in lightness specifically so it stays legible on a near-black surface — the light theme's own
-   deep #611b28 wine would go muddy there), and the brief's own suggested oxblood as the secondary
+   deep #4e1d25 wine would go muddy there), and the brief's own suggested oxblood as the secondary
    accent. Warning stays a true, brand-independent amber (status colors are never brand colors, the
    same principle the real product's own design system already follows) rather than reusing the old
    orange as a coincidence. */

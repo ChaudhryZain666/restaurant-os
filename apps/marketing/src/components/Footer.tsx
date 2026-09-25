@@ -69,8 +69,17 @@ export function Footer() {
       </Container>
 
       <Container className="flex flex-col gap-3 border-t border-border py-6 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-        <p>&copy; {new Date().getFullYear()} GarnishTable. A demo restaurant-commerce platform.</p>
-        <div className="flex items-center gap-4">
+        <p>&copy; {new Date().getFullYear()} GarnishTable. Online ordering for independent restaurants.</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Link to="/terms" className="transition-colors hover:text-foreground">
+            Terms
+          </Link>
+          <Link to="/privacy" className="transition-colors hover:text-foreground">
+            Privacy
+          </Link>
+          <Link to="/refund-policy" className="transition-colors hover:text-foreground">
+            Refunds
+          </Link>
           <a href={STOREFRONT_URL} className="transition-colors hover:text-foreground">
             View live demo restaurant
           </a>

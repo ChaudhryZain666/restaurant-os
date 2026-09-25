@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMatch } from "react-router-dom";
-import type { Category, MenuItem, ModifierGroup, SelectedModifier } from "@restaurant/types";
+import type { MenuItem, ModifierGroup, SelectedModifier } from "@restaurant/types";
 import { Alert, Button, EmptyState, Skeleton } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useRestaurant } from "../context/RestaurantContext";
 import { useActiveTheme } from "../theme/useActiveTheme";
 import { PlateIcon } from "../theme/icons";
-
-interface MenuResponse {
-  items: MenuItem[];
-  categories: Category[];
-  modifierGroups: ModifierGroup[];
-}
+import { useNoIndex } from "../hooks/useNoIndex";
+import { useStorefrontSeo, type MenuResponse } from "../hooks/useStorefrontSeo";
 
 /**
  * Phase 31 — this component owns EVERY piece of business logic the storefront needs (menu fetch,
@@ -30,6 +26,7 @@ export function MenuPage() {
     error: restaurantError,
     isPreview,
     resolvedVia,
+    activeCustomDomain,
   } = useRestaurant();
   const { definition, sections } = useActiveTheme();
   const { Hero, CategoryNav, MenuSection, Featured, About, Gallery, Cta } = definition.components;
@@ -57,7 +54,17 @@ export function MenuPage() {
   // /t/:tableToken — Phase 22) are QR-only entry points — they shouldn't accumulate in search
   // results (robots.txt disallows crawling them entirely; this noindex tag additionally covers
   // the case where a URL got linked/indexed from somewhere outside our own crawl surface).
-  const isTableRoute = Boolean(useMatch("/r/:restaurantSlug/t/:tableToken")) || Boolean(useMatch("/t/:tableToken"));
+  // Two separate useMatch calls, each unconditionally invoked (never combined into one
+  // short-circuited `||` expression) — a hook call must never be conditionally skipped, and
+  // `Boolean(useMatch(a)) || Boolean(useMatch(b))` did exactly that: whenever the first match
+  // succeeded, `||`'s short-circuit meant the second useMatch call never ran on that render,
+  // violating React's rules of hooks (caught by this workspace's own eslint, apparently never run
+  // to completion against apps/web before now — the two calls change places across renders as the
+  // route changes, which is exactly the "hooks called in a different order" failure mode the rule
+  // exists to catch).
+  const nestedTableRouteMatch = useMatch("/r/:restaurantSlug/t/:tableToken");
+  const bareTableRouteMatch = useMatch("/t/:tableToken");
+  const isTableRoute = Boolean(nestedTableRouteMatch) || Boolean(bareTableRouteMatch);
   useEffect(() => {
     if (!isTableRoute) return;
     const meta = document.createElement("meta");
@@ -69,137 +76,47 @@ export function MenuPage() {
     };
   }, [isTableRoute]);
 
-  // SEO foundation (Part 20, extended Phase 12): every restaurant-scoped menu page gets its own
-  // title, description, canonical URL, Twitter Card, and Restaurant+Menu JSON-LD structured data
-  // — the indexable surface this platform actually wants crawled/rich-result-eligible. No head
-  // library exists in this app (see the noindex tag above for the same pattern); a handful of
-  // tags/one script element is simplest done directly rather than pulling in a dependency for it.
-  // Entirely independent of which theme is active — presentation never affects SEO output.
-  useEffect(() => {
-    if (!restaurant || isTableRoute) return;
-    const prevTitle = document.title;
-    document.title = `${restaurant.name} — Order Online`;
+  // SEO audit fix — the seeded sales-demo storefront (seed-demo-data.ts's "demo-restaurant") is
+  // fictional content, not a real business; it's excluded from the dynamic sitemap
+  // (apps/api/src/routes/sitemap.routes.ts) but was otherwise fully indexable/crawlable like any
+  // real restaurant. Belt-and-suspenders with that sitemap exclusion, same as this file's own
+  // isTableRoute noindex above is belt-and-suspenders with robots.txt's Disallow list.
+  useNoIndex(restaurant?.slug === "demo-restaurant");
+  // Phase 79 — preview mode (isPreview, an authenticated owner/platform_admin-only view — see
+  // RestaurantContext.tsx) can render a restaurant that isn't published yet, or restaurant data
+  // that changes before it goes live; it must never be indexable. Independent, composable call to
+  // the same shared hook, exactly mirroring the demo-restaurant call above.
+  useNoIndex(isPreview);
 
-    const created: HTMLElement[] = [];
-    function setMeta(attr: "name" | "property", key: string, content: string) {
-      const meta = document.createElement("meta");
-      meta.setAttribute(attr, key);
-      meta.content = content;
-      document.head.appendChild(meta);
-      created.push(meta);
-    }
-    const description = restaurant.description || `Order online from ${restaurant.name}.`;
-    setMeta("name", "description", description);
-    setMeta("property", "og:title", restaurant.name);
-    setMeta("property", "og:description", description);
-    setMeta("property", "og:type", "website");
-    if (restaurant.logo) setMeta("property", "og:image", restaurant.logo);
-
-    // Twitter falls back to Open Graph tags for most fields, but "summary_large_image" only
-    // applies when explicitly declared, and title/description are worth setting directly rather
-    // than trusting every crawler's OG fallback.
-    setMeta("name", "twitter:card", restaurant.logo ? "summary_large_image" : "summary");
-    setMeta("name", "twitter:title", restaurant.name);
-    setMeta("name", "twitter:description", description);
-    if (restaurant.logo) setMeta("name", "twitter:image", restaurant.logo);
-
-    // Phase 22 — when resolved via an active custom domain, that domain IS the canonical identity
-    // (the whole point of white-labeling); the platform's /r/:slug URL stays functional but is
-    // deliberately not forced into a redirect (an owner may still want existing links/QR codes to
-    // keep working), so it's simply not the canonical one anymore while a custom domain is active.
-    const canonicalUrl =
-      resolvedVia === "domain" ? window.location.origin : `${window.location.origin}/r/${restaurant.slug}`;
-    const canonical = document.createElement("link");
-    canonical.rel = "canonical";
-    canonical.href = canonicalUrl;
-    document.head.appendChild(canonical);
-    created.push(canonical);
-
-    // schema.org/Restaurant, extended with a real hasMenu once the menu itself has loaded — never
-    // emitted with placeholder/fake data; a menu that hasn't loaded yet just means no `hasMenu`
-    // property this render, not an empty or invented one.
-    const address =
-      restaurant.address || restaurant.city
-        ? {
-            "@type": "PostalAddress",
-            streetAddress: restaurant.address,
-            addressLocality: restaurant.city,
-            addressRegion: restaurant.state,
-            postalCode: restaurant.postalCode,
-            addressCountry: restaurant.country,
-          }
-        : undefined;
-    const structuredData: Record<string, unknown> = {
-      "@context": "https://schema.org",
-      "@type": "Restaurant",
-      name: restaurant.name,
-      description,
-      url: canonicalUrl,
-      ...(restaurant.logo ? { image: restaurant.logo } : {}),
-      ...(restaurant.phone ? { telephone: restaurant.phone } : {}),
-      ...(address ? { address } : {}),
-      ...(restaurant.latitude != null && restaurant.longitude != null
-        ? { geo: { "@type": "GeoCoordinates", latitude: restaurant.latitude, longitude: restaurant.longitude } }
-        : {}),
-      // schema.org expects the plain capitalized weekday name for dayOfWeek — WEEKDAYS is stored
-      // lowercase (see packages/types/src/types/restaurant.ts), so just the first letter needs
-      // capitalizing. Closed days are omitted entirely rather than emitted with an empty range.
-      ...(restaurant.settings.businessHours.some((d) => !d.isClosed)
-        ? {
-            openingHoursSpecification: restaurant.settings.businessHours
-              .filter((d) => !d.isClosed && d.open && d.close)
-              .map((d) => ({
-                "@type": "OpeningHoursSpecification",
-                dayOfWeek: `https://schema.org/${d.day[0].toUpperCase()}${d.day.slice(1)}`,
-                opens: d.open,
-                closes: d.close,
-              })),
-          }
-        : {}),
-      ...(menu && menu.items.length > 0
-        ? {
-            hasMenu: {
-              "@type": "Menu",
-              name: `${restaurant.name} menu`,
-              hasMenuSection: menu.categories
-                .map((c) => ({
-                  category: c,
-                  items: menu.items.filter((item) => item.categoryId === c.id),
-                }))
-                .filter((section) => section.items.length > 0)
-                .map(({ category, items }) => ({
-                  "@type": "MenuSection",
-                  name: category.name,
-                  hasMenuItem: items.map((item) => ({
-                    "@type": "MenuItem",
-                    name: item.name,
-                    ...(item.description ? { description: item.description } : {}),
-                    offers: { "@type": "Offer", price: item.price, priceCurrency: restaurant.settings.currency },
-                  })),
-                })),
-            },
-          }
-        : {}),
-    };
-    const script = document.createElement("script");
-    script.type = "application/ld+json";
-    script.textContent = JSON.stringify(structuredData);
-    document.head.appendChild(script);
-    created.push(script);
-
-    return () => {
-      document.title = prevTitle;
-      for (const el of created) document.head.removeChild(el);
-    };
-  }, [restaurant, menu, isTableRoute, resolvedVia]);
+  // SEO foundation (Part 20, extended Phase 12, extracted to a shared hook in Phase 79): every
+  // restaurant-scoped menu page gets its own title, description, canonical URL, Twitter Card, and
+  // Restaurant+Menu JSON-LD structured data — the indexable surface this platform actually wants
+  // crawled/rich-result-eligible. Entirely independent of which theme is active — presentation
+  // never affects SEO output. See useStorefrontSeo.ts for the tag mechanics (shared with
+  // apps/marketing via @restaurant/utils/seoMeta) and the schema construction itself.
+  useStorefrontSeo({ restaurant, menu, isTableRoute, isPreview, resolvedVia, activeCustomDomain });
 
   useEffect(() => {
     if (!restaurant) return;
+    // Phase 79 tenant-isolation fix — a fast tenant switch (route change before this fetch
+    // resolves) could previously let restaurant A's menu response land in state AFTER the page had
+    // already moved on to restaurant B, painting A's menu (and, via useStorefrontSeo above, A's
+    // JSON-LD) under B's page. Mirrors RestaurantContext.tsx's own `cancelled` flag pattern.
+    let cancelled = false;
     apiClient
       .request<MenuResponse>(`/restaurants/${restaurant.id}/menu`, { skipRefresh: true })
-      .then(setMenu)
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!cancelled) setMenu(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError((err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [restaurant]);
 
   const categoriesById = useMemo(() => new Map((menu?.categories ?? []).map((c) => [c.id, c])), [menu]);

@@ -20,6 +20,9 @@ class FakeStorageService implements StorageService {
   getUrl(key: string): string {
     return `https://fake-cdn.test/${key}`;
   }
+  async download(): Promise<Buffer> {
+    return Buffer.from("");
+  }
 }
 
 let restaurantA: Awaited<ReturnType<typeof createTestRestaurant>>;

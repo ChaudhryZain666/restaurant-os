@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
+import { LegalConsentCheckbox } from "../components/LegalConsentCheckbox";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
@@ -18,6 +19,7 @@ export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -26,7 +28,7 @@ export function RegisterPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await register(name, email, password);
+      await register(name, email, password, termsAccepted);
       navigate("/agency");
     } catch (err) {
       setError((err as Error).message);
@@ -63,12 +65,13 @@ export function RegisterPage() {
               autoComplete="new-password"
             />
           </label>
+          <LegalConsentCheckbox checked={termsAccepted} onChange={setTermsAccepted} />
           {error && (
             <Alert tone="danger" role="alert">
               {error}
             </Alert>
           )}
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" disabled={submitting || !termsAccepted} className="w-full">
             {submitting ? "Creating account..." : "Create account"}
           </Button>
           <p className="text-center text-xs text-muted">

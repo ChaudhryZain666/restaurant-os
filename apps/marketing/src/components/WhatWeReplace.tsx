@@ -26,6 +26,17 @@ export function WhatWeReplace() {
   const reducedMotion = useReducedMotion();
   const { plans } = usePublicPlans();
   const p = reducedMotion ? 1 : Math.min(1, progress * 1.35);
+  // Phase 80 (revised) — an opacity-based fade (WhyWeExist's fix) doesn't work here: these are
+  // wide, opaque invoice cards with real cost text, not faint translucent chips, so fading their
+  // opacity while they still overlap in position just makes several legible-but-see-through cards
+  // blend into an illegible smear (confirmed via a scroll sweep screenshot — "$29/mo79/mo...hours
+  // of it" stacked directly on the summary card). Fully opaque cards overlapping is fine on its
+  // own — it just reads as a normal fanned stack. So instead of fading opacity, collapse position,
+  // rotation and scale together toward a single vanishing point, staying at opacity 1 the whole
+  // time — the cards shrink to nothing rather than turning translucent, so there's no scroll
+  // position where partially-see-through overlapping text can occur.
+  const collapse = Math.min(1, p / 0.45);
+  const spread = 1 - collapse;
 
   const cheapest = [...(plans ?? [])].sort((a, b) => {
     const ca = a.pricing.find((x) => x.interval === "monthly")?.amountCents ?? Infinity;
@@ -49,16 +60,23 @@ export function WhatWeReplace() {
             key={f.label}
             className="absolute left-1/2 top-1/2 w-56 rounded-sm border p-4 shadow-sm"
             style={{
-              borderColor: "var(--color-border)",
-              background: "var(--color-surface)",
-              transform: `translate(-50%,-50%) translate(${f.x * (1 - p)}%, ${i * 6 * (1 - p)}%) rotate(${f.rotate * (1 - p)}deg) scale(${1 - p * 0.08})`,
-              opacity: 1 - p * 0.92,
+              // "-fixed" tokens, not the theme-relative --color-* ones: this section always renders
+              // on its own light parchment card regardless of the Home page's dark .theme-obsidian
+              // ancestor, but --color-surface/--color-border/--color-foreground resolve through
+              // whichever theme wraps the element — inside .theme-obsidian that's the dark-canvas
+              // values, so these cards were rendering with a near-black background (rgb(36,23,27),
+              // confirmed live), not cream. Exactly the bug this file's own comment already documents
+              // and fixes for this component's summary card just below — these fragments were missed.
+              borderColor: "var(--gt-border-fixed)",
+              background: "var(--gt-surface-fixed)",
+              transform: `translate(-50%,-50%) translate(${f.x * spread}%, ${i * 6 * spread}%) rotate(${f.rotate * spread}deg) scale(${spread})`,
+              opacity: 1,
               zIndex: FRAGMENTS.length - i,
               transition: reducedMotion ? "none" : "transform 150ms linear, opacity 150ms linear",
             }}
           >
             <p className="font-mono text-[9px] uppercase tracking-wide text-[#8f8570]">{f.label}</p>
-            <p className="mt-1 font-heading text-base text-[var(--color-foreground)]">{f.cost}</p>
+            <p className="mt-1 font-heading text-base text-[var(--gt-text-fixed)]">{f.cost}</p>
           </div>
         ))}
 

@@ -88,7 +88,7 @@ test("knowledge base publish -> customer search/ticket -> support reply with pri
     await customerPage.getByRole("button", { name: "Submit ticket" }).click();
     await expect(customerPage).toHaveURL(/\/support\/tickets\/[a-f0-9]+$/, { timeout: 10_000 });
     await expect(customerPage.getByText("My order is missing an item")).toBeVisible();
-    await expect(customerPage.getByText("Open")).toBeVisible();
+    await expect(customerPage.getByText("Open", { exact: true })).toBeVisible();
     const ticketNumber = (await customerPage.getByText(/^TKT-\d+$/).innerText()).trim();
 
     // --- Customer replies ---

@@ -1,8 +1,8 @@
-import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
-import { Section, SectionHeading } from "../components/Section";
+import { Reveal } from "@restaurant/ui";
+import { Section } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import { StepList } from "../components/StepList";
-import { IconArrowRight } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 
 export function HowItWorksPage() {
@@ -12,14 +12,11 @@ export function HowItWorksPage() {
   });
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="How it works"
-          title="From signup to your first order"
-          description="Six steps. No developer required, no separate website to maintain."
-        />
-      </Section>
+      <MarketingPageHero
+        eyebrow="How it works"
+        title="From signup to your first order"
+        description="Six steps. No developer required, no separate website to maintain."
+      />
 
       <Section tone="surface">
         <StepList />
@@ -42,23 +39,10 @@ export function HowItWorksPage() {
         </div>
       </Section>
 
-      <Section tone="dark">
-        <Reveal className="flex flex-col items-center gap-5 text-center">
-          <h2 className="font-heading text-3xl font-semibold text-secondary-foreground">See the real thing before you sign up</h2>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/demo">
-              <Button size="lg" variant="secondary">
-                Try the live demo
-              </Button>
-            </Link>
-            <Link to="/start-trial">
-              <Button size="lg" variant="outline" className="border-white/30 text-secondary-foreground hover:bg-white/10">
-                Start Free Trial <IconArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </Reveal>
-      </Section>
+      <MarketingClosingCta
+        title="See the real thing before you sign up"
+        description="Six steps, no developer required — or just watch the real product run first."
+      />
     </>
   );
 }

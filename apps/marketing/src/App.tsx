@@ -11,6 +11,10 @@ import { DemoPage } from "./pages/DemoPage";
 import { AboutPage } from "./pages/AboutPage";
 import { ContactPage } from "./pages/ContactPage";
 import { StartTrialPage } from "./pages/StartTrialPage";
+import { TermsPage } from "./pages/TermsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { RefundPolicyPage } from "./pages/RefundPolicyPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 
 /** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown links). */
 function ScrollToTop() {
@@ -44,6 +48,10 @@ export function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/start-trial" element={<StartTrialPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/refund-policy" element={<RefundPolicyPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </>

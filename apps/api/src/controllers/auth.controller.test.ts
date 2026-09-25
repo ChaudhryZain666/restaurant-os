@@ -49,6 +49,44 @@ describe("POST /auth/register — concurrent-duplicate-email race (Phase 49)", (
   });
 });
 
+describe("POST /auth/register — legal consent recording (Phase 77)", () => {
+  it("records legalAcceptedAt/legalVersion only when termsAccepted:true is explicitly sent (owner/agency signup)", async () => {
+    const email = `consent-accepted-${Date.now()}@test.local`;
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ name: "Consent Accepted", email, password: "Password123!", termsAccepted: true });
+    expect(res.status).toBe(201);
+    track(res.body.data.user.id);
+
+    const stored = await User.findById(res.body.data.user.id);
+    expect(stored!.legalAcceptedAt).toBeInstanceOf(Date);
+    expect(typeof stored!.legalVersion).toBe("string");
+    expect(stored!.legalVersion!.length).toBeGreaterThan(0);
+  });
+
+  it("leaves legalAcceptedAt/legalVersion unset when termsAccepted is omitted — the customer storefront signup path, unaffected by this phase", async () => {
+    const email = `consent-omitted-${Date.now()}@test.local`;
+    const res = await request(app).post("/api/v1/auth/register").send({ name: "No Consent Field", email, password: "Password123!" });
+    expect(res.status).toBe(201);
+    track(res.body.data.user.id);
+
+    const stored = await User.findById(res.body.data.user.id);
+    expect(stored!.legalAcceptedAt).toBeUndefined();
+    expect(stored!.legalVersion).toBeUndefined();
+  });
+
+  it("rejects registration outright when termsAccepted:false is sent explicitly — the direct-API-bypass case", async () => {
+    const email = `consent-declined-${Date.now()}@test.local`;
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ name: "Declined Consent", email, password: "Password123!", termsAccepted: false });
+    expect(res.status).toBe(400);
+
+    const stored = await User.findOne({ email });
+    expect(stored).toBeNull();
+  });
+});
+
 describe("POST /auth/request-password-reset — no user enumeration", () => {
   it("returns the identical response for an existing and a non-existent email", async () => {
     const user = await createTestUser("customer");

@@ -2,6 +2,8 @@ import type { UserRole } from "./rbac.js";
 import type { Restaurant, RestaurantReadiness } from "./restaurant.js";
 import type { RestaurantAnalytics } from "./analytics.js";
 import type { AuditLogEntry } from "./auditLog.js";
+import type { RestaurantPaymentAccount } from "./restaurantPaymentAccount.js";
+import type { RestaurantMarketplaceIntegration } from "./marketplace.js";
 
 export interface PlatformRestaurantSummary {
   id: string;
@@ -53,6 +55,12 @@ export interface PlatformRestaurantDetail {
   /** Phase 19 — how many Restaurant (location) documents share this one's businessId, including
    *  itself. 1 for the still-overwhelmingly-common single-location case. */
   businessLocationCount: number;
+  /** Phase 78 — read-only diagnostic visibility, same rationale as the fields above: platform_admin
+   *  has neither restaurant.payments.manage nor restaurant.marketplace.* (see rbac.ts), so this is
+   *  never a write path. encryptedCredentials is never present (each model's own toJSON transform
+   *  strips it unconditionally) — everything else here was never a secret. */
+  paymentAccount: RestaurantPaymentAccount | null;
+  marketplaceIntegrations: RestaurantMarketplaceIntegration[];
 }
 
 export interface PlatformOverview {

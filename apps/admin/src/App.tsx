@@ -8,7 +8,11 @@ import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { MenuManagementPage } from "./pages/MenuManagementPage";
 import { MenuImportPage } from "./pages/MenuImportPage";
+import { ImportEntryPage } from "./pages/ImportEntryPage";
+import { MenuImportJobPage } from "./pages/MenuImportJobPage";
 import { DeliveryPage } from "./pages/DeliveryPage";
+import { MarketplaceIntegrationsPage } from "./pages/MarketplaceIntegrationsPage";
+import { MarketplaceOAuthCallbackPage } from "./pages/MarketplaceOAuthCallbackPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { LoyaltyPage } from "./pages/LoyaltyPage";
 import { StaffPage } from "./pages/StaffPage";
@@ -186,7 +190,23 @@ export function App() {
           path="/menu/import"
           element={
             <RequireAuth permission="restaurant.menu.write">
+              <ImportEntryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/menu/import/csv"
+          element={
+            <RequireAuth permission="restaurant.menu.write">
               <MenuImportPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/menu/import/job/:jobId"
+          element={
+            <RequireAuth permission="restaurant.menu.write">
+              <MenuImportJobPage />
             </RequireAuth>
           }
         />
@@ -203,6 +223,22 @@ export function App() {
           element={
             <RequireAuth permission="restaurant.settings.manage">
               <DeliveryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/marketplace"
+          element={
+            <RequireAuth permission="restaurant.marketplace.read">
+              <MarketplaceIntegrationsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/marketplace/oauth-callback"
+          element={
+            <RequireAuth permission="restaurant.marketplace.manage">
+              <MarketplaceOAuthCallbackPage />
             </RequireAuth>
           }
         />

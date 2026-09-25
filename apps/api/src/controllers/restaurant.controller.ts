@@ -321,10 +321,19 @@ function toPreviewRestaurant(restaurant: HydratedDocument<RestaurantDoc>) {
 export async function getRestaurantBySlug(req: Request, res: Response) {
   const restaurant = await Restaurant.findOne({ slug: req.params.slug, status: "active" });
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  // SEO audit fix — a restaurant with an active custom domain used to be indexable and
+  // self-canonicalizing at BOTH this /r/:slug URL and its custom domain (duplicate content).
+  // apps/web's MenuPage.tsx already carries the correct intent in its own comment ("not the
+  // canonical one anymore while a custom domain is active") but had no way to know that from the
+  // by-slug path — only getRestaurantByDomain's own resolution knew a domain was active. This one
+  // extra lookup (only on the by-slug path, not by-domain/preview, which don't need it) closes
+  // that gap; both URLs stay fully functional, only the canonical <link> value changes.
+  const activeDomain = await DomainMapping.findOne({ locationId: restaurant._id, status: "active" }).select("hostname");
   sendSuccess(res, {
     restaurant: toPublicRestaurant(restaurant),
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
+    activeCustomDomain: activeDomain?.hostname ?? null,
   });
 }
 

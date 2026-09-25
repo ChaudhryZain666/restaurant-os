@@ -67,6 +67,15 @@ export const AUDIT_ACTIONS = [
   "printer.updated",
   "printer.deleted",
   "print_job.failed",
+  // Marketplace integrations (Uber Eats/DoorDash/foodpanda order-ingestion — see
+  // RestaurantMarketplaceIntegration.ts). Same metadata-shape rule as payment_account/
+  // delivery_account above: {provider, externalStoreId?}, never a credential. No "...failed"
+  // action, matching payment_account/delivery_account's own convention — routine sync/verification
+  // failures surface via the integration's own lastMenuSyncError/lastVerificationError field and
+  // structured logs, not the audit log, which stays a record of meaningful human actions.
+  "marketplace_integration.connected",
+  "marketplace_integration.disconnected",
+  "marketplace_integration.menu_sync_triggered",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = [
@@ -83,6 +92,7 @@ export const AUDIT_TARGET_TYPES = [
   "delivery",
   "printer",
   "print_job",
+  "marketplace_integration",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -156,8 +156,10 @@ export async function connectStripeConnect(req: Request, res: Response) {
     });
   }
 
-  const refreshUrl = `${env.ADMIN_ORIGIN}/restaurants/${restaurant.id}/settings?stripeConnect=refresh`;
-  const returnUrl = `${env.ADMIN_ORIGIN}/restaurants/${restaurant.id}/settings?stripeConnect=return`;
+  // Bare paths — apps/admin has no tenant-scoped routing (LocationContext.tsx: "the active location
+  // is purely client-side UI state"), so /settings is the real route, never /restaurants/:id/settings.
+  const refreshUrl = `${env.ADMIN_ORIGIN}/settings?stripeConnect=refresh`;
+  const returnUrl = `${env.ADMIN_ORIGIN}/settings?stripeConnect=return`;
   // `as string` — InferSchemaType's known quirk with this optional top-level field (same class of
   // gotcha this codebase already works around elsewhere, e.g. restaurantProvider.ts); real and
   // Date/string-typed at runtime, guaranteed set by the branch above.

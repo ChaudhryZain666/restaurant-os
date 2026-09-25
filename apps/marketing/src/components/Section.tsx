@@ -8,6 +8,7 @@ export function SectionHeading({
   description,
   align = "center",
   as = "h2",
+  size = "default",
 }: {
   eyebrow?: string;
   title: ReactNode;
@@ -18,13 +19,47 @@ export function SectionHeading({
    *  as="h1" on a page's first (and only its first) SectionHeading to fix that; every other usage
    *  on the same page stays h2. */
   as?: "h1" | "h2";
+  /**
+   * Phase 80 — opt-in, backward-compatible: every existing call site keeps the exact same
+   * typography it already had (`size` defaults to "default"). Pass `size="hero"` on a page's own
+   * opening heading only, to close the gap the redesign found between Home's confident hero scale
+   * and every other page's identical-to-its-own-body-sections treatment — a thin accent rule
+   * under the eyebrow (Luxury theme's own "hairline rule instead of a card" signature, reused
+   * here) plus a larger, more deliberate title size than the shared body-section default.
+   */
+  size?: "default" | "hero";
 }) {
   const Heading = as;
   return (
     <Reveal className={cn("flex flex-col gap-3", align === "center" ? "items-center text-center" : "items-start text-left")}>
-      {eyebrow && <span className="text-sm font-semibold uppercase tracking-wide text-primary">{eyebrow}</span>}
-      <Heading className="font-heading text-3xl font-semibold text-foreground sm:text-4xl">{title}</Heading>
-      {description && <p className={cn("max-w-2xl text-base text-muted sm:text-lg", align === "center" && "mx-auto")}>{description}</p>}
+      {eyebrow && (
+        <span className="flex flex-col gap-2" style={align === "center" ? { alignItems: "center" } : undefined}>
+          <span className="text-sm font-semibold uppercase tracking-wide text-primary">{eyebrow}</span>
+          {/* Phase 80 note: no opacity modifier — `bg-primary/70` silently generates no CSS rule
+              at all for a color defined as a bare `var(--color-primary)` reference (the same class
+              of bug already documented/fixed on Nav.tsx). Full-strength is fine for a 1px rule. */}
+          {size === "hero" && <span className="h-px w-10 bg-primary" />}
+        </span>
+      )}
+      <Heading
+        className={cn(
+          "font-heading font-semibold text-foreground",
+          size === "hero" ? "text-4xl sm:text-5xl lg:text-6xl" : "text-3xl sm:text-4xl"
+        )}
+      >
+        {title}
+      </Heading>
+      {description && (
+        <p
+          className={cn(
+            "max-w-2xl text-muted",
+            size === "hero" ? "text-lg sm:text-xl" : "text-base sm:text-lg",
+            align === "center" && "mx-auto"
+          )}
+        >
+          {description}
+        </p>
+      )}
     </Reveal>
   );
 }

@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, Logo } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useAgency } from "../context/AgencyContext";
+import { LegalConsentCheckbox } from "../components/LegalConsentCheckbox";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
@@ -49,6 +50,7 @@ export function AgencySignupWizardPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [agencyName, setAgencyName] = useState("");
   const [agencySlug, setAgencySlug] = useState("");
@@ -82,7 +84,7 @@ export function AgencySignupWizardPage() {
     setBusy(true);
     setError(null);
     try {
-      await register(name, email, password);
+      await register(name, email, password, termsAccepted);
       setContactEmail((prev) => prev || email);
       goNext("agency");
     } catch (err) {
@@ -245,7 +247,8 @@ export function AgencySignupWizardPage() {
                 autoComplete="new-password"
               />
             </label>
-            <Button type="submit" disabled={busy} className="w-full">
+            <LegalConsentCheckbox checked={termsAccepted} onChange={setTermsAccepted} />
+            <Button type="submit" disabled={busy || !termsAccepted} className="w-full">
               {busy ? "Creating account..." : "Continue"}
             </Button>
           </form>

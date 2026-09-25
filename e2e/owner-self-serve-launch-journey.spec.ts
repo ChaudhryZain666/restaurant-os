@@ -62,6 +62,7 @@ test.describe.serial("owner self-serve launch journey (Phase 60)", () => {
       await ownerPage.getByLabel("Full name").fill("E2E Launch Owner");
       await ownerPage.getByLabel("Email").fill(ownerEmail);
       await ownerPage.getByLabel("Password").fill("LaunchOwner123!");
+      await ownerPage.getByRole("checkbox").check();
       await ownerPage.getByRole("button", { name: "Continue" }).click();
 
       await expect(ownerPage.getByRole("heading", { name: "Check your email" })).toBeVisible({ timeout: 10_000 });

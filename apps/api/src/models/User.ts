@@ -92,6 +92,17 @@ export interface UserDoc {
    *  secureToken.service.ts pattern as passwordResetTokenHash/inviteTokenHash. */
   emailVerificationTokenHash?: string;
   emailVerificationExpiresAt?: Date;
+  /** Phase 77 — set only when the caller explicitly accepted the Terms of Service + Privacy Policy
+   *  at registration (the owner/agency self-serve signup flows send `termsAccepted:true` after
+   *  their own required, non-preselected checkbox; every other caller of /auth/register, including
+   *  apps/web's customer storefront signup, omits it and this stays unset — a deliberately
+   *  behavior-neutral addition for callers this phase's brief didn't ask to touch, same pattern as
+   *  emailVerifiedAt above). legalVersion records WHICH iteration of the documents was accepted
+   *  (see docs/legal/CURRENT_LEGAL_VERSION in auth.controller.ts) so a future re-acceptance
+   *  requirement has something to compare against — this phase does not build that enforcement,
+   *  only the record it would need. */
+  legalAcceptedAt?: Date;
+  legalVersion?: string;
 }
 
 const addressSchema = new Schema<AddressDoc>({
@@ -134,6 +145,8 @@ const userSchema = new Schema<UserDoc>(
     emailVerifiedAt: { type: Date },
     emailVerificationTokenHash: { type: String, index: { sparse: true } },
     emailVerificationExpiresAt: { type: Date },
+    legalAcceptedAt: { type: Date },
+    legalVersion: { type: String },
   },
   {
     timestamps: true,

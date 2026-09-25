@@ -18,6 +18,26 @@ function orderTypeLabel(order: Order): string {
   return order.orderType === "dine_in" && order.tableName ? `${base} — ${order.tableName}` : base;
 }
 
+const MARKETPLACE_PROVIDER_LABELS: Record<string, string> = {
+  uber_eats: "Uber Eats",
+  doordash: "DoorDash",
+  foodpanda: "foodpanda",
+};
+
+/** channel "marketplace" orders are always already paid_immediately (see
+ *  marketplaceOrderIngestion.service.ts) — the receipt says WHERE the payment happened, not
+ *  "paid"/"unpaid", since staff need to know this was never collected at the register. */
+function paymentLabelFor(order: Order): string {
+  if (order.paymentMethod === "marketplace") {
+    const provider = order.marketplace?.provider;
+    const label = provider ? MARKETPLACE_PROVIDER_LABELS[provider] ?? provider : "Marketplace";
+    return `Paid via ${label}`;
+  }
+  if (order.paymentMethod === "online") return `Paid online · ${order.paymentStatus}`;
+  if (order.paymentMethod === "card") return `Card · ${order.paymentStatus}`;
+  return `Cash · ${order.paymentStatus}`;
+}
+
 /**
  * Customer receipt content — same field selection as PrintOrderPage.tsx's receipt mode (never
  * fabricates a field that order doesn't actually carry, e.g. no "amount tendered"/"change" line
@@ -62,9 +82,7 @@ export function buildReceiptDocument(order: Order, paperWidthMm: PrinterPaperWid
   lines.push({ type: "row", left: "Tax", right: formatMoney(order.taxAmount, order.currency) });
   lines.push({ type: "row", left: "Total", right: formatMoney(order.total, order.currency), bold: true });
   lines.push({ type: "rule" });
-  const paymentLabel =
-    order.paymentMethod === "online" ? `Paid online · ${order.paymentStatus}` : order.paymentMethod === "card" ? `Card · ${order.paymentStatus}` : `Cash · ${order.paymentStatus}`;
-  lines.push({ type: "text", text: paymentLabel });
+  lines.push({ type: "text", text: paymentLabelFor(order) });
   lines.push({ type: "spacer" });
   lines.push({ type: "text", text: "Thank you!", align: "center" });
 

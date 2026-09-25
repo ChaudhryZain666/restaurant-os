@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { Button, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
+import { MarketingPageHero } from "../components/MarketingPageHero";
+import { ObsidianGlowBackground } from "../components/ObsidianGlowBackground";
+import { Container } from "../components/Container";
 import { IconArrowRight, IconChart, IconHeadset, IconPalette, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 
@@ -41,14 +44,11 @@ export function AboutPage() {
   });
   return (
     <>
-      <Section className="pt-14 sm:pt-20">
-        <SectionHeading
-          as="h1"
-          eyebrow="Why this exists"
-          title="Restaurants shouldn't have to rent back what they built"
-          description="GarnishTable is a focused online ordering platform — not a marketplace, not a website builder. Just the tools a restaurant actually needs to sell direct, and keep what selling direct earns them."
-        />
-      </Section>
+      <MarketingPageHero
+        eyebrow="Why this exists"
+        title="Restaurants shouldn't have to rent back what they built"
+        description="GarnishTable is a focused online ordering platform — not a marketplace, not a website builder. Just the tools a restaurant actually needs to sell direct, and keep what selling direct earns them."
+      />
 
       <Section tone="surface">
         <Reveal className="mx-auto flex max-w-2xl flex-col gap-4 text-center">
@@ -115,29 +115,35 @@ export function AboutPage() {
         </div>
       </Section>
 
-      <Section tone="dark">
-        <Reveal className="flex flex-col items-center gap-5 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-secondary-foreground">
-            <IconHeadset className="h-5 w-5" />
-          </span>
-          <h2 className="font-heading text-3xl font-semibold text-secondary-foreground">Want to talk it through?</h2>
-          <p className="max-w-md text-sm text-secondary-foreground/70">
-            No sales script — just a straight answer about whether GarnishTable fits how your restaurant actually runs.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/contact">
-              <Button size="lg" variant="secondary">
-                Contact us
-              </Button>
-            </Link>
-            <Link to="/start-trial">
-              <Button size="lg" variant="outline" className="border-white/30 text-secondary-foreground hover:bg-white/10">
-                Start Free Trial <IconArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </Reveal>
-      </Section>
+      {/* Deliberately not <MarketingClosingCta> — "want to talk it through" is a Contact-first
+          moment, not a demo-conversion one, so this keeps its own distinct CTA pair while matching
+          the dark bookend treatment every other page's closing section now has. */}
+      <section className="relative isolate overflow-hidden py-20 sm:py-28" style={{ background: "var(--gt-ink-fixed)" }}>
+        <ObsidianGlowBackground />
+        <Container>
+          <Reveal variant="scale" className="relative mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white">
+              <IconHeadset className="h-5 w-5" />
+            </span>
+            <h2 className="font-heading text-4xl font-semibold text-white sm:text-5xl">Want to talk it through?</h2>
+            <p className="max-w-md text-white/65">
+              No sales script — just a straight answer about whether GarnishTable fits how your restaurant actually runs.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+              <Link to="/contact">
+                <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">
+                  Contact us
+                </Button>
+              </Link>
+              <Link to="/start-trial">
+                <Button size="lg">
+                  Start Free Trial <IconArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </Reveal>
+        </Container>
+      </section>
     </>
   );
 }

@@ -5,6 +5,12 @@ export const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   phone: z.string().min(7).max(20).optional(),
+  // Phase 77 — optional at this shared schema level on purpose: /auth/register is also used by
+  // apps/web's customer storefront signup, which this phase's brief does not touch. The owner
+  // (/signup, /start) and agency (/register) self-serve wizards are the callers that actually
+  // require this — enforced by their own required, non-preselected checkbox before the request is
+  // ever sent — not by this schema rejecting its absence for every caller.
+  termsAccepted: z.boolean().optional(),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 

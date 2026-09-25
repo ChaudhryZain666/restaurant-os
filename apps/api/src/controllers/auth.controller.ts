@@ -35,6 +35,11 @@ import {
 import { getActiveAgencyMemberships } from "../services/agencyMembership.service.js";
 import { parseTtlSeconds } from "../utils/ttl.js";
 
+// Phase 77 — bump this when the Terms of Service / Privacy Policy content materially changes, so
+// legalVersion on existing User documents can be compared against it later if a re-acceptance
+// requirement is ever built. Not read anywhere yet other than being stamped at registration time.
+const CURRENT_LEGAL_VERSION = "2026-09-14";
+
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_CHANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
 // Phase 37 — longer than the 1-hour password-reset TTL (this isn't a security-response action, a
@@ -132,7 +137,15 @@ async function sendVerificationEmail(req: Request, user: HydratedDocument<UserDo
 }
 
 export async function register(req: Request, res: Response) {
-  const { name, email, password, phone } = req.body as RegisterInput;
+  const { name, email, password, phone, termsAccepted } = req.body as RegisterInput;
+  // Phase 77 — the field is optional at the schema level (apps/web's customer storefront signup
+  // never sends it, and that must stay a no-op — see registerSchema's own comment), but a caller
+  // that DOES send it must send true, never false: this closes the one real gap a bypass-the-UI
+  // direct API call could otherwise exploit against the owner/agency self-serve wizards, which
+  // always send true after their own required checkbox.
+  if (termsAccepted === false) {
+    throw ApiError.badRequest("You must accept the Terms of Service and Privacy Policy to continue.");
+  }
 
   const existing = await User.findOne({ email });
   if (existing) throw ApiError.conflict("An account with this email already exists");
@@ -145,7 +158,13 @@ export async function register(req: Request, res: Response) {
   // than letting it surface as an unhandled 500.
   let user: HydratedDocument<UserDoc>;
   try {
-    user = await User.create({ name, email, passwordHash, phone });
+    user = await User.create({
+      name,
+      email,
+      passwordHash,
+      phone,
+      ...(termsAccepted === true ? { legalAcceptedAt: new Date(), legalVersion: CURRENT_LEGAL_VERSION } : {}),
+    });
   } catch (err) {
     if ((err as { code?: number }).code === 11000) {
       throw ApiError.conflict("An account with this email already exists");

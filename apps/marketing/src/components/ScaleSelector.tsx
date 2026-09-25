@@ -395,7 +395,7 @@ function TierPanel({
 }
 
 export function ScaleSelector() {
-  const { plans, error } = usePublicPlans();
+  const { plans, error, retry } = usePublicPlans();
   const sorted = useMemo(() => [...(plans ?? [])].sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)), [plans]);
 
   const ref0 = useRef<HTMLDivElement>(null);
@@ -416,7 +416,19 @@ export function ScaleSelector() {
         </p>
       </div>
 
-      {error && <p className="mt-10 text-center text-sm text-[var(--gt-accent-fixed)]">Couldn't load pricing right now — please try again shortly.</p>}
+      {error && (
+        <div className="mt-10 flex flex-col items-center gap-3 text-center">
+          <p className="text-sm text-[var(--gt-accent-fixed)]">Couldn't load pricing right now — please try again shortly.</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="rounded-full border px-4 py-1.5 text-sm font-medium text-[var(--gt-brand-fixed)] transition-colors hover:bg-[var(--gt-brand-fixed)] hover:text-[#f8f4ea]"
+            style={{ borderColor: "var(--gt-brand-fixed)" }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
       {!plans && !error && <p className="mt-10 text-center text-sm text-[#5c4f3d]">Loading pricing…</p>}
 
       {sorted.length > 0 && (

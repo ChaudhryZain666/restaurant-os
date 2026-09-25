@@ -112,6 +112,7 @@ const RESTAURANT_GROUPS: NavGroup[] = [
       { to: "/kitchen", label: "Kitchen", icon: IconKitchen, permission: "restaurant.orders.manage", settingsFlag: "kitchenEnabled" },
       { to: "/tables", label: "Tables", icon: IconTable, permission: "restaurant.tables.manage" },
       { to: "/delivery", label: "Delivery", icon: IconTruck, permission: "restaurant.settings.manage" },
+      { to: "/marketplace", label: "Marketplace", icon: IconStore, permission: "restaurant.marketplace.read" },
       { to: "/staff", label: "Staff", icon: IconIdBadge, permission: "restaurant.staff.manage", settingsFlag: "staffEnabled" },
     ],
   },

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import type {
+  LinkFoodpandaIntegrationInput,
   ListPlatformRestaurantsQueryInput,
   ListPlatformUsersQueryInput,
   UpdateRestaurantStatusInput,
@@ -13,7 +14,11 @@ import { Delivery } from "../models/Delivery.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AuditLog } from "../models/AuditLog.js";
 import { DomainMapping } from "../models/DomainMapping.js";
+import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
+import { RestaurantMarketplaceIntegration } from "../models/RestaurantMarketplaceIntegration.js";
 import { Subscription } from "../models/Subscription.js";
+import { getMarketplaceProvider } from "../marketplaceProviders/index.js";
+import { activateIntegration } from "./restaurantMarketplaceIntegration.controller.js";
 import { Plan } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
 import { Agency } from "../models/Agency.js";
@@ -170,7 +175,7 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
   const restaurant = await Restaurant.findById(id);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
-  const [owner, readiness, analytics, orderCount, recentAuditLog, businessLocationCount, domains] = await Promise.all([
+  const [owner, readiness, analytics, orderCount, recentAuditLog, businessLocationCount, domains, paymentAccount, marketplaceIntegrations] = await Promise.all([
     User.findById(restaurant.ownerId).select("name email phone inviteTokenHash inviteExpiresAt isActive"),
     computeReadiness(restaurant),
     getRestaurantAnalytics(id),
@@ -186,6 +191,14 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     // domain management stays owner-only (restaurant.settings.manage, which platform_admin never
     // holds) via the real /restaurants/:restaurantId/domains routes; this is visibility only.
     DomainMapping.find({ locationId: restaurant._id }).sort({ createdAt: -1 }),
+    // Phase 78 — read-only payment/marketplace connection visibility, same rationale as domains
+    // above: platform_admin has neither restaurant.payments.manage nor restaurant.marketplace.*
+    // (confirmed via packages/types/src/types/rbac.ts), so this is diagnostic visibility only, never
+    // a write path — the owner-facing connect/disconnect endpoints remain the only way to change
+    // these. encryptedCredentials is already unconditionally stripped by each model's own toJSON
+    // transform; nothing else here was ever a secret.
+    RestaurantPaymentAccount.findOne({ restaurantId: restaurant._id, status: { $ne: "disconnected" } }).sort({ createdAt: -1 }),
+    RestaurantMarketplaceIntegration.find({ restaurantId: restaurant._id, status: { $ne: "disconnected" } }).sort({ createdAt: -1 }),
   ]);
 
   // Phase 24 — read-only billing visibility for investigation, same rationale as domains above:
@@ -231,7 +244,51 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     analytics,
     orderCountLifetime: orderCount,
     recentAuditLog: recentAuditLog.map((a) => a.toJSON()),
+    paymentAccount: paymentAccount?.toJSON() ?? null,
+    marketplaceIntegrations: marketplaceIntegrations.map((m) => m.toJSON()),
   });
+}
+
+/**
+ * POST /platform/restaurants/:id/marketplace-integrations/foodpanda/link — the honest completion of
+ * foodpanda's "our team completes this connection on your behalf" promise (see
+ * MarketplaceIntegrationsPage.tsx's platform_admin_managed card copy). foodpanda has no
+ * restaurant-facing OAuth/sign-in step at all — only a partner-issued `client_credentials` token
+ * valid across GarnishTable's whole chainID (see FoodpandaProvider.ts's own header comment) — so a
+ * platform_admin providing the restaurant's externalStoreId IS the real, permanent activation
+ * mechanism, not a stopgap the owner-facing OAuth flow will eventually replace.
+ *
+ * Deliberately its OWN endpoint rather than a platform_admin bypass of the owner-facing connect
+ * route: `restaurant.marketplace.manage` is NOT in platform_admin's own flat permission list
+ * (packages/types/src/types/rbac.ts) — confirmed directly — so platform_admin structurally cannot
+ * reach POST /restaurants/:id/marketplace-integrations today, correctly. Reuses activateIntegration
+ * (the same disconnect-then-activate-then-audit-log helper the owner-facing flows use) so the
+ * connection-state invariants stay identical regardless of who initiated the connection.
+ */
+export async function linkFoodpandaIntegration(req: Request, res: Response) {
+  const { id } = req.params;
+  const { externalStoreId } = req.body as LinkFoodpandaIntegrationInput;
+
+  const restaurant = await Restaurant.findById(id);
+  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  if (!restaurant.businessId) throw ApiError.badRequest("This restaurant has no business association yet");
+
+  const provider = getMarketplaceProvider("foodpanda");
+  const verified = await provider.healthCheck().catch(() => false);
+  if (!verified) {
+    throw ApiError.badRequest("Could not verify foodpanda's platform-level credentials on this deployment — check FOODPANDA_CLIENT_ID/_SECRET/_CHAIN_ID before linking a restaurant.");
+  }
+
+  const integration = await activateIntegration({
+    restaurantId: restaurant._id,
+    businessId: restaurant.businessId,
+    provider: "foodpanda",
+    externalStoreId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+  });
+
+  sendSuccess(res, { integration: integration.toJSON() }, 201);
 }
 
 /**
@@ -526,6 +583,14 @@ export async function getPlatformConfig(_req: Request, res: Response) {
       emailProvider: env.EMAIL_PROVIDER,
       trialPeriodDays: env.TRIAL_PERIOD_DAYS,
       pastDueGracePeriodDays: env.PAST_DUE_GRACE_PERIOD_DAYS,
+      // Phase 78 — lets a platform_admin see at a glance whether THIS deployment even has live
+      // credentials for a given marketplace provider, independent of any single restaurant's own
+      // connection state (mirrors paymentProvider/billingProvider's own "selection, never
+      // credentials" pattern above — these booleans never reveal the credential values themselves).
+      marketplaceProviderMode: env.MARKETPLACE_PROVIDER_MODE,
+      uberEatsConfigured: Boolean(env.UBER_EATS_CLIENT_ID && env.UBER_EATS_CLIENT_SECRET),
+      doordashConfigured: Boolean(env.DOORDASH_DEVELOPER_ID && env.DOORDASH_KEY_ID && env.DOORDASH_SIGNING_SECRET),
+      foodpandaConfigured: Boolean(env.FOODPANDA_CLIENT_ID && env.FOODPANDA_CLIENT_SECRET && env.FOODPANDA_CHAIN_ID),
     },
     notificationQueueHealth: queueHealth,
     failedDeliveryCount,

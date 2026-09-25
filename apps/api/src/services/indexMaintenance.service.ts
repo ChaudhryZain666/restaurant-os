@@ -26,6 +26,7 @@ import "../models/ModifierGroup.js";
 import "../models/CategoryLocationOverride.js";
 import "../models/MenuItemLocationOverride.js";
 import "../models/ModifierGroupLocationOverride.js";
+import "../models/MenuImportJob.js";
 import "../models/Table.js";
 import "../models/AuditLog.js";
 import "../models/DomainMapping.js";

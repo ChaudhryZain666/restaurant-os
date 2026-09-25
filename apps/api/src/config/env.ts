@@ -153,6 +153,61 @@ const baseEnvSchema = z.object({
   // already-stored BYOC credential — there is no rotation tooling this phase.
   CREDENTIAL_ENCRYPTION_KEY: z.string().optional(),
 
+  // Marketplace order-ingestion (Uber Eats/DoorDash/foodpanda — see marketplaceProviders/ and
+  // RestaurantMarketplaceIntegration.ts). Unlike Stripe/Safepay/Uber Direct, these are NOT
+  // BYOC-per-restaurant credentials: all three providers authenticate GarnishTable itself as one
+  // registered partner app for the whole deployment — the per-restaurant piece is only an
+  // externalStoreId, stored on the integration document, never here. All optional at boot, same
+  // convention as every other provider credential in this file: a deployment with none of these set
+  // still boots cleanly, and each adapter throws a clear "not configured" error only the first time
+  // it's actually asked to make a real call — never fabricates a connection.
+  // Unlike PAYMENT_PROVIDER (one active default at a time), a single restaurant can have Uber Eats
+  // AND DoorDash AND foodpanda connected simultaneously — there is no single "the" marketplace
+  // provider to default to. "mock" (the safe default) makes every provider NAME resolve to
+  // MockMarketplaceProvider instead of the real network-calling adapter, mirroring
+  // PAYMENT_PROVIDER=mock's own role — this is what every dev/test environment runs on until a
+  // deployment deliberately opts into "live" with real per-provider credentials configured below.
+  MARKETPLACE_PROVIDER_MODE: z.enum(["mock", "live"]).default("mock"),
+  MOCK_MARKETPLACE_WEBHOOK_SECRET: z.string().default("mock-marketplace-webhook-secret-dev-only"),
+  UBER_EATS_CLIENT_ID: z.string().optional(),
+  UBER_EATS_CLIENT_SECRET: z.string().optional(),
+  // Phase 78 — the restaurant-facing OAuth redirect_uri registered with Uber (a single static URL,
+  // never tenant-scoped — see marketplaceOAuth.routes.ts's own header comment for why). Optional:
+  // defaults to `${ADMIN_ORIGIN}/marketplace/oauth-callback` at the point of use, an explicit
+  // override only needed where a deployment's registered Uber redirect URI differs from that.
+  UBER_EATS_REDIRECT_URI: z.string().optional(),
+  // The signing secret for Uber's ONE centralized "Primary Webhook URL" (see
+  // developer.uber.com/docs/eats/guides/webhooks) — every store's events arrive at the same
+  // endpoint, verified with this one secret, never a per-store secret.
+  UBER_EATS_WEBHOOK_SECRET: z.string().optional(),
+  // DoorDash's signing key is issued per-partner only after a Technical-Account-Manager-assisted
+  // onboarding/certification process (see developer.doordash.com's Marketplace getting-started
+  // guide) — a real, documented approval gate this adapter cannot work around, same class of
+  // constraint as UberDirectProvider.ts's own "may require written approval from Uber" note.
+  DOORDASH_DEVELOPER_ID: z.string().optional(),
+  DOORDASH_KEY_ID: z.string().optional(),
+  DOORDASH_SIGNING_SECRET: z.string().optional(),
+  // foodpanda: OAuth2 client_credentials against https://foodpanda.partner.deliveryhero.io — the
+  // resulting token is valid across every store under one chainID (foodpanda's own partner-account
+  // granularity), so FOODPANDA_CHAIN_ID is a platform-level constant too, not per-restaurant.
+  FOODPANDA_CLIENT_ID: z.string().optional(),
+  FOODPANDA_CLIENT_SECRET: z.string().optional(),
+  FOODPANDA_CHAIN_ID: z.string().optional(),
+  // A static per-partner token (not an HMAC signature — foodpanda's own documented webhook security
+  // model), checked with a constant-time comparison the same way an HMAC digest is.
+  FOODPANDA_WEBHOOK_TOKEN: z.string().optional(),
+
+  // Phase 81 — menu-import extraction (PDF/URL/image sources). "mock" (the default) is the only
+  // provider that actually runs in this project's own tests/dev — deterministic, no real API call,
+  // see apps/api/src/menuExtraction/MockMenuExtractionProvider.ts. "live" targets Anthropic's real,
+  // documented Claude Messages API (apps/api/src/menuExtraction/ClaudeMenuExtractionProvider.ts) —
+  // real, network-capable code, but never exercised against a live API key in this environment, same
+  // status class as every other external provider adapter in this file. Selecting "live" without
+  // ANTHROPIC_API_KEY throws clearly (getMenuExtractionProvider) rather than silently falling back.
+  MENU_EXTRACTION_PROVIDER_MODE: z.enum(["mock", "live"]).default("mock"),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-5"),
+
   // DNS verification (Phase 22 custom domains). "mock" (default outside production, mirroring
   // PAYMENT_PROVIDER's default-mock precedent) reads from the MockDnsRecord collection, seeded
   // directly via Mongo — the same documented exception this project already uses for e2e tests

@@ -12,7 +12,7 @@
  * See packages/ui/src/theme/tokens.ts for the typed shape all three satisfy.
  */
 :root {
-  --color-primary: #611b28;
+  --color-primary: #4e1d25; /* Phase 78 — matched to the real logo mark's sampled fill color */
   --color-primary-foreground: #fcfaf5;
   --color-secondary: #171416;
   --color-secondary-foreground: #fafaf9;

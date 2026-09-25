@@ -71,8 +71,13 @@ test.describe.serial("dashboard not-ready state (Portal UX phase)", () => {
     await expect(page.getByText("Finish the items above to enable publishing.")).toBeVisible();
 
     // --- Complete the one outstanding check, from Dashboard's own link (not by going through
-    // Setup) — its own cross-link into Menu. ---
+    // Setup) — its own cross-link into Menu. Phase 81 Stage 3 — this now lands on the import
+    // entry chooser (readinessCopy.ts's own menu.to), not the menu builder directly; "build
+    // manually" is the chooser's own path to the same manual category/item creation this test
+    // actually wants to exercise. ---
     await page.getByRole("link", { name: "Add menu items →" }).click();
+    await expect(page).toHaveURL(/\/menu\/import$/);
+    await page.getByRole("link", { name: "Or start from scratch — build your menu manually" }).click();
     await expect(page).toHaveURL(/\/menu$/);
     await page.getByPlaceholder("New category name").fill(categoryName);
     await page.getByRole("button", { name: "Add category" }).click();
