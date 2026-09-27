@@ -13,10 +13,14 @@ interface PageMeta {
  *
  * Phase 79 — thin wrapper around the shared `applySeoMeta` (packages/utils/src/seoMeta.ts), which
  * unifies this hook's original DOM logic with apps/web's MenuPage.tsx equivalent; both apps now go
- * through the same tag mechanics. og:image intentionally falls back to the site favicon (the only
- * real image asset that exists in this app today) rather than a fabricated screenshot — a
- * dedicated 1200x630 social preview image is real, valuable follow-up work, not something to fake
- * a URL for here.
+ * through the same tag mechanics.
+ *
+ * Phase 82 — og:image now points at a real, dedicated 1200x630 branded social-preview PNG
+ * (public/og-image.png: dark-ink/blueprint-grid background matching the real Hero, the real logo
+ * mark, and the real homepage headline — not a placeholder), replacing the previous fallback to
+ * favicon.svg. That fallback was worse than just "generic": most real social-preview crawlers
+ * (Facebook/Twitter/LinkedIn/Slack) don't reliably render SVG for og:image at all, so shared links
+ * were likely showing no image whatsoever, not merely an unbranded one.
  *
  * `VITE_SITE_URL` (Phase 79) lets a deployment override the origin used for canonical/og:url/
  * og:image once a real production domain exists — unset, this falls back to
@@ -38,7 +42,7 @@ export function usePageMeta({ title, description }: PageMeta): void {
         type: "website",
         url,
         siteName: "GarnishTable",
-        image: `${base}/favicon.svg`,
+        image: `${base}/og-image.png`,
       },
       twitter: {
         card: "summary",

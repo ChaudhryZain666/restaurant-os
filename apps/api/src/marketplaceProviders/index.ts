@@ -1,5 +1,6 @@
 import type { MarketplaceProviderName } from "@restaurant/types";
 import { env } from "../config/env.js";
+import { logger } from "../common/logger.js";
 import type { MarketplaceProvider } from "./MarketplaceProvider.js";
 import { MockMarketplaceProvider } from "./MockMarketplaceProvider.js";
 import { UberEatsProvider } from "./UberEatsProvider.js";
@@ -9,6 +10,17 @@ import { FoodpandaProvider } from "./FoodpandaProvider.js";
 export const KNOWN_MARKETPLACE_PROVIDER_NAMES: MarketplaceProviderName[] = ["uber_eats", "doordash", "foodpanda"];
 
 const instances = new Map<MarketplaceProviderName, MarketplaceProvider>();
+let warnedAboutMock = false;
+
+/** Phase 83 hardening — same reasoning as payments/billing: a forgotten MARKETPLACE_PROVIDER_MODE
+ *  in production doesn't fail loudly, it silently ingests/processes everything through the mock
+ *  driver instead of real Uber Eats/DoorDash/foodpanda traffic. Lower near-term urgency than
+ *  payments/billing in practice (no restaurant can receive real marketplace orders without
+ *  provider approval first — see docs/marketplace-production-onboarding.md — so this mode alone
+ *  isn't independently exploitable yet), but the same class of risk once approvals land. */
+export function shouldWarnAboutMockMarketplaceModeInProduction(nodeEnv: string, mode: string): boolean {
+  return nodeEnv === "production" && mode === "mock";
+}
 
 function buildLiveProvider(name: MarketplaceProviderName): MarketplaceProvider {
   if (name === "uber_eats") {
@@ -43,6 +55,12 @@ function buildLiveProvider(name: MarketplaceProviderName): MarketplaceProvider {
 export function getMarketplaceProvider(name: MarketplaceProviderName): MarketplaceProvider {
   const cached = instances.get(name);
   if (cached) return cached;
+  if (shouldWarnAboutMockMarketplaceModeInProduction(env.NODE_ENV, env.MARKETPLACE_PROVIDER_MODE) && !warnedAboutMock) {
+    warnedAboutMock = true;
+    logger.warn(
+      "[marketplace] Running MOCK marketplace providers in production — no real Uber Eats/DoorDash/foodpanda orders will be ingested. Set MARKETPLACE_PROVIDER_MODE=live once real provider credentials/approval exist."
+    );
+  }
   const built = env.MARKETPLACE_PROVIDER_MODE === "mock" ? new MockMarketplaceProvider(name, env.MOCK_MARKETPLACE_WEBHOOK_SECRET) : buildLiveProvider(name);
   instances.set(name, built);
   return built;

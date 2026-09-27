@@ -189,6 +189,18 @@ export async function createBusinessSelfServe(req: Request, res: Response) {
   if (!precheck.emailVerifiedAt) {
     throw ApiError.forbidden("Please verify your email address before creating your restaurant");
   }
+  // Phase 82 hardening — a real, confirmed gap: /auth/register's own termsAccepted check only
+  // rejects an EXPLICIT `false` (necessarily permissive — apps/web's customer storefront signup
+  // never sends this field at all, and that must stay a no-op there — see register()'s own
+  // comment). That means a direct API call bypassing the owner-signup wizard's UI (whose submit
+  // button stays disabled until its required checkbox is checked) could omit the field entirely,
+  // register successfully with legalAcceptedAt never set, and — before this check — still go on to
+  // provision a real business/restaurant here. This is the actual enforcement point for "an owner
+  // must have agreed to the Terms of Service," mirroring the emailVerifiedAt check immediately
+  // above.
+  if (!precheck.legalAcceptedAt) {
+    throw ApiError.forbidden("Please accept the Terms of Service and Privacy Policy before creating your restaurant");
+  }
 
   const existingSlug = await Restaurant.findOne({ slug });
   if (existingSlug) throw ApiError.conflict("That restaurant URL is already taken — try another");

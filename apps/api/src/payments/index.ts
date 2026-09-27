@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { logger } from "../common/logger.js";
 import type { PaymentProvider } from "./PaymentProvider.js";
 import { MockPaymentProvider } from "./MockPaymentProvider.js";
 import { SafepayProvider } from "./SafepayProvider.js";
@@ -7,6 +8,20 @@ import { StripeProvider } from "./StripeProvider.js";
 export type PaymentProviderName = "mock" | "safepay" | "stripe";
 
 const instances = new Map<PaymentProviderName, PaymentProvider>();
+const warnedModes = new Set<PaymentProviderName>();
+
+/** Phase 83 hardening — same reasoning as menuExtraction/index.ts's
+ *  shouldWarnAboutMockInProduction: forgetting to configure a real payment provider in production
+ *  doesn't fail loudly like a misconfigured "safepay"/"stripe" selection would — it "succeeds"
+ *  silently, letting real customers believe they paid while no real money ever moves. Deliberately
+ *  a warning, not a hard boot-time block: a legitimately cash-only deployment (no online payments
+ *  at all) is a real, documented, indefinitely-supported launch state (see env.ts's own
+ *  EMAIL_PROVIDER comment for the same distinction), so this can't assume every production
+ *  deployment must configure a real provider. Exported (not just called internally) so it's
+ *  directly unit-testable without needing to fake the `env` singleton. */
+export function shouldWarnAboutMockPaymentProviderInProduction(nodeEnv: string, resolvedProvider: PaymentProviderName): boolean {
+  return nodeEnv === "production" && resolvedProvider === "mock";
+}
 
 function buildProvider(name: PaymentProviderName): PaymentProvider {
   if (name === "mock") {
@@ -49,6 +64,13 @@ function buildProvider(name: PaymentProviderName): PaymentProvider {
  */
 export function getPaymentProvider(name?: PaymentProviderName): PaymentProvider {
   const resolved = name ?? env.PAYMENT_PROVIDER;
+  if (shouldWarnAboutMockPaymentProviderInProduction(env.NODE_ENV, resolved) && !warnedModes.has(resolved)) {
+    warnedModes.add(resolved);
+    logger.warn(
+      "[payments] Running the MOCK payment provider in production — no real money will move for any order marked \"paid\". " +
+        "Set PAYMENT_PROVIDER=stripe or =safepay (with real credentials) unless this deployment is deliberately cash-only."
+    );
+  }
   const cached = instances.get(resolved);
   if (cached) return cached;
   const built = buildProvider(resolved);

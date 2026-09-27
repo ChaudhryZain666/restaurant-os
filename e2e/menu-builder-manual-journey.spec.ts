@@ -81,9 +81,16 @@ test.describe.serial("menu builder — manual journey", () => {
     await expect(page.getByLabel("Option group name")).toHaveValue("Extra toppings", { timeout: 10_000 });
     await expect(page.getByPlaceholder("Option name").first()).toHaveValue("Option 1");
 
+    // The item editor drawer stays mounted during its own slide-out close transition (by design,
+    // so the animation has a "closed" frame to play) — waiting for it to actually be hidden avoids
+    // a flaky race against its still-present h2 title/live-preview panel, which also render this
+    // same item name and live inside the same <main> landmark as the item list (scoping to "main"
+    // alone does not exclude them).
+    const itemEditorDialog = page.locator('[role="dialog"][aria-labelledby="item-editor-title"]');
     await page.getByRole("button", { name: "Back to menu" }).click();
     await expect(page).toHaveURL(/\/menu$/);
-    await expect(page.getByRole("main").getByText(firstItemName, { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(itemEditorDialog).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByText(firstItemName, { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("1 option").first()).toBeVisible();
 
     // --- A second item, so reordering actually has something to reorder. ---
@@ -91,11 +98,14 @@ test.describe.serial("menu builder — manual journey", () => {
     await page.getByPlaceholder("Name", { exact: true }).fill(secondItemName);
     await page.getByPlaceholder("Base price").fill("9");
     await page.getByRole("button", { name: "Create item & continue" }).click();
+    // Unlike the first item's flow (several intervening modifier-editing steps naturally let the
+    // create-item save settle first), this clicks straight through — waiting for the drawer's own
+    // post-create "edit mode" content avoids racing "Back to menu" against the save still in
+    // flight, which flakily left the drawer's `open` state (and its translate-x transform) stuck.
+    await expect(page.getByText("Customize this item")).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: "Back to menu" }).click();
-    // Scoped to main (not a bare page-wide search): the item editor drawer stays mounted during
-    // its own slide-out close transition (by design, so the animation has a "closed" frame to
-    // play), so its still-present h2 title would otherwise also match this same text briefly.
-    await expect(page.getByRole("main").getByText(secondItemName, { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(itemEditorDialog).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByText(secondItemName, { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // --- Reorder — the grip handle's keyboard path (Arrow Up/Down), the same real reorder logic
     // drag-and-drop uses (see MenuManagementPage.tsx's GripHandle). Second item starts below the

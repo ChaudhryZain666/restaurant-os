@@ -96,7 +96,10 @@ test.describe.serial("Agency client provisioning, commercial terms, and workspac
     await expect(page).toHaveURL(/\/menu$/, { timeout: 10_000 });
     await page.getByPlaceholder("New category name").fill(categoryName);
     await page.getByRole("button", { name: "Add category" }).click();
-    await expect(page.getByText(categoryName, { exact: true })).toBeVisible({ timeout: 10_000 });
+    // Phase 81's menu-builder redesign legitimately shows a category name in two places at once —
+    // the persistent left-rail nav button and the center-canvas heading — so an unscoped exact-text
+    // locator is ambiguous by design now. The heading is what "shows up in the menu builder" means.
+    await expect(page.getByRole("heading", { name: categoryName })).toBeVisible({ timeout: 10_000 });
 
     // --- Exit cleanly back to the agency section. ---
     await page.getByRole("button", { name: "← Back to Agency" }).click();
@@ -122,7 +125,8 @@ test.describe.serial("Agency client provisioning, commercial terms, and workspac
     // exact same real data the agency configured moments ago. ---
     await expect(ownerPage.getByRole("link", { name: "Clients", exact: true })).toHaveCount(0);
     await ownerPage.getByRole("link", { name: "Menu", exact: true }).click();
-    await expect(ownerPage.getByText(categoryName, { exact: true })).toBeVisible({ timeout: 10_000 });
+    // Same Phase 81 menu-builder ambiguity as above — assert the heading, not unscoped text.
+    await expect(ownerPage.getByRole("heading", { name: categoryName })).toBeVisible({ timeout: 10_000 });
 
     await ownerContext.close();
 

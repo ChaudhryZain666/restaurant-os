@@ -109,6 +109,32 @@ describe("ClaudeMenuExtractionProvider", () => {
     });
   });
 
+  it("surfaces Anthropic's own structured error message field, not raw response text (Phase 82 hardening)", async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 429,
+      json: async () => ({ type: "error", error: { type: "rate_limit_error", message: "Number of request tokens has exceeded your per-minute rate limit." } }),
+    });
+    await expect(provider.extract({ kind: "pdf", buffer: Buffer.from("x"), fileName: "menu.pdf" })).rejects.toMatchObject({
+      code: "provider_error",
+      message: "Extraction service error (HTTP 429): Number of request tokens has exceeded your per-minute rate limit.",
+    });
+  });
+
+  it("falls back to a generic message, never raw/unexpected response text, when the error body isn't Anthropic's documented JSON shape", async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error("not json");
+      },
+    });
+    await expect(provider.extract({ kind: "pdf", buffer: Buffer.from("x"), fileName: "menu.pdf" })).rejects.toMatchObject({
+      code: "provider_error",
+      message: "Extraction service error (HTTP 502)",
+    });
+  });
+
   it("throws provider_error when the response has no tool_use block", async () => {
     mockFetchOnce({ ok: true, json: async () => ({ model: "m", content: [{ type: "text", text: "no tool call" }] }) });
     await expect(provider.extract({ kind: "pdf", buffer: Buffer.from("x"), fileName: "menu.pdf" })).rejects.toThrow(MenuExtractionError);

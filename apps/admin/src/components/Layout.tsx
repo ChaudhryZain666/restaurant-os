@@ -630,7 +630,11 @@ function LayoutContent() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-sidebar transition-[transform,width] duration-normal ease-premium lg:static lg:translate-x-0 ${
+        // lg:sticky + lg:h-screen (not lg:static) — without its own height/positioning, the
+        // sidebar was just a normal flex child that grew to match the main content's height and
+        // scrolled away with it on any long page, taking the whole nav out of view. Sticky pins it
+        // to the viewport on desktop while the main content scrolls independently underneath it.
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-sidebar transition-[transform,width] duration-normal ease-premium lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${effectiveCollapsed ? "lg:w-[4.5rem]" : "lg:w-64"}`}
       >

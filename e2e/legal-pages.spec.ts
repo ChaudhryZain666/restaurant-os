@@ -68,4 +68,24 @@ test.describe("Legal pages (Phase 77)", () => {
     await expect(page.getByRole("heading", { name: "We couldn't find that page", level: 1 })).toBeVisible();
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
   });
+
+  // Phase 82 Workstream H — a real, disclosed launch blocker, NOT a bug in this test: Terms,
+  // Privacy, and Refund Policy all still contain literal "[LEGAL_ENTITY_NAME]"/"[FOUNDER/LEGAL
+  // REVIEW REQUIRED]" placeholder markers pending real legal-entity/business input (see
+  // PHASE_82_LAUNCH_HARDENING_FINAL_REPORT.md §13). Deliberately marked test.fail() rather than
+  // silently skipped or omitted: this documents the gap as an explicit, tracked expectation — if a
+  // founder/legal review ever replaces these placeholders with real content, this test will start
+  // passing UNEXPECTEDLY, and Playwright reports that loudly (a real signal to come remove the
+  // test.fail() marker, not a silent pass). Never invents the missing legal-entity name or policy
+  // language itself.
+  test.fail(
+    "no unresolved legal placeholder markers ship on Terms, Privacy, or Refund Policy (expected to fail until legal/founder review is complete)",
+    async ({ page }) => {
+      for (const path of ["/terms", "/privacy", "/refund-policy"]) {
+        await page.goto(`${MARKETING_BASE}${path}`);
+        const bodyText = await page.locator("body").innerText();
+        expect(bodyText).not.toMatch(/\[LEGAL_ENTITY_NAME\]|\[FOUNDER\/LEGAL REVIEW REQUIRED[^\]]*\]/);
+      }
+    }
+  );
 });

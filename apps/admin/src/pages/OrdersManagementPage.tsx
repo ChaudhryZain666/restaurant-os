@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Order, OrderDeliveryAddress, OrderStatus, OrderType, PaymentStatus, PrintJob } from "@restaurant/types";
+import type { MarketplaceProviderName, Order, OrderDeliveryAddress, OrderStatus, OrderType, PaymentStatus, PrintJob } from "@restaurant/types";
 import { Badge, Button, Card, EmptyState } from "@restaurant/ui";
 import { formatCurrency, formatRestaurantDateTime, formatRestaurantTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
@@ -28,6 +28,15 @@ import {
 function formatDeliveryAddress(a: OrderDeliveryAddress): string {
   return [a.line1, a.line2, a.city, a.state, a.postalCode].filter(Boolean).join(", ");
 }
+
+// Phase 82 — matches MarketplaceIntegrationsPage.tsx's own local PROVIDER_LABELS mapping (kept
+// separate rather than shared/exported, matching this codebase's existing convention of small
+// per-file label maps — see e.g. ImportReviewList.tsx's REVIEW_LABEL/DUPLICATE_ACTION_LABEL).
+const MARKETPLACE_PROVIDER_LABELS: Record<MarketplaceProviderName, string> = {
+  uber_eats: "Uber Eats",
+  doordash: "DoorDash",
+  foodpanda: "foodpanda",
+};
 
 function OrderCard({
   order,
@@ -81,7 +90,10 @@ function OrderCard({
               : order.orderType === "delivery"
                 ? `Delivery${order.deliveryDistanceKm != null ? ` · ${order.deliveryDistanceKm}km` : ""}`
                 : order.orderType}
-            {order.channel === "pos" && " · POS"} · {formatRestaurantTime(order.createdAt, timezone)}
+            {order.channel === "pos" && " · POS"}
+            {order.channel === "marketplace" && order.marketplace && ` · ${MARKETPLACE_PROVIDER_LABELS[order.marketplace.provider]}`}
+            {" · "}
+            {formatRestaurantTime(order.createdAt, timezone)}
           </p>
         </div>
         <Badge tone={order.paymentStatus === "paid" ? "success" : "neutral"}>

@@ -286,15 +286,16 @@ New collection: `menuimportjobs` (4 indexes: `restaurantId+createdAt`, `business
 
 ## 25. Tests
 
-**Backend (Jest):** 117 new/touched tests across 9 suites (`menuImportJob.controller`,
+**Backend (Jest):** 141 Phase-81 tests across 12 suites (the original 9 — `menuImportJob.controller`,
 `menuImport.controller`, `writeResolvedImport`, `menuImportRetention.service`,
 `ClaudeMenuExtractionProvider`, `MockMenuExtractionProvider`, `safeUrlFetch`,
-`extractionResultToRows`, `upload.controller`) — **117/117 passing**, verified in isolation this
-session. Full API suite: **1551/1561 passing** in a single noisy run (many concurrent dev
-processes on this machine); all 10 failures were in files with zero relation to this phase
-(`analytics.controller`, `deliveryDispatch.service`, `menuClone.service`, `sitemap.routes`) and
-were confirmed to be pre-existing CPU-contention flakiness, not regressions — re-run in isolation
-this session: **48/48 clean**.
+`extractionResultToRows`, `upload.controller` — plus 3 added during the closeout audit,
+§30 — `extractionPipeline.service`, `LocalDiskStorageService`, `localStorage.routes`) —
+**141/141 passing**. Full API suite, re-run clean after the closeout audit's fix:
+**1585/1585 passing, 122/122 suites, zero failures** — including the 4 suites
+(`analytics.controller`, `deliveryDispatch.service`, `menuClone.service`, `sitemap.routes`) a
+noisier Stage-3 run had shown as flaky; this run confirms that diagnosis (pre-existing
+CPU-contention flakiness, not a regression) rather than leaving it as an inference.
 
 **Frontend:** `npm run build -w apps/admin` (tsc + vite) clean; `npm run lint -w apps/admin`: 0
 errors, 19 pre-existing warnings (none in any file this phase touched).
@@ -327,6 +328,11 @@ through the chooser, mechanics untouched), now passing. `dashboard-not-ready-sta
 **broke** (its own readiness-checklist link now lands on the chooser, not `/menu` directly),
 **fixed**, now passing. `restaurant-provisioning-golden-path.spec.ts`, `menu-rbac.spec.ts`,
 `shared-menu-canonical-override.spec.ts` — all confirmed **unaffected**, passing unchanged.
+
+All 6 were re-run again after the closeout audit's fixes (§30), individually and together,
+**still 6/6 passing** — including 2 flaky assertions in `menu-builder-manual-journey.spec.ts`
+found and fixed during that re-run (a selector-scoping issue and a missing settle-wait; both were
+test-only timing bugs, not product bugs — see §30).
 
 Two infrastructure gaps were found and closed this session specifically so these journeys could
 run for real rather than being written-but-unproven:
@@ -393,10 +399,164 @@ files. Full Jest suite: see §25.
    phase runs on infrastructure already approved and configured for this project (MongoDB, the
    existing BullMQ queue, the existing auth/RBAC system).
 
+## 30. Phase 81 closeout / production-safety audit (2026-09-26/27)
+
+A dedicated audit pass over Stage 3's completed state, explicitly scoped to finding and fixing
+real defects — not adding features, not redesigning working architecture. One genuine, real
+defect was found and fixed; several other areas were reviewed carefully and confirmed already
+correct, with reasoning recorded here rather than left implicit.
+
+**A. Production external dependencies — reconfirmed, nothing fabricated.** Same 3 items as §29:
+a real `ANTHROPIC_API_KEY` for live extraction, real S3/R2 credentials for production storage,
+and production Redis 5.0+. No credentials were invented or assumed configured anywhere in this
+audit.
+
+**B. Local storage safety — reviewed, one real test-coverage gap closed (no code defect found).**
+`isLocalDiskStorageActive()`/`getStorageService()` were re-traced end-to-end: production
+(`NODE_ENV=production`) can never activate local-disk storage, confirmed by re-reading both
+functions' logic directly, not by re-trusting the original comment. `LocalDiskStorageService`'s
+path-traversal guard (`resolvePath()`) was re-analyzed against absolute-path keys, backslash keys,
+and `../`-segment keys on both path semantics — correct in every case. The one real gap: **this
+guard, and the HTTP route that depends on it (`GET /local-storage/:key`, which passes a raw,
+unauthenticated URL param straight into `download()`), had zero test coverage** despite being the
+actual security boundary for that route. Closed with two new files: `LocalDiskStorageService.test.ts`
+(16 tests: round-trip, delete-removes-sidecar, 4 traversal-key shapes × upload/download/delete,
+proof a rejected traversal never actually writes outside the root) and `localStorage.routes.test.ts`
+(4 tests: serves a real file with the right content-type, 404s cleanly for an unknown key, 404s
+for both an encoded and a literal traversal attempt via the real HTTP route). Separately noted,
+not fixed (a real but pre-existing, deliberate architectural pattern, not a Phase 81 regression):
+`getStorageService()` fails only when actually used, not at boot, for missing S3 credentials —
+consistent with `PAYMENT_PROVIDER`/`BILLING_PROVIDER`/`MARKETPLACE_PROVIDER_MODE`'s own identical
+"throws only when used" convention (see `env.ts`'s own pre-existing comment), unlike
+`EMAIL_PROVIDER`'s stricter boot-time check (which exists because email has no permanently-valid
+"off" state — storage arguably does, for a restaurant using neither photos nor PDF/image import).
+Extending storage to a boot-time check would be a reasonable future hardening, but is a
+cross-cutting change to shared, pre-existing infrastructure well beyond this phase's scope, so it
+was not made. Also reviewed: the served-file security model for menu-import *source* files (raw
+owner-uploaded PDFs/photos, pre-review) inherits the same "public URL, unguessable-key-only"
+access model already used for public item photos — acceptable for photos (meant to be public) but
+a real, disclosed characteristic worth a dedicated look for source files (not meant to be public)
+in a future, dedicated storage-security review; not fixed here since doing it properly (signed
+URLs or an authenticated streaming proxy) would mean redesigning the shared `StorageService`
+abstraction itself, not a Phase 81-scoped fix.
+
+**C. Authorization / tenant isolation — reviewed, confirmed correct, no fixes needed.** Every
+import-job route requires `requireAuth` + `requireTenantPermission` (the same agency-aware
+tenant-scoping middleware every other restaurant-scoped route in this app uses — not a
+Phase-81-specific mechanism). Independently, the service layer re-checks tenant ownership itself
+(`assertJobVisibleToRestaurant`): a job is visible if the requesting restaurant matches its own
+`restaurantId`, or — mirroring the existing canonical-menu sharing model — if both restaurants
+belong to the same business; otherwise a 404, deliberately indistinguishable from "doesn't exist"
+(never a 403 that would let an attacker distinguish "wrong tenant" from "no such job," a genuine,
+deliberate anti-enumeration choice already documented in that function's own comment). State-machine
+transitions (row-edit, publish, cancel) all re-check `job.status` server-side before acting —
+verified directly, not assumed — so a direct API call can't bypass what the UI merely disables.
+
+**D. Import pipeline — one real, confirmed bug found and fixed.** The publish path
+(`publishMenuImportJob`) was already correct: an atomic `findOneAndUpdate` compare-and-swap claims
+the job before writing, and a failed write reverts status back to `ready_for_review` in a `catch`
+block, so a publish failure never leaves the job wedged. `writeResolvedImport()` was confirmed to
+wrap every category/item/modifier write in one real MongoDB transaction — a failure partway
+through rolls back atomically, never a half-published menu. The genuine defect was upstream, in
+`runMenuImportExtraction` (the extraction *worker*, not publish): the function's own idempotency
+guard checked `job.status !== "pending"` to skip a duplicate delivery, but a **failed, non-final
+attempt left the job's status at whatever intermediate stage it had reached** (`processing`/
+`extracting`/`normalizing`) — never resetting it back to `"pending"`. The *next* retry would find
+that non-pending status, silently `return` without throwing, and BullMQ would count that as a
+*successful* attempt (no exception raised) and never schedule another retry. Net effect: any
+transient extraction failure (a network blip, a temporary provider 503) **permanently wedged the
+job** — never reaching `ready_for_review` or `failed` — with the owner's UI polling forever, no
+error, no result. Fixed by (1) replacing the initial read-then-write status check with an atomic
+`findOneAndUpdate({_id, status:"pending"}, {$set:{status:"processing", ...}})` claim, closing a
+second, related TOCTOU race against genuine concurrent duplicate delivery, and (2) having the
+`catch` block reset status back to `"pending"` on every non-final attempt (so the next retry can
+actually claim the job), while both the reset and the final-attempt failure-marking now explicitly
+exclude an already-`"cancelled"` job (`status: {$ne: "cancelled"}`), closing a narrower but real
+race where a user-triggered cancel landing in the same instant as a failing attempt could otherwise
+be silently overwritten back to `"pending"`/`"failed"`. 4 new regression tests in
+`extractionPipeline.service.test.ts` (a file with previously zero direct coverage — this logic was
+only ever exercised indirectly through HTTP-level controller tests using a mocked queue) prove:
+a failed non-final attempt resets to pending and the next retry actually completes; a failed final
+attempt reaches `"failed"` with an honest error rather than getting stuck; a cancelled job is never
+resurrected by a failing attempt's own handling; and a non-pending job (already claimed or already
+terminal) is never reprocessed. Lower-severity items reviewed and deliberately *not* changed
+(consequence is cosmetic/self-healing, not data corruption, and a fix would add complexity
+disproportionate to the risk): a `cancelMenuImportJob` call racing a few milliseconds inside the
+happy path's own progress-update `.save()` calls (worst case, a just-cancelled job briefly shows
+progress before its next natural `isCancelled()` check catches it — publish is separately gated,
+so nothing ever reaches the live menu from this); and duplicate job-creation from a double-submit
+click (no idempotency key on `createMenuImportJob`, but any resulting duplicate job is independently
+caught by the existing, unchanged duplicate-detection/skip-by-default logic at publish time, so at
+worst a reviewer sees the same "possible duplicate" prompt twice, never a duplicated menu item).
+
+**E. Manual builder — canonical-model consistency reconfirmed; modifier-count regression test
+confirmed present.** `apps/admin` has no component/unit-test layer at all (no Jest/RTL/Vitest for
+React code — verified by searching, not assumed) — Playwright e2e is the only test layer capable
+of covering a frontend bug, so `e2e/menu-builder-manual-journey.spec.ts` (Journey 5) *is* the
+regression test for the modifier-count-refresh bug fixed during Stage 3: it asserts `"1 option"`
+becomes visible immediately after closing the item editor, which would fail again if `closePanel()`'s
+`reload()` call were ever reverted. Re-ran and fixed 2 flaky assertions in that same spec while
+verifying this (both e2e test-timing bugs — a selector that didn't actually exclude the item
+editor's own still-mounted-during-close-transition title text, and a missing wait for a create-item
+save to settle before the next action — neither was a product defect; see the spec's own updated
+comments).
+
+**F. File upload security — reviewed, no genuine issues found.** Size limits (15MB PDF/8MB image),
+page/count caps, and MIME-type allowlisting are all enforced server-side (multer config +
+redundant explicit checks in the controller), independent of the client. MIME-type validation
+trusts the client-declared `Content-Type` rather than sniffing file magic bytes — reviewed
+carefully rather than assumed safe: the allowlist is narrow (PDF + 3 image types, all
+non-script-executable), `helmet()` already sets `X-Content-Type-Options: nosniff` globally (so a
+browser will never content-sniff a declared-safe type into something dangerous), and uploaded
+bytes are only ever sent to an AI extraction API or downloaded by an authenticated reviewer — never
+executed server-side. Adding magic-byte content sniffing would be disproportionate given this.
+Filename handling (`sanitizeFileName`) strips to a safe character set and caps length. No temporary
+files are ever written to the OS temp directory (`multer.memoryStorage()` — the upload exists only
+as an in-memory `Buffer` for the duration of the request before going straight to `StorageService`),
+so there is no temp-file-cleanup concern to audit. Retention-sweep deletion (`menuImportRetention.service.ts`)
+correctly removes both a local-disk file and its content-type sidecar (verified directly in the new
+`LocalDiskStorageService.test.ts`). SSRF protections for URL import were re-verified unchanged
+(§5/§20) — no new gap found.
+
+**G. E2E coverage — all 6 mandatory journeys re-run and confirmed passing.** Command:
+`npx playwright test --reporter=list --workers=1 menu-import-pdf-journey menu-import-url-journey
+menu-import-photos-journey menu-import-duplicate-journey menu-builder-manual-journey
+menu-builder-mobile-journey` — **6/6 passed**, both individually and together, against the same
+real stack as Stage 3 (real MongoDB, the same real Redis 8.10.1 instance on port 6380, real HTTP,
+a real browser) — no mocks introduced or substituted. Environment assumption unchanged from Stage
+3: both dev servers (API on 4000, admin on 5174) already running locally. Known limitation
+unchanged from §28: the full ~140-file e2e suite was not run start-to-finish; only the 6 mandatory
+journeys plus the 5 specs already known to touch affected surfaces were re-verified.
+
+**H. Regression — full results.**
+- Phase 81 backend suite (12 files, includes the audit's 3 new test files):
+  `npm test -w apps/api -- --maxWorkers=2 menuImportJob.controller menuImport.controller
+  writeResolvedImport menuImportRetention ClaudeMenuExtractionProvider safeUrlFetch
+  extractionResultToRows MockMenuExtractionProvider upload.controller extractionPipeline.service
+  LocalDiskStorageService localStorage.routes` → **141/141 passing**.
+- Full API suite: `npm test -w apps/api -- --maxWorkers=2` → **1585/1585 passing, 122/122 suites,
+  zero failures** (a fully clean run — see §25).
+- Admin build: `npm run build -w apps/admin` (tsc + vite) → clean.
+- Admin lint: `npm run lint -w apps/admin` → 0 errors, 19 pre-existing warnings, none in any file
+  this phase or this audit touched.
+- API build: `npm run build -w apps/api` (tsc) → clean.
+- Playwright: see G above, plus `menu-import.spec.ts`, `dashboard-not-ready-state.spec.ts`,
+  `restaurant-provisioning-golden-path.spec.ts`, `menu-rbac.spec.ts`,
+  `shared-menu-canonical-override.spec.ts` (the 5 previously-identified affected/adjacent specs)
+  → all still passing.
+- No unrelated pre-existing contention failures were chased or "fixed" — the full-suite run above
+  came back completely clean on its own, so there was nothing to distinguish from a real
+  regression this time.
+
 ---
 
-**Overall status: ENGINEERING READY.** Every piece of this phase — extraction, the async pipeline,
-duplicate detection/merge, the redesigned menu builder, responsive behavior — is real, integrated
-with the existing menu architecture, and verified end-to-end against the actual running stack, not
-mocked or UI-only. What remains before **PRODUCTION READY** is entirely the external-credential and
-infrastructure items in §29, not further code.
+**Overall status: ENGINEERING READY, now with one confirmed correctness fix (§30.D) and expanded
+security test coverage (§30.B) from a dedicated closeout audit.** Every piece of this phase —
+extraction, the async pipeline (now provably retry-safe), duplicate detection/merge, the
+redesigned menu builder, responsive behavior — is real, integrated with the existing menu
+architecture, and verified end-to-end against the actual running stack, not mocked or UI-only.
+Production-safety review found local-disk storage cannot reach production under any configuration,
+tenant isolation is correctly enforced at two independent layers, and the transactional publish
+path cannot corrupt menu state on partial failure. What remains before **PRODUCTION READY** is
+still entirely the external-credential and infrastructure items in §29 — a real Anthropic API key,
+real S3/R2 storage credentials, and confirmation of production Redis's version — not further code.

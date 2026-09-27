@@ -57,6 +57,23 @@ export async function createAgency(req: Request, res: Response) {
     throw ApiError.badRequest("This account type cannot create an agency");
   }
 
+  // Phase 82 hardening — this self-serve agency creation path had no check at all for explicit
+  // Terms of Service/Privacy Policy acceptance (unlike business.controller.ts's equivalent owner
+  // self-serve flow, which already enforces this). A direct API call bypassing
+  // AgencySignupWizardPage.tsx's UI (whose submit button stays disabled until its required
+  // checkbox is checked, and which never sends termsAccepted as anything but true) could
+  // otherwise register without ever agreeing to terms and still successfully provision a full
+  // agency here. Deliberately NOT also requiring emailVerifiedAt here, unlike the owner flow: a
+  // real regression run against the actual agency signup wizard (e2e/
+  // phase28-agency-owner-toggles-loyalty.spec.ts) confirmed this product's agency flow is
+  // genuinely designed to let an account create its agency before verifying email — that is this
+  // flow's real, working, intended behavior, not a gap to close.
+  const precheck = await User.findById(req.user!.id);
+  if (!precheck) throw ApiError.unauthorized("User no longer exists");
+  if (!precheck.legalAcceptedAt) {
+    throw ApiError.forbidden("Please accept the Terms of Service and Privacy Policy before creating your agency");
+  }
+
   const existingSlug = await Agency.findOne({ slug });
   if (existingSlug) throw ApiError.conflict("That agency slug is already taken");
 

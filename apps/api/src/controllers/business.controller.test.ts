@@ -429,7 +429,7 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
   });
 
   it("a verified customer becomes the real owner of a brand-new business + restaurant", async () => {
-    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date(), legalAcceptedAt: new Date() });
     cleanupUserIds.push(customer._id);
     const token = tokenFor(customer);
     const slug = `selfserve-${Date.now()}`;
@@ -470,6 +470,27 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
     expect(stillNoBusiness!.businessId).toBeUndefined();
   });
 
+  // Phase 82 hardening — regression for a real, confirmed gap: /auth/register's own
+  // termsAccepted check only rejects an explicit `false` (necessarily permissive for
+  // apps/web's customer signup, which never sends the field at all), so a direct API call
+  // bypassing OwnerSignupWizardPage.tsx's UI (disabled-until-checked submit button) could
+  // previously register with legalAcceptedAt never set and still successfully provision a real
+  // business here.
+  it("rejects a caller who never accepted the Terms of Service/Privacy Policy, even with a verified email", async () => {
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() }); // legalAcceptedAt left unset
+    cleanupUserIds.push(customer._id);
+    const token = tokenFor(customer);
+
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Should Fail", slug: `no-consent-${Date.now()}` });
+
+    expect(res.status).toBe(403);
+    const stillNoBusiness = await User.findById(customer._id);
+    expect(stillNoBusiness!.businessId).toBeUndefined();
+  });
+
   it("rejects a caller who already has a business — this is a create-my-FIRST-business endpoint, not a re-provisioning one", async () => {
     const res = await request(app)
       .post("/api/v1/businesses/self-serve")
@@ -479,7 +500,7 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
   });
 
   it("rejects a duplicate slug and creates nothing (no orphaned Business left behind)", async () => {
-    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date(), legalAcceptedAt: new Date() });
     cleanupUserIds.push(customer._id);
     const token = tokenFor(customer);
 
@@ -496,7 +517,7 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
   });
 
   it("Phase 60 — under true concurrency, two simultaneous self-serve requests from the SAME caller (distinct slugs, e.g. two browser tabs) yield exactly one real business, never a silently orphaned second one", async () => {
-    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date() });
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date(), legalAcceptedAt: new Date() });
     cleanupUserIds.push(customer._id);
     const token = tokenFor(customer);
     const stamp = Date.now();

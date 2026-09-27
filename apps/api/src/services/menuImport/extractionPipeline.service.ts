@@ -120,13 +120,19 @@ function buildDraftRow(row: NormalizedImportRow, systemAction: "create" | "updat
  * caller's responsibility — see this function's own throw-always-on-error contract below.
  */
 export async function runMenuImportExtraction(jobId: string, attemptInfo: { attemptsMade: number; maxAttempts: number }): Promise<void> {
-  const job = await MenuImportJob.findById(jobId);
-  if (!job || job.status !== "pending") return; // idempotency guard against duplicate delivery
+  // Atomic claim (findOneAndUpdate, not read-then-write) — closes a real TOCTOU race where two
+  // concurrent deliveries of the same attempt (BullMQ stalled-job recovery re-delivering after a
+  // lock expiry) could both read status "pending" before either had written "processing". A
+  // retry (attemptsMade > 0) can also only proceed if the catch block below has first reset a
+  // failed prior attempt's status back to "pending" — see there for why that matters.
+  const job = await MenuImportJob.findOneAndUpdate(
+    { _id: jobId, status: "pending" },
+    { $set: { status: "processing", progress: { stage: "processing", percent: 10 } } },
+    { new: true }
+  );
+  if (!job) return; // already claimed by another delivery, already terminal, or already cancelled
 
   try {
-    job.status = "processing";
-    job.progress = { stage: "processing", percent: 10 };
-    await job.save();
     if (await isCancelled(jobId)) return;
 
     const input = await buildExtractionInput(job);
@@ -157,12 +163,25 @@ export async function runMenuImportExtraction(jobId: string, attemptInfo: { atte
     await job.save();
   } catch (err) {
     const isLastAttempt = attemptInfo.attemptsMade >= attemptInfo.maxAttempts;
+    // Both branches exclude an already-"cancelled" job: a user-triggered cancel (a separate,
+    // synchronous API call — see cancelMenuImportJob) can land at any instant, including the
+    // narrow window between this attempt throwing and this update running. Without the $ne
+    // guard, either branch would silently resurrect a job the user already cancelled.
     if (isLastAttempt) {
       await MenuImportJob.updateOne(
-        { _id: jobId },
+        { _id: jobId, status: { $ne: "cancelled" } },
         { $set: { status: "failed", error: { message: (err as Error).message, stage: job.status, occurredAt: new Date() } } }
       );
       logger.error("menu import extraction failed permanently", { jobId, error: (err as Error).message });
+    } else {
+      // Reset to "pending" so the next retry's own atomic claim above can actually acquire the
+      // job — without this, a retry would find status still "processing"/"extracting"/
+      // "normalizing" (whatever this failed attempt last advanced it to) and silently no-op
+      // instead of retrying, permanently wedging the job in a non-terminal state forever (this
+      // was a real, confirmed bug: BullMQ would report the retry as "succeeded" — no exception
+      // thrown — so it would never schedule another attempt, and the owner's UI would poll
+      // forever with no error and no result).
+      await MenuImportJob.updateOne({ _id: jobId, status: { $ne: "cancelled" } }, { $set: { status: "pending" } });
     }
     throw err; // BullMQ's own retry/backoff applies unless this was the last attempt
   }

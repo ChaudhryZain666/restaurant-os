@@ -133,7 +133,10 @@ test.describe.serial("owner self-serve session persistence, isolation, and dupli
     const racePage = await raceContext.newPage();
     try {
       const registerRes = await racePage.request.post("http://localhost:4000/api/v1/auth/register", {
-        data: { name: "E2E Race Owner", email: raceEmail, password: "PersistRace123!" },
+        // termsAccepted is required here (Phase 82 hardening, business.controller.ts's
+        // legalAcceptedAt check) — without it, createBusinessSelfServe correctly 403s before the
+        // race window this test exists to exercise is ever reached.
+        data: { name: "E2E Race Owner", email: raceEmail, password: "PersistRace123!", termsAccepted: true },
       });
       expect(registerRes.ok()).toBeTruthy();
       const { accessToken: raceToken } = (await registerRes.json()).data as { accessToken: string };

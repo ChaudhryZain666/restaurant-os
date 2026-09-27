@@ -335,6 +335,19 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
       message: `Production MARKETING_ORIGIN is still a localhost address (${data.MARKETING_ORIGIN}) — the CORS allow-list is built directly from this value. Set it to the real deployed marketing-site origin.`,
     });
   }
+  // Phase 83 — the same class of gap as CLIENT_ORIGIN/ADMIN_ORIGIN/MARKETING_ORIGIN above, missed
+  // by Phase 45/76's own sweep: API_PUBLIC_ORIGIN builds the BYOC webhook URL shown directly to a
+  // restaurant owner to paste into their own real Stripe/Safepay dashboard
+  // (restaurantPaymentAccount.controller.ts). Left on localhost in production, every owner would
+  // be handed a webhook URL their real payment provider can never reach — a real, if narrower
+  // (single-feature, not security-critical), broken-onboarding failure mode, not merely cosmetic.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(data.API_PUBLIC_ORIGIN)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["API_PUBLIC_ORIGIN"],
+      message: `Production API_PUBLIC_ORIGIN is still a localhost address (${data.API_PUBLIC_ORIGIN}) — restaurant owners are shown a webhook URL built from this value to paste into their own payment provider's dashboard. Set it to the real deployed API origin.`,
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

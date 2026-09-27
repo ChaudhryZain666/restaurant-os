@@ -3,6 +3,7 @@ import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { redis } from "./config/redis.js";
+import { assertRedisVersionForProduction } from "./config/checkRedisVersion.js";
 import { queueConnection } from "./queues/connection.js";
 import {
   startNotificationWorker,
@@ -49,6 +50,9 @@ process.on("unhandledRejection", (err) => {
 
 async function main() {
   await connectDB();
+  // Phase 82 hardening — production only; see checkRedisVersion.ts's own header comment for why
+  // this can't just rely on the existing (deliberately dev-friendly) graceful degradation.
+  await assertRedisVersionForProduction(redis, env.NODE_ENV);
   const app = createApp();
   const httpServer = createServer(app);
 

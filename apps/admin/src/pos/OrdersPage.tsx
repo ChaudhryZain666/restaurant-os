@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Order } from "@restaurant/types";
+import type { MarketplaceProviderName, Order } from "@restaurant/types";
 import { Badge, EmptyState, Skeleton } from "@restaurant/ui";
 import { formatCurrency, formatRestaurantTime } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
@@ -11,6 +11,15 @@ import { IconClock, IconRegister } from "../components/icons";
 import { STATUS_LABELS, STATUS_TONE } from "../lib/orderStatusFlow";
 
 const ACTIVE_STATUSES = new Set(["pending", "confirmed", "preparing", "ready", "out_for_delivery"]);
+
+// Phase 82 — matches OrdersManagementPage.tsx's own local copy of this same mapping (kept
+// separate rather than shared/exported, matching this codebase's existing convention of small
+// per-file label maps).
+const MARKETPLACE_PROVIDER_LABELS: Record<MarketplaceProviderName, string> = {
+  uber_eats: "Uber Eats",
+  doordash: "DoorDash",
+  foodpanda: "foodpanda",
+};
 
 /**
  * Same GET /restaurants/:id/orders + Socket.IO live-refresh OrdersManagementPage.tsx already
@@ -101,6 +110,9 @@ export function PosOrdersPage() {
                 <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                   {o.orderNumber}
                   {o.channel === "pos" && <span className="text-[11px] font-normal text-muted">· POS</span>}
+                  {o.channel === "marketplace" && o.marketplace && (
+                    <span className="text-[11px] font-normal text-muted">· {MARKETPLACE_PROVIDER_LABELS[o.marketplace.provider]}</span>
+                  )}
                 </p>
                 <p className="truncate text-xs text-muted">
                   {o.customerName ?? "—"} ·{" "}

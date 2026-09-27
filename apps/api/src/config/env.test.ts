@@ -54,6 +54,7 @@ describe("envSchema — production email safety (Phase 45)", () => {
       CLIENT_ORIGIN: "https://order.realdomain.example",
       ADMIN_ORIGIN: "https://admin.realdomain.example",
       MARKETING_ORIGIN: "https://www.realdomain.example",
+      API_PUBLIC_ORIGIN: "https://api.realdomain.example",
     });
     expect(result.success).toBe(true);
   });
@@ -87,6 +88,7 @@ describe("envSchema — production email safety (Phase 45)", () => {
       CLIENT_ORIGIN: "https://order.realdomain.example",
       ADMIN_ORIGIN: "https://admin.realdomain.example",
       MARKETING_ORIGIN: "https://www.realdomain.example",
+      API_PUBLIC_ORIGIN: "https://api.realdomain.example",
     });
     expect(result.success).toBe(true);
   });
@@ -101,11 +103,31 @@ describe("envSchema — production email safety (Phase 45)", () => {
       EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
       CLIENT_ORIGIN: "https://order.realdomain.example",
       ADMIN_ORIGIN: "https://admin.realdomain.example",
+      API_PUBLIC_ORIGIN: "https://api.realdomain.example",
     });
     // No explicit MARKETING_ORIGIN above — falls back to its localhost default.
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.flatten().fieldErrors.MARKETING_ORIGIN?.[0]).toMatch(/localhost/);
+    }
+  });
+
+  it("rejects NODE_ENV=production left on the default localhost API_PUBLIC_ORIGIN even with everything else configured (Phase 83)", () => {
+    const result = envSchema.safeParse({
+      ...REQUIRED_BASE,
+      NODE_ENV: "production",
+      EMAIL_PROVIDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_PORT: "587",
+      EMAIL_FROM: "GarnishTable <hello@realdomain.example>",
+      CLIENT_ORIGIN: "https://order.realdomain.example",
+      ADMIN_ORIGIN: "https://admin.realdomain.example",
+      MARKETING_ORIGIN: "https://www.realdomain.example",
+    });
+    // No explicit API_PUBLIC_ORIGIN above — falls back to its localhost default.
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.API_PUBLIC_ORIGIN?.[0]).toMatch(/localhost/);
     }
   });
 

@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { legacyDefaultSlug, useRestaurant } from "./context/RestaurantContext";
@@ -26,7 +26,9 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 // Phase 32 — lazy-loaded so the qrcode dependency and the playground UI never ship in the bundle
 // real restaurants' normal /r/:slug traffic downloads; only a visitor who actually opens the
 // public storefront-demo playground route pays for this chunk.
-const ExperiencePage = lazy(() => import("./pages/experience/ExperiencePage").then((m) => ({ default: m.ExperiencePage })));
+const ExperiencePage = lazy(() =>
+  import("./pages/experience/ExperiencePage").then((m) => ({ default: m.ExperiencePage }))
+);
 
 /**
  * Handles every bare storefront-shaped route (`/`, `/cart`, `/t/:tableToken`, `/loyalty`) — which
@@ -78,7 +80,9 @@ function LegacyRedirect({ suffix }: { suffix: string }) {
     // fall back to "demo-restaurant" unconditionally).
     return (
       <div className="flex min-h-svh items-center justify-center px-4 text-center text-muted">
-        <p>This link doesn't specify a restaurant. Please use the restaurant's own storefront link.</p>
+        <p>
+          This link doesn't specify a restaurant. Please use the restaurant's own storefront link.
+        </p>
       </div>
     );
   }
@@ -86,127 +90,141 @@ function LegacyRedirect({ suffix }: { suffix: string }) {
   return <Navigate to={target} replace />;
 }
 
+/** Scrolls the page back to top on every route change — react-router doesn't do this on its own,
+ *  so navigating away from a scrolled-down long page (e.g. a long menu) otherwise lands on the new
+ *  page already scrolled to the same offset. Mirrors apps/marketing's own ScrollToTop exactly. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
-    <Routes>
-      {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
+    <>
+      <ScrollToTop />
+      <Routes>
+        {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
           tab from the order tracking page's Print action. */}
-      <Route
-        path="/orders/:id/receipt"
-        element={
-          <RequireAuth>
-            <PrintReceiptPage />
-          </RequireAuth>
-        }
-      />
-      <Route element={<Layout />}>
-        {/* Restaurant-scoped storefront — canonical URLs. */}
-        <Route path="/r/:restaurantSlug" element={<MenuPage />} />
-        {/* Reuses MenuPage — the QR just adds table context (see TableContext), the menu itself
+        <Route
+          path="/orders/:id/receipt"
+          element={
+            <RequireAuth>
+              <PrintReceiptPage />
+            </RequireAuth>
+          }
+        />
+        <Route element={<Layout />}>
+          {/* Restaurant-scoped storefront — canonical URLs. */}
+          <Route path="/r/:restaurantSlug" element={<MenuPage />} />
+          {/* Reuses MenuPage — the QR just adds table context (see TableContext), the menu itself
             is identical to the regular storefront. */}
-        <Route path="/r/:restaurantSlug/t/:tableToken" element={<MenuPage />} />
-        {/* Authenticated owner/platform_admin preview (Phase 14) — reuses MenuPage too. Works even
+          <Route path="/r/:restaurantSlug/t/:tableToken" element={<MenuPage />} />
+          {/* Authenticated owner/platform_admin preview (Phase 14) — reuses MenuPage too. Works even
             while the restaurant is still "pending"; RestaurantContext detects this route and
             fetches from the preview endpoint instead of the public one. */}
-        <Route path="/r/:restaurantSlug/preview" element={<MenuPage />} />
-        {/* Phase 32 — the public storefront-playground demo. Resolves via the same PUBLIC by-slug
+          <Route path="/r/:restaurantSlug/preview" element={<MenuPage />} />
+          {/* Phase 32 — the public storefront-playground demo. Resolves via the same PUBLIC by-slug
             endpoint as the plain /r/:restaurantSlug route above (RestaurantContext's wildcard
             match already covers this path); the extra playground chrome is additive, and every
             customization it makes lives in a client-only ThemeOverrideContext, never the real
             settings.theme/themeDraft. */}
-        <Route
-          path="/r/:restaurantSlug/experience"
-          element={
-            <Suspense fallback={null}>
-              <ExperiencePage />
-            </Suspense>
-          }
-        />
-        <Route path="/r/:restaurantSlug/cart" element={<CartPage />} />
-        <Route
-          path="/r/:restaurantSlug/loyalty"
-          element={
-            <RequireAuth>
-              <LoyaltyPage />
-            </RequireAuth>
-          }
-        />
+          <Route
+            path="/r/:restaurantSlug/experience"
+            element={
+              <Suspense fallback={null}>
+                <ExperiencePage />
+              </Suspense>
+            }
+          />
+          <Route path="/r/:restaurantSlug/cart" element={<CartPage />} />
+          <Route
+            path="/r/:restaurantSlug/loyalty"
+            element={
+              <RequireAuth>
+                <LoyaltyPage />
+              </RequireAuth>
+            }
+          />
 
-        {/* Legacy bare URLs — forward to the env-configured default restaurant's canonical URL. */}
-        <Route path="/" element={<LegacyRedirect suffix="" />} />
-        <Route path="/cart" element={<LegacyRedirect suffix="/cart" />} />
-        <Route path="/t/:tableToken" element={<LegacyRedirect suffix="/t" />} />
-        <Route path="/loyalty" element={<LegacyRedirect suffix="/loyalty" />} />
+          {/* Legacy bare URLs — forward to the env-configured default restaurant's canonical URL. */}
+          <Route path="/" element={<LegacyRedirect suffix="" />} />
+          <Route path="/cart" element={<LegacyRedirect suffix="/cart" />} />
+          <Route path="/t/:tableToken" element={<LegacyRedirect suffix="/t" />} />
+          <Route path="/loyalty" element={<LegacyRedirect suffix="/loyalty" />} />
 
-        {/* Account/platform-level — not tied to any one restaurant. */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        {/* Public, like /reset-password — the token in the link IS the credential (see
+          {/* Account/platform-level — not tied to any one restaurant. */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* Public, like /reset-password — the token in the link IS the credential (see
             auth.controller.ts's confirmEmailChange). The link is sent to the NEW inbox, which
             isn't necessarily the same device/browser the user is currently logged in on. */}
-        <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
-        {/* Phase 45 — same public, token-is-the-credential shape as /confirm-email-change above.
+          <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+          {/* Phase 45 — same public, token-is-the-credential shape as /confirm-email-change above.
             Where /auth/register's verification email actually points for any account created
             here (resolveAppOrigin defaults to CLIENT_ORIGIN for a non-admin request). */}
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route
-          path="/orders"
-          element={
-            <RequireAuth>
-              <OrdersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/orders/:id"
-          element={
-            <RequireAuth>
-              <OrderDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/account"
-          element={
-            <RequireAuth>
-              <AccountPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="/support" element={<SupportCenterPage />} />
-        <Route path="/support/articles/:slug" element={<ArticleDetailPage />} />
-        <Route
-          path="/support/tickets"
-          element={
-            <RequireAuth>
-              <MyTicketsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/support/tickets/new"
-          element={
-            <RequireAuth>
-              <CreateTicketPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/support/tickets/:id"
-          element={
-            <RequireAuth>
-              <TicketDetailPage />
-            </RequireAuth>
-          }
-        />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route
+            path="/orders"
+            element={
+              <RequireAuth>
+                <OrdersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/orders/:id"
+            element={
+              <RequireAuth>
+                <OrderDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/account"
+            element={
+              <RequireAuth>
+                <AccountPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="/support" element={<SupportCenterPage />} />
+          <Route path="/support/articles/:slug" element={<ArticleDetailPage />} />
+          <Route
+            path="/support/tickets"
+            element={
+              <RequireAuth>
+                <MyTicketsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/support/tickets/new"
+            element={
+              <RequireAuth>
+                <CreateTicketPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/support/tickets/:id"
+            element={
+              <RequireAuth>
+                <TicketDetailPage />
+              </RequireAuth>
+            }
+          />
 
-        {/* Phase 79 (second pass) — catch-all for any URL that isn't one of the routes above and
+          {/* Phase 79 (second pass) — catch-all for any URL that isn't one of the routes above and
             isn't /r/:restaurantSlug/* either (that pattern has its own resolution failure UI, see
             Layout.tsx's restaurantNotFound). Must stay last. */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </>
   );
 }

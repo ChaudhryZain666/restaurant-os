@@ -101,7 +101,7 @@ afterAll(async () => {
 
 describe("POST /agencies — self-serve creation", () => {
   it("a customer account can create an agency and becomes its agency_owner", async () => {
-    const creator = await createTestUser("customer");
+    const creator = await createTestUser("customer", undefined, { legalAcceptedAt: new Date() });
     userIds.push(creator.id);
     const res = await request(app)
       .post("/api/v1/agencies")
@@ -133,13 +133,30 @@ describe("POST /agencies — self-serve creation", () => {
   });
 
   it("rejects a duplicate slug", async () => {
-    const creator = await createTestUser("customer");
+    const creator = await createTestUser("customer", undefined, { legalAcceptedAt: new Date() });
     userIds.push(creator.id);
     const res = await request(app)
       .post("/api/v1/agencies")
       .set("Authorization", `Bearer ${tokenFor(creator)}`)
       .send({ name: "Dup", slug: agency.slug, contactEmail: "dup@test.local" });
     expect(res.status).toBe(409);
+  });
+
+  // Phase 82 hardening — regression for a real, confirmed gap: this endpoint previously had no
+  // check for explicit Terms of Service/Privacy Policy acceptance at all. A direct API call
+  // bypassing AgencySignupWizardPage.tsx's UI could previously register without ever agreeing to
+  // terms and still successfully provision a full agency here. Deliberately does NOT also require
+  // emailVerifiedAt — a real e2e run against the actual wizard confirmed this product's agency
+  // flow genuinely allows creating an agency before verifying email; that's working, intended
+  // behavior, not a gap (see createAgency's own comment for the full reasoning).
+  it("rejects a caller who never accepted the Terms of Service/Privacy Policy", async () => {
+    const creator = await createTestUser("customer"); // legalAcceptedAt left unset
+    userIds.push(creator.id);
+    const res = await request(app)
+      .post("/api/v1/agencies")
+      .set("Authorization", `Bearer ${tokenFor(creator)}`)
+      .send({ name: "Should Fail", slug: `no-consent-${Date.now()}`, contactEmail: "x@test.local" });
+    expect(res.status).toBe(403);
   });
 });
 

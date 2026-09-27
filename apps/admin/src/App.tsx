@@ -1,4 +1,5 @@
-import { Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { LoginPage } from "./pages/LoginPage";
@@ -84,454 +85,468 @@ const AGENCY_ROLES = ["agency_member", "customer"] as const;
 // for existing accounts) so RequireAuth's single agency-aware permission check covers all three —
 // see RequireAuth.tsx's doc comment for exactly how an agency member's effective permission set is
 // computed while acting inside a business.
+/** Scrolls the page back to top on every route change — react-router doesn't do this on its own,
+ *  so navigating away from a scrolled-down long page otherwise lands on the new page already
+ *  scrolled to the same offset. Mirrors apps/marketing's own ScrollToTop exactly. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/accept-invite" element={<AcceptInvitePage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      {/* Phase 28 — the plan-first agency signup wizard, additive to /register (unchanged, still
+    <>
+      <ScrollToTop />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        {/* Phase 28 — the plan-first agency signup wizard, additive to /register (unchanged, still
           exercised directly by e2e/agency-management.spec.ts). */}
-      <Route path="/start" element={<AgencySignupWizardPage />} />
-      {/* Phase 44 — the owner counterpart: marketing's "Start Free Trial" -> single-restaurant path
+        <Route path="/start" element={<AgencySignupWizardPage />} />
+        {/* Phase 44 — the owner counterpart: marketing's "Start Free Trial" -> single-restaurant path
           lands here (see apps/marketing's StartTrialPage + lib/links.ts ADMIN_SIGNUP_URL). */}
-      <Route path="/signup" element={<OwnerSignupWizardPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
-      <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
-      {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
+        <Route path="/signup" element={<OwnerSignupWizardPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
+        {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
           BILLING_PROVIDER=mock (the API returns this path only from the mock provider). */}
-      <Route path="/mock-checkout/:token" element={<MockCheckoutPage />} />
-      {/* Phase 28 — no permission/roles gate (any authenticated identity can land here); RequireAuth
+        <Route path="/mock-checkout/:token" element={<MockCheckoutPage />} />
+        {/* Phase 28 — no permission/roles gate (any authenticated identity can land here); RequireAuth
           itself is what forces every OTHER route to redirect here while mustChangePassword is true.
           No <Layout> wrapper, same reasoning as /print/:mode/:id — this is a standalone interstitial,
           not a page with nav. */}
-      <Route
-        path="/force-password-change"
-        element={
-          <RequireAuth>
-            <ForcePasswordChangePage />
-          </RequireAuth>
-        }
-      />
-      {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
+        <Route
+          path="/force-password-change"
+          element={
+            <RequireAuth>
+              <ForcePasswordChangePage />
+            </RequireAuth>
+          }
+        />
+        {/* No <Layout> wrapper — this route IS the printable content (Phase 14), opened in a new
           tab via window.open from an order card's Print action. */}
-      <Route
-        path="/print/:mode/:id"
-        element={
-          <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
-            <PrintOrderPage />
-          </RequireAuth>
-        }
-      />
-      {/* Phase 57 — generic browser-print rendering for a PrintJob with no underlying order (a
+        <Route
+          path="/print/:mode/:id"
+          element={
+            <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
+              <PrintOrderPage />
+            </RequireAuth>
+          }
+        />
+        {/* Phase 57 — generic browser-print rendering for a PrintJob with no underlying order (a
           test print — see PrintPreviewPage.tsx's own doc comment). Same gate as /print/:mode/:id. */}
-      <Route
-        path="/print/preview/:jobId"
-        element={
-          <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
-            <PrintPreviewPage />
-          </RequireAuth>
-        }
-      />
-      {/* Dedicated POS application — deliberately its own shell (POSLayout), not nested under
+        <Route
+          path="/print/preview/:jobId"
+          element={
+            <RequireAuth permission="restaurant.orders.read" allowPlatformAdmin>
+              <PrintPreviewPage />
+            </RequireAuth>
+          }
+        />
+        {/* Dedicated POS application — deliberately its own shell (POSLayout), not nested under
           <Layout />. Same auth/permission/location/business context (AuthProvider/BusinessProvider/
           LocationProvider are all mounted above <App/> in main.tsx, so they're already available
           here with zero extra wiring), same restaurant.pos.operate permission the old in-Layout
           /pos route used — only the visual shell and page structure changed. */}
-      <Route
-        element={
-          <RequireAuth permission="restaurant.pos.operate">
-            <POSLayout />
-          </RequireAuth>
-        }
-      >
-        <Route path="/pos" element={<PosRegisterPage />} />
-        <Route path="/pos/tables" element={<PosTablesPage />} />
-        <Route path="/pos/customers" element={<PosCustomersPage />} />
-        <Route path="/pos/orders" element={<PosOrdersPage />} />
-        <Route path="/pos/pending" element={<PendingSalesPage />} />
-      </Route>
-      <Route element={<Layout />}>
         <Route
-          path="/"
           element={
-            <RequireAuth permission="restaurant.orders.read">
-              <DashboardPage />
+            <RequireAuth permission="restaurant.pos.operate">
+              <POSLayout />
             </RequireAuth>
           }
-        />
-        <Route
-          path="/orders"
-          element={
-            <RequireAuth permission="restaurant.orders.read">
-              <OrdersManagementPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/kitchen"
-          element={
-            <RequireAuth permission="restaurant.orders.manage">
-              <KitchenPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/menu"
-          element={
-            <RequireAuth permission="restaurant.menu.read">
-              <MenuManagementPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/menu/import"
-          element={
-            <RequireAuth permission="restaurant.menu.write">
-              <ImportEntryPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/menu/import/csv"
-          element={
-            <RequireAuth permission="restaurant.menu.write">
-              <MenuImportPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/menu/import/job/:jobId"
-          element={
-            <RequireAuth permission="restaurant.menu.write">
-              <MenuImportJobPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/customers"
-          element={
-            <RequireAuth permission="restaurant.orders.read">
-              <CustomersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/delivery"
-          element={
-            <RequireAuth permission="restaurant.settings.manage">
-              <DeliveryPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/marketplace"
-          element={
-            <RequireAuth permission="restaurant.marketplace.read">
-              <MarketplaceIntegrationsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/marketplace/oauth-callback"
-          element={
-            <RequireAuth permission="restaurant.marketplace.manage">
-              <MarketplaceOAuthCallbackPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/tables"
-          element={
-            <RequireAuth permission="restaurant.tables.manage">
-              <TablesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/promotions"
-          element={
-            <RequireAuth permission="restaurant.promotions.manage">
-              <PromotionsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/business-promotions"
-          element={
-            <RequireAuth permission="restaurant.promotions.manage">
-              <BusinessPromotionsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/loyalty"
-          element={
-            <RequireAuth permission="restaurant.analytics.read">
-              <LoyaltyPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/analytics"
-          element={
-            <RequireAuth permission="restaurant.analytics.read">
-              <AnalyticsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/business-analytics"
-          element={
-            <RequireAuth permission="restaurant.analytics.read">
-              <BusinessAnalyticsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/staff"
-          element={
-            <RequireAuth permission="restaurant.staff.manage">
-              <StaffPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/support"
-          element={
-            <RequireAuth permission="support.tickets.read">
-              <RestaurantSupportPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/support/:id"
-          element={
-            <RequireAuth permission="support.tickets.read">
-              <RestaurantTicketDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <RequireAuth permission="restaurant.settings.manage">
-              <SettingsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/printers"
-          element={
-            <RequireAuth permission="restaurant.printers.manage">
-              <PrinterSettingsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/theme-studio"
-          element={
-            <RequireAuth permission="restaurant.settings.manage">
-              <ThemeStudioPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/billing"
-          element={
-            <RequireAuth permission="billing.read">
-              <BillingPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyDashboardPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/businesses"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyBusinessesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/businesses/:businessId"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyBusinessDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/locations"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyLocationsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/locations/:locationId"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyLocationDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/settings"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencySettingsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/members"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyMembersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/billing"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyBillingPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/agency/activity"
-          element={
-            <RequireAuth roles={[...AGENCY_ROLES]}>
-              <AgencyAuditLogPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/audit-log"
-          element={
-            <RequireAuth permission="restaurant.audit.read">
-              <AuditLogPage />
-            </RequireAuth>
-          }
-        />
+        >
+          <Route path="/pos" element={<PosRegisterPage />} />
+          <Route path="/pos/tables" element={<PosTablesPage />} />
+          <Route path="/pos/customers" element={<PosCustomersPage />} />
+          <Route path="/pos/orders" element={<PosOrdersPage />} />
+          <Route path="/pos/pending" element={<PendingSalesPage />} />
+        </Route>
+        <Route element={<Layout />}>
+          <Route
+            path="/"
+            element={
+              <RequireAuth permission="restaurant.orders.read">
+                <DashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <RequireAuth permission="restaurant.orders.read">
+                <OrdersManagementPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/kitchen"
+            element={
+              <RequireAuth permission="restaurant.orders.manage">
+                <KitchenPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/menu"
+            element={
+              <RequireAuth permission="restaurant.menu.read">
+                <MenuManagementPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/menu/import"
+            element={
+              <RequireAuth permission="restaurant.menu.write">
+                <ImportEntryPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/menu/import/csv"
+            element={
+              <RequireAuth permission="restaurant.menu.write">
+                <MenuImportPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/menu/import/job/:jobId"
+            element={
+              <RequireAuth permission="restaurant.menu.write">
+                <MenuImportJobPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              <RequireAuth permission="restaurant.orders.read">
+                <CustomersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/delivery"
+            element={
+              <RequireAuth permission="restaurant.settings.manage">
+                <DeliveryPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/marketplace"
+            element={
+              <RequireAuth permission="restaurant.marketplace.read">
+                <MarketplaceIntegrationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/marketplace/oauth-callback"
+            element={
+              <RequireAuth permission="restaurant.marketplace.manage">
+                <MarketplaceOAuthCallbackPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/tables"
+            element={
+              <RequireAuth permission="restaurant.tables.manage">
+                <TablesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/promotions"
+            element={
+              <RequireAuth permission="restaurant.promotions.manage">
+                <PromotionsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/business-promotions"
+            element={
+              <RequireAuth permission="restaurant.promotions.manage">
+                <BusinessPromotionsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/loyalty"
+            element={
+              <RequireAuth permission="restaurant.analytics.read">
+                <LoyaltyPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <RequireAuth permission="restaurant.analytics.read">
+                <AnalyticsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/business-analytics"
+            element={
+              <RequireAuth permission="restaurant.analytics.read">
+                <BusinessAnalyticsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/staff"
+            element={
+              <RequireAuth permission="restaurant.staff.manage">
+                <StaffPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              <RequireAuth permission="support.tickets.read">
+                <RestaurantSupportPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/support/:id"
+            element={
+              <RequireAuth permission="support.tickets.read">
+                <RestaurantTicketDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <RequireAuth permission="restaurant.settings.manage">
+                <SettingsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/printers"
+            element={
+              <RequireAuth permission="restaurant.printers.manage">
+                <PrinterSettingsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/theme-studio"
+            element={
+              <RequireAuth permission="restaurant.settings.manage">
+                <ThemeStudioPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <RequireAuth permission="billing.read">
+                <BillingPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyDashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/businesses"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyBusinessesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/businesses/:businessId"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyBusinessDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/locations"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyLocationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/locations/:locationId"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyLocationDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/settings"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencySettingsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/members"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyMembersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/billing"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyBillingPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/agency/activity"
+            element={
+              <RequireAuth roles={[...AGENCY_ROLES]}>
+                <AgencyAuditLogPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/audit-log"
+            element={
+              <RequireAuth permission="restaurant.audit.read">
+                <AuditLogPage />
+              </RequireAuth>
+            }
+          />
 
-        <Route
-          path="/platform"
-          element={
-            <RequireAuth permission="platform.restaurants.manage">
-              <PlatformDashboardPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/restaurants"
-          element={
-            <RequireAuth permission="platform.restaurants.manage">
-              <PlatformRestaurantsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/restaurants/new"
-          element={
-            <RequireAuth permission="platform.restaurants.manage">
-              <CreateRestaurantPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/restaurants/:id"
-          element={
-            <RequireAuth permission="platform.restaurants.manage">
-              <PlatformRestaurantDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/setup"
-          element={
-            <RequireAuth permission="restaurant.settings.manage">
-              <SetupPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/locations"
-          element={
-            <RequireAuth permission="restaurant.settings.manage">
-              <LocationsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/users"
-          element={
-            <RequireAuth permission="platform.users.manage">
-              <PlatformUsersPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/subscriptions"
-          element={
-            <RequireAuth roles={["platform_admin"]}>
-              <PlatformSubscriptionsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/analytics"
-          element={
-            <RequireAuth roles={["platform_admin"]}>
-              <PlatformAnalyticsPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/support"
-          element={
-            <RequireAuth permission="support.tickets.read">
-              <SupportDashboardPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/support/tickets/:id"
-          element={
-            <RequireAuth permission="support.tickets.read">
-              <SupportTicketDetailPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/support/kb"
-          element={
-            <RequireAuth permission="support.knowledgebase.write">
-              <KnowledgeBaseAdminPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/platform/settings"
-          element={
-            <RequireAuth roles={["platform_admin"]}>
-              <SystemConfigPage />
-            </RequireAuth>
-          }
-        />
-      </Route>
-    </Routes>
+          <Route
+            path="/platform"
+            element={
+              <RequireAuth permission="platform.restaurants.manage">
+                <PlatformDashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/restaurants"
+            element={
+              <RequireAuth permission="platform.restaurants.manage">
+                <PlatformRestaurantsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/restaurants/new"
+            element={
+              <RequireAuth permission="platform.restaurants.manage">
+                <CreateRestaurantPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/restaurants/:id"
+            element={
+              <RequireAuth permission="platform.restaurants.manage">
+                <PlatformRestaurantDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/setup"
+            element={
+              <RequireAuth permission="restaurant.settings.manage">
+                <SetupPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/locations"
+            element={
+              <RequireAuth permission="restaurant.settings.manage">
+                <LocationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/users"
+            element={
+              <RequireAuth permission="platform.users.manage">
+                <PlatformUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/subscriptions"
+            element={
+              <RequireAuth roles={["platform_admin"]}>
+                <PlatformSubscriptionsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/analytics"
+            element={
+              <RequireAuth roles={["platform_admin"]}>
+                <PlatformAnalyticsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/support"
+            element={
+              <RequireAuth permission="support.tickets.read">
+                <SupportDashboardPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/support/tickets/:id"
+            element={
+              <RequireAuth permission="support.tickets.read">
+                <SupportTicketDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/support/kb"
+            element={
+              <RequireAuth permission="support.knowledgebase.write">
+                <KnowledgeBaseAdminPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/settings"
+            element={
+              <RequireAuth roles={["platform_admin"]}>
+                <SystemConfigPage />
+              </RequireAuth>
+            }
+          />
+        </Route>
+      </Routes>
+    </>
   );
 }

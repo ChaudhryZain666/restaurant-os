@@ -80,8 +80,25 @@ export class ClaudeMenuExtractionProvider implements MenuExtractionProvider {
       if (res.status === 401 || res.status === 403) {
         throw new MenuExtractionError("The extraction service rejected these credentials.", "invalid_credentials");
       }
-      const text = await res.text().catch(() => "");
-      throw new MenuExtractionError(`Extraction service error (HTTP ${res.status}): ${text.slice(0, 300)}`, "provider_error");
+      // Phase 82 hardening — parses Anthropic's own documented error shape
+      // ({"type":"error","error":{"type":"...","message":"..."}}) and surfaces only that specific
+      // field, matching this codebase's own established provider-error convention
+      // (StripeProvider.ts extracts json.error.message the same way) rather than the previous
+      // behavior of slicing up to 300 raw response characters — this job's error.message is shown
+      // directly to the restaurant owner (ImportErrorPanel.tsx), so an untrusted/unexpected
+      // response body (a CDN outage page, a gateway error, anything not shaped like Anthropic's
+      // own documented error format) is never echoed back verbatim.
+      let providerMessage: string | undefined;
+      try {
+        const errorBody = (await res.json()) as { error?: { message?: unknown } };
+        if (typeof errorBody?.error?.message === "string") providerMessage = errorBody.error.message;
+      } catch {
+        // Non-JSON error body — fall through to the generic message below rather than guessing.
+      }
+      throw new MenuExtractionError(
+        `Extraction service error (HTTP ${res.status})${providerMessage ? `: ${providerMessage}` : ""}`,
+        "provider_error"
+      );
     }
 
     let json: AnthropicMessageResponse;

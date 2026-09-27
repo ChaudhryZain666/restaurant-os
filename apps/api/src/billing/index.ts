@@ -1,10 +1,22 @@
 import { env } from "../config/env.js";
+import { logger } from "../common/logger.js";
 import type { BillingProvider } from "./BillingProvider.js";
 import { MockBillingProvider } from "./MockBillingProvider.js";
 import { PaddleBillingProvider } from "./PaddleBillingProvider.js";
 
 let instance: BillingProvider | null = null;
 let mockInstance: MockBillingProvider | null = null;
+
+/** Phase 83 hardening — same reasoning as payments/index.ts's own
+ *  shouldWarnAboutMockPaymentProviderInProduction: forgetting to configure a real billing
+ *  provider in production doesn't fail loudly — it "succeeds" silently, letting a restaurant/
+ *  agency "subscribe" through a fake billing flow and receive full paid-tier entitlements while
+ *  GarnishTable is never actually paid. Deliberately a warning, not a hard boot-time block, for
+ *  the same reason as payments: this module alone can't rule out a deployment that deliberately
+ *  handles all billing manually/offline. */
+export function shouldWarnAboutMockBillingProviderInProduction(nodeEnv: string, mode: string): boolean {
+  return nodeEnv === "production" && mode === "mock";
+}
 
 /**
  * Lazy-singleton provider getter, mirroring apps/api/src/payments/index.ts exactly. "mock" is the
@@ -17,6 +29,11 @@ let mockInstance: MockBillingProvider | null = null;
 export function getBillingProvider(): BillingProvider {
   if (instance) return instance;
   if (env.BILLING_PROVIDER === "mock") {
+    if (shouldWarnAboutMockBillingProviderInProduction(env.NODE_ENV, env.BILLING_PROVIDER)) {
+      logger.warn(
+        "[billing] Running the MOCK billing provider in production — subscriptions will \"activate\" without any real charge ever occurring. Set BILLING_PROVIDER=paddle (with real credentials) unless billing is deliberately handled outside this system."
+      );
+    }
     instance = new MockBillingProvider(env.MOCK_BILLING_WEBHOOK_SECRET);
     return instance;
   }
