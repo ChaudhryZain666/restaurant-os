@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { cn, useReducedMotion, useScrollReveal } from "@restaurant/ui";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { MiniLineChart } from "./MiniLineChart";
+import { ScrollParallaxGrid } from "./ScrollParallaxGrid";
 import { OFFER_FEATURES } from "../lib/content";
 import {
   IconArrowRight,
@@ -362,8 +363,9 @@ function SupportMoment() {
 
 export function OperationsBoard() {
   return (
-    <div>
-      <div className="mb-10 max-w-2xl">
+    <div className="relative isolate overflow-hidden">
+      <ScrollParallaxGrid />
+      <div className="relative mb-10 max-w-2xl">
         <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-primary">Now operating</span>
         <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">Everything a restaurant needs to sell online</h2>
         <p className="mt-3 text-white/55">Not a stripped-down ordering form — a full restaurant commerce toolkit, in one dashboard.</p>

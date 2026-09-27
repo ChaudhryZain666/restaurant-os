@@ -53,8 +53,11 @@ export function WhatWeReplace() {
       </div>
 
       {/* overflow-hidden: same guard as WhyWeExist — the fanned fragment cards use fixed widths
-          with percentage/px transforms that can extend past this container on narrow viewports. */}
-      <div className="relative mx-auto mt-16 h-[320px] max-w-md overflow-hidden sm:h-[280px]">
+          with percentage/px transforms that can extend past this container on narrow viewports.
+          Height reduced from 320/280px — percentage/index-driven transforms don't need a box that
+          tall, and once collapsed it left the small summary card sitting alone in a large void
+          (same class of gap as WhyWeExist's original bug). */}
+      <div className="relative mx-auto mt-16 h-[240px] max-w-md overflow-hidden sm:h-[220px]">
         {FRAGMENTS.map((f, i) => (
           <div
             key={f.label}
@@ -82,29 +85,43 @@ export function WhatWeReplace() {
 
         {cheapest && (
           <div
-            className="absolute left-1/2 top-1/2 w-64 -translate-x-1/2 -translate-y-1/2 rounded-sm border p-5"
+            className="absolute left-1/2 top-1/2 w-64 -translate-x-1/2 -translate-y-1/2 rounded-sm"
             style={{
-              borderColor: "var(--gt-brand-fixed)",
-              background: "var(--gt-brand-foreground-fixed)",
-              boxShadow: "0 20px 40px -20px rgba(61,15,22,0.25)",
               opacity: p,
               transform: `translate(-50%,-50%) scale(${0.9 + p * 0.1})`,
               transition: reducedMotion ? "none" : "opacity 200ms linear, transform 200ms linear",
             }}
           >
-            <p className="font-mono text-[10px] uppercase tracking-wide text-[var(--gt-accent-fixed)]">{cheapest.name}</p>
-            <p className="mt-1 font-heading text-2xl text-[var(--gt-text-fixed)]">
-              {formatPlanPrice(cheapest.pricing, "monthly") ?? "Contact us"}
-              <span className="text-sm text-[#8f8570]">/mo</span>
-            </p>
-            <ul className="mt-3 flex flex-col gap-1.5">
-              {["Ordering, menu, delivery", "Customers & loyalty", "Analytics", "$0 commission"].map((f) => (
-                <li key={f} className="flex items-center gap-1.5 text-xs text-[var(--gt-text-fixed)]">
-                  <IconCheck className="h-3 w-3 text-[var(--gt-brand-fixed)]" />
-                  {f}
-                </li>
-              ))}
-            </ul>
+            {/* a quiet glow behind the payoff card — the same oxblood thread used at every other
+                convergence/arrival moment on this page, so this reads as one considered system
+                rather than an isolated card with a plain drop-shadow. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute rounded-full"
+              style={{ inset: -30, background: "radial-gradient(circle, rgba(97,27,40,0.16) 0%, transparent 70%)", filter: "blur(16px)" }}
+            />
+            <div
+              className="relative rounded-sm border p-6"
+              style={{
+                borderColor: "var(--gt-brand-fixed)",
+                background: "var(--gt-brand-foreground-fixed)",
+                boxShadow: "0 24px 48px -20px rgba(61,15,22,0.3)",
+              }}
+            >
+              <p className="font-mono text-[10px] uppercase tracking-wide text-[var(--gt-accent-fixed)]">{cheapest.name}</p>
+              <p className="mt-1 font-heading text-2xl text-[var(--gt-text-fixed)]">
+                {formatPlanPrice(cheapest.pricing, "monthly") ?? "Contact us"}
+                <span className="text-sm text-[#8f8570]">/mo</span>
+              </p>
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {["Ordering, menu, delivery", "Customers & loyalty", "Analytics", "$0 commission"].map((f) => (
+                  <li key={f} className="flex items-center gap-1.5 text-xs text-[var(--gt-text-fixed)]">
+                    <IconCheck className="h-3 w-3 text-[var(--gt-brand-fixed)]" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
       </div>

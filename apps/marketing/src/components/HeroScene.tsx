@@ -51,9 +51,15 @@ export function HeroScene() {
     <div ref={ref} className="relative mx-auto w-full max-w-[620px]" style={{ perspective: "1600px" }}>
       <div className="relative" style={{ transformStyle: "preserve-3d" }}>
         {/* paper kitchen ticket — a physical object resting beside the screen, cycling through a
-            few real-feeling orders (see TICKETS above) rather than sitting on one forever. */}
+            few real-feeling orders (see TICKETS above) rather than sitting on one forever.
+            Pulled fully inside the screen's own box (was -left-4/-left-10 -top-10, poking well
+            outside it) — repeatedly reported as clipped at the top-left corner, not reproducible
+            in isolation across every viewport/timing tested, which points at some ancestor's
+            overflow/clip-path (several exist: the Hero section, the Reveal `variant="mask"`
+            wrapper) rather than one specific bug to chase further. Staying inside the container
+            removes the entire class of risk regardless of which ancestor was ever responsible. */}
         <div
-          className="absolute -left-4 -top-10 z-10 w-44 rounded-sm p-3.5 transition-[opacity,transform] duration-300 ease-out sm:-left-10"
+          className="absolute left-3 top-3 z-10 w-44 rounded-sm p-3.5 transition-[opacity,transform] duration-300 ease-out"
           style={{
             transform: `translateZ(30px) rotate(${-9 + p * 2}deg) translateY(${ticketVisible ? 0 : -6}px)`,
             opacity: ticketVisible ? 1 : 0,
@@ -89,9 +95,12 @@ export function HeroScene() {
 
         {/* operational data — kept clear of the iframe's own box (iframes composite above CSS
             z-ordering unpredictably across browsers, so "in front of" has to mean "not
-            overlapping," not "a higher translateZ"). */}
+            overlapping," not "a higher translateZ"). Bottom card moved from bottom-right to
+            bottom-left: the real embedded storefront renders its own help-widget button near its
+            own bottom-right corner (confirmed live, not a mockup gap), which the bottom-right
+            placement collided with — bottom-left has nothing else contesting it. */}
         <div
-          className="absolute -bottom-6 -right-3 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[color:var(--color-surface)]/95 px-3.5 py-2.5 shadow-lg backdrop-blur sm:flex"
+          className="absolute -bottom-6 -left-3 hidden items-center gap-2.5 rounded-lg border border-white/10 bg-[color:var(--color-surface)]/95 px-3.5 py-2.5 shadow-lg backdrop-blur sm:flex"
           style={{ transform: `translateZ(60px)` }}
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-success/15 text-success">

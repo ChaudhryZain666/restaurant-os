@@ -1,34 +1,27 @@
 import { Reveal } from "@restaurant/ui";
-import { IconCart, IconPalette, IconPercentBadge, IconPlug, IconStore, IconUsers } from "./icons";
 
 const PILLARS = [
   {
-    icon: IconPalette,
     title: "Your brand",
     copy: "The ordering experience looks and feels like your restaurant — your colors, your storefront theme, your domain.",
   },
   {
-    icon: IconCart,
     title: "Direct ordering",
     copy: "Customers order straight from your restaurant. That relationship, and the data behind it, stays yours.",
   },
   {
-    icon: IconPercentBadge,
     title: "No GarnishTable commission",
     copy: "0% platform commission on direct orders — a flat subscription instead. Payment processing and any delivery-provider fees are separate, real costs, never hidden as \"free.\"",
   },
   {
-    icon: IconStore,
     title: "Built for restaurants",
     copy: "Menus, modifiers, availability, pickup and delivery — the product is shaped around how a restaurant actually operates.",
   },
   {
-    icon: IconUsers,
     title: "Restaurant + agency workflows",
     copy: "An owner runs their restaurant directly. An agency manages many client restaurants from one account. Neither is bolted onto the other.",
   },
   {
-    icon: IconPlug,
     title: "Flexible integrations",
     copy: "Connect the providers your restaurant already uses, through the connection flow each one actually supports today.",
   },
@@ -44,9 +37,16 @@ const PILLARS = [
  * light parchment ground (nested inside the page's one outer `.theme-obsidian` wrapper) can't use
  * the theme-relative `text-foreground`/`text-muted`/`text-primary` classes.
  */
+/** Zero-padded index — "01", "02"... — the same editorial-numeral device the pricing/menu
+ *  sections already use, rather than an icon badge. Typography carries this section, per the
+ *  brief's "make this a brand statement... typography and composition over iconography." */
+function ordinal(i: number): string {
+  return String(i + 1).padStart(2, "0");
+}
+
 export function WhyGarnishTable() {
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-5xl">
       <Reveal className="max-w-2xl">
         <span className="text-sm font-semibold uppercase tracking-wide text-[var(--gt-brand-fixed)]">Why GarnishTable</span>
         <h2 className="mt-3 font-heading text-3xl font-semibold text-[var(--gt-text-fixed)] sm:text-4xl">
@@ -54,31 +54,40 @@ export function WhyGarnishTable() {
         </h2>
       </Reveal>
 
-      <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-12">
         {PILLARS.map((pillar, i) => (
-          <Reveal key={pillar.title} index={i}>
+          <Reveal
+            key={pillar.title}
+            index={i}
+            className="flex flex-col gap-2 border-t py-7 sm:flex-row sm:items-baseline sm:gap-10 lg:gap-16"
+            style={{ borderColor: "var(--gt-border-fixed)" }}
+          >
             <span
-              className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--gt-brand-fixed)]"
-              style={{ backgroundColor: "color-mix(in srgb, var(--gt-brand-fixed) 10%, transparent)" }}
+              className="font-heading text-2xl italic sm:w-16 sm:flex-shrink-0"
+              style={{ color: "var(--gt-brand-fixed)" }}
+              aria-hidden
             >
-              <pillar.icon className="h-5 w-5" />
+              {ordinal(i)}
             </span>
-            <p className="mt-3 font-medium text-[var(--gt-text-fixed)]">{pillar.title}</p>
-            <p className="mt-1.5 text-sm text-[var(--gt-text-muted-fixed)]">
-              {pillar.title === "Flexible integrations" ? (
-                <>
-                  {pillar.copy} See{" "}
-                  <a href="#integrations" className="underline underline-offset-2 hover:text-[var(--gt-text-fixed)]">
-                    integrations
-                  </a>{" "}
-                  below for exactly what's available today.
-                </>
-              ) : (
-                pillar.copy
-              )}
-            </p>
+            <div className="flex-1">
+              <p className="font-heading text-xl font-semibold text-[var(--gt-text-fixed)] sm:text-2xl">{pillar.title}</p>
+              <p className="mt-2 max-w-2xl text-[var(--gt-text-muted-fixed)]">
+                {pillar.title === "Flexible integrations" ? (
+                  <>
+                    {pillar.copy} See{" "}
+                    <a href="#integrations" className="underline underline-offset-2 hover:text-[var(--gt-text-fixed)]">
+                      integrations
+                    </a>{" "}
+                    below for exactly what's available today.
+                  </>
+                ) : (
+                  pillar.copy
+                )}
+              </p>
+            </div>
           </Reveal>
         ))}
+        <div className="border-t" style={{ borderColor: "var(--gt-border-fixed)" }} aria-hidden />
       </div>
     </div>
   );

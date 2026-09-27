@@ -63,14 +63,16 @@ should close soon after) · 🔵 External dependency.
   project history, Owner + Agency Growth checkout/entitlements were verified live in *sandbox* only;
   production webhook delivery has not yet been proven end-to-end against a real Paddle production
   account. This is the single largest unresolved billing risk carried into Phase 83.
-- 🟡 **CURRENT COMMERCIAL CONFIGURATION vs FINAL INPUT REQUIRED** (Workstream G — see the full report
-  for detail): the live plan catalog today is `owner_starter` ($59/mo), `owner_growth` ($99/mo),
-  `agency_growth_v2` ($179/mo). The founder's own prior planning notes floated a possible lower-entry
-  structure (~$29–39 / ~$59–79 / ~$129–149) but explicitly said these are not final. **No price was
-  changed in Phase 83** — if the founder finalizes different pricing, use
-  `planCatalogSeed.service.ts`'s existing generational-deactivation pattern (`isActive: false` on the
-  old plan document, a new plan document for the new price) rather than mutating a live plan's price
-  in place, to preserve existing subscribers' grandfathered terms.
+- ✅ **Commercial pricing — LOCKED (Phase 85 pre-launch decision)**: `owner_starter` ($59/mo),
+  `owner_growth` ($99/mo), `agency_growth_v2` ($179/mo) is the final launch catalog, confirmed
+  against real competitive pricing research (Restolabs' $69/$99/$199 tiers are the closest direct
+  comparable — same 0%-commission, tiered-SaaS, agency-reseller positioning — and independently
+  validate this range; ChowNow/Owner.com/Popmenu/Lunchbox all sit meaningfully higher at $179–499/mo).
+  The earlier lower-entry range (~$29–39/~$59–79/~$129–149) discussed prior to this decision is
+  superseded and should not be reopened absent a new, explicit founder decision. If pricing is ever
+  revised in the future, use `planCatalogSeed.service.ts`'s existing generational-deactivation
+  pattern (`isActive: false` on the old plan document, a new plan document for the new price) rather
+  than mutating a live plan's price in place, to preserve existing subscribers' grandfathered terms.
 
 ## 5. Marketplace (Uber Eats / DoorDash / foodpanda)
 

@@ -260,6 +260,10 @@ h3 {
      transit) that are neither the brand's warm rose nor a literal success/warning/danger state.
      Used sparingly — never a second accent competing with the brand highlight. */
   --gt-info: #6fa0f0;
+  /* Cinematic build — a saturated oxblood reserved for LIGHT (glows, rim-light, ambient bloom),
+     distinct from --gt-brand above (deliberately lightened for on-dark text/UI contrast, so it
+     reads as chalky rather than deep when used for a glow). Never used for text or borders. */
+  --gt-glow: #611b28;
 
   --color-primary: var(--gt-brand);
   --color-primary-foreground: var(--gt-brand-foreground);
@@ -331,6 +335,24 @@ h3 {
   }
   100% {
     background-position: 88px 88px;
+  }
+}
+
+/* Cinematic Hero's arrival glow — a slow breathing pulse behind the mark, so the "wine light in
+   the room" reads as alive rather than a static painted circle. Neutralized for free by the
+   prefers-reduced-motion block below (animation-duration -> 0.01ms). */
+.gt-glow-pulse {
+  animation: glowPulse 5s ease-in-out infinite;
+}
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
   }
 }
 

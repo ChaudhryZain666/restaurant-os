@@ -106,7 +106,7 @@ function StepNode({ index, active }: { index: number; active: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLDivElement>();
   const Moment = MOMENTS[index];
   return (
-    <div ref={ref} className="relative pb-14 pl-16 last:pb-0 sm:pl-20">
+    <div ref={ref} className="relative pb-16 pl-16 last:pb-0 sm:pl-20">
       <div
         className="absolute left-6 top-1 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border font-mono text-[10px] transition-all duration-500 sm:left-8"
         style={{
@@ -118,13 +118,15 @@ function StepNode({ index, active }: { index: number; active: boolean }) {
         {index + 1}
       </div>
       <div
-        className="transition-all duration-700"
+        className="transition-all duration-700 lg:flex lg:items-center lg:justify-between lg:gap-16"
         style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(14px)" }}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">{legFor(index)}</span>
-        <h3 className="mt-1 font-heading text-xl text-white sm:text-2xl">{title}</h3>
-        <p className="mt-2 max-w-md text-sm text-white/55">{description}</p>
-        <div className="mt-4 max-w-xs">
+        <div className="lg:max-w-lg">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">{legFor(index)}</span>
+          <h3 className="mt-1 font-heading text-2xl text-white sm:text-3xl">{title}</h3>
+          <p className="mt-3 max-w-md text-base text-white/55">{description}</p>
+        </div>
+        <div className="mt-6 w-full max-w-sm lg:mt-0 lg:w-80 lg:flex-shrink-0">
           <Moment />
         </div>
       </div>
@@ -138,10 +140,10 @@ export function JourneyRoute() {
   const activeCount = reducedMotion ? HOW_IT_WORKS_STEPS.length : Math.floor(progress * HOW_IT_WORKS_STEPS.length * 1.15);
 
   return (
-    <div>
-      <div className="mb-14 max-w-xl">
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-16 max-w-2xl">
         <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-white/50">How it works</span>
-        <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">From signup to your first order</h2>
+        <h2 className="mt-3 font-heading text-4xl text-white sm:text-5xl">From signup to your first order</h2>
       </div>
 
       <div ref={ref} className="relative">

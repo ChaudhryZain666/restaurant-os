@@ -3,6 +3,7 @@ export * from "./Button.js";
 export * from "./Badge.js";
 export * from "./Card.js";
 export * from "./Logo.js";
+export { default as logoMarkAsset } from "./assets/logo-mark.png";
 export * from "./Skeleton.js";
 export * from "./Alert.js";
 export * from "./EmptyState.js";

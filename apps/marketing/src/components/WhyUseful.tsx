@@ -1,6 +1,7 @@
 import { useScrollReveal, useReducedMotion } from "@restaurant/ui";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { BENEFITS } from "../lib/content";
+import { IconCheck } from "./icons";
 
 /**
  * "Why we are useful" — the real Benefits content (unchanged, all 6 statements), presented as a
@@ -77,11 +78,20 @@ export function WhyUseful() {
         <TransformScene />
       </div>
 
-      <div className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2">
+      <div className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-9 sm:grid-cols-2">
         {BENEFITS.map((benefit) => (
-          <div key={benefit.title} className="border-t pt-4" style={{ borderColor: "var(--gt-border-fixed)" }}>
-            <h3 className="font-heading text-lg text-[var(--gt-text-fixed)]">{benefit.title}</h3>
-            <p className="mt-1.5 text-sm text-[#5c4f3d]">{benefit.description}</p>
+          <div key={benefit.title} className="flex gap-4 border-t pt-5" style={{ borderColor: "var(--gt-border-fixed)" }}>
+            <span
+              className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full"
+              style={{ background: "color-mix(in srgb, var(--gt-brand-fixed) 10%, transparent)", color: "var(--gt-brand-fixed)" }}
+              aria-hidden
+            >
+              <IconCheck className="h-3.5 w-3.5" />
+            </span>
+            <div>
+              <h3 className="font-heading text-lg text-[var(--gt-text-fixed)]">{benefit.title}</h3>
+              <p className="mt-1.5 text-sm text-[#5c4f3d]">{benefit.description}</p>
+            </div>
           </div>
         ))}
       </div>

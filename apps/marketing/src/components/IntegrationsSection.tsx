@@ -1,5 +1,4 @@
-import { Badge, Reveal } from "@restaurant/ui";
-import { IconCheck } from "./icons";
+import { Reveal } from "@restaurant/ui";
 
 // Phase 80 (content add-on) — the real, current state of each provider connection, confirmed
 // directly against packages/types/src/types/marketplace.ts and each provider adapter's own
@@ -8,46 +7,39 @@ import { IconCheck } from "./icons";
 const PROVIDERS = [
   {
     name: "Stripe",
-    status: "available" as const,
+    live: true,
     label: "Connect in minutes",
     copy: "A guided, Stripe-hosted setup — no API keys to copy, no technical steps. Your payments run through your own connected account.",
   },
   {
     name: "Uber Eats",
-    status: "connect" as const,
+    live: true,
     label: "Connect your account",
     copy: "A real account-connection flow — sign in with Uber Eats and authorize the connection, the same way you'd connect any other app.",
   },
   {
     name: "DoorDash",
-    status: "soon" as const,
+    live: false,
     label: "Coming soon",
     copy: "A self-serve connection is on the way. We'll notify you the moment it's ready for your restaurant.",
   },
   {
     name: "foodpanda",
-    status: "managed" as const,
+    live: false,
     label: "Set up by our team",
     copy: "foodpanda doesn't offer an individual sign-in step — our team completes this connection on your behalf once it's ready.",
   },
 ];
 
-const STATUS_TONE: Record<(typeof PROVIDERS)[number]["status"], "success" | "warning" | "info"> = {
-  available: "success",
-  connect: "success",
-  soon: "warning",
-  managed: "info",
-};
-
 /**
  * Phase 80 (content add-on) — kept deliberately clean and honest per the brief: this is not a
- * "connect anything instantly" claim. Each card states plainly what actually happens today.
+ * "connect anything instantly" claim. Each card states plainly what actually happens today. The
+ * distinction between what's live and what isn't is now carried by the cards' own visual weight
+ * (solid vs. dashed, a status dot rather than a stock colored badge) rather than a generic
+ * green/yellow/blue pill, so it reads as a deliberate, editorial status report, not a UI kit demo.
  *
  * `-fixed` tokens throughout, same reason as every other new light section on this page (see
- * WhatIsGarnishTable.tsx). `text-success` has no `-fixed` counterpart in index.css's token set —
- * hardcoded to the real `:root` light-mode success green directly, matching this codebase's own
- * established fallback pattern (WhyUseful.tsx's literal muted-brown hex values) for the rare case
- * a token genuinely doesn't have a light-locked variant yet.
+ * WhatIsGarnishTable.tsx).
  */
 export function IntegrationsSection() {
   return (
@@ -63,24 +55,33 @@ export function IntegrationsSection() {
         </p>
       </Reveal>
 
-      <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2">
         {PROVIDERS.map((provider, i) => (
           <Reveal
             key={provider.name}
             index={i}
-            className="flex flex-col gap-2 rounded-2xl border p-6"
-            style={{ borderColor: "var(--gt-border-fixed)", background: "var(--gt-surface-fixed)" }}
+            className="flex flex-col gap-3 rounded-2xl p-7"
+            style={{
+              border: provider.live ? "1px solid var(--gt-border-fixed)" : "1px dashed var(--gt-border-fixed)",
+              background: provider.live ? "var(--gt-surface-fixed)" : "transparent",
+              boxShadow: provider.live ? "0 12px 32px -20px rgba(43,33,22,0.35)" : "none",
+            }}
           >
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-heading text-lg font-semibold text-[var(--gt-text-fixed)]">{provider.name}</h3>
-              <Badge tone={STATUS_TONE[provider.status]}>{provider.label}</Badge>
+              <h3 className="font-heading text-xl font-semibold text-[var(--gt-text-fixed)]">{provider.name}</h3>
+              <span
+                className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
+                style={{ color: provider.live ? "#15803d" : "var(--gt-text-muted-fixed)" }}
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ background: provider.live ? "#15803d" : "var(--gt-text-muted-fixed)" }}
+                  aria-hidden
+                />
+                {provider.label}
+              </span>
             </div>
             <p className="text-sm text-[var(--gt-text-muted-fixed)]">{provider.copy}</p>
-            {(provider.status === "available" || provider.status === "connect") && (
-              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium" style={{ color: "#15803d" }}>
-                <IconCheck className="h-3.5 w-3.5" /> Available from your dashboard
-              </p>
-            )}
           </Reveal>
         ))}
       </div>

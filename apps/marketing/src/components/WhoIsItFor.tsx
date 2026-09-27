@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Reveal } from "@restaurant/ui";
-import { IconArrowRight, IconMapPin, IconStore, IconUsers } from "./icons";
+import { IconArrowRight } from "./icons";
+import { ScaleGlyph } from "./ScaleGlyph";
 import { ADMIN_START_URL } from "../lib/links";
 
 // Phase 80 note: the shared <Button variant="outline"> reaches for `border-border`/`text-foreground`
@@ -13,7 +14,7 @@ const fixedOutlineButtonClass =
 
 const PATHS = [
   {
-    icon: IconStore,
+    tier: "one" as const,
     eyebrow: "For restaurant owners",
     title: "Run one restaurant, your way",
     copy: "Launch your own branded ordering page, take direct orders, and manage the day-to-day from one dashboard — no marketplace listing in between you and your customers.",
@@ -22,7 +23,7 @@ const PATHS = [
     external: false,
   },
   {
-    icon: IconMapPin,
+    tier: "few" as const,
     eyebrow: "For growing restaurant groups",
     title: "Scale without losing your identity",
     copy: "Add locations under one account without turning every location into a copy of the others — centralized control, with each location's own menu, hours and settings.",
@@ -31,7 +32,7 @@ const PATHS = [
     external: false,
   },
   {
-    icon: IconUsers,
+    tier: "many" as const,
     eyebrow: "For agencies",
     title: "One login, every client's business",
     copy: "Manage every restaurant client you work with from a single agency account — each with its own storefront, staff and owner, under consolidated billing.",
@@ -68,6 +69,9 @@ export function WhoIsItFor() {
         </p>
       </Reveal>
 
+      {/* the three cards visually scale up — one node, a small cluster, a dense constellation —
+          so the progression itself (not just the copy) foreshadows the agency/multi-location
+          story, per the brief's "one restaurant → multiple restaurants → agency constellation." */}
       <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {PATHS.map((path, i) => (
           <Reveal
@@ -76,12 +80,7 @@ export function WhoIsItFor() {
             className="flex flex-col gap-4 rounded-2xl border p-7"
             style={{ borderColor: "var(--gt-border-fixed)", background: "var(--gt-surface-fixed)" }}
           >
-            <span
-              className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--gt-brand-fixed)]"
-              style={{ backgroundColor: "color-mix(in srgb, var(--gt-brand-fixed) 10%, transparent)" }}
-            >
-              <path.icon className="h-5 w-5" />
-            </span>
+            <ScaleGlyph tier={path.tier} />
             <div>
               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--gt-text-muted-fixed)]">{path.eyebrow}</span>
               <h3 className="mt-1.5 font-heading text-xl font-semibold text-[var(--gt-text-fixed)]">{path.title}</h3>

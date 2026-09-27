@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useReducedMotion } from "@restaurant/ui";
 import { STOREFRONT_URL } from "../lib/links";
 import { DashboardMock, MenuMock, OrdersMock } from "./FeatureMocks";
+import { ScrollParallaxGrid } from "./ScrollParallaxGrid";
 
 /**
  * "The control room": one large active screen plus three smaller preview screens you switch
@@ -67,8 +68,9 @@ export function ProductShowcase() {
   let previewSlot = 0;
 
   return (
-    <div>
-      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="relative isolate overflow-hidden">
+      <ScrollParallaxGrid travel={28} />
+      <div className="relative mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-lg">
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-info">See it in action</span>
           <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">This is Wildwood Kitchen, live</h2>
