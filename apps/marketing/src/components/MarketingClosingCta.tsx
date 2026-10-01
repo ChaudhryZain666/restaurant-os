@@ -1,43 +1,59 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Button, Logo, Reveal } from "@restaurant/ui";
+import { Button, Reveal } from "@restaurant/ui";
 import { Container } from "./Container";
-import { ObsidianGlowBackground } from "./ObsidianGlowBackground";
 
 /**
- * The dark-chapter closing CTA shared by the 9 non-Home marketing routes — structurally the same
- * as HomePage.tsx's own Final CTA (logo mark, headline, the same Start Free Trial / View Demo pair,
- * the same trust-indicator row), reused verbatim rather than reinvented so every page on the site
- * ends on the identical, already-converged CTA moment. `title`/`description` are per-page — short,
- * specific copy, never a literal copy-paste of Home's own.
+ * The closing moment shared by every marketing page except Home — the homepage's Departure scene
+ * without the photograph: a large centered Playfair line on ink, a wine glow rising from below,
+ * the same CTA pair, and the platform's two plain facts set as a mono line rather than badges.
+ * `title`/`description` are per-page.
  */
-export function MarketingClosingCta({ title, description }: { title: ReactNode; description: ReactNode }) {
+export function MarketingClosingCta({
+  title,
+  description,
+}: {
+  title: ReactNode;
+  description: ReactNode;
+}) {
   return (
-    <section className="relative isolate overflow-hidden py-20 sm:py-28" style={{ background: "var(--gt-ink-fixed)" }}>
-      <ObsidianGlowBackground />
+    <section
+      className="theme-obsidian relative isolate overflow-hidden py-24 sm:py-32"
+      style={{ background: "#0f0c0d" }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: "radial-gradient(60% 80% at 50% 115%, rgba(97,27,40,0.55), transparent 70%)",
+        }}
+      />
       <Container>
-        <Reveal variant="scale" className="relative mx-auto flex max-w-2xl flex-col items-center gap-6 text-center">
-          <Logo hideText size="lg" variant="light" />
-          <h2 className="font-heading text-4xl font-semibold text-white sm:text-5xl">{title}</h2>
-          <p className="max-w-xl text-white/65">{description}</p>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        <Reveal className="relative mx-auto flex max-w-3xl flex-col items-center text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[#e3aab2]">
+            Your restaurant. Running on your terms.
+          </p>
+          <h2
+            className="mt-6 font-heading text-4xl font-semibold leading-[1.02] tracking-tight text-[#f6f0e2] sm:text-6xl"
+            style={{ textWrap: "balance" }}
+          >
+            {title}
+          </h2>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/60">{description}</p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link to="/start-trial">
-              <Button size="lg">Start Free Trial</Button>
+              <Button size="lg">Start your restaurant</Button>
             </Link>
-            <Link to="/demo">
-              <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                View Demo
-              </Button>
+            <Link
+              to="/demo"
+              className="inline-flex h-12 items-center rounded-pill border border-white/30 px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"
+            >
+              Explore the demo
             </Link>
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-6 text-sm text-white/50">
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" /> No commission on direct orders
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" /> 14-day trial, no card required
-            </span>
-          </div>
+          <p className="mt-9 font-mono text-[10px] uppercase tracking-[0.26em] text-white/40">
+            0% platform commission on direct orders · 14-day trial, no card required
+          </p>
         </Reveal>
       </Container>
     </section>

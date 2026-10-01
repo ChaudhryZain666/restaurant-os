@@ -31,10 +31,20 @@ export function SectionHeading({
 }) {
   const Heading = as;
   return (
-    <Reveal className={cn("flex flex-col gap-3", align === "center" ? "items-center text-center" : "items-start text-left")}>
+    <Reveal
+      className={cn(
+        "flex flex-col gap-3",
+        align === "center" ? "items-center text-center" : "items-start text-left"
+      )}
+    >
       {eyebrow && (
-        <span className="flex flex-col gap-2" style={align === "center" ? { alignItems: "center" } : undefined}>
-          <span className="text-sm font-semibold uppercase tracking-wide text-primary">{eyebrow}</span>
+        <span
+          className="flex flex-col gap-2"
+          style={align === "center" ? { alignItems: "center" } : undefined}
+        >
+          <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-primary">
+            {eyebrow}
+          </span>
           {/* Phase 80 note: no opacity modifier — `bg-primary/70` silently generates no CSS rule
               at all for a color defined as a bare `var(--color-primary)` reference (the same class
               of bug already documented/fixed on Nav.tsx). Full-strength is fine for a 1px rule. */}
@@ -43,8 +53,8 @@ export function SectionHeading({
       )}
       <Heading
         className={cn(
-          "font-heading font-semibold text-foreground",
-          size === "hero" ? "text-4xl sm:text-5xl lg:text-6xl" : "text-3xl sm:text-4xl"
+          "font-heading font-semibold leading-[1.05] tracking-tight text-foreground",
+          size === "hero" ? "text-4xl sm:text-5xl lg:text-[4.2rem]" : "text-3xl sm:text-[2.6rem]"
         )}
       >
         {title}

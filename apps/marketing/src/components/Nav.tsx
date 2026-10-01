@@ -4,18 +4,22 @@ import { Button, Logo } from "@restaurant/ui";
 import { ADMIN_LOGIN_URL } from "../lib/links";
 import { useScrolled } from "../hooks/useScrolled";
 
-// Phase 80 — routes whose hero renders on HomePage's dark `.theme-obsidian` canvas. Nav lives in
-// Layout.tsx, OUTSIDE that wrapper, so it needs its own explicit list rather than inferring "dark
-// hero" from page content — a synchronous, route-keyed check (not a context + effect) so there's
-// zero flash-of-wrong-state on first paint. Extend this set as other routes get their own dark
-// cinematic openers in a later stage.
-const DARK_HERO_ROUTES = new Set(["/"]);
-
-// Cinematic pages that are dark (or cross between dark and parchment) for their whole length, not
-// just the hero: the nav stays a translucent ink bar with light text when scrolled, instead of
-// switching to the light bar that would cut across every dark scene. Every other route keeps the
-// existing behavior exactly.
-const CINEMATIC_ROUTES = new Set(["/"]);
+// Routes that open on a dark, full-bleed hero pulled up under the nav (the homepage's film-still,
+// MarketingPageHero everywhere else): the bar is transparent over the hero at rest and only turns
+// solid once scrolled. Every other route (legal pages, 404) gets the solid bar from the first
+// pixel. A synchronous, route-keyed check, so there's no flash of the wrong state on first paint.
+const DARK_HERO_ROUTES = new Set([
+  "/",
+  "/product",
+  "/solutions",
+  "/how-it-works",
+  "/pricing",
+  "/faq",
+  "/demo",
+  "/about",
+  "/contact",
+  "/start-trial",
+]);
 
 interface DropdownLink {
   label: string;
@@ -232,8 +236,7 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
 export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
-  const cinematic = CINEMATIC_ROUTES.has(pathname);
-  const overDarkHero = DARK_HERO_ROUTES.has(pathname) || cinematic;
+  const overDarkHero = DARK_HERO_ROUTES.has(pathname);
   // Raised from 10 to 24 (Phase 80) — at 10px the transparent-vs-solid swap felt twitchy right at
   // rest; 24px gives the dark hero a moment to actually read before the bar commits to solid.
   const scrolled = useScrolled(24);
@@ -242,36 +245,18 @@ export function Nav() {
   // route but Home, today), an open mobile panel is always solid regardless of scroll position,
   // and Home itself only goes solid once actually scrolled.
   const solid = scrolled || mobileOpen || !overDarkHero;
-  const lightBar = solid && !cinematic;
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b backdrop-blur transition-[background-color,box-shadow,border-color] duration-300 ${
-        lightBar
-          ? "border-border shadow-sm"
-          : `theme-obsidian ${solid ? "border-white/10" : "border-transparent"}`
+      // The nav is always the dark ink bar now — the whole site shares the homepage's cinematic
+      // palette — so `.theme-obsidian` sits on the header itself (Nav renders in Layout.tsx,
+      // outside any page wrapper; without it every var(--color-*) below would resolve to :root's
+      // light palette). Over a dark hero at rest it's fully transparent; once scrolled, or on a
+      // page without a dark hero, it's a near-opaque ink bar.
+      className={`theme-obsidian sticky top-0 z-40 border-b backdrop-blur transition-[background-color,box-shadow,border-color] duration-300 ${
+        solid ? "border-white/10" : "border-transparent"
       }`}
-      // Tailwind can't generate an opacity-modifier utility (`bg-surface/90`) for a color defined
-      // as a raw `var(--color-surface)` reference (its `/N` syntax needs an rgb-channel or hex
-      // literal it can splice an alpha into) — `bg-surface/90` silently compiled to nothing, so the
-      // header had NO background at all and read whatever page content scrolled underneath it
-      // (confirmed: unreadable nav text once scrolled past the dark hero). color-mix() works with
-      // any valid color, opaque var() included, so it's the safe fix here without touching every
-      // other place this app's tokens are consumed as plain `var(--color-*)` colors.
-      //
-      // Phase 80 — transparent mode (`!solid`) additionally applies the `.theme-obsidian` class
-      // right here on the header itself. Nav renders in Layout.tsx, OUTSIDE HomePage's own
-      // `.theme-obsidian` wrapper, so without this every `var(--color-foreground)`/`var(--color-
-      // muted)`/`var(--color-primary)` reference below would resolve to :root's LIGHT palette —
-      // dark-brown-on-near-black nav text over the dark hero. This is the exact ghost-nav bug
-      // apps/web/src/theme/cinematic/Header.tsx already hit and fixed once; same fix here.
-      style={{
-        backgroundColor: lightBar
-          ? "color-mix(in srgb, var(--color-surface) 90%, transparent)"
-          : solid
-            ? "rgba(15, 12, 13, 0.94)"
-            : "transparent",
-      }}
+      style={{ backgroundColor: solid ? "rgba(15, 12, 13, 0.94)" : "transparent" }}
     >
       <div
         className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 transition-[padding] duration-300 sm:px-6 ${
@@ -279,7 +264,7 @@ export function Nav() {
         }`}
       >
         <Link to="/">
-          <Logo variant={lightBar ? "default" : "light"} />
+          <Logo variant="light" />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
@@ -309,7 +294,7 @@ export function Nav() {
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            className="flex h-10 w-10 items-center justify-center rounded-pill border border-border text-foreground lg:hidden"
+            className="-my-0.5 flex h-10 w-10 items-center justify-center rounded-pill border border-border text-foreground lg:hidden"
           >
             <svg
               viewBox="0 0 24 24"
