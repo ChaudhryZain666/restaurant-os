@@ -17,8 +17,128 @@
       href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- First-load brand loader (see #gt-loader in <body>). Hidden entirely without JS. -->
+    <noscript><style>#gt-loader { display: none; }</style></noscript>
+    <style>
+      #gt-loader { position: fixed; inset: 0; z-index: 2147483000; }
+      #gt-loader .gl-layer { position: absolute; inset: 0; clip-path: inset(0 0 0 0); }
+      #gt-loader .gl-wine { background: #611b28; }
+      #gt-loader .gl-ink { background: #0f0c0d; display: flex; align-items: center; justify-content: center; }
+      #gt-loader .gl-inner {
+        display: flex; flex-direction: column; align-items: center;
+        transition: opacity 0.35s ease, transform 0.6s cubic-bezier(0.76, 0, 0.24, 1);
+      }
+      #gt-loader .gl-mark {
+        width: 46px; height: 47px; background: #f6f0e2;
+        -webkit-mask: url(/v3/logo-mark.png) center / contain no-repeat;
+        mask: url(/v3/logo-mark.png) center / contain no-repeat;
+        animation: gl-breathe 2.4s ease-in-out infinite;
+      }
+      #gt-loader .gl-word {
+        margin-top: 18px; font-family: "Playfair Display", Georgia, serif; font-weight: 600;
+        font-size: 26px; letter-spacing: -0.01em; color: #f6f0e2;
+        opacity: 0; transition: opacity 0.4s ease;
+      }
+      #gt-loader.gl-fonts .gl-word { opacity: 1; }
+      #gt-loader .gl-bar { margin-top: 30px; width: 200px; height: 1px; background: rgba(246, 240, 226, 0.14); overflow: hidden; }
+      #gt-loader .gl-fill { height: 100%; background: #c9838d; transform-origin: 0 50%; transform: scaleX(0); }
+      #gt-loader .gl-meta {
+        margin-top: 12px; width: 200px; display: flex; justify-content: space-between;
+        font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        letter-spacing: 0.24em; text-transform: uppercase; color: rgba(246, 240, 226, 0.5);
+        font-variant-numeric: tabular-nums;
+      }
+      #gt-loader .gl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      /* exit: the marks lift away, then the ink curtain rises, then the wine one behind it */
+      #gt-loader.gl-out { pointer-events: none; }
+      #gt-loader.gl-out .gl-inner { opacity: 0; transform: translateY(-16px); }
+      #gt-loader.gl-out .gl-ink { clip-path: inset(0 0 100% 0); transition: clip-path 1s cubic-bezier(0.76, 0, 0.24, 1) 0.2s; }
+      #gt-loader.gl-out .gl-wine { clip-path: inset(0 0 100% 0); transition: clip-path 1s cubic-bezier(0.76, 0, 0.24, 1) 0.36s; }
+      html.gl-lock, html.gl-lock body { overflow: hidden; }
+      @keyframes gl-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+      @media (prefers-reduced-motion: reduce) {
+        #gt-loader .gl-mark { animation: none; }
+        #gt-loader.gl-out { opacity: 0; transition: opacity 0.25s ease; }
+        #gt-loader.gl-out .gl-ink, #gt-loader.gl-out .gl-wine { clip-path: none; transition: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="gt-loader">
+      <div class="gl-layer gl-wine"></div>
+      <div class="gl-layer gl-ink">
+        <div class="gl-inner">
+          <div class="gl-mark" aria-hidden="true"></div>
+          <div class="gl-word" aria-hidden="true">GarnishTable</div>
+          <div class="gl-bar" aria-hidden="true"><div class="gl-fill"></div></div>
+          <div class="gl-meta" aria-hidden="true"><span class="gl-label">Setting the tables</span><span class="gl-pct">0</span></div>
+          <span class="gl-sr" role="status">Loading GarnishTable</span>
+        </div>
+      </div>
+    </div>
+    <script>
+      /* First-load loader. Runs before the app bundle, so it covers the blank-page gap too.
+       * Progress is real, not a timer: it tracks three things finishing — the web fonts, the hero
+       * photograph, and the page itself mounting (the page calls window.__gtLoader.ready()). It
+       * shows at least MIN_MS so it never flashes, and gives up after MAX_MS so a slow asset can
+       * never trap anyone behind it. Only on LOADER_ROUTES; SPA navigation never re-shows it. */
+      (function () {
+        var LOADER_ROUTES = ["/"];
+        var MIN_MS = 900, MAX_MS = 5000;
+        var el = document.getElementById("gt-loader");
+        var path = location.pathname.replace(/\/+$/, "") || "/";
+        if (LOADER_ROUTES.indexOf(path) < 0) { el.parentNode.removeChild(el); return; }
+
+        var root = document.documentElement;
+        root.classList.add("gl-lock");
+        var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var fill = el.querySelector(".gl-fill"), pct = el.querySelector(".gl-pct"), label = el.querySelector(".gl-label");
+        var STAGES = ["Setting the tables", "Firing the kitchen", "Opening the doors"];
+        var tasks = { fonts: false, hero: false, app: false };
+        var start = performance.now(), shown = 0, leaving = false;
+        function finish(k) { tasks[k] = true; }
+
+        // load() the two faces the opening frame uses — fonts.ready alone resolves before any font
+        // has been requested. The Google Fonts stylesheet above is script-blocking, so its
+        // @font-face rules exist by the time this runs.
+        var fontsReady = document.fonts && document.fonts.load
+          ? Promise.all([document.fonts.load('600 26px "Playfair Display"'), document.fonts.load('400 16px "Inter"')])
+          : Promise.resolve();
+        fontsReady.then(done, done);
+        function done() { finish("fonts"); el.classList.add("gl-fonts"); }
+        setTimeout(function () { el.classList.add("gl-fonts"); }, 1200);
+        var hero = new Image();
+        hero.onload = hero.onerror = function () { finish("hero"); };
+        hero.src = "/v3/demo-restaurant-cover.jpg";
+        window.__gtLoader = { ready: function () { finish("app"); } };
+
+        function leave() {
+          leaving = true;
+          fill.style.transform = "scaleX(1)";
+          pct.textContent = "100";
+          label.textContent = STAGES[2];
+          el.classList.add("gl-out");
+          root.classList.remove("gl-lock");
+          window.dispatchEvent(new Event("gt:loaded"));
+          setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, reduce ? 300 : 1500);
+        }
+        function tick(now) {
+          if (leaving) return;
+          var n = 0, k;
+          for (k in tasks) if (tasks[k]) n++;
+          var t = n / 3, elapsed = now - start;
+          // finished tasks move the bar; a slow creep keeps it alive while one is still pending
+          var goal = t >= 1 ? 1 : t * 0.85 + 0.1 * (1 - Math.exp(-elapsed / 1200));
+          shown += (goal - shown) * (reduce ? 1 : t >= 1 ? 0.22 : 0.09); // quick final sweep once ready
+          fill.style.transform = "scaleX(" + shown.toFixed(4) + ")";
+          pct.textContent = String(Math.round(shown * 100));
+          label.textContent = STAGES[Math.min(2, Math.floor(shown * 3))];
+          if ((t >= 1 && shown > 0.99 && elapsed > MIN_MS) || elapsed > MAX_MS) return leave();
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

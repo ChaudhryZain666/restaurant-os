@@ -52,8 +52,37 @@ export function usePublicPlans() {
   return { plans, error, retry: () => setAttempt((a) => a + 1) };
 }
 
-export function formatPlanPrice(pricing: PublicPlanPricing[], interval: "monthly" | "yearly"): string | null {
+export function formatPlanPrice(
+  pricing: PublicPlanPricing[],
+  interval: "monthly" | "yearly"
+): string | null {
   const entry = pricing.find((p) => p.interval === interval);
   if (!entry?.amountCents || !entry.currency) return null;
-  return (entry.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: entry.currency, maximumFractionDigits: 0 });
+  return (entry.amountCents / 100).toLocaleString(undefined, {
+    style: "currency",
+    currency: entry.currency,
+    maximumFractionDigits: 0,
+  });
+}
+
+const ENTITLEMENT_LABELS: Record<string, string> = {
+  custom_domains: "Custom domain / white-label",
+  business_analytics: "Business analytics",
+  business_promotions: "Promotions & discount codes",
+};
+
+/** A plan's real entitlements as plain-language feature lines — never a hardcoded feature list. */
+export function planFeatures(plan: PublicPlan): string[] {
+  const features: string[] = [];
+  for (const e of plan.entitlements) {
+    if (e.key === "max_locations" && typeof e.value === "number") {
+      features.push(`${e.value} location${e.value === 1 ? "" : "s"} included`);
+    } else if (e.key === "max_businesses" && typeof e.value === "number") {
+      features.push(`${e.value} businesses included`);
+    } else if (ENTITLEMENT_LABELS[e.key] && e.value === true) {
+      features.push(ENTITLEMENT_LABELS[e.key]);
+    }
+  }
+  if (plan.trialDays) features.unshift(`${plan.trialDays}-day free trial`);
+  return features;
 }

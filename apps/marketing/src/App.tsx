@@ -1,7 +1,8 @@
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { Layout } from "./components/Layout";
-import { HomePage } from "./pages/HomePage";
+import { HomeV2Page } from "./pages/HomeV2Page";
+import { HomeV3Page } from "./pages/HomeV3Page";
 import { ProductPage } from "./pages/ProductPage";
 import { SolutionsPage } from "./pages/SolutionsPage";
 import { HowItWorksPage } from "./pages/HowItWorksPage";
@@ -38,7 +39,11 @@ export function App() {
       <ScrollToTop />
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<HomeV3Page />} />
+          {/* Homepage redesign under review — not linked from Nav, noindex. See HomeV2Page.tsx. */}
+          <Route path="/v2" element={<HomeV2Page />} />
+          {/* The review URL for what is now the homepage — keep old links working. */}
+          <Route path="/v3" element={<Navigate to="/" replace />} />
           <Route path="/product" element={<ProductPage />} />
           <Route path="/solutions" element={<SolutionsPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />

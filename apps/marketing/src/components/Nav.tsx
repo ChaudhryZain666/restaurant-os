@@ -11,6 +11,12 @@ import { useScrolled } from "../hooks/useScrolled";
 // cinematic openers in a later stage.
 const DARK_HERO_ROUTES = new Set(["/"]);
 
+// Cinematic pages that are dark (or cross between dark and parchment) for their whole length, not
+// just the hero: the nav stays a translucent ink bar with light text when scrolled, instead of
+// switching to the light bar that would cut across every dark scene. Every other route keeps the
+// existing behavior exactly.
+const CINEMATIC_ROUTES = new Set(["/"]);
+
 interface DropdownLink {
   label: string;
   to: string;
@@ -25,29 +31,89 @@ interface NavDropdown {
 const PRODUCT: NavDropdown = {
   label: "Product",
   links: [
-    { label: "Online Ordering", to: "/product#online-ordering", description: "Direct orders, no marketplace cut" },
-    { label: "Digital Menu", to: "/product#digital-menu", description: "Photos, modifiers, availability" },
-    { label: "Order Management", to: "/product#order-management", description: "Accept, prepare, complete" },
+    {
+      label: "Online Ordering",
+      to: "/product#online-ordering",
+      description: "Direct orders, no marketplace cut",
+    },
+    {
+      label: "Digital Menu",
+      to: "/product#digital-menu",
+      description: "Photos, modifiers, availability",
+    },
+    {
+      label: "Order Management",
+      to: "/product#order-management",
+      description: "Accept, prepare, complete",
+    },
     { label: "Delivery", to: "/product#delivery", description: "Zones, fees and pickup together" },
-    { label: "Customer Management", to: "/product#customers", description: "Order history at a glance" },
-    { label: "Promotions", to: "/product#promotions", description: "Offers that bring people back" },
-    { label: "Analytics", to: "/product#analytics", description: "Revenue and trends in real time" },
+    {
+      label: "Customer Management",
+      to: "/product#customers",
+      description: "Order history at a glance",
+    },
+    {
+      label: "Promotions",
+      to: "/product#promotions",
+      description: "Offers that bring people back",
+    },
+    {
+      label: "Analytics",
+      to: "/product#analytics",
+      description: "Revenue and trends in real time",
+    },
     { label: "Loyalty", to: "/product#loyalty", description: "Points that reward repeat orders" },
-    { label: "QR Ordering", to: "/product#qr-ordering", description: "Table-side ordering by phone" },
-    { label: "Restaurant Branding", to: "/product#branding", description: "Your colors, your identity" },
-    { label: "Multi-location", to: "/product#multi-location", description: "One dashboard, every location" },
-    { label: "Customer Support", to: "/product#support", description: "A help center customers actually use" },
+    {
+      label: "QR Ordering",
+      to: "/product#qr-ordering",
+      description: "Table-side ordering by phone",
+    },
+    {
+      label: "Restaurant Branding",
+      to: "/product#branding",
+      description: "Your colors, your identity",
+    },
+    {
+      label: "Multi-location",
+      to: "/product#multi-location",
+      description: "One dashboard, every location",
+    },
+    {
+      label: "Customer Support",
+      to: "/product#support",
+      description: "A help center customers actually use",
+    },
   ],
 };
 
 const SOLUTIONS: NavDropdown = {
   label: "Solutions",
   links: [
-    { label: "Independent Restaurants", to: "/solutions#independent", description: "Your own ordering channel" },
-    { label: "Cafés & Fast Food", to: "/solutions#counter-service", description: "Fast, simple counter ordering" },
-    { label: "Takeaways & Pizzerias", to: "/solutions#pickup-heavy", description: "Built for pickup speed" },
-    { label: "Multi-location & Growing", to: "/solutions#growing", description: "Scale without losing your brand" },
-    { label: "Agencies", to: "/solutions#agencies", description: "One login, every client's business" },
+    {
+      label: "Independent Restaurants",
+      to: "/solutions#independent",
+      description: "Your own ordering channel",
+    },
+    {
+      label: "Cafés & Fast Food",
+      to: "/solutions#counter-service",
+      description: "Fast, simple counter ordering",
+    },
+    {
+      label: "Takeaways & Pizzerias",
+      to: "/solutions#pickup-heavy",
+      description: "Built for pickup speed",
+    },
+    {
+      label: "Multi-location & Growing",
+      to: "/solutions#growing",
+      description: "Scale without losing your brand",
+    },
+    {
+      label: "Agencies",
+      to: "/solutions#agencies",
+      description: "One login, every client's business",
+    },
   ],
 };
 
@@ -58,7 +124,11 @@ const RESOURCES: NavDropdown = {
     { label: "Features", to: "/product", description: "Everything the platform includes" },
     { label: "Demo", to: "/demo", description: "Try a real restaurant menu" },
     { label: "FAQs", to: "/faq", description: "Common questions answered" },
-    { label: "Help Center", to: "/demo#help-center", description: "The support experience customers see" },
+    {
+      label: "Help Center",
+      to: "/demo#help-center",
+      description: "The support experience customers see",
+    },
   ],
 };
 
@@ -78,7 +148,14 @@ function Dropdown({ menu }: { menu: NavDropdown }) {
         aria-haspopup="true"
       >
         {menu.label}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5" aria-hidden>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          className="h-3.5 w-3.5"
+          aria-hidden
+        >
           <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -107,7 +184,9 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
     // `bg-primary/10` (active state) has the identical opacity-on-var() issue and was already
     // silently not generating before this phase — pre-existing, out of this stage's scope; the
     // active link's `text-primary` (no opacity modifier) still colors correctly either way.
-    isActive ? "bg-primary/10 text-primary" : "text-muted hover:bg-black/[0.04] hover:text-foreground",
+    isActive
+      ? "bg-primary/10 text-primary"
+      : "text-muted hover:bg-black/[0.04] hover:text-foreground",
   ].join(" ");
 }
 
@@ -153,7 +232,8 @@ function MobileDropdown({ menu, onNavigate }: { menu: NavDropdown; onNavigate: (
 export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
-  const overDarkHero = DARK_HERO_ROUTES.has(pathname);
+  const cinematic = CINEMATIC_ROUTES.has(pathname);
+  const overDarkHero = DARK_HERO_ROUTES.has(pathname) || cinematic;
   // Raised from 10 to 24 (Phase 80) — at 10px the transparent-vs-solid swap felt twitchy right at
   // rest; 24px gives the dark hero a moment to actually read before the bar commits to solid.
   const scrolled = useScrolled(24);
@@ -162,11 +242,14 @@ export function Nav() {
   // route but Home, today), an open mobile panel is always solid regardless of scroll position,
   // and Home itself only goes solid once actually scrolled.
   const solid = scrolled || mobileOpen || !overDarkHero;
+  const lightBar = solid && !cinematic;
 
   return (
     <header
       className={`sticky top-0 z-40 border-b backdrop-blur transition-[background-color,box-shadow,border-color] duration-300 ${
-        solid ? "border-border shadow-sm" : "theme-obsidian border-transparent"
+        lightBar
+          ? "border-border shadow-sm"
+          : `theme-obsidian ${solid ? "border-white/10" : "border-transparent"}`
       }`}
       // Tailwind can't generate an opacity-modifier utility (`bg-surface/90`) for a color defined
       // as a raw `var(--color-surface)` reference (its `/N` syntax needs an rgb-channel or hex
@@ -182,7 +265,13 @@ export function Nav() {
       // muted)`/`var(--color-primary)` reference below would resolve to :root's LIGHT palette —
       // dark-brown-on-near-black nav text over the dark hero. This is the exact ghost-nav bug
       // apps/web/src/theme/cinematic/Header.tsx already hit and fixed once; same fix here.
-      style={{ backgroundColor: solid ? "color-mix(in srgb, var(--color-surface) 90%, transparent)" : "transparent" }}
+      style={{
+        backgroundColor: lightBar
+          ? "color-mix(in srgb, var(--color-surface) 90%, transparent)"
+          : solid
+            ? "rgba(15, 12, 13, 0.94)"
+            : "transparent",
+      }}
     >
       <div
         className={`mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 transition-[padding] duration-300 sm:px-6 ${
@@ -190,7 +279,7 @@ export function Nav() {
         }`}
       >
         <Link to="/">
-          <Logo variant={solid ? "default" : "light"} />
+          <Logo variant={lightBar ? "default" : "light"} />
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
@@ -222,7 +311,14 @@ export function Nav() {
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             className="flex h-10 w-10 items-center justify-center rounded-pill border border-border text-foreground lg:hidden"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5" aria-hidden>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              className="h-5 w-5"
+              aria-hidden
+            >
               {mobileOpen ? (
                 <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
               ) : (
@@ -251,19 +347,39 @@ export function Nav() {
         >
           <MobileDropdown menu={PRODUCT} onNavigate={() => setMobileOpen(false)} />
           <MobileDropdown menu={SOLUTIONS} onNavigate={() => setMobileOpen(false)} />
-          <Link to="/pricing" className={navLinkClass({ isActive: false })} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/pricing"
+            className={navLinkClass({ isActive: false })}
+            onClick={() => setMobileOpen(false)}
+          >
             Pricing
           </Link>
-          <Link to="/how-it-works" className={navLinkClass({ isActive: false })} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/how-it-works"
+            className={navLinkClass({ isActive: false })}
+            onClick={() => setMobileOpen(false)}
+          >
             How it works
           </Link>
-          <Link to="/demo" className={navLinkClass({ isActive: false })} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/demo"
+            className={navLinkClass({ isActive: false })}
+            onClick={() => setMobileOpen(false)}
+          >
             Demo
           </Link>
-          <Link to="/faq" className={navLinkClass({ isActive: false })} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/faq"
+            className={navLinkClass({ isActive: false })}
+            onClick={() => setMobileOpen(false)}
+          >
             FAQs
           </Link>
-          <Link to="/about" className={navLinkClass({ isActive: false })} onClick={() => setMobileOpen(false)}>
+          <Link
+            to="/about"
+            className={navLinkClass({ isActive: false })}
+            onClick={() => setMobileOpen(false)}
+          >
             Company
           </Link>
           <div className="mt-2 flex items-center justify-between border-t border-border pt-3">

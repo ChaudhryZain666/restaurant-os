@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useReducedMotion } from "@restaurant/ui";
-import { usePublicPlans, formatPlanPrice, type PublicPlan } from "../lib/plans";
+import { usePublicPlans, formatPlanPrice, planFeatures, type PublicPlan } from "../lib/plans";
 import { IconArrowRight, IconCheck } from "./icons";
 
 /**
@@ -29,29 +29,10 @@ const STAGE_NARRATIVE = [
   "The same system now runs a whole portfolio — every location reporting into one view.",
 ];
 
-const ENTITLEMENT_LABELS: Record<string, string> = {
-  custom_domains: "Custom domain / white-label",
-  business_analytics: "Business analytics",
-  business_promotions: "Promotions & discount codes",
-};
-
-function planFeatures(plan: PublicPlan): string[] {
-  const features: string[] = [];
-  for (const e of plan.entitlements) {
-    if (e.key === "max_locations" && typeof e.value === "number") {
-      features.push(`${e.value} location${e.value === 1 ? "" : "s"} included`);
-    } else if (e.key === "max_businesses" && typeof e.value === "number") {
-      features.push(`${e.value} businesses included`);
-    } else if (ENTITLEMENT_LABELS[e.key] && e.value === true) {
-      features.push(ENTITLEMENT_LABELS[e.key]);
-    }
-  }
-  if (plan.trialDays) features.unshift(`${plan.trialDays}-day free trial`);
-  return features;
-}
-
 function planMonthlyCents(plan: PublicPlan): number {
-  return plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? Number.POSITIVE_INFINITY;
+  return (
+    plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? Number.POSITIVE_INFINITY
+  );
 }
 
 function entitlement(plan: PublicPlan, key: string): boolean | number | string | undefined {
@@ -136,7 +117,15 @@ function useCenterActive(refs: React.RefObject<HTMLElement | null>[]) {
 
 /** The pinned stage — a growing architectural floor plan. Density and which markers appear are
  *  computed directly from the active plan's real entitlements, not from the stage index alone. */
-function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undefined; stageIndex: number; compact?: boolean }) {
+function Stage({
+  plan,
+  stageIndex,
+  compact = false,
+}: {
+  plan: PublicPlan | undefined;
+  stageIndex: number;
+  compact?: boolean;
+}) {
   const reducedMotion = useReducedMotion();
   // Multiple Stage instances render at once (3 mobile-only + 1 desktop sticky) — hardcoded
   // gradient/filter ids collided across them (invalid duplicate DOM ids), which silently broke
@@ -146,9 +135,9 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
   const idWarmGlow = `warmGlow-${uid}`;
   const idSoftDrop = `softDrop-${uid}`;
   const idTableFill = `tableFill-${uid}`;
-  const price = plan ? plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? 0 : 0;
+  const price = plan ? (plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? 0) : 0;
   const tweenedCents = useTweenedNumber(price / 100);
-  const priceLabel = plan ? formatPlanPrice(plan.pricing, "monthly") ?? "Contact us" : "—";
+  const priceLabel = plan ? (formatPlanPrice(plan.pricing, "monthly") ?? "Contact us") : "—";
   const hasAnalytics = plan ? Boolean(entitlement(plan, "business_analytics")) : false;
   const hasPromotions = plan ? Boolean(entitlement(plan, "business_promotions")) : false;
   const hasDomain = plan ? Boolean(entitlement(plan, "custom_domains")) : false;
@@ -160,9 +149,15 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
   return (
     <div
       className="relative overflow-hidden rounded-sm border"
-      style={{ borderColor: "var(--gt-border-fixed)", background: "linear-gradient(160deg,#faf6ec,#f2ebd9)" }}
+      style={{
+        borderColor: "var(--gt-border-fixed)",
+        background: "linear-gradient(160deg,#faf6ec,#f2ebd9)",
+      }}
     >
-      <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: "var(--gt-border-fixed)" }}>
+      <div
+        className="flex items-center justify-between border-b px-5 py-3"
+        style={{ borderColor: "var(--gt-border-fixed)" }}
+      >
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--gt-accent-fixed)]">
           Floor plan — {STAGE_LABEL[stageIndex]}
         </span>
@@ -179,7 +174,13 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               <stop offset="100%" stopColor="var(--gt-brand-fixed)" stopOpacity="0" />
             </radialGradient>
             <filter id={idSoftDrop} x="-40%" y="-40%" width="180%" height="180%">
-              <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#3d0f16" floodOpacity="0.18" />
+              <feDropShadow
+                dx="0"
+                dy="4"
+                stdDeviation="5"
+                floodColor="#3d0f16"
+                floodOpacity="0.18"
+              />
             </filter>
             <radialGradient id={idTableFill} cx="35%" cy="30%" r="70%">
               <stop offset="0%" stopColor="#8a3040" />
@@ -193,7 +194,13 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               literal camera move — not just added content — so Start/Prove/Scale read as
               different SPACES, not the same static diagram with more icons switched on. */}
           <g
-            transform={stageIndex === 0 ? "translate(44,26.8) scale(0.92)" : stageIndex === 1 ? "" : "translate(18,18.8) scale(0.82)"}
+            transform={
+              stageIndex === 0
+                ? "translate(44,26.8) scale(0.92)"
+                : stageIndex === 1
+                  ? ""
+                  : "translate(18,18.8) scale(0.82)"
+            }
             style={{ transition: "transform 700ms cubic-bezier(0.16,1,0.3,1)" }}
           >
             <rect
@@ -208,8 +215,25 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
               filter={`url(#${idSoftDrop})`}
             />
             {/* kitchen zone — Prove and up */}
-            <rect x="90" y="60" width="70" height="70" rx="2" fill="var(--gt-brand-fixed)" opacity={stageIndex >= 1 ? 0.12 : 0} style={{ transition: "opacity 500ms ease" }} />
-            <text x="98" y="80" fontSize="8" fontWeight="600" fill="var(--gt-accent-fixed)" opacity={stageIndex >= 1 ? 1 : 0} style={{ transition: "opacity 500ms ease" }}>
+            <rect
+              x="90"
+              y="60"
+              width="70"
+              height="70"
+              rx="2"
+              fill="var(--gt-brand-fixed)"
+              opacity={stageIndex >= 1 ? 0.12 : 0}
+              style={{ transition: "opacity 500ms ease" }}
+            />
+            <text
+              x="98"
+              y="80"
+              fontSize="8"
+              fontWeight="600"
+              fill="var(--gt-accent-fixed)"
+              opacity={stageIndex >= 1 ? 1 : 0}
+              style={{ transition: "opacity 500ms ease" }}
+            >
               KITCHEN
             </text>
 
@@ -239,7 +263,17 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
 
             {/* order ticket marker — Prove and up */}
             <g opacity={stageIndex >= 1 ? 1 : 0} style={{ transition: "opacity 500ms ease 200ms" }}>
-              <rect x="222" y="20" width="58" height="28" rx="2" fill="var(--gt-brand-foreground-fixed)" stroke="#c7a6ab" strokeWidth="1" filter={`url(#${idSoftDrop})`} />
+              <rect
+                x="222"
+                y="20"
+                width="58"
+                height="28"
+                rx="2"
+                fill="var(--gt-brand-foreground-fixed)"
+                stroke="#c7a6ab"
+                strokeWidth="1"
+                filter={`url(#${idSoftDrop})`}
+              />
               <text x="228" y="33" fontSize="7" fill="var(--gt-brand-fixed)">
                 #1047 · New
               </text>
@@ -263,7 +297,11 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
                 strokeLinecap="round"
                 strokeDasharray="230"
                 strokeDashoffset={t(hasAnalytics ? 0 : 230, 0)}
-                style={{ transition: reducedMotion ? "none" : "stroke-dashoffset 900ms cubic-bezier(0.16,1,0.3,1) 260ms" }}
+                style={{
+                  transition: reducedMotion
+                    ? "none"
+                    : "stroke-dashoffset 900ms cubic-bezier(0.16,1,0.3,1) 260ms",
+                }}
               />
               <text x="90" y="305" fontSize="7" fill="var(--gt-accent-fixed)">
                 Revenue trending up
@@ -272,7 +310,16 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
 
             {/* promotions tag — only if the real plan includes business_promotions */}
             <g opacity={hasPromotions ? 1 : 0} style={{ transition: "opacity 500ms ease 320ms" }}>
-              <rect x="20" y="140" width="56" height="20" rx="10" fill="var(--gt-brand-foreground-fixed)" stroke="var(--gt-brand-fixed)" strokeWidth="1" />
+              <rect
+                x="20"
+                y="140"
+                width="56"
+                height="20"
+                rx="10"
+                fill="var(--gt-brand-foreground-fixed)"
+                stroke="var(--gt-brand-fixed)"
+                strokeWidth="1"
+              />
               <text x="30" y="153" fontSize="7" fill="var(--gt-brand-fixed)">
                 WELCOME10
               </text>
@@ -300,17 +347,62 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
             ];
             const p = positions[i];
             return (
-              <g key={i} opacity={on ? 1 : 0} style={{ transition: `opacity 550ms ease ${i * 140 + 120}ms` }}>
-                <line x1={p.lx1} y1={p.ly1} x2={p.lx2} y2={p.ly2} stroke="#c7a6ab" strokeWidth="1.2" strokeDasharray="3 3" />
+              <g
+                key={i}
+                opacity={on ? 1 : 0}
+                style={{ transition: `opacity 550ms ease ${i * 140 + 120}ms` }}
+              >
+                <line
+                  x1={p.lx1}
+                  y1={p.ly1}
+                  x2={p.lx2}
+                  y2={p.ly2}
+                  stroke="#c7a6ab"
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                />
                 {on && !reducedMotion && (
                   <circle r="2.4" fill="var(--gt-brand-fixed)">
-                    <animateMotion dur="1.1s" begin={`${i * 0.14 + 0.3}s`} fill="freeze" path={`M${p.lx1},${p.ly1} L${p.lx2},${p.ly2}`} />
-                    <animate attributeName="opacity" values="0;1;0" dur="1.1s" begin={`${i * 0.14 + 0.3}s`} fill="freeze" />
+                    <animateMotion
+                      dur="1.1s"
+                      begin={`${i * 0.14 + 0.3}s`}
+                      fill="freeze"
+                      path={`M${p.lx1},${p.ly1} L${p.lx2},${p.ly2}`}
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0;1;0"
+                      dur="1.1s"
+                      begin={`${i * 0.14 + 0.3}s`}
+                      fill="freeze"
+                    />
                   </circle>
                 )}
-                <rect x={p.x} y={p.y} width="50" height="42" rx="3" fill="var(--gt-brand-foreground-fixed)" stroke="var(--gt-brand-fixed)" strokeWidth="1.2" filter={`url(#${idSoftDrop})`} />
-                <circle cx={p.x + 25} cy={p.y + 24} r="4" fill={`url(#${idTableFill})`} opacity="0.9" />
-                <text x={p.x + 7} y={p.y + 14} fontSize="6.5" fontWeight="600" fill="var(--gt-accent-fixed)">
+                <rect
+                  x={p.x}
+                  y={p.y}
+                  width="50"
+                  height="42"
+                  rx="3"
+                  fill="var(--gt-brand-foreground-fixed)"
+                  stroke="var(--gt-brand-fixed)"
+                  strokeWidth="1.2"
+                  filter={`url(#${idSoftDrop})`}
+                />
+                <circle
+                  cx={p.x + 25}
+                  cy={p.y + 24}
+                  r="4"
+                  fill={`url(#${idTableFill})`}
+                  opacity="0.9"
+                />
+                <text
+                  x={p.x + 7}
+                  y={p.y + 14}
+                  fontSize="6.5"
+                  fontWeight="600"
+                  fill="var(--gt-accent-fixed)"
+                >
                   Location {i + 2}
                 </text>
               </g>
@@ -325,16 +417,24 @@ function Stage({ plan, stageIndex, compact = false }: { plan: PublicPlan | undef
       </div>
 
       {/* the oversized transforming price — the dominant typographic object in the scene */}
-      <div className="flex items-end justify-between border-t px-5 py-5" style={{ borderColor: "var(--gt-border-fixed)" }}>
+      <div
+        className="flex items-end justify-between border-t px-5 py-5"
+        style={{ borderColor: "var(--gt-border-fixed)" }}
+      >
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gt-accent-fixed)]">{plan?.name ?? ""}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gt-accent-fixed)]">
+            {plan?.name ?? ""}
+          </p>
           <p className="font-heading text-5xl leading-none text-[var(--gt-text-fixed)] sm:text-6xl">
             {plan ? `$${Math.round(t(tweenedCents, price / 100)).toLocaleString()}` : priceLabel}
             <span className="ml-1 text-base font-sans text-[#8f8570]">/mo</span>
           </p>
         </div>
         {plan?.trialDays && (
-          <span className="rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--gt-brand-fixed)]" style={{ borderColor: "var(--gt-brand-fixed)" }}>
+          <span
+            className="rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--gt-brand-fixed)]"
+            style={{ borderColor: "var(--gt-brand-fixed)" }}
+          >
             {plan.trialDays}-day trial
           </span>
         )}
@@ -367,7 +467,10 @@ function TierPanel({
         </span>
         <h3
           className="font-heading text-3xl transition-all duration-300 sm:text-4xl"
-          style={{ color: isActive ? "var(--gt-text-fixed)" : "var(--gt-text-muted-fixed)", fontStyle: isActive ? "italic" : "normal" }}
+          style={{
+            color: isActive ? "var(--gt-text-fixed)" : "var(--gt-text-muted-fixed)",
+            fontStyle: isActive ? "italic" : "normal",
+          }}
         >
           {plan.name}
         </h3>
@@ -396,7 +499,10 @@ function TierPanel({
 
 export function ScaleSelector() {
   const { plans, error, retry } = usePublicPlans();
-  const sorted = useMemo(() => [...(plans ?? [])].sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)), [plans]);
+  const sorted = useMemo(
+    () => [...(plans ?? [])].sort((a, b) => planMonthlyCents(a) - planMonthlyCents(b)),
+    [plans]
+  );
 
   const ref0 = useRef<HTMLDivElement>(null);
   const ref1 = useRef<HTMLDivElement>(null);
@@ -409,8 +515,12 @@ export function ScaleSelector() {
   return (
     <div>
       <div className="mx-auto max-w-2xl text-center">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--gt-accent-fixed)]">Pricing</span>
-        <h2 className="mt-3 font-heading text-4xl italic text-[var(--gt-text-fixed)] sm:text-5xl">Choose the scale of your restaurant.</h2>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--gt-accent-fixed)]">
+          Pricing
+        </span>
+        <h2 className="mt-3 font-heading text-4xl italic text-[var(--gt-text-fixed)] sm:text-5xl">
+          Choose the scale of your restaurant.
+        </h2>
         <p className="mt-4 text-[#5c4f3d]">
           The same system, growing with the business — no per-order commission at any tier.
         </p>
@@ -418,7 +528,9 @@ export function ScaleSelector() {
 
       {error && (
         <div className="mt-10 flex flex-col items-center gap-3 text-center">
-          <p className="text-sm text-[var(--gt-accent-fixed)]">Couldn't load pricing right now — please try again shortly.</p>
+          <p className="text-sm text-[var(--gt-accent-fixed)]">
+            Couldn't load pricing right now — please try again shortly.
+          </p>
           <button
             type="button"
             onClick={retry}
@@ -429,7 +541,9 @@ export function ScaleSelector() {
           </button>
         </div>
       )}
-      {!plans && !error && <p className="mt-10 text-center text-sm text-[#5c4f3d]">Loading pricing…</p>}
+      {!plans && !error && (
+        <p className="mt-10 text-center text-sm text-[#5c4f3d]">Loading pricing…</p>
+      )}
 
       {sorted.length > 0 && (
         <div className="mt-16 grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
@@ -443,7 +557,13 @@ export function ScaleSelector() {
                 <div className="mb-4 lg:hidden">
                   <Stage plan={plan} stageIndex={i} compact />
                 </div>
-                <TierPanel plan={plan} index={i} isActive={i === active} onSelect={() => setActive(i)} innerRef={refs[i]} />
+                <TierPanel
+                  plan={plan}
+                  index={i}
+                  isActive={i === active}
+                  onSelect={() => setActive(i)}
+                  innerRef={refs[i]}
+                />
               </div>
             ))}
           </div>
@@ -455,7 +575,10 @@ export function ScaleSelector() {
       )}
 
       <div className="mt-4 flex justify-center">
-        <Link to="/pricing" className="text-sm font-medium text-[var(--gt-accent-fixed)] underline-offset-4 hover:underline">
+        <Link
+          to="/pricing"
+          className="text-sm font-medium text-[var(--gt-accent-fixed)] underline-offset-4 hover:underline"
+        >
           See full pricing
         </Link>
       </div>

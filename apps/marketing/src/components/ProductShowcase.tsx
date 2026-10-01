@@ -54,7 +54,17 @@ function useIsMobile() {
   return mobile;
 }
 
-export function ProductShowcase() {
+interface ProductShowcaseProps {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+}
+
+export function ProductShowcase({
+  eyebrow = "See it in action",
+  title = "This is Wildwood Kitchen, live",
+  description = "Our demo restaurant, running on the real platform — not a screenshot. Explore the menu, then switch over to see the owner dashboard, menu management, and order queue behind it.",
+}: ProductShowcaseProps = {}) {
   // Phase 80 — defaults to the real live storefront tab, not the dashboard mock. The add-on brief
   // is explicit that the live demo iframe is "the product proof" and must not sit too far down the
   // page or be buried behind other content on first view — this is the minimal, non-duplicative
@@ -72,12 +82,9 @@ export function ProductShowcase() {
       <ScrollParallaxGrid travel={28} />
       <div className="relative mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-lg">
-          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-info">See it in action</span>
-          <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">This is Wildwood Kitchen, live</h2>
-          <p className="mt-3 text-white/55">
-            Our demo restaurant, running on the real platform — not a screenshot. Explore the menu, then switch
-            over to see the owner dashboard, menu management, and order queue behind it.
-          </p>
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-info">{eyebrow}</span>
+          <h2 className="mt-3 font-heading text-3xl text-white sm:text-4xl">{title}</h2>
+          <p className="mt-3 text-white/55">{description}</p>
         </div>
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-white/40">
           <span className="h-1.5 w-1.5 rounded-full bg-info" style={{ boxShadow: "0 0 8px var(--color-info)" }} />
