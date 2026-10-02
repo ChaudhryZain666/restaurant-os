@@ -1,28 +1,36 @@
 # Phase 85B — Production Container & Infrastructure Verification
 
-Baseline: Phase 85A's working tree (uncommitted) on top of `6ee44cf`. Nothing in this phase was
-committed or pushed, and no production service was connected.
+Baseline: Phase 85A's work on top of `6ee44cf`. The native verification ran on the uncommitted
+working tree. The container verification ran on GitHub Actions from branch
+`phase-85b-docker-verification` (commit `fed2b91`); see "GitHub Actions Docker Verification".
+`main` was never changed, and no production service was connected.
 
 ## 1. Executive Status
 
-**`PARTIAL — BLOCKED BY LOCAL ENVIRONMENT`**
+**`COMPLETE — CONTAINER AND LOCAL INFRASTRUCTURE VERIFIED; EXTERNAL INFRASTRUCTURE REMAINS`**
 
-**Docker is not installed on this machine**, and neither are Podman, nerdctl or a WSL distribution.
-So none of the four production images (`api.prod.Dockerfile`, and `frontend.prod.Dockerfile` with
-`APP=web|admin|marketing`) was built or started, and the nginx configuration was never executed.
-Those items stay **BLOCKED — Docker is not installed/available on this machine.**
+This phase ran in two parts:
 
-Everything the images *contain* was verified natively, as close to the image as this machine allows:
+1. **Native verification** (sections 2 and 4–11), on this Windows machine. Docker can't run here:
+   hardware virtualization is disabled in the firmware.
+   - **API runtime:** reconstructed from the Dockerfile's COPY list with a production-only install,
+     and run with `NODE_ENV=production` against Redis 8.10.1 and a disposable MongoDB 8.3.4 replica
+     set.
+   - **Frontends:** the production builds, served on all seven hostnames over HTTPS through a
+     scratch edge and driven by a real Chromium browser.
+   - **Worker:** real and synthetic jobs on Redis 8.10.1.
+2. **Container verification** on a GitHub-hosted Ubuntu 24.04 runner (see "GitHub Actions Docker
+   Verification").
+   - **What ran:** the four real production images (`api.prod.Dockerfile`, and
+     `frontend.prod.Dockerfile` for `web`, `admin` and `marketing`) were built from a clean checkout
+     with planted decoy `.env` files, then started alongside Redis 7.4.11 and a throwaway MongoDB
+     7.0.43 replica set.
+   - **Result:** **97 checks passed, 0 failed.** Covered: image builds, Docker HEALTHCHECK,
+     health/readiness, worker jobs, `nginx -t`, SPA routing for all seven hostnames, `.env`
+     isolation, an image secret scan, and graceful shutdown on `docker stop`.
 
-- **API runtime:** reconstructed from the Dockerfile's own COPY list, with a production-only
-  dependency install. The compiled API ran with `NODE_ENV=production` against **Redis 8.10.1** and
-  a disposable MongoDB 8.3.4 replica-set database.
-- **Frontends:** the three production builds, made with the production `VITE_*` values.
-- **Hostnames and browser:** all seven production hostnames, served over HTTPS through a scratch
-  edge implementing the documented routing rules, driven by a real Chromium browser.
-- **Worker:** processed real and synthetic jobs on Redis 8.10.1.
-
-This is **not** a claim that the project is production ready, or that the images work.
+This closes the container/local portion of Phase 85B only. GarnishTable is **not** production
+ready: every item in section 12 still requires real external infrastructure.
 
 ## 2. Environment
 
@@ -31,7 +39,7 @@ This is **not** a claim that the project is production ready, or that the images
 | OS | Windows 11 Home 10.0.22631 |
 | Node.js | v24.18.0. The images pin `node:22-slim`, so the runtime major version differs from the image. |
 | Package manager | npm 11.16.0 (repo uses npm workspaces + `package-lock.json`). npm 11 blocks dependency install scripts by default; `node:22-slim` ships npm 10, which doesn't. |
-| Docker / Compose / buildx | **Not installed** (`docker: command not found`; no `C:\Program Files\Docker`) |
+| Docker / Compose / buildx | Not available at the native run. Docker Desktop 29.8.1 (Compose v5.5.1, buildx v0.37.1) was installed later, but its engine **can't start**: hardware virtualization is disabled in firmware and WSL isn't installed. Container verification therefore ran on GitHub Actions. |
 | Podman / nerdctl / WSL distro | Not installed / none |
 | MongoDB | 8.3.4, Windows service, replica set `rs0`, `localhost:27017` |
 | Redis (dev) | 3.0.504, Windows service, `:6379`. Below BullMQ's minimum; **not used** for worker verification. |
@@ -45,11 +53,11 @@ This is **not** a claim that the project is production ready, or that the images
 
 | Artifact | Build | Started | Smoke Tested | Result |
 |---|---|---|---|---|
-| API (`api.prod.Dockerfile`) | ❌ not run — no Docker | ❌ | ✅ natively, as an image-equivalent runtime | **BLOCKED** (image); runtime contents verified |
-| Owner Portal (`frontend.prod.Dockerfile APP=admin`) | ❌ not run | ❌ | ✅ production build served on app./agency./admin./pos. | **BLOCKED** (image); build verified |
-| Storefront (`APP=web`) | ❌ not run | ❌ | ✅ production build on order. and a custom domain | **BLOCKED** (image); build verified |
-| Marketing (`APP=marketing`) | ❌ not run | ❌ | ✅ production build on the apex | **BLOCKED** (image); build verified |
-| Worker | n/a: runs inside the API process (no separate image, by design) | ✅ with the API | ✅ on Redis 8.10.1 | **VERIFIED natively** |
+| API (`api.prod.Dockerfile`) | ✅ GitHub Actions, 44 s, 384 MB | ✅ `healthy` in about 8 s | ✅ health, readiness, API, Swagger, mock guards, deploy scripts, demo provisioning | **VERIFIED in container** |
+| Owner Portal (`frontend.prod.Dockerfile APP=admin`) | ✅ 29 s, 57 MB | ✅ nginx | ✅ app./agency./admin./pos. routing, assets, `/api` proxy | **VERIFIED in container** |
+| Storefront (`APP=web`) | ✅ 26 s, 56 MB | ✅ nginx | ✅ order. + custom domain, `/api` + `/sitemap.xml` proxy, unknown-host message, Wildwood Kitchen rendered | **VERIFIED in container** |
+| Marketing (`APP=marketing`) | ✅ 25 s, 50 MB | ✅ nginx | ✅ apex routing, static sitemap, robots, og:image | **VERIFIED in container** |
+| Worker | n/a: runs inside the API process (no separate image, by design) | ✅ inside the API container | ✅ Redis 7.4.11: safe job completed, failing job failed cleanly | **VERIFIED in container** (and natively on Redis 8.10.1) |
 
 **Image-equivalent API runtime.** Built in the scratchpad, outside the repo:
 
@@ -66,6 +74,81 @@ This is **not** a claim that the project is production ready, or that the images
 | Storefront | exit 0 | 14 s | 8.0 MB | 1 (Vite chunk-size advisory) |
 | Owner Portal | exit 0 | 25 s | 8.2 MB | 1 (Vite chunk-size advisory) |
 | Marketing | exit 0 | 13 s | 1.9 MB | none |
+
+## GitHub Actions Docker Verification
+
+A temporary workflow, `.github/workflows/phase-85b-docker-verification.yml`, ran on branch
+`phase-85b-docker-verification` (`main` untouched) and was deleted afterwards. It needed no
+repository secrets, pushed no images, and used only generated throwaway values (masked in logs).
+
+| | |
+|---|---|
+| Successful run | [37075115037](https://github.com/ChaudhryZain666/restaurant-os/actions/runs/37075115037), commit `fed2b91`: **97 passed, 0 failed** |
+| Runner | Ubuntu 24.04.5 LTS, kernel 6.17.0-1022-azure, 4 CPUs |
+| Docker | client 28.0.4 / server 28.0.4; buildx v0.37.1 |
+| MongoDB | `mongo:7` → 7.0.43, single-node replica set `rs0` (transactions available), throwaway database `gt_85b_ci` |
+| Redis | `redis:7-alpine` → **7.4.11** |
+
+**Earlier runs (none needed an application change):**
+
+| Run | Commit | Result | Cause |
+|---|---|---|---|
+| 37074247272 | `c70cd9b` | failure | My first commit contained only the workflow: Git rejected the `:!_bgsample.png` exclusion syntax, so the Dockerfiles under test weren't on the branch yet |
+| 37074293623 | `719f847` | 1 failed check | False positive in the workflow's localhost scan: the admin printer-setup help text says "e.g. `http://localhost:9100`" (user-facing copy). Filter narrowed. |
+| 37074720643 | `d961219` | success | Green, but the single results annotation was truncated at about 4 KB. Output split into parts. |
+| 37075115037 | `fed2b91` | **success, 97/0** | Complete results, below |
+
+**Environment isolation.** Before building, the workflow planted decoy files that recreate the
+developer checkout:
+
+- `apps/web/.env` with `VITE_RESTAURANT_SLUG=demo-restaurant` and a localhost API URL;
+- `.env.local` and `.env.production` with unique canary slugs;
+- admin and marketing `.env` files;
+- `apps/api/.env` and `.env.production` with canary JWT, Mongo, Paddle and SMTP values;
+- a root `.env`.
+
+Results:
+- **0** `.env` files in any of the 4 images.
+- **0** canary hits anywhere in any image filesystem.
+- The storefront bundle contains `demo-restaurant` exactly once: the SEO noindex check
+  `` e?.slug===`demo-restaurant` ``, matching the clean baseline. No default-slug leak.
+- In a real browser, an **unknown storefront host shows "This link doesn't specify a restaurant"**
+  and not Wildwood Kitchen.
+- The build guard (`check-build-env.sh`) fails a build missing its `VITE_*` arguments: "Missing
+  build arguments for APP=web: VITE_API_URL VITE_SITE_URL VITE_ADMIN_URL VITE_MARKETING_URL".
+
+**API image.**
+- **Config:** `user=node`, `workdir=/repo/apps/api`, `cmd=["node","dist/index.js"]`, HEALTHCHECK
+  defined, `STOPSIGNAL SIGTERM`, `EXPOSE 4000`. The running process is `node dist/index.js`.
+- **Contents:** no `apps/api/src` and no `tsx`, Jest, ts-jest, Vite or Playwright. `typescript`
+  and `eslint` **are present**, confirming issue 3.
+- **Hygiene:** no secret-shaped strings (Stripe/Paddle/Anthropic keys, private keys, credentialed
+  Mongo URIs) in application files.
+
+**Results by area:**
+
+| Area | Result |
+|---|---|
+| Unsafe config inside the image | Without `TRUST_PROXY` → container exits 1 |
+| Docker HEALTHCHECK | `healthy` after about 8 s (Docker's own status, not just a manual curl) |
+| API | `/health/live` 200; `/health` 200 with `{"mongo":"up","redis":"up"}`; `/api/v1/public/plans` 200; `/api/docs/` 200; dev-only `/local-storage` 404; 0 error-level startup log lines |
+| Mock guards in container | mock payment, billing and marketplace webhooks → 404; mock checkout completion → 404 |
+| Deploy scripts in container | `ensureIndexes.js` exit 0; `seed.js` exit 0 |
+| Demo provisioning in container | first run created 1 owner, 1 business, 1 restaurant, 7 categories, 28 items, 11 modifier groups; second run created nothing |
+| Worker | `[queue] redis ready`; 5 repeatable schedules registered; `payment.reconciliation_tick` → **completed**; `delivery.dispatch_create` with bogus ids → **failed: Order not found**; API still 200 afterwards |
+| nginx | `nginx -t` "syntax is ok / test is successful" for web, admin and marketing (templates rendered via the image entrypoint), and again inside each running container; rendered upstream `proxy_pass http://api:4000` |
+| Hostname routing | all seven hostnames plus the custom-domain host: `/` → index.html 200 `no-cache`. SPA deep links 200 `no-cache`: `/r/demo-restaurant`, `/r/demo-restaurant/experience`, `pos./pos`, `agency./agency/billing`, `admin./platform/restaurants`, `/pricing`. Assets 200 `public, max-age=31536000, immutable`; missing asset 404 on all three |
+| Proxying | storefront and admin nginx → API `/api` 200; storefront `/sitemap.xml` → API XML 200; admin `/sitemap.xml` 404; marketing static sitemap with `https://garnishtable.com/` URLs |
+| SEO | `robots.txt` absolute on order. and the apex; marketing `og:image` → `https://garnishtable.com/og-image.png` |
+| Upload limit | a 31 MB body to `/api` reaches the API (404 from the API, not 413 from nginx) |
+| Browser (headless Chrome) | unknown host → honest no-restaurant message; `order.garnishtable.com/r/demo-restaurant` renders Wildwood Kitchen and Margherita Pizza through the nginx and API containers |
+| Graceful shutdown | `docker stop` (SIGTERM, 20 s stop timeout) → "shutting down" with signal SIGTERM → "[shutdown] complete" → exit code 0, not OOM-killed, stopped in **148 ms** (no SIGKILL) |
+
+**Not covered by the container run (covered natively, or external):**
+- TLS termination, which belongs to the external edge;
+- the full customer → owner → POS browser journey (verified natively);
+- real DNS;
+- `TRUST_PROXY` against a real edge's address range.
 
 ## 4. Production Configuration Verification
 
@@ -245,7 +328,7 @@ disposable databases.
 | Production builds | web, admin and marketing with production values: exit 0; API `tsc` exit 0 |
 | Targeted Playwright (dev servers) | 10 specs, **15 / 15 passed**. The full 70-spec suite was **not** run. |
 | Production browser smoke (scratch, real hostnames, production builds and API) | 9 / 9 checks passed (marketing, `/demo` link, demo checkout, customer order, Owner Portal, POS, agency., admin., custom-domain host), plus the active-custom-domain check. Two caveats: the custom-domain check passed only after the storefront was rebuilt cleanly (§13, issue 1), and my first `/demo` check wrongly expected an iframe — the page uses a link by design — so it was rewritten to follow the link. |
-| Docker image builds / container start | **not run (no Docker)** |
+| Docker image builds / containers (GitHub Actions, run 37075115037) | 4 / 4 images built; API, web, admin, marketing, Redis 7.4.11 and MongoDB 7.0.43 started; **97 / 97 checks passed** |
 
 **Correction to Phase 85A.** Its report said "1694 / 1694". Three full runs this phase, each with a
 different suite failing to start, all reported **1677** total tests. Jest had already counted the
@@ -254,7 +337,10 @@ non-starting suites' tests, so Phase 85A's figure double-counted 17. The 85A rep
 
 ## 12. Remaining External Inputs
 
-- **Docker** on a machine that can build and run the four images. This is the first gap to close.
+- ~~Docker on a machine that can build and run the four images.~~ **Closed:** verified on GitHub Actions (run 37075115037, 97/97).
+- **A production host for the containers.** One API container (single instance) and the three
+  frontend containers, or a static host plus edge. The images are proven; where they run isn't
+  chosen yet.
 - **Managed Redis ≥ 6.2** for production. Compatibility is shown here with 8.10.1;
   `maxmemory-policy noeviction` and persistence aren't verified.
 - **MongoDB Atlas** production connection: tier, backups, network access.
@@ -298,7 +384,7 @@ non-starting suites' tests, so Phase 85A's figure double-counted 17. The 85A rep
 |---|---|
 | Severity | Low (size only, inert; never loaded by the API) |
 | Root cause | `npm prune --omit=dev` keeps every workspace's `dependencies`, and `packages/config` declares its lint tooling as `dependencies` |
-| Fix | **Not fixed.** Changing the Dockerfile's install strategy can't be verified without Docker. Revisit when images can be built. |
+| Fix | **Not fixed.** Confirmed in the real image (384 MB; `typescript` and `eslint` present, inert). It's now measurable, so it can be decided on its own merits: optional, and not a launch blocker. |
 | Verification | `npm ls typescript eslint --omit=dev` in the staged runtime |
 
 **4. Expected 503 ("paid checkout not available yet") is logged at `error` level**
@@ -336,20 +422,21 @@ there were deleted. The disposable databases were dropped and Redis db 14 flushe
 
 ## 14. Recommended Next Phase
 
-Install Docker (Docker Desktop with WSL 2 on this machine, or any Linux host/CI runner), then
-re-run Phase 85B's container steps:
+**Phase 85C — Production Infrastructure Provisioning.** The artifacts are proven: images, health
+checks, nginx, worker, shutdown and environment isolation. What remains is real infrastructure:
 
-1. `docker build` of `api.prod.Dockerfile` and of `frontend.prod.Dockerfile` for each `APP`;
-   record sizes.
-2. Run them on one network with a `redis:7` container and a disposable Mongo, `API_UPSTREAM=http://api:4000`.
-3. Confirm:
-   - the healthcheck reports healthy;
-   - `nginx -t` passes and the templates render;
-   - SPA fallback and `/api` proxying work in nginx;
-   - `docker stop` produces the graceful-shutdown log within 15 s;
-   - the image runs as `node`;
-   - `docker history` and an image filesystem scan show no `.env` files.
-4. Decide on issue 3 once there's a measured image size.
+1. **Hosting decision:** choose where the single API container and the three frontend containers
+   (or static hosting) run, plus the edge with TLS for the seven hostnames and WebSocket upgrade on
+   `api.`. Set `TRUST_PROXY` to that edge's real address range.
+2. **Managed services:** Redis ≥ 6.2 (`noeviction`, persistence), S3-compatible storage, and
+   transactional SMTP with SPF/DKIM/DMARC. Confirm the Atlas tier, backups and network access.
+3. **DNS** for the seven hostnames.
+4. **First staging deploy** of these exact images onto that infrastructure, with staging
+   credentials. Then run the deploy steps (`ensureIndexes`, `seed`, `provisionProductionDemo`) and
+   repeat the 85B container checks against it.
 
-Only after that should real infrastructure provisioning (managed Redis, storage, SMTP, edge, DNS)
-begin.
+Paddle production, payment providers, marketplaces and the legal inputs follow separately
+(section 12).
+
+**Repository state:** the Phase 85A/85B work is on branch `phase-85b-docker-verification`, not
+`main`. Whether and how to merge it is the owner's decision.
