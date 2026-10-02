@@ -1,9 +1,11 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
-import { Button } from "@restaurant/ui";
+import { useReducedMotion } from "@restaurant/ui";
+
+import { COVER } from "./media";
 import { Pinned } from "./Pinned";
-import { ease, lerp, seg, useIsDesktop } from "./motion";
+import { ease, lerp, seg, useDesktopFit, useIsDesktop } from "./motion";
 import { AnalyticsPane, OrdersPane, StorefrontPane, Surface, Ticket } from "./Surfaces";
+import { ButtonLink } from "../ButtonLink";
 
 const ANSWERS = [
   {
@@ -26,6 +28,10 @@ const ANSWERS = [
  */
 export function Arrival() {
   const desktop = useIsDesktop();
+  const fit = useDesktopFit(); // 1 at 1440×900+; shrinks the layered panes on short/narrow laptops
+  // Reduced motion renders a scene's final frame. On phones that frame has the copy faded out
+  // under the storefront pane, so phones hold the opening's resting frame instead.
+  const staticMobile = useReducedMotion() && !desktop;
   const panes = useMemo(
     () => ({ store: <StorefrontPane />, orders: <OrdersPane />, analytics: <AnalyticsPane /> }),
     []
@@ -34,7 +40,9 @@ export function Arrival() {
   return (
     <>
       <Pinned length={2.8} background="#0f0c0d" label="Your restaurant, running on your terms">
-        {(p) => {
+        {(progress) => {
+          // phones under reduced motion hold the opening's resting frame: photo, copy, CTAs
+          const p = staticMobile ? 0 : progress;
           const pull = ease(seg(p, 0.06, 0.5)); // camera pulls back
           const scale = desktop ? lerp(1, 0.4, pull) : lerp(1, 0.84, pull);
           const unfold = ease(seg(p, 0.42, 0.72)); // product surfaces arrive
@@ -57,7 +65,11 @@ export function Arrival() {
                 }}
               >
                 <img
-                  src="/v3/demo-restaurant-cover.jpg"
+                  src={COVER.src}
+                  srcSet={COVER.srcSet}
+                  sizes="100vw"
+                  width={1800}
+                  height={1200}
                   alt="The dining room at Wildwood Kitchen, GarnishTable's demo restaurant"
                   className="h-full w-full object-cover"
                   style={{ filter: `brightness(${lerp(0.5, 0.9, pull)}) saturate(1.05)` }}
@@ -77,7 +89,7 @@ export function Arrival() {
               {desktop && (
                 <div
                   className="pointer-events-none absolute inset-0"
-                  style={{ perspective: "1800px" }}
+                  style={{ perspective: "1800px", containerType: "size" }}
                 >
                   <div
                     className="absolute"
@@ -86,7 +98,8 @@ export function Arrival() {
                       top: "8%",
                       width: 300,
                       opacity: unfold,
-                      transform: `translate3d(${lerp(80, 0, unfold)}px, ${lerp(-40, 0, unfold)}px, -120px) rotateY(-10deg)`,
+                      transformOrigin: "0 0",
+                      transform: `translate3d(${lerp(80, 0, unfold)}px, ${lerp(-40, 0, unfold)}px, -120px) rotateY(-10deg) scale(${fit})`,
                     }}
                   >
                     <Surface label="Kitchen · Orders">{panes.orders}</Surface>
@@ -98,7 +111,8 @@ export function Arrival() {
                       top: "58%",
                       width: 280,
                       opacity: unfold,
-                      transform: `translate3d(${lerp(120, 0, unfold)}px, ${lerp(60, 0, unfold)}px, -60px) rotateY(-12deg)`,
+                      transformOrigin: "0 0",
+                      transform: `translate3d(${lerp(120, 0, unfold)}px, ${lerp(60, 0, unfold)}px, -60px) rotateY(-12deg) scale(${fit})`,
                     }}
                   >
                     <Surface label="Owner · This week">{panes.analytics}</Surface>
@@ -110,7 +124,8 @@ export function Arrival() {
                       top: "46%",
                       width: 290,
                       opacity: unfold,
-                      transform: `translate3d(${lerp(-60, 0, unfold)}px, ${lerp(120, 0, unfold)}px, 60px) rotateY(8deg)`,
+                      transformOrigin: "0 0",
+                      transform: `translate3d(${lerp(-60, 0, unfold)}px, ${lerp(120, 0, unfold)}px, 60px) rotateY(8deg) scale(${fit})`,
                     }}
                   >
                     <Surface label="Customer · Storefront">{panes.store}</Surface>
@@ -118,10 +133,11 @@ export function Arrival() {
                   <Ticket
                     className="absolute"
                     style={{
-                      left: `${lerp(58, 64, travel)}%`,
-                      top: `${lerp(56, 20, travel)}%`,
+                      left: 0,
+                      top: 0,
                       opacity: seg(p, 0.64, 0.7) * (1 - seg(p, 0.95, 1) * 0.4),
-                      transform: `rotate(${lerp(-8, 4, travel)}deg) scale(${lerp(0.9, 1, travel)})`,
+                      transformOrigin: "0 0",
+                      transform: `translate(${lerp(58, 64, travel)}cqw, ${lerp(56, 20, travel)}cqh) rotate(${lerp(-8, 4, travel)}deg) scale(${lerp(0.9, 1, travel) * fit})`,
                     }}
                   />
                 </div>
@@ -154,10 +170,10 @@ export function Arrival() {
                     Built for independent restaurants
                   </p>
                   <h1 className="mt-5 font-heading font-semibold leading-[0.9] tracking-[-0.02em] text-[#f6f0e2]">
-                    <span className="block text-[17vw] sm:text-[12vw] lg:text-[8.2vw] xl:text-[7.6rem]">
+                    <span className="block text-[17vw] sm:text-[min(12vw,10svh)] lg:text-[8.2vw] xl:text-[7.6rem]">
                       Your restaurant.
                     </span>
-                    <span className="block pb-[0.08em] text-[11vw] italic text-[#f6f0e2]/85 sm:text-[8vw] lg:text-[4.6vw] xl:text-[4.4rem]">
+                    <span className="block pb-[0.08em] text-[11vw] italic text-[#f6f0e2]/85 sm:text-[min(8vw,6.5svh)] lg:text-[4.6vw] xl:text-[4.4rem]">
                       Running on your terms.
                     </span>
                   </h1>
@@ -172,9 +188,9 @@ export function Arrival() {
                     className="mt-7 flex flex-wrap items-center gap-3"
                     style={{ opacity: desktop ? 1 : 1 - seg(p, 0.28, 0.44) }}
                   >
-                    <Link to="/start-trial">
-                      <Button size="lg">Start your restaurant</Button>
-                    </Link>
+                    <ButtonLink to="/start-trial" size="lg">
+                      Start your restaurant
+                    </ButtonLink>
                     <a
                       href="#demo"
                       className="inline-flex h-12 items-center rounded-pill border border-white/35 px-6 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/10"

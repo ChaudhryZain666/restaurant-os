@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { applyJsonLd } from "@restaurant/utils/seoMeta";
 import { Nav } from "./Nav";
@@ -41,7 +41,13 @@ export function Layout() {
       </a>
       <Nav />
       <main id="main-content" className="flex-1">
-        <Outlet />
+        {/* Lazy page chunks: hold the page's own opening ground (ink, under the transparent nav)
+            while one loads, so the nav and footer never jump. */}
+        <Suspense
+          fallback={<div className="-mt-[61px] min-h-[100svh]" style={{ background: "#0f0c0d" }} />}
+        >
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
       <BackToTop />

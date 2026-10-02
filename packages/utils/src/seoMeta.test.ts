@@ -76,6 +76,33 @@ describe("applySeoMeta", () => {
     expect(document.querySelector('meta[property="og:title"]')).toBeNull();
     expect(document.querySelector('meta[name="twitter:card"]')).toBeNull();
   });
+  it("updates static OG/Twitter/canonical tags from the HTML shell in place — never duplicates — and restores them", () => {
+    resetHead();
+    document.head.innerHTML =
+      '<meta property="og:title" content="Shell title">' +
+      '<meta name="twitter:card" content="summary_large_image">' +
+      '<link rel="canonical" href="https://example.com/">';
+    const cleanup = applySeoMeta({
+      title: "Pricing",
+      description: "Plans.",
+      canonicalUrl: "https://example.com/pricing",
+      og: { title: "Pricing" },
+      twitter: { card: "summary" },
+    });
+
+    expect(document.querySelectorAll('meta[property="og:title"]')).toHaveLength(1);
+    expect(document.querySelector('meta[property="og:title"]')?.getAttribute("content")).toBe("Pricing");
+    expect(document.querySelectorAll('meta[name="twitter:card"]')).toHaveLength(1);
+    expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://example.com/pricing");
+
+    cleanup();
+    expect(document.querySelector('meta[property="og:title"]')?.getAttribute("content")).toBe("Shell title");
+    expect(document.querySelector('meta[name="twitter:card"]')?.getAttribute("content")).toBe("summary_large_image");
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://example.com/");
+    // the description it had to create is removed again
+    expect(document.querySelector('meta[name="description"]')).toBeNull();
+  });
 });
 
 describe("applyJsonLd", () => {

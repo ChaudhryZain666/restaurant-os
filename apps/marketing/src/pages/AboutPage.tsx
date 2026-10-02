@@ -1,11 +1,11 @@
-import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
 import { MarketingPageHero } from "../components/MarketingPageHero";
 import { ObsidianGlowBackground } from "../components/ObsidianGlowBackground";
 import { Container } from "../components/Container";
 import { IconArrowRight, IconChart, IconHeadset, IconPalette, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { ButtonLink } from "../components/ButtonLink";
 
 const PRINCIPLES = [
   {
@@ -130,16 +130,8 @@ export function AboutPage() {
               No sales script — just a straight answer about whether GarnishTable fits how your restaurant actually runs.
             </p>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-              <Link to="/contact">
-                <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                  Contact us
-                </Button>
-              </Link>
-              <Link to="/start-trial">
-                <Button size="lg">
-                  Start Free Trial <IconArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+              <ButtonLink to="/contact" size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">Contact us</ButtonLink>
+              <ButtonLink to="/start-trial" size="lg">Start Free Trial <IconArrowRight className="h-4 w-4" /></ButtonLink>
             </div>
           </Reveal>
         </Container>

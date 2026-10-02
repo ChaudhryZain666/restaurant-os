@@ -3,6 +3,9 @@
 // Vite apps/ports in local dev, and separate deployed origins in production — env-driven with the
 // local-dev ports as fallback, same pattern as VITE_RESTAURANT_SLUG in apps/web.
 export const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL ?? "http://localhost:5173";
+/** The demo restaurant by its own path — skips the storefront root's custom-domain lookup (which
+ *  404s, then falls back), so the embedded demo never flashes a "can't find that restaurant" frame. */
+export const DEMO_STOREFRONT_URL = `${STOREFRONT_URL}/r/demo-restaurant`;
 export const ADMIN_URL = import.meta.env.VITE_ADMIN_URL ?? "http://localhost:5174";
 export const ADMIN_LOGIN_URL = `${ADMIN_URL}/login`;
 // Phase 28 — the real plan-first agency signup wizard (AgencySignupWizardPage.tsx). Specifically

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Button, Logo } from "@restaurant/ui";
+import { Logo } from "@restaurant/ui";
 import { ADMIN_LOGIN_URL } from "../lib/links";
 import { useScrolled } from "../hooks/useScrolled";
+import { ButtonLink } from "./ButtonLink";
 
 // Routes that open on a dark, full-bleed hero pulled up under the nav (the homepage's film-still,
 // MarketingPageHero everywhere else): the bar is transparent over the hero at rest and only turns
@@ -149,7 +150,6 @@ function Dropdown({ menu }: { menu: NavDropdown }) {
         // brown over the dark hero, unreadable). `text-muted` needs no opacity modifier — it's
         // already the correct "de-emphasized foreground" token, and it's theme-aware for real.
         className="flex items-center gap-1 rounded-pill px-3.5 py-2 text-sm font-medium text-muted transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground"
-        aria-haspopup="true"
       >
         {menu.label}
         <svg
@@ -245,6 +245,21 @@ export function Nav() {
   // route but Home, today), an open mobile panel is always solid regardless of scroll position,
   // and Home itself only goes solid once actually scrolled.
   const solid = scrolled || mobileOpen || !overDarkHero;
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // The mobile panel closes on navigation (including back/forward) and on Escape, returning focus
+  // to the toggle so keyboard users aren't left on a control that just disappeared.
+  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMobileOpen(false);
+      toggleRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   return (
     <header
@@ -286,10 +301,12 @@ export function Nav() {
           >
             Log in
           </a>
-          <Link to="/start-trial" className="hidden sm:inline-block">
-            <Button size="sm">Start Free Trial</Button>
-          </Link>
+          <ButtonLink to="/start-trial" size="sm" className="hidden sm:inline-flex">
+            Start Free Trial
+          </ButtonLink>
           <button
+            ref={toggleRef}
+            type="button"
             onClick={() => setMobileOpen((v) => !v)}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
@@ -371,9 +388,9 @@ export function Nav() {
             <a href={ADMIN_LOGIN_URL} className="text-sm font-medium text-muted">
               Log in
             </a>
-            <Link to="/start-trial" onClick={() => setMobileOpen(false)}>
-              <Button size="sm">Start Free Trial</Button>
-            </Link>
+            <ButtonLink to="/start-trial" size="sm" onClick={() => setMobileOpen(false)}>
+              Start Free Trial
+            </ButtonLink>
           </div>
         </nav>
       )}

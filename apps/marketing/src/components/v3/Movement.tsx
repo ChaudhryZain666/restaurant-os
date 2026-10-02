@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logoMarkAsset } from "@restaurant/ui";
 import { Pinned } from "./Pinned";
-import { ease, seg, useIsDesktop } from "./motion";
+import { ease, lerp, seg, useIsDesktop } from "./motion";
 
 interface Station {
   id: string;
@@ -38,7 +38,7 @@ const STATIONS: Station[] = [
   {
     id: "delivery",
     name: "Delivery",
-    caption: "Your zones, your fees — or Uber Eats, connected from the dashboard.",
+    caption: "Your own delivery zones and fees, right alongside pickup.",
   },
   { id: "loyalty", name: "Loyalty", caption: "Points land on Jordan's account automatically." },
   {
@@ -49,6 +49,12 @@ const STATIONS: Station[] = [
 ];
 const RETURN_CAPTION =
   "…and Jordan comes back. The loop closes at your restaurant, not someone else's.";
+
+/** Every caption the desktop column can show, in order — rendered together so its height is fixed. */
+const CAPTION_STEPS = [
+  ...STATIONS.map(({ name, caption }) => ({ name, caption })),
+  { name: "Back to the customer", caption: RETURN_CAPTION },
+];
 
 type Layout = { w: number; h: number; pos: Record<string, [number, number]>; path: string };
 
@@ -100,11 +106,14 @@ export function Movement() {
   const [stops, setStops] = useState<number[]>([]);
 
   // Sample the path once per layout, and find where along it each station sits.
-  useLayoutEffect(() => {
+  // A normal effect, not a layout effect: the scene mounts off-screen, so sampling never needs to
+  // block a paint. 160 samples + linear interpolation (below) is as smooth as dense sampling at a
+  // third of the getPointAtLength calls, which are slow in every engine.
+  useEffect(() => {
     const path = pathRef.current;
     if (!path) return;
     const total = path.getTotalLength();
-    const N = 480;
+    const N = 160;
     const pts = Array.from({ length: N + 1 }, (_, i) => {
       const pt = path.getPointAtLength((i / N) * total);
       return { x: pt.x, y: pt.y };
@@ -134,8 +143,14 @@ export function Movement() {
     <Pinned length={3.2} background="#0f0c0d" label="How an order moves through GarnishTable">
       {(p) => {
         const t = ease(seg(p, 0.08, 0.92));
-        const idx = samples.length ? Math.round(t * (samples.length - 1)) : 0;
-        const ticket = samples[idx] ?? { x: L.pos.customer[0], y: L.pos.customer[1] };
+        const f = samples.length ? t * (samples.length - 1) : 0;
+        const i0 = Math.floor(f);
+        const a = samples[i0];
+        const b = samples[Math.min(i0 + 1, samples.length - 1)];
+        const ticket =
+          a && b
+            ? { x: lerp(a.x, b.x, f - i0), y: lerp(a.y, b.y, f - i0) }
+            : { x: L.pos.customer[0], y: L.pos.customer[1] };
         let current = 0;
         stops.forEach((s, i) => {
           if (t >= s - 0.004) current = i;
@@ -153,14 +168,27 @@ export function Movement() {
               <h2 className="mt-3 font-heading text-[8vw] font-semibold leading-[1] tracking-tight text-[#f6f0e2] lg:text-[2.9vw]">
                 Follow one order through the restaurant.
               </h2>
-              <div
-                className="mt-6 hidden min-h-[7.5rem] border-t border-white/10 pt-5 lg:block"
-                aria-live="off"
-              >
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-white/45">
-                  {heading}
-                </p>
-                <p className="mt-2 font-heading text-2xl leading-snug text-[#f6f0e2]">{caption}</p>
+              {/* every caption sits in the same grid cell (only the current one visible), so the
+                  column is always as tall as the longest caption and never re-flows mid-scroll */}
+              <div className="mt-6 hidden border-t border-white/10 pt-5 lg:grid" aria-live="off">
+                {CAPTION_STEPS.map((step) => {
+                  const active = step.name === heading;
+                  return (
+                    <div
+                      key={step.name}
+                      className="[grid-area:1/1]"
+                      style={{ opacity: active ? 1 : 0 }}
+                      aria-hidden={!active}
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-white/45">
+                        {step.name}
+                      </p>
+                      <p className="mt-2 font-heading text-2xl leading-snug text-[#f6f0e2]">
+                        {step.caption}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -169,11 +197,14 @@ export function Movement() {
               style={{
                 maxWidth: desktop
                   ? "min(100%, calc((100svh - 140px) * 1.667))"
-                  : "min(100%, calc((100svh - 260px) * 0.526))",
+                  : "min(100%, calc((100svh - 340px) * 0.526))", // header + two-line caption must fit below
                 width: "100%",
               }}
             >
-              <div className="relative w-full" style={{ aspectRatio: `${L.w} / ${L.h}` }}>
+              <div
+                className="relative w-full"
+                style={{ aspectRatio: `${L.w} / ${L.h}`, containerType: "size" }}
+              >
                 <svg
                   viewBox={`0 0 ${L.w} ${L.h}`}
                   className="absolute inset-0 h-full w-full"
@@ -290,9 +321,9 @@ export function Movement() {
                   aria-hidden
                   className="absolute"
                   style={{
-                    left: `${(ticket.x / L.w) * 100}%`,
-                    top: `${(ticket.y / L.h) * 100}%`,
-                    transform: "translate(-50%, -50%)",
+                    left: 0,
+                    top: 0,
+                    transform: `translate(calc(${(ticket.x / L.w) * 100}cqw - 50%), calc(${(ticket.y / L.h) * 100}cqh - 50%))`,
                     opacity: p > 0.02 && !returned ? 1 : 0,
                     transition: "opacity 300ms ease",
                   }}

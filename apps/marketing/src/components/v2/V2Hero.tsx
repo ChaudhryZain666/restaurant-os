@@ -1,15 +1,15 @@
-import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { GlowMark } from "../GlowMark";
 import { FilmGrain } from "../FilmGrain";
 import { ChapterMark } from "./Chapter";
 import { SystemRing, SystemStrip } from "./SystemRing";
+import { ButtonLink } from "../ButtonLink";
 
 const WHAT_IT_RUNS = [
   { href: "#sell", label: "Sell", copy: "Storefront, menu, QR ordering, promotions" },
   { href: "#run", label: "Run", copy: "Orders, kitchen, POS, delivery" },
   { href: "#grow", label: "Grow", copy: "Loyalty, analytics, customers, locations" },
-  { href: "#system", label: "Connect", copy: "Stripe payments, Uber Eats, your own domain" },
+  { href: "#system", label: "Connect", copy: "Stripe payments, delivery, your own domain" },
 ];
 
 /**
@@ -70,9 +70,9 @@ export function V2Hero() {
               come back — run from one system, with no commission taken from a single direct order.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link to="/start-trial">
-                <Button size="lg">Start your restaurant</Button>
-              </Link>
+              <ButtonLink to="/start-trial" size="lg">
+                Start your restaurant
+              </ButtonLink>
               <a
                 href="#demo"
                 className="inline-flex h-12 items-center rounded-pill border border-white/30 px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"

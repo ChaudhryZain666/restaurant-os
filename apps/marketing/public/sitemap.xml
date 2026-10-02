@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Static sitemap for the 13 fixed marketing routes (this is a client-rendered SPA with no
-  server-side route generation, unlike apps/api's dynamic per-restaurant sitemap.routes.ts).
+  Static sitemap for the fixed marketing routes (a client-rendered SPA with no server-side route
+  generation, unlike apps/api's dynamic per-restaurant sitemap.routes.ts).
 
-  NOTE: <loc> uses https://www.garnishtable.app as a placeholder production origin — no real
-  production domain is registered yet (this project is pre-launch). Replace every <loc> host
-  with the real domain before this is deployed; do not ship this file as-is.
+  <loc> is authored against the https://www.garnishtable.app placeholder origin; the production
+  build (vite.config.ts, siteOrigin plugin) rewrites every <loc> and robots.txt's Sitemap line to
+  VITE_SITE_URL, and warns if it is unset.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://www.garnishtable.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>

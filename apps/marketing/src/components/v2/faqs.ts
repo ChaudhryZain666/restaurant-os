@@ -31,7 +31,7 @@ export const BUYER_FAQS = [
   },
   {
     q: "Does GarnishTable support POS and delivery workflows?",
-    a: "Yes. Staff ring up counter and table sales on the built-in POS, the kitchen works from a live order queue, and delivery runs alongside pickup with your own areas and fees. Uber Eats connects from your dashboard today.",
+    a: "Yes. Staff ring up counter and table sales on the built-in POS, the kitchen works from a live order queue, and delivery runs alongside pickup with your own areas and fees. Marketplace connections switch on as each provider approves them — Uber Eats first.",
   },
   {
     q: "Can agencies manage restaurant clients?",

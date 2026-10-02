@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { COVER } from "./media";
 
 /**
  * Product UI as physical objects. A `Surface` is a pane of the product — labelled like a piece of
@@ -40,14 +41,14 @@ export function Surface({
 }
 
 const DEMO_DISHES = [
-  { name: "Margherita Pizza", price: "$12.50", img: "/v3/margherita-pizza.jpg" },
-  { name: "Braised Short Rib", price: "$21.00", img: "/v3/braised-short-rib.jpg" },
+  { name: "Margherita Pizza", price: "$12.50", img: "/v3/margherita-pizza-thumb.webp" },
+  { name: "Braised Short Rib", price: "$21.00", img: "/v3/braised-short-rib-thumb.webp" },
   {
     name: "Wild Mushroom & Taleggio Pizza",
     price: "$16.00",
-    img: "/v3/wild-mushroom-taleggio-pizza.jpg",
+    img: "/v3/wild-mushroom-taleggio-pizza-thumb.webp",
   },
-  { name: "Grilled Salmon", price: "$18.50", img: "/v3/grilled-salmon.jpg" },
+  { name: "Grilled Salmon", price: "$18.50", img: "/v3/grilled-salmon-thumb.webp" },
 ];
 
 /** The customer's side: Wildwood Kitchen's own ordering page. */
@@ -55,12 +56,7 @@ export function StorefrontPane() {
   return (
     <div>
       <div className="relative h-28 overflow-hidden">
-        <img
-          src="/v3/demo-restaurant-cover.jpg"
-          alt=""
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+        <img src={COVER.small} alt="" className="h-full w-full object-cover" loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#1d1719] via-[#1d1719]/40 to-transparent" />
         <div className="absolute bottom-3 left-4">
           <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#9fd9a8]">
@@ -109,7 +105,7 @@ export function MenuPane() {
             />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] text-white/85">{d.name}</span>
-              <span className="block text-[11px] text-white/45">{d.price}</span>
+              <span className="block text-[11px] text-white/55">{d.price}</span>
             </span>
             <span
               className="font-mono text-[9px] uppercase tracking-[0.16em]"
@@ -140,7 +136,7 @@ export function OrdersPane() {
         >
           <span>
             <span className="block font-mono text-[12px] text-white/85">{r.n}</span>
-            <span className="block text-[11px] text-white/45">{r.d}</span>
+            <span className="block text-[11px] text-white/55">{r.d}</span>
           </span>
           <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: r.c }}>
             {r.s}
@@ -167,7 +163,7 @@ export function AnalyticsPane() {
           ["Returning", "38%"],
         ].map(([k, v]) => (
           <div key={k} className="rounded-lg bg-white/[0.03] p-2.5">
-            <p className="text-[10px] text-white/45">{k}</p>
+            <p className="text-[10px] text-white/55">{k}</p>
             <p className="font-heading text-lg text-[#f6f0e2]">{v}</p>
           </div>
         ))}
@@ -230,7 +226,7 @@ export function LoyaltyPane() {
         </span>
         <span>
           <span className="block text-[13px] text-white/85">Jordan Lee</span>
-          <span className="block text-[11px] text-white/45">12 orders · regular</span>
+          <span className="block text-[11px] text-white/55">12 orders · regular</span>
         </span>
       </div>
       <p className="mt-3 font-heading text-3xl text-[#f6f0e2]">2,140 pts</p>

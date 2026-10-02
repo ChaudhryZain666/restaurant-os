@@ -39,53 +39,69 @@ export function applySeoMeta(input: SeoMetaInput): () => void {
   const previousTitle = document.title;
   document.title = input.title;
 
+  // Every tag is updated in place when the HTML shell already ships it (index.html carries static
+  // defaults — description, Open Graph, Twitter — so crawlers that never run JavaScript still get a
+  // useful preview) and restored on cleanup; otherwise it's created and removed. Never a duplicate:
+  // any reader of "the" og:title or canonical keeps finding exactly one.
   const created: HTMLElement[] = [];
-  function addMeta(attr: "name" | "property", key: string, content: string) {
-    const meta = document.createElement("meta");
-    meta.setAttribute(attr, key);
-    meta.content = content;
-    document.head.appendChild(meta);
-    created.push(meta);
+  const restores: (() => void)[] = [];
+  function setTag(selector: string, create: () => HTMLElement, attr: string, value: string) {
+    const existing = document.head.querySelector(selector);
+    if (existing) {
+      const previous = existing.getAttribute(attr);
+      existing.setAttribute(attr, value);
+      restores.push(() => {
+        if (previous === null) existing.removeAttribute(attr);
+        else existing.setAttribute(attr, previous);
+      });
+      return;
+    }
+    const el = create();
+    el.setAttribute(attr, value);
+    document.head.appendChild(el);
+    created.push(el);
+  }
+  function setMeta(attr: "name" | "property", key: string, content: string) {
+    setTag(
+      `meta[${attr}="${key}"]`,
+      () => {
+        const meta = document.createElement("meta");
+        meta.setAttribute(attr, key);
+        return meta;
+      },
+      "content",
+      content
+    );
   }
 
-  // A page that ships a static description in its HTML shell (index.html, for a useful default
-  // before React hydrates) would otherwise end up with a second, duplicate tag appended after it —
-  // any reader of "the" description tag (a crawler, a querySelector) keeps finding the static
-  // shell's text first. Updating the existing tag in place, and restoring it on cleanup, fixes that
-  // for real. A page with no static tag falls straight through to the create-and-remove branch.
-  const descriptionTag = document.querySelector('meta[name="description"]');
-  let previousDescription: string | null = null;
-  if (descriptionTag) {
-    previousDescription = descriptionTag.getAttribute("content");
-    descriptionTag.setAttribute("content", input.description);
-  } else {
-    addMeta("name", "description", input.description);
-  }
+  setMeta("name", "description", input.description);
+  setTag(
+    'link[rel="canonical"]',
+    () => {
+      const link = document.createElement("link");
+      link.rel = "canonical";
+      return link;
+    },
+    "href",
+    input.canonicalUrl
+  );
 
-  const canonical = document.createElement("link");
-  canonical.rel = "canonical";
-  canonical.href = input.canonicalUrl;
-  document.head.appendChild(canonical);
-  created.push(canonical);
+  if (input.og?.title) setMeta("property", "og:title", input.og.title);
+  if (input.og?.description) setMeta("property", "og:description", input.og.description);
+  if (input.og?.type) setMeta("property", "og:type", input.og.type);
+  if (input.og?.url) setMeta("property", "og:url", input.og.url);
+  if (input.og?.siteName) setMeta("property", "og:site_name", input.og.siteName);
+  if (input.og?.image) setMeta("property", "og:image", input.og.image);
 
-  if (input.og?.title) addMeta("property", "og:title", input.og.title);
-  if (input.og?.description) addMeta("property", "og:description", input.og.description);
-  if (input.og?.type) addMeta("property", "og:type", input.og.type);
-  if (input.og?.url) addMeta("property", "og:url", input.og.url);
-  if (input.og?.siteName) addMeta("property", "og:site_name", input.og.siteName);
-  if (input.og?.image) addMeta("property", "og:image", input.og.image);
-
-  if (input.twitter?.card) addMeta("name", "twitter:card", input.twitter.card);
-  if (input.twitter?.title) addMeta("name", "twitter:title", input.twitter.title);
-  if (input.twitter?.description) addMeta("name", "twitter:description", input.twitter.description);
-  if (input.twitter?.image) addMeta("name", "twitter:image", input.twitter.image);
+  if (input.twitter?.card) setMeta("name", "twitter:card", input.twitter.card);
+  if (input.twitter?.title) setMeta("name", "twitter:title", input.twitter.title);
+  if (input.twitter?.description) setMeta("name", "twitter:description", input.twitter.description);
+  if (input.twitter?.image) setMeta("name", "twitter:image", input.twitter.image);
 
   return () => {
     document.title = previousTitle;
-    if (descriptionTag && previousDescription !== null) {
-      descriptionTag.setAttribute("content", previousDescription);
-    }
-    for (const el of created) document.head.removeChild(el);
+    for (const restore of restores) restore();
+    for (const el of created) el.remove();
   };
 }
 

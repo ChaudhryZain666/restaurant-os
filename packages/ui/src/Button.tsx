@@ -2,7 +2,8 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./cn.js";
 
-const buttonVariants = cva(
+/** Exported so a link can wear button styling without nesting a <button> inside an <a>. */
+export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 rounded-pill text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-fast ease-premium active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100",
   {
     variants: {

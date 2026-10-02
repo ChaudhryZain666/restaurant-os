@@ -126,7 +126,7 @@ const STAGES = [
   },
   {
     name: "Delivery",
-    items: ["Your delivery areas and fees", "Uber Eats, connected", "Alongside pickup"],
+    items: ["Your delivery areas and fees", "Marketplaces, as approved", "Alongside pickup"],
   },
 ];
 
@@ -135,7 +135,7 @@ const STAGES = [
  * actually does at each stage. The connecting rule fills as the section scrolls through — the one
  * motion here, and it means something (the order moving through the system). Every capability
  * listed is a shipped feature (QR dine-in, kitchen view, POS terminal with pending-sale recovery
- * and staff attribution, Uber Eats connection), not roadmap.
+ * and staff attribution), not roadmap — marketplace connections are described as switching on per provider approval.
  */
 export function SystemChapter() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>();

@@ -74,9 +74,17 @@ export function PricingPage() {
           </Alert>
         )}
         {!plans && !error ? (
-          <p className="text-center text-sm text-muted">Loading pricing...</p>
+          // Placeholder cards hold the grid's space until the live catalog arrives, so the plans
+          // don't push the rest of the page down when they land (layout shift).
+          <div className="mx-auto grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3" role="status">
+            <span className="sr-only">Loading pricing...</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} aria-hidden className="h-[30rem] animate-pulse rounded-xl border border-border bg-surface" />
+            ))}
+          </div>
         ) : (
-          <div className="mx-auto grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`mx-auto grid max-w-5xl gap-6 sm:grid-cols-2 ${allPlans.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+            <h2 className="sr-only">Plans</h2>
             {allPlans.map((plan) => (
               <Reveal key={plan.code}>
                 <Card className="flex h-full flex-col gap-5">

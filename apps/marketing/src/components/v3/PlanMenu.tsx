@@ -137,7 +137,7 @@ export function PlanMenu() {
                     {pick && (
                       <span
                         aria-hidden
-                        className="absolute -left-2 top-6 hidden h-16 w-16 -rotate-12 items-center justify-center rounded-full border-2 border-[#a8813f] text-center font-mono text-[8px] uppercase leading-tight tracking-wider text-[#a8813f] sm:flex"
+                        className="absolute -left-2 top-6 hidden h-16 w-16 -rotate-12 items-center justify-center rounded-full border-2 border-[#87652a] text-center font-mono text-[8px] uppercase leading-tight tracking-wider text-[#87652a] sm:flex"
                       >
                         Chef's
                         <br />
@@ -170,7 +170,7 @@ export function PlanMenu() {
                         </span>
                       </div>
                       {pick && (
-                        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[#a8813f] sm:hidden">
+                        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[#87652a] sm:hidden">
                           Chef's pick
                         </p>
                       )}

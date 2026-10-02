@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { Container } from "./Container";
+import { ButtonLink } from "./ButtonLink";
 
 /**
  * The opening shared by every marketing page except Home — the same visual world as the
@@ -59,9 +60,9 @@ export function MarketingPageHero({
           </p>
           {!hideCta && (
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link to="/start-trial">
-                <Button size="lg">Start your restaurant</Button>
-              </Link>
+              <ButtonLink to="/start-trial" size="lg">
+                Start your restaurant
+              </ButtonLink>
               {pathname !== "/demo" && (
                 <Link
                   to="/demo"

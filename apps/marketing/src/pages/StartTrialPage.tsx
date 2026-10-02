@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { Section } from "../components/Section";
 import { MarketingPageHero } from "../components/MarketingPageHero";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { ADMIN_START_URL, ADMIN_SIGNUP_URL } from "../lib/links";
+import { ButtonLink } from "../components/ButtonLink";
 
 const INCLUDED = [
   "Your own branded restaurant storefront",
@@ -41,7 +42,7 @@ export function StartTrialPage() {
         <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-2">
         <Reveal className="flex flex-col gap-8">
           <div className="flex flex-col gap-3">
-            <h3 className="font-heading text-lg font-semibold text-foreground">What's included</h3>
+            <h2 className="font-heading text-lg font-semibold text-foreground">What's included</h2>
             <ul className="flex flex-col gap-2.5">
               {INCLUDED.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm text-foreground/80">
@@ -53,7 +54,7 @@ export function StartTrialPage() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <h3 className="font-heading text-lg font-semibold text-foreground">What happens when you sign up</h3>
+            <h2 className="font-heading text-lg font-semibold text-foreground">What happens when you sign up</h2>
             <ol className="flex flex-col gap-3">
               {STEPS.map((step, i) => (
                 <li key={step.title} className="flex items-start gap-3 text-sm">
@@ -70,7 +71,7 @@ export function StartTrialPage() {
           </div>
 
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
-            <h3 className="font-heading text-sm font-semibold text-foreground">About pricing &amp; trial length</h3>
+            <h2 className="font-heading text-sm font-semibold text-foreground">About pricing &amp; trial length</h2>
             <p className="text-sm text-muted">
               No credit card required to start a trial. See{" "}
               <Link to="/pricing" className="font-medium text-primary hover:underline">
@@ -85,30 +86,24 @@ export function StartTrialPage() {
           </div>
 
           <p className="text-sm text-muted">
-            Curious what it looks like first? <Link to="/demo" className="text-primary hover:underline">Try the live demo</Link>.
+            Curious what it looks like first? <Link to="/demo" className="text-primary underline underline-offset-2">Try the live demo</Link>.
           </p>
         </Reveal>
         <Reveal index={1} className="flex flex-col gap-8">
           <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-5">
-            <h3 className="font-heading text-lg font-semibold text-foreground">Running a single restaurant?</h3>
+            <h2 className="font-heading text-lg font-semibold text-foreground">Running a single restaurant?</h2>
             <p className="text-sm text-muted">
               Create your account, name your restaurant, and start your 14-day trial — no waiting on our team, no
               card required.
             </p>
-            <a href={ADMIN_SIGNUP_URL}>
-              <Button className="w-full">Start my restaurant's trial</Button>
-            </a>
+            <ButtonLink href={ADMIN_SIGNUP_URL} className="w-full">Start my restaurant's trial</ButtonLink>
           </div>
           <div className="flex flex-col gap-3">
-            <h3 className="font-heading text-lg font-semibold text-foreground">Running an agency?</h3>
+            <h2 className="font-heading text-lg font-semibold text-foreground">Running an agency?</h2>
             <p className="text-sm text-muted">
               Start your agency's trial directly — choose a plan, create your account, and you're in.
             </p>
-            <a href={ADMIN_START_URL}>
-              <Button variant="outline" className="w-full">
-                Start agency trial
-              </Button>
-            </a>
+            <ButtonLink href={ADMIN_START_URL} variant="outline" className="w-full">Start agency trial</ButtonLink>
           </div>
         </Reveal>
       </div>

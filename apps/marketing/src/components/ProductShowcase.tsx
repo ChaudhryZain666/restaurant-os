@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "@restaurant/ui";
-import { STOREFRONT_URL } from "../lib/links";
+import { DEMO_STOREFRONT_URL } from "../lib/links";
 import { DashboardMock, MenuMock, OrdersMock } from "./FeatureMocks";
 import { ScrollParallaxGrid } from "./ScrollParallaxGrid";
 
@@ -117,7 +117,7 @@ export function ProductShowcase({
                     className="h-1.5 w-1.5 shrink-0 rounded-full"
                     style={{ background: isActive ? "var(--color-info)" : "rgba(255,255,255,0.25)" }}
                   />
-                  <span className="truncate font-mono text-[9px] uppercase tracking-[0.1em] text-white/45 sm:text-[10px]">{tab.label}</span>
+                  <span className="truncate font-mono text-[9px] uppercase tracking-[0.1em] text-white/60 sm:text-[10px]">{tab.label}</span>
                 </div>
                 {tab.id === "storefront" && (
                   <span className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-success">Live</span>
@@ -126,7 +126,7 @@ export function ProductShowcase({
 
               <div className="relative h-[calc(100%-33px)] overflow-hidden bg-white">
                 {tab.id === "storefront" ? (
-                  <iframe src={STOREFRONT_URL} title="Live demo restaurant storefront" className="h-full w-full border-0" loading="lazy" />
+                  <iframe src={DEMO_STOREFRONT_URL} title="Live demo restaurant storefront" className="h-full w-full border-0" loading="lazy" />
                 ) : (
                   // The Dashboard/Menu/Orders mocks are laid out for their full "big screen" size
                   // (real padding, fixed-pixel thumbnails) — at a small preview slot's actual pixel

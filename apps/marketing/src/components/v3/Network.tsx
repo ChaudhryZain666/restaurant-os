@@ -112,7 +112,12 @@ export function Network() {
             <div className="relative mt-6 w-full flex-1 lg:mt-0">
               <div
                 className="relative mx-auto w-full max-w-[860px]"
-                style={{ aspectRatio: `${field.w} / ${field.h}`, transform: `scale(${zoom})` }}
+                style={{
+                  aspectRatio: `${field.w} / ${field.h}`,
+                  transform: `scale(${zoom})`,
+                  // the tall mobile field must also fit the frame's height on landscape tablets
+                  maxWidth: desktop ? undefined : "min(100%, calc((100svh - 380px) * 0.8))",
+                }}
               >
                 <svg
                   viewBox={`0 0 ${field.w} ${field.h}`}

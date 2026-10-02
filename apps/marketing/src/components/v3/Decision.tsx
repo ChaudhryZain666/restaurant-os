@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Reveal } from "@restaurant/ui";
-import { FaqItem } from "../../pages/FaqPage";
+import { FaqItem } from "../FaqItem";
 import { BUYER_FAQS } from "../v2/faqs";
 
 const FOR = [

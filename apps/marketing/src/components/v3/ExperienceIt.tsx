@@ -22,8 +22,10 @@ export function ExperienceIt() {
                 Experience it
               </p>
               <p
-                className="relative mt-6 w-fit font-heading text-[14vw] font-semibold leading-[0.95] tracking-tight lg:text-[9vw]"
-                style={{ color: `rgba(246,240,226,${lerp(1, 0.28, strike)})` }}
+                className="relative mt-6 w-fit whitespace-nowrap font-heading text-[10.5vw] font-semibold leading-[0.95] tracking-tight lg:text-[9vw]"
+                style={{
+                  color: `rgba(246,240,226,${lerp(1, 0.37, strike) /* ≥3:1 for large text, still clearly struck */})`,
+                }}
               >
                 Enough marketing.
                 <span

@@ -1,5 +1,6 @@
 import { Reveal } from "@restaurant/ui";
 import { AnimatedNumber } from "../AnimatedNumber";
+import { MARGHERITA } from "./media";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // Daily revenue for the demo week — sums to the same $8,420 used everywhere else on the site.
@@ -137,7 +138,11 @@ export function Business() {
             <figure className="m-0">
               <div className="aspect-[4/5] overflow-hidden rounded-sm">
                 <img
-                  src="/v3/margherita-pizza.jpg"
+                  src={MARGHERITA.src}
+                  srcSet={MARGHERITA.srcSet}
+                  sizes={MARGHERITA.sizes}
+                  width={1400}
+                  height={1050}
                   alt="Margherita pizza at Wildwood Kitchen"
                   className="h-full w-full object-cover"
                   loading="lazy"

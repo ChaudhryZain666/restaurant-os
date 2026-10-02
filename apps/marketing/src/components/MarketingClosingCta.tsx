@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { Container } from "./Container";
+import { ButtonLink } from "./ButtonLink";
 
 /**
  * The closing moment shared by every marketing page except Home — the homepage's Departure scene
@@ -41,9 +42,9 @@ export function MarketingClosingCta({
           </h2>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/60">{description}</p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/start-trial">
-              <Button size="lg">Start your restaurant</Button>
-            </Link>
+            <ButtonLink to="/start-trial" size="lg">
+              Start your restaurant
+            </ButtonLink>
             <Link
               to="/demo"
               className="inline-flex h-12 items-center rounded-pill border border-white/30 px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"

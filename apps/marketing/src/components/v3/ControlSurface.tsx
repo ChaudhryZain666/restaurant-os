@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { DashboardMock } from "../FeatureMocks";
 import { Pinned } from "./Pinned";
-import { ease, lerp, seg, useIsDesktop } from "./motion";
+import { ease, lerp, seg, useDesktopFit, useIsDesktop } from "./motion";
 import { LoyaltyPane, MenuPane, OrdersPane, PosPane, Surface } from "./Surfaces";
 
 const SATELLITES = [
@@ -51,6 +51,8 @@ const SATELLITES = [
  */
 export function ControlSurface() {
   const desktop = useIsDesktop();
+  const desktopFit = useDesktopFit(); // 1 at 1440×900+; shrinks the stage on short/narrow laptops
+  const fit = desktop ? desktopFit : 1;
   const panes = useMemo(
     () => ({
       dashboard: <DashboardMock />,
@@ -89,7 +91,7 @@ export function ControlSurface() {
                 className="relative w-full max-w-[860px]"
                 style={{
                   transformOrigin: "50% 100%",
-                  transform: `rotateX(${lerp(64, 0, rise)}deg) translateY(${lerp(60, 0, rise)}px) scale(${lerp(0.9, desktop ? 0.82 : 1, orbit)})`,
+                  transform: `rotateX(${lerp(64, 0, rise)}deg) translateY(${lerp(60, 0, rise)}px) scale(${lerp(0.9, desktop ? 0.82 : 1, orbit) * fit})`,
                 }}
               >
                 <Surface label="Owner · Dashboard">{panes.dashboard}</Surface>
@@ -106,7 +108,7 @@ export function ControlSurface() {
                         width: s.w,
                         opacity: orbit,
                         // x spreads across the viewport width so the outer panes never leave the frame
-                        transform: `translate(-50%, -50%) translate3d(${((lerp(0.4, 1, orbit) * s.x) / 64) * 34}vw, ${lerp(s.y * 0.4, s.y, orbit) * 7}px, ${s.z}px) rotateY(${s.x > 0 ? -8 : 8}deg)`,
+                        transform: `translate(-50%, -50%) translate3d(${((lerp(0.4, 1, orbit) * s.x) / 64) * 34}vw, ${lerp(s.y * 0.4, s.y, orbit) * 7 * fit}px, ${s.z}px) rotateY(${s.x > 0 ? -8 : 8}deg) scale(${fit})`,
                       }}
                     >
                       <Surface label={s.label}>{pane}</Surface>

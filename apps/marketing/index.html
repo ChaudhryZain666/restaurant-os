@@ -7,7 +7,7 @@
     <title>GarnishTable — Online Ordering for Independent Restaurants</title>
     <meta
       name="description"
-      content="Launch your own branded online ordering experience. Menu, orders, delivery, loyalty and analytics — one platform, no commission-hungry marketplace."
+      content="Direct online ordering, kitchen, POS, loyalty and analytics in one system for independent restaurants — with 0% platform commission on direct orders."
     />
     <!-- Phase 66 — GarnishTable's one site-wide typeface pairing (see index.css's --font-heading/
          --font-body): Playfair Display for every headline and the wordmark, Inter for UI/body. -->
@@ -35,7 +35,7 @@
         animation: gl-breathe 2.4s ease-in-out infinite;
       }
       #gt-loader .gl-word {
-        margin-top: 18px; font-family: "Playfair Display", Georgia, serif; font-weight: 600;
+        margin-top: 18px; font-family: "Playfair Display", "Playfair Display Fallback", Georgia, serif; font-weight: 600;
         font-size: 26px; letter-spacing: -0.01em; color: #f6f0e2;
         opacity: 0; transition: opacity 0.4s ease;
       }
@@ -109,7 +109,11 @@
         setTimeout(function () { el.classList.add("gl-fonts"); }, 1200);
         var hero = new Image();
         hero.onload = hero.onerror = function () { finish("hero"); };
-        hero.src = "/v3/demo-restaurant-cover.jpg";
+        // Same srcset/sizes as the hero <img> (src/components/v3/media.ts), so the browser picks
+        // the same candidate and the hero paints from cache.
+        hero.sizes = "100vw";
+        hero.srcset = "/v3/demo-restaurant-cover-768.webp 768w, /v3/demo-restaurant-cover-1280.webp 1280w, /v3/demo-restaurant-cover-1800.webp 1800w";
+        hero.src = "/v3/demo-restaurant-cover-1280.webp";
         window.__gtLoader = { ready: function () { finish("app"); } };
 
         function leave() {

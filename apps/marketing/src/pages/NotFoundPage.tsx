@@ -1,8 +1,8 @@
-import { Link } from "react-router-dom";
-import { Button } from "@restaurant/ui";
+
 import { Section, SectionHeading } from "../components/Section";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { ButtonLink } from "../components/ButtonLink";
 
 /**
  * Phase 79 (second pass) — this app previously had no catch-all route at all: an unmatched URL
@@ -27,12 +27,10 @@ export function NotFoundPage() {
         description="The link may be outdated, or the page may have moved. Here are a few places to start instead."
       />
       <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Link to="/">
-          <Button>Back to homepage</Button>
-        </Link>
-        <Link to="/contact">
-          <Button variant="outline">Contact us</Button>
-        </Link>
+        <ButtonLink to="/">Back to homepage</ButtonLink>
+        <ButtonLink to="/contact" variant="outline">
+          Contact us
+        </ButtonLink>
       </div>
     </Section>
   );

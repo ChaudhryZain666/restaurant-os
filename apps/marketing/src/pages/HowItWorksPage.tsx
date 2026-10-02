@@ -19,6 +19,7 @@ export function HowItWorksPage() {
       />
 
       <Section tone="surface">
+        <h2 className="sr-only">The six steps</h2>
         <StepList />
       </Section>
 

@@ -1,34 +1,55 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, useEffect } from "react";
+import type { ComponentType } from "react";
 import { Layout } from "./components/Layout";
-import { HomeV2Page } from "./pages/HomeV2Page";
 import { HomeV3Page } from "./pages/HomeV3Page";
-import { ProductPage } from "./pages/ProductPage";
-import { SolutionsPage } from "./pages/SolutionsPage";
-import { HowItWorksPage } from "./pages/HowItWorksPage";
-import { PricingPage } from "./pages/PricingPage";
-import { FaqPage } from "./pages/FaqPage";
-import { DemoPage } from "./pages/DemoPage";
-import { AboutPage } from "./pages/AboutPage";
-import { ContactPage } from "./pages/ContactPage";
-import { StartTrialPage } from "./pages/StartTrialPage";
-import { TermsPage } from "./pages/TermsPage";
-import { PrivacyPage } from "./pages/PrivacyPage";
-import { RefundPolicyPage } from "./pages/RefundPolicyPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
-/** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown links). */
+// The homepage (the LCP-critical route) and the 404 ship in the main bundle; every other page is
+// its own chunk, fetched on first visit, so the homepage doesn't download the whole site.
+const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
+  lazy(() => load().then((m) => ({ default: m[name] })));
+const HomeV2Page = page(() => import("./pages/HomeV2Page"), "HomeV2Page");
+const ProductPage = page(() => import("./pages/ProductPage"), "ProductPage");
+const SolutionsPage = page(() => import("./pages/SolutionsPage"), "SolutionsPage");
+const HowItWorksPage = page(() => import("./pages/HowItWorksPage"), "HowItWorksPage");
+const PricingPage = page(() => import("./pages/PricingPage"), "PricingPage");
+const FaqPage = page(() => import("./pages/FaqPage"), "FaqPage");
+const DemoPage = page(() => import("./pages/DemoPage"), "DemoPage");
+const AboutPage = page(() => import("./pages/AboutPage"), "AboutPage");
+const ContactPage = page(() => import("./pages/ContactPage"), "ContactPage");
+const StartTrialPage = page(() => import("./pages/StartTrialPage"), "StartTrialPage");
+const TermsPage = page(() => import("./pages/TermsPage"), "TermsPage");
+const PrivacyPage = page(() => import("./pages/PrivacyPage"), "PrivacyPage");
+const RefundPolicyPage = page(() => import("./pages/RefundPolicyPage"), "RefundPolicyPage");
+
+/** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown and footer
+ *  links). Lazy pages render their anchors only once their chunk arrives, so a missing target is
+ *  watched for briefly instead of silently giving up. */
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (hash) {
-      const el = document.getElementById(hash.slice(1));
-      if (el) {
-        el.scrollIntoView({ block: "start" });
-        return;
-      }
+    if (!hash) {
+      window.scrollTo(0, 0);
+      return;
     }
+    const id = decodeURIComponent(hash.slice(1));
+    const jump = () => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ block: "start" });
+      return !!el;
+    };
+    if (jump()) return;
     window.scrollTo(0, 0);
+    const observer = new MutationObserver(() => {
+      if (jump()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    const giveUp = window.setTimeout(() => observer.disconnect(), 4000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(giveUp);
+    };
   }, [pathname, hash]);
   return null;
 }

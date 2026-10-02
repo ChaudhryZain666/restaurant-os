@@ -69,7 +69,9 @@ export function Pinned({
       <div
         className={
           reducedMotion
-            ? "relative min-h-[100svh] overflow-hidden"
+            ? // a definite height, same as the pinned frame — scenes lay out against h-full, which
+              // collapses to zero under a min-height-only parent
+              "relative h-[100svh] overflow-hidden"
             : "sticky top-0 h-[100svh] overflow-hidden"
         }
       >

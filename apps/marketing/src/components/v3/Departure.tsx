@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
-import { Button } from "@restaurant/ui";
+
+import { COVER } from "./media";
 import { Pinned } from "./Pinned";
 import { ease, lerp, seg } from "./motion";
+import { ButtonLink } from "../ButtonLink";
 
 /**
  * SCENE 12 — DEPARTURE. The bookend: the same dining room the page opened on returns full-bleed,
@@ -10,7 +12,7 @@ import { ease, lerp, seg } from "./motion";
  */
 export function Departure() {
   return (
-    <Pinned length={1.9} background="#0f0c0d" label="Your restaurant, running on your terms">
+    <Pinned length={1.9} background="#0f0c0d" label="Start your restaurant on GarnishTable">
       {(p) => {
         const push = ease(seg(p, 0, 0.9));
         const l1 = ease(seg(p, 0.12, 0.34));
@@ -20,7 +22,11 @@ export function Departure() {
         return (
           <div className="relative h-full w-full">
             <img
-              src="/v3/demo-restaurant-cover.jpg"
+              src={COVER.src}
+              srcSet={COVER.srcSet}
+              sizes="100vw"
+              width={1800}
+              height={1200}
               alt=""
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover"
@@ -67,9 +73,9 @@ export function Departure() {
                   system to run it.
                 </p>
                 <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-                  <Link to="/start-trial">
-                    <Button size="lg">Start your restaurant</Button>
-                  </Link>
+                  <ButtonLink to="/start-trial" size="lg">
+                    Start your restaurant
+                  </ButtonLink>
                   <Link
                     to="/demo"
                     className="inline-flex h-12 items-center rounded-pill border border-white/35 px-6 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/10"

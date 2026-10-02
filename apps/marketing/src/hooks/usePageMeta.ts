@@ -45,9 +45,10 @@ export function usePageMeta({ title, description }: PageMeta): void {
         image: `${base}/og-image.png`,
       },
       twitter: {
-        card: "summary",
+        card: "summary_large_image",
         title,
         description,
+        image: `${base}/og-image.png`,
       },
     });
   }, [title, description]);

@@ -1,15 +1,16 @@
 import { Link } from "react-router-dom";
-import { Button, Reveal } from "@restaurant/ui";
+import { Reveal } from "@restaurant/ui";
 import { ProductShowcase } from "../ProductShowcase";
 import { ScaleSelector } from "../ScaleSelector";
 import { ScaleGlyph } from "../ScaleGlyph";
 import { GlowMark } from "../GlowMark";
 import { FilmGrain } from "../FilmGrain";
 import { AgencyMock, MockFrame } from "../FeatureMocks";
-import { FaqItem } from "../../pages/FaqPage";
+import { FaqItem } from "../FaqItem";
 import { ADMIN_START_URL } from "../../lib/links";
 import { Chapter, ChapterHeading, ChapterMark, INK, PARCHMENT } from "./Chapter";
 import { BUYER_FAQS } from "./faqs";
+import { ButtonLink } from "../ButtonLink";
 
 /* ─── 07 — See it ──────────────────────────────────────────────────────────────────────────── */
 
@@ -289,9 +290,9 @@ export function FinalChapter() {
           the system to run it.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Link to="/start-trial">
-            <Button size="lg">Start your restaurant</Button>
-          </Link>
+          <ButtonLink to="/start-trial" size="lg">
+            Start your restaurant
+          </ButtonLink>
           <Link
             to="/demo"
             className="inline-flex h-12 items-center rounded-pill border border-white/30 px-6 text-sm font-medium text-white transition-colors hover:bg-white/10"

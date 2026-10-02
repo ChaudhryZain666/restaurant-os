@@ -1,3 +1,4 @@
+import { COVER } from "./media";
 import { Pinned } from "./Pinned";
 import { ease, lerp, seg, useIsDesktop } from "./motion";
 
@@ -39,7 +40,7 @@ export function DirectOrdering() {
         const restScale = lerp(1, 1.28, close);
 
         return (
-          <div className="relative h-full w-full text-[#2b2116]">
+          <div className="relative h-full w-full text-[#2b2116]" style={{ containerType: "size" }}>
             {/* the ghost word */}
             <div
               aria-hidden
@@ -71,7 +72,7 @@ export function DirectOrdering() {
               <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[#611b28]">
                 The order
               </p>
-              <h2 className="mt-4 font-heading text-[9vw] font-semibold leading-[0.98] tracking-tight text-[#2b2116] lg:text-[3.6vw]">
+              <h2 className="mt-4 font-heading text-[min(9vw,6svh)] font-semibold leading-[0.98] tracking-tight text-[#2b2116] lg:text-[3.6vw]">
                 Every order goes somewhere. <em>The question is whose.</em>
               </h2>
             </div>
@@ -164,14 +165,14 @@ export function DirectOrdering() {
             <figure
               className="absolute m-0 flex flex-col items-center"
               style={{
-                left: `${restX}%`,
+                left: 0,
                 top: `${nodeY}%`,
-                transform: `translate(-50%, -50%) scale(${restScale})`,
+                transform: `translate(calc(${restX}cqw - 50%), -50%) scale(${restScale})`,
               }}
             >
               <span className="block h-20 w-20 overflow-hidden rounded-full border-2 border-[#611b28]/60 shadow-[0_20px_40px_-15px_rgba(97,27,40,0.5)] lg:h-24 lg:w-24">
                 <img
-                  src="/v3/demo-restaurant-cover.jpg"
+                  src={COVER.small}
                   alt=""
                   className="h-full w-full object-cover"
                   loading="lazy"

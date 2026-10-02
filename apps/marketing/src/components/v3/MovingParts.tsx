@@ -75,7 +75,10 @@ export function MovingParts() {
         const wordsIn = seg(p, 0.02, 0.16);
 
         return (
-          <div className="relative h-full w-full" style={{ background: ground }}>
+          <div
+            className="relative h-full w-full"
+            style={{ background: ground, containerType: "size" }}
+          >
             <h2
               className="absolute left-5 right-5 top-[16%] font-heading text-[10vw] font-semibold leading-[0.95] tracking-tight sm:left-10 lg:left-16 lg:max-w-[52rem] lg:text-[5.4vw]"
               style={{
@@ -95,7 +98,7 @@ export function MovingParts() {
                 const sc = scatter[i];
                 const ang = ((i / WORDS.length) * 360 - 90 + spin) * (Math.PI / 180);
                 const ox = 50 + rx * Math.cos(ang);
-                const oy = 54 + ry * Math.sin(ang);
+                const oy = (desktop ? 54 : 50) + ry * Math.sin(ang);
                 const drift = (1 - gather) * sc.d * (p - 0.15);
                 const x = lerp(sc.x, ox, gather);
                 const y = lerp(sc.y, oy, gather);
@@ -105,12 +108,12 @@ export function MovingParts() {
                     key={w}
                     className="absolute whitespace-nowrap font-heading font-semibold uppercase leading-none tracking-[-0.01em]"
                     style={{
-                      left: `${x}%`,
-                      top: `${y}%`,
-                      fontSize: desktop ? "6.4vw" : "13vw",
+                      left: 0,
+                      top: 0,
+                      fontSize: desktop ? "6.4vw" : "min(13vw, 9svh)",
                       color: wordColor,
                       opacity: lerp(0.16, 1, wordsIn) * lerp(0.55 + (sc.s - 0.7) * 0.6, 1, gather),
-                      transform: `translate(-50%, calc(-50% - ${drift}px)) rotate(${lerp(sc.r, 0, gather)}deg) scale(${s})`,
+                      transform: `translate(calc(${x}cqw - 50%), calc(${y}cqh - 50% - ${drift}px)) rotate(${lerp(sc.r, 0, gather)}deg) scale(${s})`,
                       willChange: "transform",
                     }}
                   >
@@ -122,7 +125,7 @@ export function MovingParts() {
 
             {/* the restaurant at the center */}
             <div
-              className="absolute left-1/2 top-[54%] flex flex-col items-center"
+              className="absolute left-1/2 top-[50%] flex flex-col items-center lg:top-[54%]"
               style={{
                 opacity: seg(p, 0.5, 0.7),
                 transform: `translate(-50%, -50%) scale(${lerp(0.7, 1, seg(p, 0.5, 0.75))})`,
@@ -146,7 +149,7 @@ export function MovingParts() {
             </div>
 
             <p
-              className="absolute inset-x-5 bottom-[7%] text-center font-heading text-[8vw] font-semibold leading-[1.02] tracking-tight text-[#2b2116] lg:bottom-[6%] lg:text-[3.6vw]"
+              className="absolute inset-x-5 bottom-[7%] text-center font-heading text-[min(8vw,6.5svh)] font-semibold leading-[1.02] tracking-tight text-[#2b2116] lg:bottom-[6%] lg:text-[3.6vw]"
               style={{ opacity: outro, transform: `translateY(${lerp(30, 0, outro)}px)` }}
             >
               GarnishTable brings them <em className="text-[#611b28]">together.</em>
