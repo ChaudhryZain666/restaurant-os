@@ -12,6 +12,7 @@ import {
   mockCompleteTerminalPayment,
 } from "../controllers/posTerminalPayment.controller.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 /** Mounted at /restaurants/:restaurantId/pos — mergeParams for :restaurantId. Every route here is
  *  staff-only (never public — unlike table resolution, there's no anonymous POS caller), gated on
@@ -39,7 +40,7 @@ posRouter.post("/orders/:orderId/terminal-payment/:paymentId/cancel", asyncHandl
 
 // Only exists at all when the mock terminal provider is active — same "the route itself doesn't
 // exist otherwise" discipline as routes/payment.routes.ts's own mock-complete route.
-if (env.POS_TERMINAL_PROVIDER === "mock") {
+if (env.POS_TERMINAL_PROVIDER === "mock" && mockDriversAllowed(env.NODE_ENV)) {
   posRouter.post(
     "/orders/:orderId/terminal-payment/:paymentId/mock-complete",
     validateBody(mockCompleteTerminalPaymentSchema),

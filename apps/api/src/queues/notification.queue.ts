@@ -154,6 +154,10 @@ export async function dispatchOrderNotification(name: DispatchableOrderEvent, pa
     User.findById(payload.customerId).select("email"),
   ]);
   if (!order || !restaurant) return;
+  // Phase 85A — a public demo-playground order (Order.isDemo) belongs to a throwaway
+  // `@playground.demo.local` account; in production, emailing it would only send real mail into a
+  // bounce, hurting the sending domain's reputation. Realtime events still fire as normal.
+  if (order.isDemo) return;
 
   const total = formatOrderTotal(order.total, order.currency);
   const trackingUrl = `${env.CLIENT_ORIGIN}/orders/${order.id}`;

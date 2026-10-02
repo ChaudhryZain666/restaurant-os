@@ -1,0 +1,43 @@
+# Phase 85A — static frontend server (frontend.prod.Dockerfile). ${API_UPSTREAM} is filled in by
+# the nginx image's envsubst step at container start; nginx's own $variables are left untouched.
+#
+# The edge in front of this container terminates TLS and must forward the real client address in
+# X-Forwarded-For; this server appends its own hop, and the API's TRUST_PROXY must trust exactly
+# the proxies between the internet and the API (docs/production-architecture.md).
+server {
+    listen 80 default_server;
+    # Any hostname: the storefront image also answers restaurants' custom domains.
+    server_name _;
+    root /usr/share/nginx/html;
+
+    # Menu imports upload up to 12 × 8 MB images or a 15 MB PDF through /api.
+    client_max_body_size 100m;
+
+    location /api/ {
+        proxy_pass ${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    include /etc/nginx/conf.d/app-locations.inc;
+
+    # Content-hashed build output — safe to cache forever.
+    location /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # SPA fallback: every client-side route serves index.html, which must never be cached so a
+    # deploy takes effect on the next load.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+}

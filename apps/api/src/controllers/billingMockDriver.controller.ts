@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import type { MockAdvanceSubscriptionInput } from "@restaurant/validation";
 import { ApiError } from "../utils/ApiError.js";
+import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { sendSuccess } from "../common/response.js";
 import { getMockBillingProvider } from "../billing/index.js";
 import { getSubscriptionForBusiness, processBillingProviderEvent } from "../services/subscription.service.js";
@@ -15,6 +17,8 @@ import { getSubscriptionForBusiness, processBillingProviderEvent } from "../serv
  * shortcut around it.
  */
 export async function mockAdvanceSubscription(req: Request, res: Response) {
+  // Phase 85A — dev/test only (config/mockDrivers.ts); re-checked per request.
+  if (!mockDriversAllowed(env.NODE_ENV)) throw ApiError.notFound();
   const { businessId } = req.params;
   const { status } = req.body as MockAdvanceSubscriptionInput;
 
@@ -42,6 +46,8 @@ export async function mockAdvanceSubscription(req: Request, res: Response) {
  * idempotent event-processing path a genuine webhook delivery would, never a shortcut DB write.
  */
 export async function completeMockCheckout(req: Request, res: Response) {
+  // Phase 85A — dev/test only (config/mockDrivers.ts); re-checked per request.
+  if (!mockDriversAllowed(env.NODE_ENV)) throw ApiError.notFound();
   const { token } = req.params;
 
   const mockProvider = getMockBillingProvider();

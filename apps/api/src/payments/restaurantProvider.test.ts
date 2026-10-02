@@ -150,17 +150,23 @@ describe("hasActiveRestaurantPaymentAccount (Phase 42)", () => {
 
 describe("canProcessOnlinePayments (Phase 42 — the BYOC-required safety rule)", () => {
   it("blocks a restaurant with no own account once the pooled default is a real provider", () => {
-    expect(canProcessOnlinePayments(false, "stripe")).toBe(false);
-    expect(canProcessOnlinePayments(false, "safepay")).toBe(false);
+    expect(canProcessOnlinePayments(false, "stripe", "development")).toBe(false);
+    expect(canProcessOnlinePayments(false, "safepay", "development")).toBe(false);
+    expect(canProcessOnlinePayments(false, "stripe", "production")).toBe(false);
   });
 
-  it("allows a restaurant with no own account while the pooled default is still the mock provider (dev/test/demo)", () => {
-    expect(canProcessOnlinePayments(false, "mock")).toBe(true);
+  it("allows a restaurant with no own account while the pooled default is still the mock provider (dev/test)", () => {
+    expect(canProcessOnlinePayments(false, "mock", "development")).toBe(true);
+    expect(canProcessOnlinePayments(false, "mock", "test")).toBe(true);
+  });
+
+  it("Phase 85A — never lets the mock provider process an online payment in production", () => {
+    expect(canProcessOnlinePayments(false, "mock", "production")).toBe(false);
   });
 
   it("always allows a restaurant that has its own connected account, regardless of the pooled default", () => {
-    expect(canProcessOnlinePayments(true, "stripe")).toBe(true);
-    expect(canProcessOnlinePayments(true, "safepay")).toBe(true);
-    expect(canProcessOnlinePayments(true, "mock")).toBe(true);
+    expect(canProcessOnlinePayments(true, "stripe", "production")).toBe(true);
+    expect(canProcessOnlinePayments(true, "safepay", "production")).toBe(true);
+    expect(canProcessOnlinePayments(true, "mock", "development")).toBe(true);
   });
 });

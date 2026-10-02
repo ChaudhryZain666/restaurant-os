@@ -89,7 +89,10 @@ test.describe.serial("custom domain management (Phase 22)", () => {
 
     // --- Activate. ---
     await domainCard.getByRole("button", { name: "Activate" }).click();
-    await expect(domainCard.getByText("Active", { exact: true })).toBeVisible({ timeout: 10_000 });
+    // Phase 85A — with no CUSTOM_DOMAIN_CNAME_TARGET configured (no edge can serve customer
+    // hostnames yet), an activated domain is labelled honestly instead of "Active".
+    await expect(domainCard.getByText("Activated — not serving traffic yet", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Custom domains don.t serve customers yet/)).toBeVisible();
 
     // Now resolves — proving the domain that went through the real UI-driven lifecycle actually
     // works against the real, security-critical resolution endpoint.

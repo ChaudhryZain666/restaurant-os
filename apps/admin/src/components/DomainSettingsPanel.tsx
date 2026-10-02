@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { DomainMapping, DomainMappingStatus } from "@restaurant/types";
+import type { DomainMapping, DomainMappingStatus, DomainRoutingInfo } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
@@ -19,6 +19,14 @@ const STATUS_LABEL: Record<DomainMappingStatus, string> = {
   verified: "Verified — not live yet",
   active: "Active",
 };
+
+// Phase 85A — until the platform's edge can route and secure customer hostnames
+// (routing.servingAvailable), an activated domain is saved but no customer can reach the
+// storefront through it, so "Active" would be a false claim.
+function statusLabel(status: DomainMappingStatus, servingAvailable: boolean): string {
+  if (status === "active" && !servingAvailable) return "Activated — not serving traffic yet";
+  return STATUS_LABEL[status];
+}
 
 /**
  * Phase 22 — the real Domain tab, replacing the previous static placeholder. Deliberately its own
@@ -50,10 +58,12 @@ export function DomainSettingsPanel() {
   const [hostnameDraft, setHostnameDraft] = useState("");
   const [adding, setAdding] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [routing, setRouting] = useState<DomainRoutingInfo>({ servingAvailable: false, cnameTarget: null });
 
   async function reload() {
-    const { domains } = await apiClient.request<{ domains: DomainMapping[] }>(`/businesses/${businessId}/domains`);
-    setDomains(domains.filter((d) => d.locationId === restaurantId));
+    const res = await apiClient.request<{ domains: DomainMapping[]; routing?: DomainRoutingInfo }>(`/businesses/${businessId}/domains`);
+    setDomains(res.domains.filter((d) => d.locationId === restaurantId));
+    setRouting(res.routing ?? { servingAvailable: false, cnameTarget: null });
   }
 
   useEffect(() => {
@@ -136,6 +146,14 @@ export function DomainSettingsPanel() {
         </Alert>
       )}
 
+      {!routing.servingAvailable && (
+        <Alert tone="info">
+          Custom domains don&apos;t serve customers yet. You can add and verify your domain now — once custom-domain hosting is
+          switched on, this page will show the DNS record that sends customers to your storefront. Until then, customers order
+          through your GarnishTable storefront link.
+        </Alert>
+      )}
+
       <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
         <legend className="px-1 text-sm font-medium">Platform URL</legend>
         <div className="flex items-center gap-2">
@@ -147,7 +165,9 @@ export function DomainSettingsPanel() {
       {domains.map((d) => (
         <fieldset key={d.id} className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
           <legend className="px-1 text-sm font-medium">{d.hostname}</legend>
-          <Badge tone={STATUS_TONE[d.status]}>{STATUS_LABEL[d.status]}</Badge>
+          <Badge tone={d.status === "active" && !routing.servingAvailable ? "warning" : STATUS_TONE[d.status]}>
+            {statusLabel(d.status, routing.servingAvailable)}
+          </Badge>
 
           {/* Phase 64 — the domain mapping itself is never touched by a lapsed plan (nothing here
               deletes or disables it), but the storefront stops actually resolving it while the plan
@@ -184,6 +204,24 @@ export function DomainSettingsPanel() {
                 >
                   {copiedId === d.id ? "Copied!" : "Copy"}
                 </button>
+              </span>
+            </div>
+          )}
+
+          {d.status !== "pending_verification" && routing.servingAvailable && routing.cnameTarget && (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-3 text-xs">
+              <p className="text-foreground">Point this domain at your storefront with a CNAME record at your domain registrar.</p>
+              <span className="text-muted">Record type: CNAME</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-muted">Host:</span>
+                <code className="rounded bg-background px-1.5 py-0.5">{d.hostname}</code>
+              </span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-muted">Value:</span>
+                <code className="rounded bg-background px-1.5 py-0.5">{routing.cnameTarget}</code>
+              </span>
+              <span className="text-muted">
+                Use a subdomain such as orders.yourrestaurant.com — most registrars don&apos;t allow a CNAME on the bare domain.
               </span>
             </div>
           )}

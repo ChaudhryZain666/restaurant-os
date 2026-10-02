@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { isSelfClaim, verificationRecordHost, generateVerificationToken } from "./domainVerification.service.js";
+import { platformHostnames } from "../config/origins.js";
 import { normalizeHostname, isValidHostname } from "@restaurant/validation";
 
 describe("normalizeHostname / isValidHostname", () => {
@@ -33,6 +34,22 @@ describe("isSelfClaim", () => {
 
   it("allows any hostname that doesn't match the platform's own origin", () => {
     expect(isSelfClaim("orders.acme-restaurants.com", "app.garnishtable.example")).toBe(false);
+  });
+
+  it("Phase 85A — rejects every platform hostname and anything under them", () => {
+    const platform = platformHostnames({
+      CLIENT_ORIGIN: "https://order.garnishtable.com",
+      ADMIN_ORIGIN: "https://app.garnishtable.com",
+      MARKETING_ORIGIN: "https://garnishtable.com",
+      API_PUBLIC_ORIGIN: "https://api.garnishtable.com",
+      PORTAL_ORIGINS: ["https://agency.garnishtable.com", "https://admin.garnishtable.com", "https://pos.garnishtable.com"],
+    });
+    for (const hostname of ["garnishtable.com", "pos.garnishtable.com", "admin.garnishtable.com", "anything.garnishtable.com"]) {
+      expect(isSelfClaim(hostname, platform)).toBe(true);
+    }
+    expect(isSelfClaim("garnishtable.com.evil.example", platform)).toBe(false);
+    expect(isSelfClaim("notgarnishtable.com", platform)).toBe(false);
+    expect(isSelfClaim("orders.somerestaurant.com", platform)).toBe(false);
   });
 });
 

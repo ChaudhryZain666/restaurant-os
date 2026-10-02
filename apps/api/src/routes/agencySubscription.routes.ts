@@ -13,6 +13,7 @@ import {
   getAgencyEntitlementsHandler,
   getAgencySubscriptionHandler,
   reactivateAgencySubscriptionHandler,
+  agencyPaymentMethodUpdateHandler,
 } from "../controllers/agencySubscription.controller.js";
 
 /** Mounted at /agencies/:agencyId/subscription — mirrors businessSubscription.routes.ts exactly:
@@ -51,6 +52,11 @@ agencySubscriptionRouter.post(
   "/cancel",
   requireAgencyPermission("agency.billing.manage"),
   asyncHandler(cancelAgencySubscriptionHandler)
+);
+agencySubscriptionRouter.post(
+  "/payment-method-update",
+  requireAgencyPermission("agency.billing.manage"),
+  asyncHandler(agencyPaymentMethodUpdateHandler)
 );
 agencySubscriptionRouter.post(
   "/reactivate",

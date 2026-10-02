@@ -9,6 +9,7 @@ import { processProviderEvent } from "../services/payment.service.js";
 import { PaymentWebhookEvent } from "../models/PaymentWebhookEvent.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 /** Phase 48 — an invalid webhook signature was previously only a 400 to the caller (the provider
  *  itself), never a log line: the global error handler only logs 500+ responses, so a
@@ -36,6 +37,11 @@ function logInvalidSignature(provider: string, extra?: Record<string, unknown>) 
 export async function handleProviderWebhook(req: Request, res: Response) {
   if (!KNOWN_PAYMENT_PROVIDER_NAMES.includes(req.params.provider as PaymentProviderName)) {
     throw ApiError.badRequest(`"${req.params.provider}" is not a recognized payment provider`);
+  }
+  // Phase 85A — the mock provider's signing secret is a public dev-only default; in production a
+  // "mock" payment event is never evidence of anything, so the endpoint doesn't exist there.
+  if (req.params.provider === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
+    throw ApiError.notFound();
   }
 
   let provider;

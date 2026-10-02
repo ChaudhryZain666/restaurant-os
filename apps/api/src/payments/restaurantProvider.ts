@@ -1,6 +1,7 @@
 import { RestaurantPaymentAccount, type RestaurantPaymentAccountDoc } from "../models/RestaurantPaymentAccount.js";
 import { decryptCredentials, type EncryptedBlob } from "../utils/credentialEncryption.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { SafepayProvider } from "./SafepayProvider.js";
 import { StripeProvider } from "./StripeProvider.js";
 import type { PaymentProvider } from "./PaymentProvider.js";
@@ -94,8 +95,12 @@ export async function hasActiveRestaurantPaymentAccount(restaurantId: string): P
  * actually moves, restaurant.controller.ts at the point a restaurant tries to enable the setting)
  * share one tested rule instead of two copies that could drift.
  */
-export function canProcessOnlinePayments(hasOwnAccount: boolean, pooledProviderName: string): boolean {
-  return hasOwnAccount || pooledProviderName === "mock";
+export function canProcessOnlinePayments(hasOwnAccount: boolean, pooledProviderName: string, nodeEnv: string): boolean {
+  if (hasOwnAccount) return true;
+  // Phase 85A — the mock exemption is dev/test only. In production the mock provider moves no
+  // money, so "online payment" through it would mark real orders paid for free: fail closed, and
+  // the customer is told to pay with cash. Cash/manual payments never reach this check.
+  return pooledProviderName === "mock" && mockDriversAllowed(nodeEnv);
 }
 
 export type { StripeCredentials, SafepayCredentials };

@@ -167,6 +167,11 @@ export class MockBillingProvider implements BillingProvider {
     return { mode: "redirect", url: `/mock-checkout/${token}?ownerType=${input.metadata.ownerType}`, providerPriceId: input.providerPriceId };
   }
 
+  /** No hosted payment-method page exists for the mock provider. */
+  async getPaymentMethodUpdateUrl(_providerSubscriptionId: string): Promise<string | null> {
+    return null;
+  }
+
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null> {
     const record = this.invoices.get(providerInvoiceId);
     if (!record) return null;

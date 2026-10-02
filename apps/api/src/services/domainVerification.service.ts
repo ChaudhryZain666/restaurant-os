@@ -23,12 +23,16 @@ export async function checkDomainVerification(hostname: string, expectedToken: s
 }
 
 /**
- * A normalized hostname that exactly matches the platform's own configured origin can't be claimed
+ * A normalized hostname that matches (or sits under) one of the platform's own hostnames can't be claimed
  * as a custom domain — otherwise a business could "verify" the platform's own domain against
  * itself. Takes `platformHostname` as an explicit parameter (rather than reading env internally)
  * so the comparison itself stays a trivial, directly-testable pure function independent of
  * whatever CLIENT_ORIGIN happens to be configured in a given environment.
  */
-export function isSelfClaim(hostname: string, platformHostname: string): boolean {
-  return hostname === platformHostname;
+export function isSelfClaim(hostname: string, platformHostnames: string | string[]): boolean {
+  // Phase 85A — every GarnishTable hostname (marketing apex, portals, storefront, API) and anything
+  // under them: with marketing on the apex, that covers all of *.garnishtable.com, so a tenant can't
+  // even park a pending claim on a platform hostname.
+  const platform = Array.isArray(platformHostnames) ? platformHostnames : [platformHostnames];
+  return platform.some((p) => hostname === p || hostname.endsWith(`.${p}`));
 }

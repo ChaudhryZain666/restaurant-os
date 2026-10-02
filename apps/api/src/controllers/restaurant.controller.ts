@@ -466,7 +466,7 @@ export async function updateRestaurant(req: Request, res: Response) {
   // doc comment for the full rule this mirrors at payment-creation time.
   if (updates.settings?.onlinePaymentEnabled === true) {
     const hasAccount = await hasActiveRestaurantPaymentAccount(restaurantId);
-    if (!canProcessOnlinePayments(hasAccount, getPaymentProvider().name)) {
+    if (!canProcessOnlinePayments(hasAccount, getPaymentProvider().name, env.NODE_ENV)) {
       throw ApiError.badRequest("Connect a payment account before enabling online payments.");
     }
   }

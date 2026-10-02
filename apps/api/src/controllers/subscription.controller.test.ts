@@ -14,6 +14,7 @@ import {
   createTestBusiness,
   createTestPlan,
   createTestRestaurant,
+  createTestSubscription,
   createTestUser,
   tokenFor,
 } from "../test-utils/fixtures.js";
@@ -429,5 +430,49 @@ describe("GET /platform/subscriptions — platform-admin read-only overview", ()
       .get(`/api/v1/businesses/${business.id}/subscription`)
       .set("Authorization", `Bearer ${platformAdminToken}`);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /businesses/:businessId/subscription/payment-method-update (Phase 85A)", () => {
+  async function ownerWith(subscription?: Record<string, unknown>) {
+    const biz = await createTestBusiness();
+    const loc = await createTestRestaurant({ businessId: biz._id });
+    const owner = await createTestUser("restaurant_owner", loc._id, { businessId: biz._id });
+    const staff = await createTestUser("restaurant_staff", loc._id, { businessId: biz._id, locationIds: [loc._id] });
+    businessIds.push(biz.id);
+    restaurantIds.push(loc.id);
+    userIds.push(owner.id as string, staff.id as string);
+    if (subscription) await createTestSubscription("business", biz._id, plan._id, subscription);
+    return { biz, ownerToken: tokenFor(owner), staffToken: tokenFor(staff) };
+  }
+
+  const call = (businessId: string, token: string) =>
+    request(app).post(`/api/v1/businesses/${businessId}/subscription/payment-method-update`).set("Authorization", `Bearer ${token}`);
+
+  it("404s when there is no live subscription", async () => {
+    const { biz, ownerToken: token } = await ownerWith();
+    expect((await call(biz.id, token)).status).toBe(404);
+  });
+
+  it("400s for a no-card trial — adding a card is what checkout is for", async () => {
+    const { biz, ownerToken: token } = await ownerWith({ status: "trialing" });
+    const res = await call(biz.id, token);
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/choose a plan/);
+  });
+
+  it("503s when the configured provider has no hosted payment-method page (the mock provider)", async () => {
+    const { biz, ownerToken: token } = await ownerWith({ status: "past_due", providerSubscriptionId: `sub_mock_${Date.now()}` });
+    expect((await call(biz.id, token)).status).toBe(503);
+  });
+
+  it("503s rather than calling the wrong provider when the subscription belongs to a different one", async () => {
+    const { biz, ownerToken: token } = await ownerWith({ status: "past_due", provider: "paddle", providerSubscriptionId: "sub_paddle_1" });
+    expect((await call(biz.id, token)).status).toBe(503);
+  });
+
+  it("requires billing.manage (staff are refused)", async () => {
+    const { biz, staffToken: token } = await ownerWith({ status: "past_due", providerSubscriptionId: `sub_mock_s_${Date.now()}` });
+    expect((await call(biz.id, token)).status).toBe(403);
   });
 });

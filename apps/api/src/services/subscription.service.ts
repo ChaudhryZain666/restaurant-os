@@ -6,6 +6,7 @@ import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { getBillingProvider } from "../billing/index.js";
 import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
@@ -132,6 +133,11 @@ async function createCheckoutSessionCore(
   planCode: string,
   billingInterval: BillingInterval
 ): Promise<ProviderCheckoutSession> {
+  // Phase 85A — the mock provider's checkout "completes" without payment (MockCheckoutPage), so a
+  // production deployment that hasn't configured Paddle yet offers trials only, and says so.
+  if (getBillingProvider().name === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
+    throw ApiError.serviceUnavailable("Paid plan checkout isn't available yet. Your free trial stays active in the meantime.");
+  }
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
@@ -300,6 +306,33 @@ async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, owne
   await recordBillingHistoryEvent({ ownerType, ownerId, subscriptionId: updated._id, type: "reactivated", provider: updated.provider });
 
   return updated;
+}
+
+/**
+ * Phase 85A — the provider-hosted "update your card" page for a subscription that has a real
+ * provider subscription behind it (e.g. after a failed renewal leaves it past_due). A local-only
+ * trial has no card on file yet; adding one is what checkout is for.
+ */
+async function getPaymentMethodUpdateUrlCore(ownerType: SubscriptionOwnerType, ownerId: string): Promise<string> {
+  const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
+  if (!subscription.providerSubscriptionId) {
+    throw ApiError.badRequest("There's no payment method on file yet — choose a plan to add one.");
+  }
+  const provider = getBillingProvider();
+  if (provider.name !== subscription.provider) {
+    throw ApiError.serviceUnavailable("Payment method updates aren't available for this subscription right now.");
+  }
+  const url = await provider.getPaymentMethodUpdateUrl(subscription.providerSubscriptionId);
+  if (!url) throw ApiError.serviceUnavailable("Payment method updates aren't available for this subscription right now.");
+  return url;
+}
+
+export async function getPaymentMethodUpdateUrl(businessId: string): Promise<string> {
+  return getPaymentMethodUpdateUrlCore("business", businessId);
+}
+
+export async function getAgencyPaymentMethodUpdateUrl(agencyId: string): Promise<string> {
+  return getPaymentMethodUpdateUrlCore("agency", agencyId);
 }
 
 export async function reactivateSubscription(businessId: string): Promise<HydratedDocument<SubscriptionDoc>> {

@@ -17,6 +17,7 @@ import {
   createSubscriptionForAgency,
   getSubscriptionForAgency,
   reactivateAgencySubscription,
+  getAgencyPaymentMethodUpdateUrl,
 } from "../services/subscription.service.js";
 
 /**
@@ -76,6 +77,13 @@ export async function cancelAgencySubscriptionHandler(req: Request, res: Respons
     metadata: { status: subscription.status },
   });
   sendSuccess(res, await toResponseShape(subscription));
+}
+
+/** Phase 85A — POST /agencies/:agencyId/subscription/payment-method-update (see
+ *  subscription.controller.ts's paymentMethodUpdateHandler). */
+export async function agencyPaymentMethodUpdateHandler(req: Request, res: Response) {
+  const url = await getAgencyPaymentMethodUpdateUrl(req.params.agencyId);
+  sendSuccess(res, { url });
 }
 
 export async function reactivateAgencySubscriptionHandler(req: Request, res: Response) {

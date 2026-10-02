@@ -18,6 +18,7 @@ import {
   createSubscriptionForBusiness,
   getSubscriptionForBusiness,
   reactivateSubscription,
+  getPaymentMethodUpdateUrl,
 } from "../services/subscription.service.js";
 
 /**
@@ -101,6 +102,13 @@ export async function cancelSubscriptionHandler(req: Request, res: Response) {
     status: subscription.status,
   });
   sendSuccess(res, await toResponseShape(subscription));
+}
+
+/** Phase 85A — POST /businesses/:businessId/subscription/payment-method-update. Returns a fresh,
+ *  short-lived provider-hosted URL; nothing is stored or changed locally. */
+export async function paymentMethodUpdateHandler(req: Request, res: Response) {
+  const url = await getPaymentMethodUpdateUrl(req.params.businessId);
+  sendSuccess(res, { url });
 }
 
 export async function reactivateSubscriptionHandler(req: Request, res: Response) {

@@ -99,7 +99,7 @@ export async function createPaymentForOrder(
   // must never have a real online payment processed through the platform's pooled credentials.
   // The mock provider is exempt (dev/test/demo default, never real money), so this is a no-op for
   // every existing environment that hasn't configured a real platform-wide provider.
-  if (!canProcessOnlinePayments(Boolean(restaurantPaymentAccountId), provider.name)) {
+  if (!canProcessOnlinePayments(Boolean(restaurantPaymentAccountId), provider.name, env.NODE_ENV)) {
     throw ApiError.badRequest("This restaurant hasn't connected a payment account yet — please pay with cash.");
   }
 

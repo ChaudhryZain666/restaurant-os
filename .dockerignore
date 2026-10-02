@@ -1,0 +1,16 @@
+# Phase 85A — keeps secrets, local state and host-built artifacts out of every image build context.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.tsbuildinfo
+.git
+.github
+test-results
+playwright-report
+apps/api/backups
+apps/api/dump.rdb
+apps/api/jest-out.txt
+*.log
+_bgsample.png

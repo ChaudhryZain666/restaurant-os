@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { LoginPage } from "./pages/LoginPage";
@@ -68,6 +68,8 @@ import { AgencySettingsPage } from "./pages/AgencySettingsPage";
 import { AgencyAuditLogPage } from "./pages/AgencyAuditLogPage";
 import { MockCheckoutPage } from "./pages/MockCheckoutPage";
 import { ForcePasswordChangePage } from "./pages/ForcePasswordChangePage";
+import { portalHomeForOrigin, type PortalOrigins } from "./lib/portalHosts";
+import { useCan } from "./hooks/useCan";
 
 const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
@@ -94,6 +96,30 @@ function ScrollToTop() {
     window.scrollTo(0, 0);
   }, [pathname]);
   return null;
+}
+
+// Phase 85A — the production hostnames that serve this same build (docs/production-architecture.md).
+const PORTAL_ORIGINS: PortalOrigins = {
+  pos: import.meta.env.VITE_POS_URL,
+  agency: import.meta.env.VITE_AGENCY_URL,
+  platformAdmin: import.meta.env.VITE_PLATFORM_ADMIN_URL,
+};
+
+/** Phase 85A — the "/" route. On the POS hostname (lib/portalHosts.ts) a signed-in user who can
+ *  operate the POS opens the register instead of the owner dashboard. Agency and Platform Admin
+ *  users already land on /agency and /platform by role (roleHomePath via RequireAuth), so their
+ *  hostnames need nothing extra. Keyed on the real permission, so a user the POS would turn away
+ *  (e.g. kitchen staff) is never bounced between "/" and "/pos". */
+function IndexRoute() {
+  const canOperatePos = useCan("restaurant.pos.operate");
+  if (canOperatePos && portalHomeForOrigin(window.location.origin, PORTAL_ORIGINS) === "/pos") {
+    return <Navigate to="/pos" replace />;
+  }
+  return (
+    <RequireAuth permission="restaurant.orders.read">
+      <DashboardPage />
+    </RequireAuth>
+  );
 }
 
 export function App() {
@@ -170,11 +196,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route
             path="/"
-            element={
-              <RequireAuth permission="restaurant.orders.read">
-                <DashboardPage />
-              </RequireAuth>
-            }
+            element={<IndexRoute />}
           />
           <Route
             path="/orders"

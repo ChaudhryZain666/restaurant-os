@@ -28,6 +28,7 @@ import { sendSuccess } from "../common/response.js";
 import { escapeRegex, paginateQuery } from "../utils/pagination.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
+import { platformHostnames } from "../config/origins.js";
 import { getEmailService } from "../email/index.js";
 import { ownerInviteEmail } from "../email/templates.js";
 import { generateSecureToken, generateTemporaryPassword } from "../services/secureToken.service.js";
@@ -654,7 +655,7 @@ export async function setAgencyDomain(req: Request, res: Response) {
   const { agencyId } = req.params;
   const { domain } = req.body as SetAgencyDomainInput;
 
-  if (isSelfClaim(domain, new URL(env.CLIENT_ORIGIN).hostname) || isSelfClaim(domain, new URL(env.ADMIN_ORIGIN).hostname)) {
+  if (isSelfClaim(domain, platformHostnames(env))) {
     throw ApiError.badRequest("This platform's own domain can't be claimed as a white-label domain");
   }
 

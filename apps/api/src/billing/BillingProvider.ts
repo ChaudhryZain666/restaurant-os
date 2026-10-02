@@ -67,6 +67,11 @@ export interface ProviderCheckoutSession {
    *  SDK needs separately from clientToken to associate the checkout with the right customer
    *  (e.g. Paddle.Checkout.open({customer: {id: providerCustomerId}, ...})). */
   providerCustomerId?: string;
+  /** Phase 85A — present when mode === "overlay": which of the provider's environments this
+   *  session (and clientToken) belongs to, so the frontend SDK is initialised for the same one
+   *  (Paddle.Environment.set). Derived server-side from the API host actually being called — never
+   *  defaulted by the frontend. */
+  environment?: "sandbox" | "production";
 }
 
 export interface ProviderInvoice {
@@ -130,6 +135,10 @@ export interface BillingProvider {
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession>;
   /** Null if the provider has no record of this invoice reference. */
   retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null>;
+  /** Phase 85A — a provider-hosted page where the customer updates the card on a subscription
+   *  (e.g. after a failed renewal). Short-lived, so it's fetched on demand and never stored. Null
+   *  when the provider has no such page for this subscription. */
+  getPaymentMethodUpdateUrl(providerSubscriptionId: string): Promise<string | null>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderBillingWebhookEvent | null;
 }

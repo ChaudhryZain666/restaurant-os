@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:demo": "tsx src/scripts/seed-demo-data.ts",
+    "demo:provision": "tsx src/scripts/provisionProductionDemo.ts",
     "bootstrap:platform-admin": "tsx src/scripts/bootstrapPlatformAdmin.ts",
     "migrate:business-location": "tsx src/scripts/migrateToBusinessLocation.ts",
     "migrate:menu-canonical": "tsx src/scripts/migrateMenuToCanonical.ts",

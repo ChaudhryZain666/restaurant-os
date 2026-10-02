@@ -97,6 +97,13 @@ export class PaddleBillingProvider implements BillingProvider {
     private readonly clientToken?: string
   ) {}
 
+  /** Phase 85A — the Paddle environment this adapter talks to, read off the API host it was built
+   *  with (baseUrlForEnv), so the checkout session can never claim a different environment from
+   *  the one its prices and customers actually live in. */
+  get environment(): "sandbox" | "production" {
+    return this.baseUrl === PRODUCTION_BASE_URL ? "production" : "sandbox";
+  }
+
   static baseUrlForEnv(paddleEnv: "sandbox" | "production"): string {
     return paddleEnv === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
   }
@@ -230,6 +237,19 @@ export class PaddleBillingProvider implements BillingProvider {
     return this.toSnapshot(response);
   }
 
+  /**
+   * Phase 85A — ASSUMED shape, from Paddle Billing's documented subscription entity: GET
+   * /subscriptions/{id} returns `management_urls.update_payment_method`, a temporary,
+   * Paddle-hosted link where the customer replaces the card on file (Paddle documents these links
+   * as expiring, hence fetched per click and never persisted). Not yet exercised against a live
+   * Paddle account. Anything other than an https URL is treated as "not available".
+   */
+  async getPaymentMethodUpdateUrl(providerSubscriptionId: string): Promise<string | null> {
+    const response = await this.request<PaddleSubscriptionResponse>("GET", `/subscriptions/${providerSubscriptionId}`);
+    const url = response.data?.management_urls?.update_payment_method;
+    return typeof url === "string" && url.startsWith("https://") ? url : null;
+  }
+
   async cancelSubscription(providerSubscriptionId: string, atPeriodEnd: boolean): Promise<ProviderSubscriptionSnapshot> {
     const response = await this.request<PaddleSubscriptionResponse>("POST", `/subscriptions/${providerSubscriptionId}/cancel`, {
       effective_from: atPeriodEnd ? "next_billing_period" : "immediately",
@@ -278,6 +298,7 @@ export class PaddleBillingProvider implements BillingProvider {
       clientToken: this.clientToken,
       providerPriceId: input.providerPriceId,
       providerCustomerId: input.providerCustomerId,
+      environment: this.environment,
     };
   }
 
@@ -382,6 +403,7 @@ interface PaddleSubscriptionResponse {
     id?: string;
     status?: string;
     current_billing_period?: { starts_at?: string; ends_at?: string };
+    management_urls?: { update_payment_method?: string | null; cancel?: string | null };
   };
 }
 

@@ -3,6 +3,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { getBillingProvider } from "../billing/index.js";
 import { processBillingProviderEvent } from "../services/subscription.service.js";
 import { logger } from "../common/logger.js";
+import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 /**
  * POST /webhooks/billing/:provider — mirrors paymentWebhook.controller.ts's handleProviderWebhook
@@ -11,6 +13,11 @@ import { logger } from "../common/logger.js";
  * payment webhooks, reused here rather than duplicated.
  */
 export async function handleBillingProviderWebhook(req: Request, res: Response) {
+  // Phase 85A — a pre-Paddle production deployment still runs the mock billing provider, whose
+  // signing secret is a public dev-only default: a forged "mock" event would grant a paid plan.
+  if (req.params.provider === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
+    throw ApiError.notFound();
+  }
   const provider = getBillingProvider();
   if (provider.name !== req.params.provider) {
     throw ApiError.badRequest(`This deployment is not configured for billing provider "${req.params.provider}"`);

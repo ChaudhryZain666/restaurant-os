@@ -8,6 +8,8 @@ import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yaml";
 import { env } from "./config/env.js";
+import { httpCorsOrigins } from "./config/origins.js";
+import { parseTrustProxy } from "./config/trustProxy.js";
 import { requestId } from "./common/requestId.js";
 import { requestLogger } from "./common/requestLogger.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -31,8 +33,12 @@ function loadOpenApiDocument(): object {
 export function createApp() {
   const app = express();
 
+  // Phase 85A — must be set before anything reads req.ip (every rate limiter below). See
+  // config/trustProxy.ts for the accepted values and why "trust everything" is refused.
+  app.set("trust proxy", parseTrustProxy(env.TRUST_PROXY));
+
   app.use(helmet());
-  app.use(cors({ origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN, env.MARKETING_ORIGIN], credentials: true }));
+  app.use(cors({ origin: httpCorsOrigins(env), credentials: true }));
   // Captures the raw pre-parse body bytes onto req.rawBody — payment webhook signature
   // verification (controllers/paymentWebhook.controller.ts) must check the exact bytes a
   // provider signed; a re-serialized copy of the parsed JSON can differ in whitespace/key order

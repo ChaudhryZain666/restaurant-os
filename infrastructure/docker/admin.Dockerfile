@@ -1,4 +1,5 @@
-# Development image — runs the restaurant/platform admin dashboard with Vite's dev server + HMR.
+# DEVELOPMENT image (docker-compose.yml) — runs the restaurant/platform admin dashboard with Vite's dev server + HMR.
+# Never use this in production: see frontend.prod.Dockerfile (static build + nginx).
 FROM node:22-slim
 
 WORKDIR /repo

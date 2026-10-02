@@ -1,0 +1,2 @@
+# Marketing — robots.txt and sitemap.xml are static files from the build (rewritten to the real
+# origin by apps/marketing/vite.config.ts when VITE_SITE_URL is set). Nothing extra here.

@@ -4,6 +4,8 @@ import { verifyAccessToken } from "../services/token.service.js";
 import { canAccessRestaurant } from "../middleware/tenant.js";
 import { env } from "../config/env.js";
 import { logger } from "../common/logger.js";
+import { realtimeOrigins } from "../config/origins.js";
+import { createRealtimeOriginCheck, isActiveCustomDomainOrigin } from "./realtimeOrigins.js";
 
 /**
  * Authenticated connection + per-user room (also per-restaurant, when the token carries one).
@@ -20,7 +22,11 @@ export function getIO(): SocketIOServer | null {
 
 export function createSocketServer(httpServer: HttpServer): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
-    cors: { origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN], credentials: true },
+    // Phase 85A — every GarnishTable surface that opens a socket (storefront, and all four admin-app
+    // portals), plus any restaurant's ACTIVE custom domain (its storefront runs on that hostname).
+    // Authentication is the handshake token below, not cookies — this allow-list only decides
+    // which pages a browser lets connect, so a DB-backed check is safe here.
+    cors: { origin: createRealtimeOriginCheck(realtimeOrigins(env), isActiveCustomDomainOrigin), credentials: true },
   });
 
   io.use((socket, next) => {

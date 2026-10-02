@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import type { DomainRoutingInfo } from "@restaurant/types";
 import { DomainMapping } from "../models/DomainMapping.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -11,6 +12,7 @@ import {
   isSelfClaim,
 } from "../services/domainVerification.service.js";
 import { env } from "../config/env.js";
+import { platformHostnames } from "../config/origins.js";
 
 /**
  * Phase 22 — owner-facing domain management. `getRestaurantByDomain` (the public storefront-
@@ -23,16 +25,25 @@ function toDomainMappingDto(mapping: InstanceType<typeof DomainMapping>) {
   return { ...mapping.toJSON(), verificationRecordHost: verificationRecordHost(mapping.hostname) };
 }
 
+/** Phase 85A — whether this deployment's edge can actually serve customer hostnames yet. The DNS
+ *  record a domain must point at only exists once the edge routes and issues certificates for
+ *  customer hostnames (docs/custom-domains-infrastructure-contract.md); until then the admin UI
+ *  says plainly that a verified/activated domain does not serve traffic. */
+export function customDomainRouting(cnameTarget: string | undefined): DomainRoutingInfo {
+  const target = cnameTarget?.trim().toLowerCase().replace(/\.$/, "");
+  return target ? { servingAvailable: true, cnameTarget: target } : { servingAvailable: false, cnameTarget: null };
+}
+
 export async function listDomainsForBusiness(req: Request, res: Response) {
   const domains = await DomainMapping.find({ businessId: req.params.businessId }).sort({ createdAt: -1 });
-  sendSuccess(res, { domains: domains.map(toDomainMappingDto) });
+  sendSuccess(res, { domains: domains.map(toDomainMappingDto), routing: customDomainRouting(env.CUSTOM_DOMAIN_CNAME_TARGET) });
 }
 
 export async function addDomain(req: Request, res: Response) {
   const { hostname } = req.body as { hostname: string };
   const restaurantId = req.params.restaurantId;
 
-  if (isSelfClaim(hostname, new URL(env.CLIENT_ORIGIN).hostname)) {
+  if (isSelfClaim(hostname, platformHostnames(env))) {
     throw ApiError.badRequest("This platform's own domain can't be claimed as a custom domain");
   }
 

@@ -8,6 +8,8 @@ import {
 } from "../services/posTerminalPayment.service.js";
 import { getMockTerminalProvider } from "../payments/terminal/index.js";
 import { ApiError } from "../utils/ApiError.js";
+import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 /**
  * Phase 74 — all three real endpoints below sit under posRouter (routes/pos.routes.ts), which
@@ -46,6 +48,8 @@ export async function cancelTerminalPayment(req: Request, res: Response) {
  * itself never marks anything paid directly.
  */
 export async function mockCompleteTerminalPayment(req: Request, res: Response) {
+  // Phase 85A — dev/test only (config/mockDrivers.ts); re-checked per request.
+  if (!mockDriversAllowed(env.NODE_ENV)) throw ApiError.notFound();
   const { restaurantId, orderId, paymentId } = req.params;
   const { outcome } = req.body as MockCompleteTerminalPaymentInput;
 

@@ -1,5 +1,8 @@
 import "dotenv/config";
 import { z } from "zod";
+import { parseTrustProxy, TrustProxyConfigError } from "./trustProxy.js";
+
+const LOCALHOST_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i;
 
 const baseEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -44,6 +47,32 @@ const baseEnvSchema = z.object({
   // *_ORIGIN above is a frontend's origin, used for CORS; this is the API itself, which otherwise
   // has no reason to know its own public address.
   API_PUBLIC_ORIGIN: z.string().default("http://localhost:4000"),
+  // Phase 85A — the admin app (apps/admin) is ONE build that serves four production surfaces:
+  // Owner Portal (ADMIN_ORIGIN), plus Agency Portal, Platform Admin and POS on their own hostnames
+  // (see docs/production-architecture.md). Comma-separated list of those extra origins, e.g.
+  // "https://agency.garnishtable.com,https://admin.garnishtable.com,https://pos.garnishtable.com".
+  // Added to the CORS and Socket.IO allow-lists — without it, realtime (kitchen/POS order events)
+  // would be refused on every portal hostname except ADMIN_ORIGIN. Email links keep using
+  // ADMIN_ORIGIN; every route exists on every portal hostname, so those links work regardless.
+  PORTAL_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "")
+        .split(",")
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean)
+    ),
+  // Phase 85A — Express "trust proxy" (see config/trustProxy.ts for the accepted values and why
+  // "true"/trust-everything is refused). Unset means "trust nothing" outside production; production
+  // must set it explicitly, because the deployment architecture always puts an edge in front of
+  // the API and leaving it unset there silently collapses every rate limiter onto the edge's IP.
+  TRUST_PROXY: z.string().optional(),
+  // Phase 85A — the hostname a restaurant's custom domain must CNAME to once the edge can route and
+  // issue certificates for customer hostnames (docs/custom-domains-infrastructure-contract.md).
+  // Unset means that edge capability doesn't exist yet: domains can still be verified and saved,
+  // and the admin UI says plainly that they don't serve traffic yet.
+  CUSTOM_DOMAIN_CNAME_TARGET: z.string().optional(),
 
   // File storage (optional — StorageService throws only when actually used unconfigured)
   STORAGE_ENDPOINT: z.string().optional(),
@@ -281,7 +310,84 @@ const baseEnvSchema = z.object({
  *  triggering the process.exit(1) below (that only ever runs against the module's own top-level
  *  parse of the real process.env). */
 export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
+  // Phase 85A — validated in every environment, so a typo fails at boot rather than at the first
+  // proxied request.
+  try {
+    parseTrustProxy(data.TRUST_PROXY);
+  } catch (err) {
+    if (!(err instanceof TrustProxyConfigError)) throw err;
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["TRUST_PROXY"], message: err.message });
+  }
+  for (const origin of data.PORTAL_ORIGINS) {
+    if (!/^https?:\/\/[^/\s]+$/i.test(origin)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PORTAL_ORIGINS"],
+        message: `PORTAL_ORIGINS entry "${origin}" is not an origin (expected scheme://host[:port], no path).`,
+      });
+    }
+  }
+
   if (data.NODE_ENV !== "production") return;
+
+  // Phase 85A — production checks that must hold regardless of the email configuration below
+  // (which returns early on its own first failure).
+  if (data.TRUST_PROXY === undefined || data.TRUST_PROXY.trim() === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["TRUST_PROXY"],
+      message:
+        "Production requires TRUST_PROXY to be set explicitly — the API runs behind an edge proxy, and without it every rate limiter " +
+        "keys on the proxy's IP. Use the edge's address/CIDR (safest), a hop count, or \"none\" if nothing proxies the API.",
+    });
+  }
+  for (const origin of data.PORTAL_ORIGINS) {
+    if (LOCALHOST_ORIGIN.test(origin)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PORTAL_ORIGINS"],
+        message: `Production PORTAL_ORIGINS contains a localhost address (${origin}). Use the real portal hostnames.`,
+      });
+    }
+  }
+  // Mock card-terminal approvals would let staff record a "card" payment no terminal ever took.
+  if (data.POS_TERMINAL_PROVIDER === "mock") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["POS_TERMINAL_PROVIDER"],
+      message: 'Production cannot use POS_TERMINAL_PROVIDER=mock — it approves card payments no terminal processed. Use "none".',
+    });
+  }
+  // Production billing must be real Paddle production when Paddle is selected — never a silent
+  // sandbox. (BILLING_PROVIDER=mock in production stays allowed for a pre-Paddle launch, but every
+  // mock billing driver/webhook is refused at runtime — see config/mockDrivers.ts.)
+  if (data.BILLING_PROVIDER === "paddle") {
+    if (data.PADDLE_ENV !== "production") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PADDLE_ENV"],
+        message: "Production with BILLING_PROVIDER=paddle requires PADDLE_ENV=production — a production deployment must never bill through the Paddle sandbox.",
+      });
+    }
+    for (const key of ["PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET", "PADDLE_CLIENT_TOKEN"] as const) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `Production with BILLING_PROVIDER=paddle requires ${key}.`,
+        });
+      }
+    }
+    // Paddle's client-side tokens are prefixed by environment ("test_" sandbox, "live_" live).
+    if (data.PADDLE_CLIENT_TOKEN?.startsWith("test_")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PADDLE_CLIENT_TOKEN"],
+        message: 'PADDLE_CLIENT_TOKEN is a sandbox token ("test_…"). Production needs the live client-side token.',
+      });
+    }
+  }
+
   if (data.EMAIL_PROVIDER !== "smtp") {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

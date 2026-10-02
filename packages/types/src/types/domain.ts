@@ -9,6 +9,14 @@
 
 export type DomainMappingStatus = "pending_verification" | "verified" | "active";
 
+/** Phase 85A — returned alongside the domain list: whether the platform's edge can serve customer
+ *  hostnames yet, and the DNS target to point them at when it can. */
+export interface DomainRoutingInfo {
+  servingAvailable: boolean;
+  /** The hostname a custom domain must CNAME to; null until edge routing/TLS exists. */
+  cnameTarget: string | null;
+}
+
 export interface DomainMapping {
   id: string;
   hostname: string;

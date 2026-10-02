@@ -6,6 +6,8 @@ import { resolveMarketplaceIntegrationByExternalStore } from "../marketplaceProv
 import { MarketplaceWebhookEvent } from "../models/MarketplaceWebhookEvent.js";
 import { notificationQueue } from "../queues/notification.queue.js";
 import { logger } from "../common/logger.js";
+import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 /**
  * POST /webhooks/marketplace/:provider — the ONE centralized endpoint for every restaurant
@@ -31,6 +33,11 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
     throw ApiError.badRequest(`"${providerName}" is not a recognized marketplace provider`);
   }
   const provider = providerName as MarketplaceProviderName;
+  // Phase 85A — in mock mode every provider's webhook is verified with the public dev-only mock
+  // secret, so in production anyone could inject orders into a restaurant's kitchen.
+  if (env.MARKETPLACE_PROVIDER_MODE === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
+    throw ApiError.notFound();
+  }
 
   let adapter;
   try {

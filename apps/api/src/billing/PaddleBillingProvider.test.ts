@@ -39,6 +39,7 @@ describe("PaddleBillingProvider.createCheckoutSession", () => {
       clientToken: "real-env-client-token",
       providerPriceId: "pri_456",
       providerCustomerId: "ctm_123",
+      environment: "sandbox",
     });
     // The bug this fixed: clientToken must never equal the customer id.
     expect(session.clientToken).not.toBe("ctm_123");
@@ -54,6 +55,31 @@ describe("PaddleBillingProvider.createCheckoutSession", () => {
         cancelUrl: "https://admin.example.com/billing",
       })
     ).rejects.toThrow("PADDLE_CLIENT_TOKEN is not configured");
+  });
+});
+
+/**
+ * Phase 85A — the admin app initialises Paddle.js from the session's `environment`, so it must be
+ * derived from the Paddle host this adapter actually calls, never a separate flag that could drift.
+ */
+describe("PaddleBillingProvider checkout environment (Phase 85A)", () => {
+  const input = {
+    providerCustomerId: "ctm_123",
+    providerPriceId: "pri_456",
+    metadata: { ownerType: "business", ownerId: "biz-1", planCode: "owner_growth", billingInterval: "monthly" },
+    successUrl: "https://app.example.com/billing-checkout-complete",
+    cancelUrl: "https://app.example.com/billing",
+  };
+
+  it("reports sandbox for the sandbox host", async () => {
+    const sandbox = new PaddleBillingProvider("k", "s", PaddleBillingProvider.baseUrlForEnv("sandbox"), "test_token");
+    expect((await sandbox.createCheckoutSession(input)).environment).toBe("sandbox");
+  });
+
+  it("reports production for the production host", async () => {
+    const production = new PaddleBillingProvider("k", "s", PaddleBillingProvider.baseUrlForEnv("production"), "live_token");
+    expect(production.environment).toBe("production");
+    expect((await production.createCheckoutSession(input)).environment).toBe("production");
   });
 });
 
@@ -272,5 +298,29 @@ describe("PaddleBillingProvider.baseUrlForEnv", () => {
   it("defaults unsafely-guessable input toward sandbox, never production, on anything but an exact match", () => {
     expect(PaddleBillingProvider.baseUrlForEnv("sandbox")).toBe("https://sandbox-api.paddle.com");
     expect(PaddleBillingProvider.baseUrlForEnv("production")).toBe("https://api.paddle.com");
+  });
+});
+
+/**
+ * Phase 85A — the in-app "Update payment method" link. Based on Paddle Billing's documented
+ * subscription entity (management_urls.update_payment_method); not yet exercised against a live
+ * Paddle account.
+ */
+describe("PaddleBillingProvider.getPaymentMethodUpdateUrl (Phase 85A)", () => {
+  it("returns the subscription's hosted update-payment-method URL", async () => {
+    const fetchSpy = mockFetchOnce(200, {
+      data: { id: "sub_1", management_urls: { update_payment_method: "https://buyer-portal.paddle.com/update/abc", cancel: null } },
+    });
+    await expect(provider().getPaymentMethodUpdateUrl("sub_1")).resolves.toBe("https://buyer-portal.paddle.com/update/abc");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://sandbox-api.paddle.com/subscriptions/sub_1");
+    expect(init.method).toBe("GET");
+  });
+
+  it("returns null when Paddle has no such link, or it isn't an https URL", async () => {
+    mockFetchOnce(200, { data: { id: "sub_1", management_urls: { update_payment_method: null } } });
+    await expect(provider().getPaymentMethodUpdateUrl("sub_1")).resolves.toBeNull();
+    mockFetchOnce(200, { data: { id: "sub_1", management_urls: { update_payment_method: "javascript:alert(1)" } } });
+    await expect(provider().getPaymentMethodUpdateUrl("sub_1")).resolves.toBeNull();
   });
 });

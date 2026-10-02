@@ -6,6 +6,7 @@ import { requirePermission } from "../middleware/rbac.js";
 import { requireTenantMatch } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { createPayment, getPayment, listPayments, refund } from "../controllers/payment.controller.js";
 import { mockCompletePayment } from "../controllers/paymentMockDriver.controller.js";
 
@@ -34,8 +35,9 @@ paymentRouter.post(
 
 // Only exists at all when the mock provider is active — a deployment configured for a real
 // provider has no route here, so "simulate a completed payment" is never even reachable, let
-// alone mistakable for a real confirmation.
-if (env.PAYMENT_PROVIDER === "mock") {
+// alone mistakable for a real confirmation. Phase 85A — and never in production, even when a
+// cash-only deployment still has the mock provider selected (config/mockDrivers.ts).
+if (env.PAYMENT_PROVIDER === "mock" && mockDriversAllowed(env.NODE_ENV)) {
   paymentRouter.post(
     "/:paymentId/mock-complete",
     validateBody(mockCompletePaymentSchema),

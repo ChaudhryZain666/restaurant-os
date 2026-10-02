@@ -10,6 +10,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireBusinessMatch, requireBusinessPermission as requirePermission } from "../middleware/businessLocation.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import {
   cancelSubscriptionHandler,
   changePlanHandler,
@@ -19,6 +20,7 @@ import {
   getEntitlementsHandler,
   getSubscription,
   reactivateSubscriptionHandler,
+  paymentMethodUpdateHandler,
 } from "../controllers/subscription.controller.js";
 import { mockAdvanceSubscription } from "../controllers/billingMockDriver.controller.js";
 
@@ -56,6 +58,11 @@ businessSubscriptionRouter.post(
 businessSubscriptionRouter.post("/cancel", requirePermission("billing.manage"), asyncHandler(cancelSubscriptionHandler));
 businessSubscriptionRouter.post("/reactivate", requirePermission("billing.manage"), asyncHandler(reactivateSubscriptionHandler));
 businessSubscriptionRouter.post(
+  "/payment-method-update",
+  requirePermission("billing.manage"),
+  asyncHandler(paymentMethodUpdateHandler)
+);
+businessSubscriptionRouter.post(
   "/change-plan",
   requirePermission("billing.manage"),
   validateBody(changeSubscriptionPlanSchema),
@@ -64,7 +71,7 @@ businessSubscriptionRouter.post(
 
 // Only exists at all when the mock provider is active — a deployment configured for a real
 // provider has no route here, mirroring payment.routes.ts's mock-complete route exactly.
-if (env.BILLING_PROVIDER === "mock") {
+if (env.BILLING_PROVIDER === "mock" && mockDriversAllowed(env.NODE_ENV)) {
   businessSubscriptionRouter.post(
     "/mock-advance",
     requirePermission("billing.manage"),

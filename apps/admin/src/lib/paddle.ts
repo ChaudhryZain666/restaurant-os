@@ -6,7 +6,12 @@
  * client-side token is per-checkout-session data from the app's own perspective, not build-time
  * config. Paddle.Initialize is only ever called once per page load (guarded below) — calling it
  * repeatedly is not part of Paddle's documented contract.
+ *
+ * Phase 85A — the environment (sandbox/production) also comes from that same checkout response,
+ * validated by resolvePaddleEnvironment; it was previously hardcoded to "sandbox".
  */
+import { PaddleConfigurationError, resolvePaddleEnvironment, type PaddleCheckoutSessionConfig, type PaddleEnvironment } from "./paddleEnvironment";
+
 interface PaddleCheckoutCompletedEvent {
   name: "checkout.completed";
   data?: { transaction_id?: string };
@@ -30,7 +35,7 @@ declare global {
   }
 }
 
-let initialized = false;
+let initializedEnvironment: PaddleEnvironment | null = null;
 
 /** Real Paddle.js availability check — the script tag can fail to load (network, ad-blocker), and
  *  this must fail loudly rather than silently no-op a checkout attempt. */
@@ -39,24 +44,28 @@ export function isPaddleJsLoaded(): boolean {
 }
 
 export function openPaddleCheckout(
-  clientToken: string,
+  session: PaddleCheckoutSessionConfig,
   providerPriceId: string,
   providerCustomerId: string,
   customData: Record<string, string>,
   onCompleted: () => void
 ): void {
   if (!window.Paddle) throw new Error("Paddle.js did not load — check your network connection and try again.");
+  // Throws (never falls back to sandbox) when the session's environment is missing or inconsistent.
+  const environment = resolvePaddleEnvironment(session);
 
-  if (!initialized) {
+  if (initializedEnvironment === null) {
     // Real, documented order: Environment.set must run before Initialize.
-    window.Paddle.Environment.set("sandbox");
+    window.Paddle.Environment.set(environment);
     window.Paddle.Initialize({
-      token: clientToken,
+      token: session.clientToken as string,
       eventCallback: (event) => {
         if (event.name === "checkout.completed") onCompleted();
       },
     });
-    initialized = true;
+    initializedEnvironment = environment;
+  } else if (initializedEnvironment !== environment) {
+    throw new PaddleConfigurationError(`Paddle.js is already running in ${initializedEnvironment}, not ${environment}.`);
   }
 
   // Paddle copies customData onto the transaction and, for recurring items, onto the subscription

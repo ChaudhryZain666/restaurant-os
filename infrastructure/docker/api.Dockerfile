@@ -1,6 +1,5 @@
-# Development image — runs the API with hot reload (tsx watch).
-# A separate multi-stage production Dockerfile (build once, run compiled dist/,
-# no dev deps) is future work once there's an actual deployment target.
+# DEVELOPMENT image (docker-compose.yml) — runs the API with hot reload (tsx watch).
+# Never use this in production: see api.prod.Dockerfile (compiled dist/, no dev deps).
 FROM node:22-slim
 
 WORKDIR /repo

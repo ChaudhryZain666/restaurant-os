@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import type { MockCompletePaymentInput } from "@restaurant/validation";
 import { ApiError } from "../utils/ApiError.js";
+import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { sendSuccess } from "../common/response.js";
 import { getMockPaymentProvider } from "../payments/index.js";
 import { getPaymentById, processProviderEvent } from "../services/payment.service.js";
@@ -14,6 +16,9 @@ import { getPaymentById, processProviderEvent } from "../services/payment.servic
  * services/payment.service.ts's processProviderEvent), not a shortcut around it.
  */
 export async function mockCompletePayment(req: Request, res: Response) {
+  // Phase 85A — re-checked per request: the route is never registered in production, and this
+  // keeps it that way even if it somehow were.
+  if (!mockDriversAllowed(env.NODE_ENV)) throw ApiError.notFound();
   const { restaurantId, orderId, paymentId } = req.params;
   const { outcome } = req.body as MockCompletePaymentInput;
 

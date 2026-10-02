@@ -52,6 +52,7 @@ import { agencyRouter } from "./agency.routes.js";
 import { agencyMembershipRouter, agencyAcceptInviteRouter } from "./agencyMembership.routes.js";
 import { agencySubscriptionRouter } from "./agencySubscription.routes.js";
 import { env } from "../config/env.js";
+import { mockDriversAllowed } from "../config/mockDrivers.js";
 
 export const apiRouter = Router();
 
@@ -69,7 +70,9 @@ apiRouter.use("/businesses/:businessId/subscription", businessSubscriptionRouter
 apiRouter.use("/webhooks/billing", billingWebhookRouter);
 // Phase 27 — only exists at all when the mock provider is active, mirroring
 // businessSubscription.routes.ts's mock-advance route gating exactly.
-if (env.BILLING_PROVIDER === "mock") {
+// Phase 85A — and never in production (config/mockDrivers.ts): a pre-Paddle production deployment
+// still selects the mock billing provider, and this route activates a paid plan for free.
+if (env.BILLING_PROVIDER === "mock" && mockDriversAllowed(env.NODE_ENV)) {
   apiRouter.use("/billing/mock-checkout", billingMockCheckoutRouter);
 }
 apiRouter.use("/plans", planRouter);

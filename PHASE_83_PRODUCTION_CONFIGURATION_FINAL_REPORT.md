@@ -1,5 +1,11 @@
 # Phase 83 — Production Configuration & Commercial Readiness — Final Report
 
+> **Errata (Phase 85A).** Three statements below no longer match the code: object storage is
+> **required** in production (`storage/index.ts` throws on first use without it; local disk is
+> development-only); the menu-extraction mode is `live`, not `claude`; and the Redis version check
+> **refuses to boot** below 5.0.0 rather than only warning. Current guidance:
+> `docs/production-launch-checklist.md` and `docs/production-architecture.md`.
+
 ## 1. Executive Summary
 
 Phase 83 audited GarnishTable's production configuration, billing/commercial architecture, legal

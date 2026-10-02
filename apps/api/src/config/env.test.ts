@@ -55,6 +55,7 @@ describe("envSchema — production email safety (Phase 45)", () => {
       ADMIN_ORIGIN: "https://admin.realdomain.example",
       MARKETING_ORIGIN: "https://www.realdomain.example",
       API_PUBLIC_ORIGIN: "https://api.realdomain.example",
+      TRUST_PROXY: "1",
     });
     expect(result.success).toBe(true);
   });
@@ -89,6 +90,7 @@ describe("envSchema — production email safety (Phase 45)", () => {
       ADMIN_ORIGIN: "https://admin.realdomain.example",
       MARKETING_ORIGIN: "https://www.realdomain.example",
       API_PUBLIC_ORIGIN: "https://api.realdomain.example",
+      TRUST_PROXY: "1",
     });
     expect(result.success).toBe(true);
   });
@@ -210,5 +212,91 @@ describe("envSchema — CONTACT_RATE_LIMIT_MAX (Phase 56)", () => {
 
   it("rejects a non-positive value", () => {
     expect(envSchema.safeParse({ ...REQUIRED_BASE, CONTACT_RATE_LIMIT_MAX: "0" }).success).toBe(false);
+  });
+});
+
+// Phase 85A — production boot rules added for the production-hardening phase.
+const PRODUCTION_READY = {
+  ...REQUIRED_BASE,
+  NODE_ENV: "production",
+  EMAIL_PROVIDER: "smtp",
+  SMTP_HOST: "smtp.example.com",
+  SMTP_PORT: "587",
+  EMAIL_FROM: "GarnishTable <hello@garnishtable.com>",
+  CLIENT_ORIGIN: "https://order.garnishtable.com",
+  ADMIN_ORIGIN: "https://app.garnishtable.com",
+  MARKETING_ORIGIN: "https://garnishtable.com",
+  API_PUBLIC_ORIGIN: "https://api.garnishtable.com",
+  PORTAL_ORIGINS: "https://agency.garnishtable.com,https://admin.garnishtable.com,https://pos.garnishtable.com",
+  TRUST_PROXY: "10.0.0.0/8",
+};
+
+function fieldErrors(input: Record<string, unknown>) {
+  const result = envSchema.safeParse(input);
+  return result.success ? {} : result.error.flatten().fieldErrors;
+}
+
+describe("envSchema — Phase 85A production hardening", () => {
+  it("accepts the documented production configuration", () => {
+    const result = envSchema.safeParse(PRODUCTION_READY);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.PORTAL_ORIGINS).toEqual([
+        "https://agency.garnishtable.com",
+        "https://admin.garnishtable.com",
+        "https://pos.garnishtable.com",
+      ]);
+    }
+  });
+
+  it("requires TRUST_PROXY to be set explicitly in production", () => {
+    expect(fieldErrors({ ...PRODUCTION_READY, TRUST_PROXY: undefined }).TRUST_PROXY?.[0]).toMatch(/TRUST_PROXY/);
+    expect(envSchema.safeParse({ ...PRODUCTION_READY, TRUST_PROXY: "none" }).success).toBe(true);
+  });
+
+  it('rejects TRUST_PROXY="true" in every environment', () => {
+    expect(fieldErrors({ ...PRODUCTION_READY, TRUST_PROXY: "true" }).TRUST_PROXY?.[0]).toMatch(/every X-Forwarded-For hop/);
+    expect(fieldErrors({ ...REQUIRED_BASE, TRUST_PROXY: "true" }).TRUST_PROXY?.[0]).toMatch(/every X-Forwarded-For hop/);
+  });
+
+  it("rejects PORTAL_ORIGINS entries that aren't origins, and localhost portals in production", () => {
+    expect(fieldErrors({ ...REQUIRED_BASE, PORTAL_ORIGINS: "https://pos.garnishtable.com/pos" }).PORTAL_ORIGINS).toBeTruthy();
+    expect(fieldErrors({ ...PRODUCTION_READY, PORTAL_ORIGINS: "http://localhost:5174" }).PORTAL_ORIGINS?.[0]).toMatch(/localhost/);
+  });
+
+  it("rejects the mock card terminal in production", () => {
+    expect(fieldErrors({ ...PRODUCTION_READY, POS_TERMINAL_PROVIDER: "mock" }).POS_TERMINAL_PROVIDER).toBeTruthy();
+  });
+
+  describe("Paddle in production", () => {
+    const PADDLE_LIVE = {
+      ...PRODUCTION_READY,
+      BILLING_PROVIDER: "paddle",
+      PADDLE_ENV: "production",
+      PADDLE_API_KEY: "pdl_live_key",
+      PADDLE_WEBHOOK_SECRET: "whsec",
+      PADDLE_CLIENT_TOKEN: "live_abc",
+    };
+
+    it("accepts Paddle production with every credential", () => {
+      expect(envSchema.safeParse(PADDLE_LIVE).success).toBe(true);
+    });
+
+    it("never silently runs production billing against the Paddle sandbox", () => {
+      expect(fieldErrors({ ...PADDLE_LIVE, PADDLE_ENV: "sandbox" }).PADDLE_ENV?.[0]).toMatch(/PADDLE_ENV=production/);
+      // PADDLE_ENV's schema default is sandbox — leaving it unset must fail too, not fall back.
+      expect(fieldErrors({ ...PADDLE_LIVE, PADDLE_ENV: undefined }).PADDLE_ENV).toBeTruthy();
+    });
+
+    it("fails clearly on missing Paddle credentials or a sandbox client token", () => {
+      const missing = fieldErrors({ ...PADDLE_LIVE, PADDLE_API_KEY: undefined, PADDLE_CLIENT_TOKEN: undefined });
+      expect(missing.PADDLE_API_KEY).toBeTruthy();
+      expect(missing.PADDLE_CLIENT_TOKEN).toBeTruthy();
+      expect(fieldErrors({ ...PADDLE_LIVE, PADDLE_CLIENT_TOKEN: "test_abc" }).PADDLE_CLIENT_TOKEN?.[0]).toMatch(/sandbox token/);
+    });
+
+    it("leaves development and test free to use the Paddle sandbox", () => {
+      expect(envSchema.safeParse({ ...REQUIRED_BASE, BILLING_PROVIDER: "paddle", PADDLE_ENV: "sandbox" }).success).toBe(true);
+    });
   });
 });

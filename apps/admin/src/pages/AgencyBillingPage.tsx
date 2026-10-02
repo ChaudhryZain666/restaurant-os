@@ -159,14 +159,14 @@ export function AgencyBillingPage() {
     setError(null);
     try {
       const res = await apiClient.request<{
-        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string };
+        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string; environment?: string };
       }>(`/agencies/${activeAgencyId}/subscription/checkout`, { method: "POST", body: { planCode: selectedPlanCode, billingInterval } });
       if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
       } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
         if (!isPaddleJsLoaded()) throw new Error("Paddle.js did not load — check your network connection and try again.");
         openPaddleCheckout(
-          res.checkout.clientToken,
+          { clientToken: res.checkout.clientToken, environment: res.checkout.environment },
           res.checkout.providerPriceId,
           res.checkout.providerCustomerId,
           { ownerType: "agency", ownerId: activeAgencyId!, planCode: selectedPlanCode, billingInterval },
@@ -208,6 +208,20 @@ export function AgencyBillingPage() {
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Phase 85A — opens the billing provider's own hosted "update your card" page (e.g. after a
+   *  failed renewal). The URL is short-lived, so it's requested at click time, never cached. */
+  async function updatePaymentMethod() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await apiClient.request<{ url: string }>(`/agencies/${activeAgencyId}/subscription/payment-method-update`, { method: "POST" });
+      window.location.assign(url);
+    } catch (err) {
+      setError((err as Error).message);
       setBusy(false);
     }
   }
@@ -367,6 +381,13 @@ export function AgencyBillingPage() {
                   Reactivate
                 </Button>
               )}
+              {subscription.provider === "paddle" &&
+                subscription.providerSubscriptionId &&
+                ["active", "past_due", "cancelling"].includes(subscription.status) && (
+                  <Button size="sm" variant={subscription.status === "past_due" ? "primary" : "outline"} onClick={updatePaymentMethod} disabled={busy}>
+                    Update payment method
+                  </Button>
+                )}
               {["trialing", "active", "past_due"].includes(subscription.status) && (
                 <button
                   type="button"
