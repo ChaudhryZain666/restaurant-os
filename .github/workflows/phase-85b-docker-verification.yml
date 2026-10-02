@@ -328,9 +328,14 @@ jobs:
           R="$GITHUB_WORKSPACE/../results.txt"
           { echo "## Phase 85B Docker verification"; echo; echo '| Result | Check | Detail |'; echo '|---|---|---|'; sed -E 's/^([A-Z]+) \| ([^|]*) \| (.*)$/| \1 | \2 | \3 |/' "$R"; } >> "$GITHUB_STEP_SUMMARY"
           p=$(grep -c '^PASS' "$R" || true); f=$(grep -c '^FAIL' "$R" || true)
-          # One annotation carrying every result (workflow-command encoding: % CR LF).
-          body=$(sed -e 's/%/%25/g' "$R" | awk '{printf "%s%%0A", $0}')
-          echo "::notice title=RESULTS — $p passed, $f failed::$body"
+          # Every result, published as a few annotations (a single annotation is truncated around
+          # 4 KB). Workflow-command encoding for % and newlines; titles must not contain commas.
+          echo "::notice title=TOTAL $p passed and $f failed::$p passed / $f failed"
+          split -l 18 "$R" "$RUNNER_TEMP/part-"
+          n=0; for part in "$RUNNER_TEMP"/part-*; do n=$((n+1))
+            body=$(cut -c1-200 "$part" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=RESULTS part $n::$body"
+          done
           [ "$f" -eq 0 ]
 
       - name: Logs on failure
