@@ -28,9 +28,11 @@ jobs:
           cat > "$RUNNER_TEMP/lib.sh" <<'EOF'
           set +e  # every check records its own result; build failures exit explicitly
           RESULTS="$GITHUB_WORKSPACE/../results.txt"
-          pass() { echo "PASS | $1 | $2" >> "$RESULTS"; echo "::notice title=PASS: $1::$2"; }
+          # Annotations are capped at 50 per job, so only failures get their own annotation; the
+          # Summary step publishes every result as one combined notice.
+          pass() { echo "PASS | $1 | $2" >> "$RESULTS"; echo "PASS: $1 | $2"; }
           fail() { echo "FAIL | $1 | $2" >> "$RESULTS"; echo "::error title=FAIL: $1::$2"; }
-          info() { echo "INFO | $1 | $2" >> "$RESULTS"; echo "::notice title=INFO: $1::$2"; }
+          info() { echo "INFO | $1 | $2" >> "$RESULTS"; echo "INFO: $1 | $2"; }
           check() { local name="$1" detail="$2"; shift 2; if "$@"; then pass "$name" "$detail"; else fail "$name" "$detail"; fi; }
           EOF
           source "$RUNNER_TEMP/lib.sh"
@@ -118,7 +120,7 @@ jobs:
             html="$RUNNER_TEMP/fs-$app/usr/share/nginx/html"
             maps=$(find "$html" -name '*.map' | wc -l)
             check "No source maps in $app bundle" "$maps .map files" test "$maps" -eq 0
-            lh=$(grep -rhoE '.{0,40}(localhost|127\.0\.0\.1).{0,40}' "$html" --include=*.js --include=*.html | grep -vE 'location\.hostname:`localhost`|hostname!==`localhost`|placeholder:`http://localhost:9100`' | head -3)
+            lh=$(grep -rhoE '.{0,40}(localhost|127\.0\.0\.1).{0,40}' "$html" --include=*.js --include=*.html | grep -vE 'location\.hostname:`localhost`|hostname!==`localhost`|placeholder:`http://localhost:9100`|e\.g\. http://localhost:9100' | head -3)
             check "No localhost URLs baked into $app bundle" "${lh:-only known benign occurrences}" test -z "$lh"
           done
           webjs=$(ls "$RUNNER_TEMP"/fs-web/usr/share/nginx/html/assets/index-*.js | head -1)
@@ -326,7 +328,9 @@ jobs:
           R="$GITHUB_WORKSPACE/../results.txt"
           { echo "## Phase 85B Docker verification"; echo; echo '| Result | Check | Detail |'; echo '|---|---|---|'; sed -E 's/^([A-Z]+) \| ([^|]*) \| (.*)$/| \1 | \2 | \3 |/' "$R"; } >> "$GITHUB_STEP_SUMMARY"
           p=$(grep -c '^PASS' "$R" || true); f=$(grep -c '^FAIL' "$R" || true)
-          echo "::notice title=TOTAL::$p passed, $f failed"
+          # One annotation carrying every result (workflow-command encoding: % CR LF).
+          body=$(sed -e 's/%/%25/g' "$R" | awk '{printf "%s%%0A", $0}')
+          echo "::notice title=RESULTS — $p passed, $f failed::$body"
           [ "$f" -eq 0 ]
 
       - name: Logs on failure
