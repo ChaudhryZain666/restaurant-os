@@ -115,7 +115,7 @@ diag() {
   info "diag: caddy can reach pebble" "$(dc exec -T caddy wget -q -O /dev/null https://pebble:14000/dir 2>&1 | head -1 || true) exit=$?"
   caddy_logs | grep -iE 'error|obtain|acme|challenge|tls' | grep -v '"level":"info".*"msg":"handled request"' | tail -6 | while read -r l; do info "diag: caddy" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
   dc logs --no-color pebble 2>/dev/null | tail -5 | while read -r l; do info "diag: pebble" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
-  dc logs --no-color challtestsrv 2>/dev/null | tail -3 | while read -r l; do info "diag: challtestsrv" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
+  dc logs --no-color challtestsrv 2>/dev/null | head -3 | while read -r l; do info "diag: challtestsrv" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
   info "diag: containers" "$(dc ps --format '{{.Service}}={{.State}}' | tr '\n' ' ')"
 }
 

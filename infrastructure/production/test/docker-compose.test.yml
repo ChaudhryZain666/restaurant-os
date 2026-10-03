@@ -12,7 +12,7 @@ services:
     image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
     # Every A query answers with Caddy's address, so Pebble's HTTP-01 validation reaches the edge.
     # TXT records (the GarnishTable ownership token) are added through its management API.
-    command: ["-defaultIPv4", "${GT_CADDY_IP:-172.30.86.10}", "-defaultIPv6", "", "-dns01", ":53", "-management", ":8055", "-http01", "", "-tlsalpn01", ""]
+    command: ["-defaultIPv4", "${GT_CADDY_IP:-172.30.86.10}", "-defaultIPv6", "", "-dnsserver", ":53", "-management", ":8055"]
     ports:
       - "127.0.0.1:8055:8055"
     networks:
