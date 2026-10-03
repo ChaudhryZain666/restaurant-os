@@ -13,7 +13,8 @@ GT_LOG_TAG=healthwatch
 set +e
 
 problems=()
-report="$("$SCRIPT_DIR/smoke-test.sh" --expect "$(tag_commit "$(state_get current | cut -d' ' -f1)")" 2>&1)"
+live_tag="$(state_get current | cut -d' ' -f1)"
+report="$(bash "$(release_smoke "$live_tag")" --expect "$(tag_commit "$live_tag")" 2>&1)"
 [ $? -eq 0 ] || problems+=("smoke: $(grep '^FAIL' <<< "$report" | head -3 | tr '\n' ';')")
 
 disk="$(df -P /var/lib/docker 2> /dev/null | awk 'NR==2 {gsub("%","",$5); print $5}')"

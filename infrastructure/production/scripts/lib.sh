@@ -66,6 +66,15 @@ gt_compose() {
   env "${unset_args[@]}" GT_IMAGE_TAG="$tag" GT_IMAGE_REGISTRY="$reg" docker compose "${args[@]}" "$@"
 }
 
+# The smoke test that belongs to a release: the copy in releases/<tag>/scripts/ matches that
+# release's Caddyfile and compose file (a rollback to a release from before a hostname was added must
+# not be judged by checks for that hostname). Falls back to this checkout's copy.
+release_smoke() {
+  local f="$GT_RELEASES/$1/scripts/smoke-test.sh"
+  [ -f "$f" ] || f="$(dirname "${BASH_SOURCE[0]}")/smoke-test.sh"
+  printf '%s' "$f"
+}
+
 state_get() { [ -f "$GT_STATE/$1" ] && cat "$GT_STATE/$1" || true; }
 state_set() { mkdir -p "$GT_STATE"; printf '%s\n' "$2" > "$GT_STATE/$1.tmp" && mv "$GT_STATE/$1.tmp" "$GT_STATE/$1"; }
 history() { mkdir -p "$GT_STATE"; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$GT_STATE/history.log"; }
