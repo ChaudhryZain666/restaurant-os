@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — MongoDB + certificate backup
+[Unit]
+Description=GarnishTable MongoDB + certificate backup (*-*-* 03:15:00)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

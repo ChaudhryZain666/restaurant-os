@@ -12,6 +12,7 @@ import {
   registerPaymentReconciliationJob,
   registerMarketplaceStuckEventCheckJob,
   registerMenuImportCleanupJob,
+  registerDemoCleanupJob,
 } from "./queues/notification.queue.js";
 import { createSocketServer } from "./realtime/socket.js";
 import { registerOrderEventListeners } from "./events/orderEventListeners.js";
@@ -75,6 +76,7 @@ async function main() {
     registerPaymentReconciliationJob(),
     registerMarketplaceStuckEventCheckJob(),
     registerMenuImportCleanupJob(),
+    registerDemoCleanupJob(),
   ]).catch((err) => {
     logger.error("[queue] could not register background jobs, continuing without them", { error: (err as Error).message });
   });

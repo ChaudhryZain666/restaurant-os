@@ -1,0 +1,210 @@
+# Phase 87 — production image pipeline: verify → build & push immutable images → deployment rehearsal.
+#
+#   verify     lint, typecheck, unit/integration tests (MongoDB replica set + Redis 7), shellcheck
+#   images     builds api / web / admin / marketing ONCE, pushes them to GHCR tagged sha-<full commit>
+#              (never "latest"), with the commit recorded inside each image (label + /version.json /
+#              GET /health/live)
+#   rehearsal  turns the runner into a simulated server and drives the real server scripts against
+#              the pushed images: deploy, failed deploy → auto-rollback, rollback.sh, crash/restart,
+#              Redis outage, backup/restore (infrastructure/production/test/deploy-rehearsal.sh)
+#
+# This workflow never deploys to a real server (that is deploy-production.yml, manual and gated).
+# It never runs for pull requests, so code from a fork can't reach the registry credentials.
+name: Production images
+
+on:
+  push:
+    # TEMPORARY: phase-87-hostinger-deployment runs the pipeline for Phase 87 verification; remove
+    # once recorded in PHASE_87_HOSTINGER_PRODUCTION_DEPLOYMENT_REPORT.md.
+    branches: [main, phase-87-hostinger-deployment]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: production-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Public hostnames compiled into the frontend bundles. Override with repository variables
+  # (Settings → Secrets and variables → Actions → Variables) if the domain changes.
+  MARKETING_HOST: ${{ vars.GT_MARKETING_HOST || 'garnishtable.com' }}
+  APP_HOST: ${{ vars.GT_APP_HOST || 'app.garnishtable.com' }}
+  AGENCY_HOST: ${{ vars.GT_AGENCY_HOST || 'agency.garnishtable.com' }}
+  ADMIN_HOST: ${{ vars.GT_ADMIN_HOST || 'admin.garnishtable.com' }}
+  POS_HOST: ${{ vars.GT_POS_HOST || 'pos.garnishtable.com' }}
+  ORDER_HOST: ${{ vars.GT_ORDER_HOST || 'order.garnishtable.com' }}
+  API_HOST: ${{ vars.GT_API_HOST || 'api.garnishtable.com' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: |
+          npm run build -w apps/api
+          for app in web admin marketing; do (cd apps/$app && npx tsc -b); done
+      - name: Shell scripts (shellcheck, errors fail the build)
+        run: shellcheck -S error infrastructure/production/scripts/*.sh infrastructure/production/test/*.sh infrastructure/docker/*.sh
+      - name: Test databases (MongoDB 7 replica set, Redis 7) on localhost
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all > /dev/null
+          docker run -d --name redis -p 127.0.0.1:6379:6379 redis:7-alpine > /dev/null
+          for i in $(seq 1 60); do docker exec mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' > /dev/null 2>&1 && break; sleep 1; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]}).ok'
+          for i in $(seq 1 60); do [ "$(docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && break; sleep 1; done
+      - name: API test configuration (throwaway values)
+        run: |
+          a=$(openssl rand -hex 32); b=$(openssl rand -hex 32); k=$(openssl rand -base64 32); w=$(openssl rand -hex 24)
+          echo "::add-mask::$a"; echo "::add-mask::$b"; echo "::add-mask::$k"; echo "::add-mask::$w"
+          umask 077
+          cat > apps/api/.env <<EOF
+          MONGO_URI=mongodb://localhost:27017/restaurant_platform_test
+          REDIS_URL=redis://localhost:6379/1
+          JWT_ACCESS_SECRET=$a
+          JWT_REFRESH_SECRET=$b
+          CREDENTIAL_ENCRYPTION_KEY=$k
+          STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$w
+          GEOCODING_PROVIDER=test
+          POS_TERMINAL_PROVIDER=mock
+          PADDLE_ENV=sandbox
+          EOF
+      - name: API tests
+        run: npm test -w apps/api -- --ci 2>&1 | tee "$RUNNER_TEMP/api-tests.log"; exit ${PIPESTATUS[0]}
+      - name: Web, admin and utils tests
+        run: |
+          npm test -w apps/web -- --ci
+          npm test -w apps/admin -- --ci
+          npm test -w packages/utils -- --ci
+      - name: Report
+        if: always()
+        run: |
+          s=$(grep -E '^(Tests|Test Suites):' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | tr '\n' ' ')
+          echo "::notice title=API tests::${s:-no summary (see log)}"
+          grep -E '^\s+● ' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | sort -u | head -20 | while read -r l; do echo "::error title=API test failure::$l"; done
+
+  images:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        service: [api, web, admin, marketing]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name and build metadata
+        id: meta
+        run: |
+          reg="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image=$reg/${{ matrix.service }}:sha-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.service }}" = api ]; then
+            echo "file=infrastructure/docker/api.prod.Dockerfile" >> "$GITHUB_OUTPUT"
+            args=""
+          else
+            echo "file=infrastructure/docker/frontend.prod.Dockerfile" >> "$GITHUB_OUTPUT"
+            case "${{ matrix.service }}" in
+              web|admin) args="VITE_API_URL=https://$API_HOST
+          VITE_SITE_URL=https://$ORDER_HOST
+          VITE_STOREFRONT_URL=https://$ORDER_HOST
+          VITE_ADMIN_URL=https://$APP_HOST
+          VITE_MARKETING_URL=https://$MARKETING_HOST
+          VITE_POS_URL=https://$POS_HOST
+          VITE_AGENCY_URL=https://$AGENCY_HOST
+          VITE_PLATFORM_ADMIN_URL=https://$ADMIN_HOST" ;;
+              marketing) args="VITE_SITE_URL=https://$MARKETING_HOST
+          VITE_STOREFRONT_URL=https://$ORDER_HOST
+          VITE_ADMIN_URL=https://$APP_HOST" ;;
+            esac
+            args="APP=${{ matrix.service }}
+          $args"
+          fi
+          { echo "args<<ARGS_EOF"; echo "$args" | sed 's/^ *//'; echo "ARGS_EOF"; } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push ${{ steps.meta.outputs.image }}
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.meta.outputs.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          build-args: |
+            ${{ steps.meta.outputs.args }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.meta.outputs.built }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - name: Report
+        run: echo "::notice title=Pushed ${{ matrix.service }}::${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}"
+
+  rehearsal:
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # earlier commits: rollback targets and their compose files
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find the previous image set (rollback target)
+        id: prev
+        run: |
+          reg="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "reg=$reg" >> "$GITHUB_OUTPUT"
+          for c in $(git rev-list --max-count=20 HEAD~1 2> /dev/null); do
+            ok=1
+            for s in api web admin marketing; do docker manifest inspect "$reg/$s:sha-$c" > /dev/null 2>&1 || { ok=0; break; }; done
+            if [ "$ok" = 1 ]; then echo "sha=$c" >> "$GITHUB_OUTPUT"; echo "previous image set: $c"; break; fi
+          done
+      - name: Deployment rehearsal on a simulated server
+        env:
+          REG: ${{ steps.prev.outputs.reg }}
+          CUR_SHA: ${{ github.sha }}
+          PREV_SHA: ${{ steps.prev.outputs.sha }}
+          SIM_DIR: ${{ runner.temp }}/sim
+        run: mkdir -p "$SIM_DIR" && bash infrastructure/production/test/deploy-rehearsal.sh
+      - name: Report
+        if: always()
+        run: |
+          r="$RUNNER_TEMP/sim/results.txt"
+          [ -f "$r" ] || { echo "::error title=Rehearsal::no results"; exit 0; }
+          { echo "## Deployment rehearsal"; echo; echo '```'; cat "$r"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep '^FAIL' "$r" | head -10 | while read -r l; do echo "::error title=Rehearsal::$l"; done
+          # Every result as a few combined notices (annotations are capped per job and in length).
+          split -l 18 "$r" "$RUNNER_TEMP/chunk."
+          n=0; for f in "$RUNNER_TEMP"/chunk.*; do n=$((n + 1)); echo "::notice title=Rehearsal results $n::$(sed 's/%/%25/g' "$f" | awk '{printf "%s%%0A", $0}')"; done
+      - name: Logs on failure
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP"/sim/*.log; do echo "::group::$(basename "$f")"; tail -80 "$f"; echo "::endgroup::"; done

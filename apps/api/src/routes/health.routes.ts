@@ -6,6 +6,13 @@ import { sendSuccess } from "../common/response.js";
 
 export const healthRouter = Router();
 
+/** Phase 87 — which build is running. Baked into the image at CI build time (GIT_SHA/BUILD_TIME
+ *  build args, infrastructure/docker/api.prod.Dockerfile); "unknown" for local/dev builds. Not
+ *  secret: a public Git commit id and a timestamp. */
+export function buildVersion() {
+  return { commit: process.env.GIT_SHA || "unknown", builtAt: process.env.BUILD_TIME || null };
+}
+
 /**
  * Phase 48 — liveness: "is the process itself running and able to respond at all," independent of
  * any external dependency. A deployment platform's restart-on-failed-liveness policy should only
@@ -15,7 +22,7 @@ export const healthRouter = Router();
  * an HTTP request; carries no dependency checks and nothing to redact.
  */
 healthRouter.get("/live", (_req, res) => {
-  sendSuccess(res, { status: "ok" });
+  sendSuccess(res, { status: "ok", version: buildVersion() });
 });
 
 /**
@@ -46,6 +53,10 @@ healthRouter.get(
     }
 
     const status = mongoUp && redisUp ? "ok" : "degraded";
-    sendSuccess(res, { status, dependencies: { mongo: mongoUp ? "up" : "down", redis: redisUp ? "up" : "down" } }, status === "ok" ? 200 : 503);
+    sendSuccess(
+      res,
+      { status, dependencies: { mongo: mongoUp ? "up" : "down", redis: redisUp ? "up" : "down" }, version: buildVersion() },
+      status === "ok" ? 200 : 503
+    );
   })
 );

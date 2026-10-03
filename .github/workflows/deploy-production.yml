@@ -1,0 +1,94 @@
+# Phase 87 — deploy an already-built image set to the production server. MANUAL ONLY.
+#
+#   Actions → Deploy production → Run workflow → tag: sha-<full commit>  (from main)
+#
+# The deployment boundary:
+#   · runs only when a person starts it, only from main, never for pull requests or forks
+#   · the "production" environment holds the SSH secrets; give it required reviewers
+#     (Settings → Environments → production) so every deploy is approved by someone
+#   · deploys only a tag whose four images already exist in GHCR (built by production-images.yml)
+#   · the server does the work (scripts/deploy.sh: pull, verify, health, smoke, auto-rollback);
+#     this job only connects and reports the result
+#
+# Required "production" environment secrets: PROD_SSH_HOST, PROD_SSH_USER, PROD_SSH_KEY (a key
+# used only for deploys), PROD_SSH_KNOWN_HOSTS (output of `ssh-keyscan -t ed25519 <host>`, checked —
+# host keys are never accepted blindly).
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy: sha-<40-character commit> (must already be built)"
+        required: true
+      rollback:
+        description: "Roll back instead (tag optional: empty = previous deployment)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Validate the tag
+        env:
+          TAG: ${{ inputs.tag }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: |
+          if [ "$ROLLBACK" = true ] && [ -z "$TAG" ]; then exit 0; fi
+          [[ "$TAG" =~ ^sha-[0-9a-f]{40}$ ]] || { echo "::error::tag must be sha-<40-character commit>, got '$TAG'"; exit 1; }
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: The images exist in the registry
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          reg="ghcr.io/${GITHUB_REPOSITORY,,}"
+          for s in api web admin marketing; do
+            docker manifest inspect "$reg/$s:$TAG" > /dev/null || { echo "::error::$reg/$s:$TAG not found — has production-images.yml finished for that commit?"; exit 1; }
+          done
+      - name: Deploy on the server
+        env:
+          TAG: ${{ inputs.tag }}
+          ROLLBACK: ${{ inputs.rollback }}
+          SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          [ -n "$SSH_HOST" ] && [ -n "$SSH_KEY" ] && [ -n "$SSH_KNOWN_HOSTS" ] || { echo "::error::production environment secrets are not configured"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          scripts=/opt/garnishtable/repo/infrastructure/production/scripts
+          if [ "$ROLLBACK" = true ]; then
+            remote="$scripts/rollback.sh $TAG"
+          else
+            # Scripts at the same commit as the images, then deploy.
+            remote="git -C /opt/garnishtable/repo fetch --quiet origin && git -C /opt/garnishtable/repo checkout --quiet --detach ${TAG#sha-} && $scripts/deploy.sh $TAG"
+          fi
+          set +e
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "$SSH_USER@$SSH_HOST" "$remote"
+          rc=$?
+          rm -f ~/.ssh/deploy_key
+          case $rc in
+            0) echo "::notice title=Deployed::$TAG is live and healthy" ;;
+            2) echo "::error title=Deploy failed::$TAG was not healthy — the server rolled back automatically" ;;
+            *) echo "::error title=Deploy failed::exit $rc — see docs/incident-runbook.md" ;;
+          esac
+          exit $rc

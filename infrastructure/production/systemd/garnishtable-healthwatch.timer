@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — health watch
+[Unit]
+Description=GarnishTable health watch (*:0/5)
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

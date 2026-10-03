@@ -55,7 +55,8 @@ export type NotificationJobName =
   | "marketplace.menu_sync"
   | "marketplace.stuck_event_check"
   | "menu_import.extract"
-  | "menu_import.cleanup_tick";
+  | "menu_import.cleanup_tick"
+  | "demo.cleanup_tick";
 
 export interface DemoPingPayload {
   message: string;
@@ -376,6 +377,13 @@ export async function registerMenuImportCleanupJob(): Promise<void> {
   );
 }
 
+/** Phase 87 — expired public-demo guest accounts (and their demo orders/payments) are removed
+ *  hourly at :05, on the same scheduler as every other periodic job here (fixed jobId, so BullMQ
+ *  dedupes the registration across restarts and the single worker never overlaps two runs). */
+export async function registerDemoCleanupJob(): Promise<void> {
+  await notificationQueue.add("demo.cleanup_tick", {}, { repeat: { pattern: "5 * * * *" }, jobId: "demo-cleanup-hourly" });
+}
+
 export function startNotificationWorker(): Worker<NotificationJobPayload> {
   const worker = new Worker<NotificationJobPayload>(
     "notifications",
@@ -452,6 +460,12 @@ export function startNotificationWorker(): Worker<NotificationJobPayload> {
         const { runMenuImportExtraction } = await import("../services/menuImport/extractionPipeline.service.js");
         const { jobId } = job.data as MenuImportExtractPayload;
         await runMenuImportExtraction(jobId, { attemptsMade: job.attemptsMade, maxAttempts: job.opts.attempts ?? 1 });
+      } else if (job.name === "demo.cleanup_tick") {
+        // Rethrown on failure so the job is recorded as failed (visible in queue counts and the
+        // worker's "notification job failed" log line); the next hourly tick still runs.
+        const { cleanupExpiredDemoData } = await import("../services/demoCleanup.service.js");
+        const result = await cleanupExpiredDemoData();
+        logger.info("[demo-cleanup] expired demo data removed", result);
       } else if (job.name === "menu_import.cleanup_tick") {
         try {
           const { runMenuImportRetentionSweep } = await import("../services/menuImport/menuImportRetention.service.js");

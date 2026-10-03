@@ -1,0 +1,51 @@
+# Build overlay for docker-compose.yml (Phase 87). Production servers never use this: CI builds and
+# pushes the images (.github/workflows/production-images.yml) and servers pull them by immutable tag.
+# Used for local builds and by the edge test harness (test/edge-e2e.sh):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+
+x-frontend-build-args: &frontend-build-args
+  VITE_API_URL: https://${API_HOST:?set API_HOST in .env}
+  VITE_SITE_URL: https://${ORDER_HOST:?set ORDER_HOST in .env}
+  VITE_STOREFRONT_URL: https://${ORDER_HOST}
+  VITE_ADMIN_URL: https://${APP_HOST:?set APP_HOST in .env}
+  VITE_MARKETING_URL: https://${MARKETING_HOST:?set MARKETING_HOST in .env}
+  VITE_POS_URL: https://${POS_HOST:?set POS_HOST in .env}
+  VITE_AGENCY_URL: https://${AGENCY_HOST:?set AGENCY_HOST in .env}
+  VITE_PLATFORM_ADMIN_URL: https://${ADMIN_HOST:?set ADMIN_HOST in .env}
+  GIT_SHA: ${GT_GIT_SHA:-local}
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.prod.Dockerfile
+      args:
+        GIT_SHA: ${GT_GIT_SHA:-local}
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: web
+        <<: *frontend-build-args
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: admin
+        <<: *frontend-build-args
+
+  marketing:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: marketing
+        VITE_SITE_URL: https://${MARKETING_HOST}
+        VITE_STOREFRONT_URL: https://${ORDER_HOST}
+        VITE_ADMIN_URL: https://${APP_HOST}
+        GIT_SHA: ${GT_GIT_SHA:-local}

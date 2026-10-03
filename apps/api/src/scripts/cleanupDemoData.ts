@@ -1,8 +1,6 @@
 import mongoose from "mongoose";
 import { connectDB } from "../config/db.js";
-import { User } from "../models/User.js";
-import { Order } from "../models/Order.js";
-import { Payment } from "../models/Payment.js";
+import { cleanupExpiredDemoData } from "../services/demoCleanup.service.js";
 
 /**
  * Phase 32 — deletes expired public storefront-playground demo accounts (User.isDemoAccount:true,
@@ -13,31 +11,19 @@ import { Payment } from "../models/Payment.js";
  * backfillLocationCounts.ts) and no Mongo TTL index anywhere, so this mirrors that existing
  * convention rather than introducing a new persistence pattern.
  *
+ * Phase 87 — production runs this hourly on the existing BullMQ scheduler (`demo.cleanup_tick`,
+ * queues/notification.queue.ts); this script remains for a manual run.
+ *
  * Usage: npm run --workspace apps/api cleanup:demo-data
  */
 async function cleanup() {
   await connectDB();
-
-  const expired = await User.find({ isDemoAccount: true, demoExpiresAt: { $lt: new Date() } }).select("_id");
-  const userIds = expired.map((u) => u._id);
-
-  if (userIds.length === 0) {
-    console.log("[cleanup-demo-data] nothing expired");
-    await mongoose.disconnect();
-    return;
-  }
-
-  const [{ deletedCount: paymentsDeleted }, { deletedCount: ordersDeleted }, { deletedCount: usersDeleted }] =
-    await Promise.all([
-      Payment.deleteMany({ customerId: { $in: userIds } }),
-      Order.deleteMany({ customerId: { $in: userIds }, isDemo: true }),
-      User.deleteMany({ _id: { $in: userIds } }),
-    ]);
-
+  const { users, orders, payments } = await cleanupExpiredDemoData();
   console.log(
-    `[cleanup-demo-data] deleted users=${usersDeleted} orders=${ordersDeleted} payments=${paymentsDeleted}`
+    users === 0
+      ? "[cleanup-demo-data] nothing expired"
+      : `[cleanup-demo-data] deleted users=${users} orders=${orders} payments=${payments}`
   );
-
   await mongoose.disconnect();
 }
 

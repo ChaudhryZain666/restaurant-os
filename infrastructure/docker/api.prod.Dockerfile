@@ -38,6 +38,12 @@ RUN npm run build -w packages/types \
 
 FROM node:22-slim AS runtime
 ENV NODE_ENV=production
+# Phase 87 — which commit this image was built from (set by CI). Exposed read-only at
+# GET /health(/live) as data.version; never secret. Declared late so it doesn't bust the build cache.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=
+ENV GIT_SHA=${GIT_SHA} BUILD_TIME=${BUILD_TIME}
+LABEL org.opencontainers.image.revision=${GIT_SHA}       org.opencontainers.image.created=${BUILD_TIME}       org.opencontainers.image.title="garnishtable-api"
 WORKDIR /repo
 COPY --from=build --chown=node:node /repo/package.json ./
 COPY --from=build --chown=node:node /repo/node_modules ./node_modules

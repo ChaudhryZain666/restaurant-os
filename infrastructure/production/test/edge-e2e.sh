@@ -29,7 +29,7 @@ fail() { echo "FAIL | $1 | $2" | tee -a "$RESULTS"; }
 info() { echo "INFO | $1 | $2" | tee -a "$RESULTS"; }
 check() { local name="$1" detail="$2"; shift 2; if "$@"; then pass "$name" "$detail"; else fail "$name" "$detail"; fi; }
 
-dc() { docker compose --env-file "$OUT/edge.env" -f "$PROD/docker-compose.yml" -f "$PROD/test/docker-compose.test.yml" --profile local-redis "$@"; }
+dc() { docker compose --env-file "$OUT/edge.env" -f "$PROD/docker-compose.yml" -f "$PROD/docker-compose.build.yml" -f "$PROD/test/docker-compose.test.yml" --profile local-redis "$@"; }
 # HTTPS through the edge, trusting only Pebble's test root (no -k).
 hc() { local host="$1" path="$2"; shift 2; curl -sS --max-time 20 --cacert "$OUT/pebble-root.pem" --resolve "$host:443:127.0.0.1" "$@" "https://$host$path"; }
 code() { local c; c=$(hc "$1" "$2" -o /dev/null -w '%{http_code}' "${@:3}" 2>/dev/null); echo "${c:-000}"; }

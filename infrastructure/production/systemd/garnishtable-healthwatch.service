@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — installed by scripts/bootstrap.sh. health watch
+[Unit]
+Description=GarnishTable health watch
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/garnishtable/repo/infrastructure/production/scripts/healthwatch.sh
+Nice=10

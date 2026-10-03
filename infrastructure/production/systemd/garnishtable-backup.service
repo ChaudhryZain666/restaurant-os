@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — installed by scripts/bootstrap.sh. MongoDB + certificate backup
+[Unit]
+Description=GarnishTable MongoDB + certificate backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/garnishtable/repo/infrastructure/production/scripts/backup.sh
+Nice=10

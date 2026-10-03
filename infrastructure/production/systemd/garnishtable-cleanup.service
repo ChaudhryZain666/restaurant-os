@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — installed by scripts/bootstrap.sh. old image cleanup
+[Unit]
+Description=GarnishTable old image cleanup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/garnishtable/repo/infrastructure/production/scripts/cleanup-images.sh
+Nice=10

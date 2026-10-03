@@ -1,0 +1,11 @@
+# GarnishTable (Phase 87) — old image cleanup
+[Unit]
+Description=GarnishTable old image cleanup (Sun *-*-* 04:30:00)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

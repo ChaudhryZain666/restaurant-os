@@ -51,6 +51,12 @@ FROM nginx:1.27-alpine AS runtime
 ARG APP
 ENV API_UPSTREAM=http://api:4000
 COPY --from=build /repo/apps/${APP}/dist /usr/share/nginx/html
+# Phase 87 — which commit this image was built from (set by CI): served at /version.json and
+# recorded as an image label, so a deployment can be verified and traced to a Git commit.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=
+RUN printf '{"app":"%s","commit":"%s","builtAt":"%s"}' "${APP}" "${GIT_SHA}" "${BUILD_TIME}" > /usr/share/nginx/html/version.json
+LABEL org.opencontainers.image.revision=${GIT_SHA}       org.opencontainers.image.created=${BUILD_TIME}       org.opencontainers.image.title="garnishtable-${APP}"
 COPY infrastructure/docker/nginx/frontend.conf.template /etc/nginx/templates/default.conf.template
 COPY infrastructure/docker/nginx/${APP}.locations.template /etc/nginx/templates/app-locations.inc.template
 EXPOSE 80
