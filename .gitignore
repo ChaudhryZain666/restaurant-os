@@ -22,3 +22,6 @@ backups/
 # Phase 81 — LocalDiskStorageService's dev-only fallback storage root (apps/api/.local-storage/).
 # Never used in production; contains locally-uploaded files, not source.
 .local-storage/
+
+# Phase 86 — edge test harness output (generated throwaway secrets, certificates)
+infrastructure/production/test/out/

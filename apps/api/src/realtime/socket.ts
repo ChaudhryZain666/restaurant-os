@@ -21,12 +21,21 @@ export function getIO(): SocketIOServer | null {
 }
 
 export function createSocketServer(httpServer: HttpServer): SocketIOServer {
+  const originCheck = createRealtimeOriginCheck(realtimeOrigins(env), isActiveCustomDomainOrigin);
   const io = new SocketIOServer(httpServer, {
     // Phase 85A — every GarnishTable surface that opens a socket (storefront, and all four admin-app
     // portals), plus any restaurant's ACTIVE custom domain (its storefront runs on that hostname).
     // Authentication is the handshake token below, not cookies — this allow-list only decides
     // which pages a browser lets connect, so a DB-backed check is safe here.
-    cors: { origin: createRealtimeOriginCheck(realtimeOrigins(env), isActiveCustomDomainOrigin), credentials: true },
+    cors: { origin: originCheck, credentials: true },
+    // Phase 86 — CORS only governs browsers' polling requests; a WebSocket handshake isn't subject
+    // to CORS at all. Refuse any handshake whose Origin header names a page we don't serve. A
+    // request with no Origin (a non-browser client) is still let through, authenticated by token.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      if (!origin) return callback(null, true);
+      originCheck(origin, (_err, allow) => callback(null, Boolean(allow)));
+    },
   });
 
   io.use((socket, next) => {

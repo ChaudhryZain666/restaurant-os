@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { isValidHostname, normalizeHostname } from "@restaurant/validation";
 import { parseTrustProxy, TrustProxyConfigError } from "./trustProxy.js";
 
 const LOCALHOST_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i;
@@ -73,6 +74,10 @@ const baseEnvSchema = z.object({
   // Unset means that edge capability doesn't exist yet: domains can still be verified and saved,
   // and the admin UI says plainly that they don't serve traffic yet.
   CUSTOM_DOMAIN_CNAME_TARGET: z.string().optional(),
+  // Phase 86 — the private port of the TLS edge's certificate-issuance check (edge/tlsAskServer.ts).
+  // Only containers on the internal Docker network can reach it; never publish it. Unset = the
+  // listener isn't started (local development and tests).
+  CUSTOM_DOMAIN_TLS_ASK_PORT: z.coerce.number().int().min(1).max(65535).optional(),
 
   // File storage (optional — StorageService throws only when actually used unconfigured)
   STORAGE_ENDPOINT: z.string().optional(),
@@ -328,7 +333,35 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
     }
   }
 
+  // Phase 86 — custom-domain edge settings, validated wherever they're set.
+  if (data.CUSTOM_DOMAIN_CNAME_TARGET !== undefined && !isValidHostname(normalizeHostname(data.CUSTOM_DOMAIN_CNAME_TARGET))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["CUSTOM_DOMAIN_CNAME_TARGET"],
+      message: `CUSTOM_DOMAIN_CNAME_TARGET must be a bare public hostname such as domains.garnishtable.com (got "${data.CUSTOM_DOMAIN_CNAME_TARGET}").`,
+    });
+  }
+  if (data.CUSTOM_DOMAIN_TLS_ASK_PORT !== undefined && data.CUSTOM_DOMAIN_TLS_ASK_PORT === data.PORT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["CUSTOM_DOMAIN_TLS_ASK_PORT"],
+      message: "CUSTOM_DOMAIN_TLS_ASK_PORT must differ from PORT — the certificate check must not be reachable through the public API port.",
+    });
+  }
+
   if (data.NODE_ENV !== "production") return;
+
+  // Phase 86 — restaurant custom domains are a launch requirement: production needs the CNAME
+  // target shown to restaurants and the private listener the TLS edge asks before issuing.
+  for (const key of ["CUSTOM_DOMAIN_CNAME_TARGET", "CUSTOM_DOMAIN_TLS_ASK_PORT"] as const) {
+    if (data[key] === undefined || data[key] === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `Production requires ${key} — restaurant custom domains cannot obtain TLS certificates without it (docs/custom-domains-operations.md).`,
+      });
+    }
+  }
 
   // Phase 85A — production checks that must hold regardless of the email configuration below
   // (which returns early on its own first failure).

@@ -1,0 +1,91 @@
+# GarnishTable production edge (Phase 86). Caddy terminates TLS for every hostname and proxies to
+# the private containers of docker-compose.yml. It holds no business logic: which restaurant a
+# custom domain belongs to is decided by the application (customDomain.service.ts), and Caddy only
+# asks it whether a certificate may be issued.
+#
+# Every value below comes from the environment (infrastructure/production/.env); nothing is
+# hard-coded to a production domain.
+
+{
+	email {$ACME_EMAIL}
+	# Let's Encrypt production by default. Set ACME_CA to the staging directory
+	# (https://acme-staging-v02.api.letsencrypt.org/directory) when rehearsing, so tests never
+	# consume production rate limits.
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	# How often managed certificates are scanned for renewal (Caddy's default is 10m).
+	renew_interval {$CADDY_RENEW_INTERVAL:10m}
+
+	# Restaurant custom domains: before obtaining OR renewing a certificate for a hostname that isn't
+	# one of the fixed sites below, Caddy asks the API's private listener. Any non-2xx answer (unknown,
+	# unverified, inactive, unentitled, malformed, or the API being unreachable) means no certificate.
+	# Port CUSTOM_DOMAIN_TLS_ASK_PORT is only reachable on the private Docker network.
+	on_demand_tls {
+		ask http://api:{$CUSTOM_DOMAIN_TLS_ASK_PORT}/internal/tls/ask
+	}
+
+	servers {
+		# Caddy is the public edge: it never trusts X-Forwarded-For from clients and sets it from the
+		# real connection. The API's TRUST_PROXY trusts only the private edge subnet.
+		protocols h1 h2 h3
+	}
+}
+
+(edge) {
+	encode zstd gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ---- Fixed GarnishTable hostnames (normal, eagerly managed certificates) --------------------------
+
+{$MARKETING_HOST} {
+	import edge
+	reverse_proxy marketing:80
+}
+
+# Owner Portal, Agency Portal, Platform Admin and POS: one admin build, four hostnames.
+{$APP_HOST}, {$AGENCY_HOST}, {$ADMIN_HOST}, {$POS_HOST} {
+	import edge
+	reverse_proxy admin:80
+}
+
+{$ORDER_HOST} {
+	import edge
+	reverse_proxy web:80
+}
+
+# API, inbound webhooks and Socket.IO. WebSocket upgrades are proxied natively and are not subject
+# to request timeouts.
+{$API_HOST} {
+	import edge
+	reverse_proxy api:4000
+}
+
+# The hostname restaurants CNAME their domains to. Browsed directly, it just leads to marketing.
+{$CUSTOM_DOMAIN_CNAME_TARGET} {
+	import edge
+	redir https://{$MARKETING_HOST}{uri} 308
+}
+
+# ---- Restaurant custom domains (any other hostname) ----------------------------------------------
+# Certificates are obtained on demand, only after the ask check above allows the hostname. Requests
+# go to the storefront, which resolves the restaurant itself from the hostname (by-domain lookup).
+https:// {
+	import edge
+	tls {
+		on_demand
+	}
+	reverse_proxy web:80
+}
+
+# Plain HTTP for custom domains: redirect to HTTPS. (ACME HTTP-01 challenges are answered by Caddy
+# before this route; the fixed hostnames get Caddy's automatic redirects.)
+http:// {
+	redir https://{host}{uri} 308
+}

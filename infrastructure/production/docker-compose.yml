@@ -1,0 +1,228 @@
+# GarnishTable production stack (Phase 86) — one host (e.g. a Hostinger KVM VPS) running:
+#
+#   caddy      public edge: TLS for the fixed hostnames + on-demand TLS for restaurant domains
+#   api        HTTP API + Socket.IO + background worker (single instance) + private TLS ask listener
+#   web        storefront (also serves every restaurant custom domain)
+#   admin      Owner Portal / Agency Portal / Platform Admin / POS
+#   marketing  marketing site
+#   redis      OPTIONAL (profile "local-redis") — or point REDIS_URL at a managed Redis
+#
+# MongoDB is external (Atlas). Only Caddy publishes ports. Secrets live in the API env file
+# (default ../../apps/api/.env.production, gitignored), never in images or this file.
+#
+#   cd infrastructure/production
+#   cp .env.example .env            # fill in hostnames / ACME email
+#   docker compose up -d --build    # add --profile local-redis to run Redis on this host
+#
+# See docs/custom-domains-operations.md and docs/production-architecture.md.
+
+name: garnishtable
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-frontend-build-args: &frontend-build-args
+  VITE_API_URL: https://${API_HOST:?set API_HOST in .env}
+  VITE_SITE_URL: https://${ORDER_HOST:?set ORDER_HOST in .env}
+  VITE_STOREFRONT_URL: https://${ORDER_HOST}
+  VITE_ADMIN_URL: https://${APP_HOST:?set APP_HOST in .env}
+  VITE_MARKETING_URL: https://${MARKETING_HOST:?set MARKETING_HOST in .env}
+  VITE_POS_URL: https://${POS_HOST:?set POS_HOST in .env}
+  VITE_AGENCY_URL: https://${AGENCY_HOST:?set AGENCY_HOST in .env}
+  VITE_PLATFORM_ADMIN_URL: https://${ADMIN_HOST:?set ADMIN_HOST in .env}
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+      CADDY_RENEW_INTERVAL: ${CADDY_RENEW_INTERVAL:-10m}
+      CUSTOM_DOMAIN_TLS_ASK_PORT: ${CUSTOM_DOMAIN_TLS_ASK_PORT:-4001}
+      CUSTOM_DOMAIN_CNAME_TARGET: ${CUSTOM_DOMAIN_CNAME_TARGET:?set CUSTOM_DOMAIN_CNAME_TARGET in .env}
+      MARKETING_HOST: ${MARKETING_HOST}
+      APP_HOST: ${APP_HOST}
+      AGENCY_HOST: ${AGENCY_HOST}
+      ADMIN_HOST: ${ADMIN_HOST}
+      POS_HOST: ${POS_HOST}
+      ORDER_HOST: ${ORDER_HOST}
+      API_HOST: ${API_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates, ACME account keys and OCSP staples. NOT disposable: losing it means re-issuing
+      # every certificate (and hitting CA rate limits). Back it up; never commit it.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: ${GT_CADDY_IP:-172.30.86.10}
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+      marketing:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.prod.Dockerfile
+    image: garnishtable/api:${GT_IMAGE_TAG:-local}
+    restart: unless-stopped
+    logging: *logging
+    stop_grace_period: 20s
+    env_file:
+      - ${GT_API_ENV_FILE:-../../apps/api/.env.production}
+    # Derived from the hostnames so the edge and the API can never disagree. These override the
+    # env file; secrets (MONGO_URI, JWT_*, SMTP_*, STORAGE_*, …) come only from the env file.
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      CLIENT_ORIGIN: https://${ORDER_HOST}
+      ADMIN_ORIGIN: https://${APP_HOST}
+      MARKETING_ORIGIN: https://${MARKETING_HOST}
+      API_PUBLIC_ORIGIN: https://${API_HOST}
+      PORTAL_ORIGINS: https://${AGENCY_HOST},https://${ADMIN_HOST},https://${POS_HOST}
+      CUSTOM_DOMAIN_CNAME_TARGET: ${CUSTOM_DOMAIN_CNAME_TARGET}
+      CUSTOM_DOMAIN_TLS_ASK_PORT: ${CUSTOM_DOMAIN_TLS_ASK_PORT:-4001}
+      # Only the private edge network (Caddy and the frontends' nginx) may set X-Forwarded-For.
+      TRUST_PROXY: ${GT_EDGE_SUBNET:-172.30.86.0/24}
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      # Public listener (liveness) AND the private TLS ask listener — Caddy needs both.
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const h=require('http');const g=(p,u)=>new Promise((ok,no)=>h.get({host:'127.0.0.1',port:p,path:u},r=>r.statusCode===200?ok():no()).on('error',no));
+          Promise.all([g(4000,'/health/live'),g(process.env.CUSTOM_DOMAIN_TLS_ASK_PORT,'/internal/tls/health')]).then(()=>process.exit(0),()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: web
+        <<: *frontend-build-args
+    image: garnishtable/web:${GT_IMAGE_TAG:-local}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      API_UPSTREAM: http://api:4000
+    networks:
+      - edge
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck: &nginx-health
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: admin
+        <<: *frontend-build-args
+    image: garnishtable/admin:${GT_IMAGE_TAG:-local}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      API_UPSTREAM: http://api:4000
+    networks:
+      - edge
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck: *nginx-health
+
+  marketing:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend.prod.Dockerfile
+      args:
+        APP: marketing
+        VITE_SITE_URL: https://${MARKETING_HOST}
+        VITE_STOREFRONT_URL: https://${ORDER_HOST}
+        VITE_ADMIN_URL: https://${APP_HOST}
+    image: garnishtable/marketing:${GT_IMAGE_TAG:-local}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      API_UPSTREAM: http://api:4000
+    networks:
+      - edge
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck: *nginx-health
+
+  # Optional Redis on this host (docker compose --profile local-redis up -d). Private network only;
+  # append-only persistence; never evicts (BullMQ requirement). With it, set
+  # REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379 in the API env file.
+  redis:
+    profiles: ["local-redis"]
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    # (Checked at container start rather than with ${VAR:?}: Compose interpolates every service, even
+    # ones whose profile is off, and managed-Redis deployments don't set REDIS_PASSWORD.)
+    command:
+      - sh
+      - -c
+      - >-
+        test -n "$$REDIS_PASSWORD" || { echo "REDIS_PASSWORD must be set in .env for the local-redis profile" >&2; exit 1; };
+        exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+networks:
+  # Caddy, the frontends and the API. Fixed subnet so TRUST_PROXY can name it exactly.
+  edge:
+    ipam:
+      config:
+        - subnet: ${GT_EDGE_SUBNET:-172.30.86.0/24}
+  # API <-> Redis only; no route to the internet.
+  backend:
+    internal: true
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

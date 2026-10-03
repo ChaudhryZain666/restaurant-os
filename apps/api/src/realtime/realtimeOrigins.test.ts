@@ -3,7 +3,11 @@ import mongoose from "mongoose";
 import { connectDB } from "../config/db.js";
 import { httpCorsOrigins, realtimeOrigins } from "../config/origins.js";
 import { DomainMapping } from "../models/DomainMapping.js";
-import { closeTestConnections } from "../test-utils/fixtures.js";
+import { Business } from "../models/Business.js";
+import { Plan } from "../models/Plan.js";
+import { Restaurant } from "../models/Restaurant.js";
+import { Subscription } from "../models/Subscription.js";
+import { closeTestConnections, createTestBusiness, createTestPlan, createTestRestaurant, createTestSubscription } from "../test-utils/fixtures.js";
 import { clearRealtimeOriginCache, createRealtimeOriginCheck, isActiveCustomDomainOrigin } from "./realtimeOrigins.js";
 
 const PRODUCTION_ORIGINS = {
@@ -68,15 +72,31 @@ describe("isActiveCustomDomainOrigin", () => {
     clearRealtimeOriginCache();
   });
 
+  const cleanupIds: mongoose.Types.ObjectId[] = [];
+
   afterAll(async () => {
     await DomainMapping.deleteMany({ hostname: { $in: [hostname, `pending-${hostname}`] } });
+    await Promise.all([
+      Subscription.deleteMany({ ownerId: { $in: cleanupIds } }),
+      Restaurant.deleteMany({ _id: { $in: cleanupIds } }),
+      Business.deleteMany({ _id: { $in: cleanupIds } }),
+      Plan.deleteMany({ _id: { $in: cleanupIds } }),
+    ]);
     await closeTestConnections();
   });
 
-  it("accepts an https origin whose hostname is an ACTIVE custom domain, and nothing else", async () => {
-    const ids = { businessId: new mongoose.Types.ObjectId(), verificationToken: "t" };
-    await DomainMapping.create({ ...ids, locationId: new mongoose.Types.ObjectId(), hostname, status: "active" });
-    await DomainMapping.create({ ...ids, locationId: new mongoose.Types.ObjectId(), hostname: `pending-${hostname}`, status: "verified" });
+  it("accepts an https origin whose hostname is a LIVE custom domain, and nothing else", async () => {
+    // Phase 86 — "live" is the shared decision (customDomain.service.ts): active mapping, active
+    // restaurant, entitled business.
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id, ownerId: business.ownerId, status: "active" });
+    const other = await createTestRestaurant({ businessId: business._id, ownerId: business.ownerId, status: "active" });
+    const plan = await createTestPlan({ code: `realtime-${Date.now()}`, entitlements: [{ key: "custom_domains", value: true }] });
+    await createTestSubscription("business", business._id, plan._id);
+    cleanupIds.push(business._id, restaurant._id, other._id, plan._id);
+    const ids = { businessId: business._id, verificationToken: "t" };
+    await DomainMapping.create({ ...ids, locationId: restaurant._id, hostname, status: "active" });
+    await DomainMapping.create({ ...ids, locationId: other._id, hostname: `pending-${hostname}`, status: "verified" });
 
     expect(await isActiveCustomDomainOrigin(`https://${hostname}`)).toBe(true);
     expect(await isActiveCustomDomainOrigin(`https://pending-${hostname}`)).toBe(false);

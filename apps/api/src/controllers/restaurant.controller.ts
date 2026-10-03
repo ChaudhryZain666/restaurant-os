@@ -4,7 +4,6 @@ import mongoose from "mongoose";
 import type { Request, Response } from "express";
 import type { HydratedDocument } from "mongoose";
 import type { CreateRestaurantInput, UpdateRestaurantInput } from "@restaurant/validation";
-import { normalizeHostname } from "@restaurant/validation";
 import type { RestaurantThemeConfig } from "@restaurant/types";
 import { normalizeThemeConfig } from "@restaurant/types";
 import { Restaurant, type RestaurantDoc } from "../models/Restaurant.js";
@@ -18,7 +17,8 @@ import { computeReadiness, computeSetupChecklist } from "../services/restaurantR
 import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
-import { hasFeatureEntitlement, releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
+import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
+import { resolveCustomDomain } from "../services/customDomain.service.js";
 import { getPaymentProvider } from "../payments/index.js";
 import { canProcessOnlinePayments, hasActiveRestaurantPaymentAccount } from "../payments/restaurantProvider.js";
 import { logger } from "../common/logger.js";
@@ -380,17 +380,13 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
  * stops it from being SERVED while it isn't.
  */
 export async function getRestaurantByDomain(req: Request, res: Response) {
-  const hostname = normalizeHostname(req.params.hostname);
-  const mapping = await DomainMapping.findOne({ hostname, status: "active" });
-  if (!mapping) throw ApiError.notFound("No storefront is configured for this domain");
+  // Phase 86 — the same decision the TLS edge's certificate check uses (customDomain.service.ts),
+  // so a hostname is served exactly when it can also obtain a certificate.
+  const decision = await resolveCustomDomain(req.params.hostname);
+  if (!decision.live) throw ApiError.notFound("No storefront is configured for this domain");
 
-  const restaurant = await Restaurant.findOne({ _id: mapping.locationId, status: "active" });
+  const restaurant = await Restaurant.findOne({ _id: decision.restaurantId, status: "active" });
   if (!restaurant) throw ApiError.notFound("No storefront is configured for this domain");
-
-  if (restaurant.businessId) {
-    const hasCustomDomains = await hasFeatureEntitlement("business", restaurant.businessId.toString(), "custom_domains");
-    if (!hasCustomDomains) throw ApiError.notFound("No storefront is configured for this domain");
-  }
 
   sendSuccess(res, {
     restaurant: toPublicRestaurant(restaurant),

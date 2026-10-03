@@ -5,10 +5,14 @@ own domain, e.g. `orders.somerestaurant.com`, to their storefront. This document
 code already does from what the production edge must provide before a custom domain can actually
 serve customers.
 
-**Current status: verification works; serving does not.** Nothing in this repository routes,
-proxies or issues TLS certificates for customer hostnames. Until the edge capability below exists,
-`CUSTOM_DOMAIN_CNAME_TARGET` stays unset and the admin panel tells owners that their domain is
-verified and saved but not yet serving customers. It never shows such a domain as "Active".
+**Status (Phase 86): implemented.** The production edge is Caddy (`infrastructure/production/`):
+on-demand TLS gated by the API's private certificate-issuance check, routing to the storefront, and
+`CUSTOM_DOMAIN_CNAME_TARGET` (required in production). Operations, DNS model and threat model are in
+`docs/custom-domains-operations.md`. The contract below is unchanged; Phase 86 is one implementation
+of it.
+
+The admin panel's honest "not serving traffic yet" state still applies to any deployment without
+`CUSTOM_DOMAIN_CNAME_TARGET`, e.g. development.
 
 These are separate from GarnishTable's own hostnames (`docs/production-architecture.md`), which are
 static configuration. Custom domains are tenant data in `DomainMapping`.
@@ -60,11 +64,10 @@ customer hostnames to that container.
 
 Each customer hostname needs its own certificate, issued on demand.
 
-- **Issue only for hostnames that are active custom domains.** The edge should ask the platform
-  before issuing (a "should I issue for this hostname?" check), so strangers can't point arbitrary
-  domains at the edge and burn certificate quota. Nothing in the API answers that question for the
-  edge today: a small internal endpoint, or a direct `DomainMapping` lookup, is the remaining
-  engineering item once an edge is chosen.
+- **Issue only for hostnames that are live custom domains.** The edge asks the platform before
+  issuing or renewing: `GET /internal/tls/ask?domain=<host>` on the API's private listener
+  (`CUSTOM_DOMAIN_TLS_ASK_PORT`, Phase 86), backed by the same decision as `by-domain`. Any non-2xx
+  means no certificate.
 - Renew automatically, and stop renewing when a domain is deactivated or removed.
 - Redirect HTTP to HTTPS. Socket.IO only accepts `https://` custom-domain origins.
 

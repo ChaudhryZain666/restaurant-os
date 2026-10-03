@@ -1,0 +1,60 @@
+# Phase 86 — TEST-ONLY overlay for the production stack, used by edge-e2e.sh. Never deploy this.
+#
+# Adds Let's Encrypt's official ACME test CA (Pebble) and its DNS test server (challtestsrv), plus a
+# throwaway single-node MongoDB replica set, so the real production Caddyfile and API can run the
+# complete custom-domain lifecycle — DNS TXT verification, on-demand issuance, renewal,
+# deactivation — without touching any public CA or real DNS.
+#
+#   docker compose --env-file test/out/edge.env -f docker-compose.yml -f test/docker-compose.test.yml --profile local-redis up -d
+
+services:
+  challtestsrv:
+    image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
+    # Every A query answers with Caddy's address, so Pebble's HTTP-01 validation reaches the edge.
+    # TXT records (the GarnishTable ownership token) are added through its management API.
+    command: ["-defaultIPv4", "${GT_CADDY_IP:-172.30.86.10}", "-defaultIPv6", "", "-dns01", ":53", "-management", ":8055", "-http01", "", "-https01", "", "-tlsalpn01", "", "-doh", ""]
+    ports:
+      - "127.0.0.1:8055:8055"
+    networks:
+      edge:
+        ipv4_address: ${GT_CHALLTESTSRV_IP:-172.30.86.20}
+
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:latest
+    command: ["-config", "/gt/pebble-config.json", "-dnsserver", "${GT_CHALLTESTSRV_IP:-172.30.86.20}:53"]
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+    volumes:
+      - ./test/pebble-config.json:/gt/pebble-config.json:ro
+    ports:
+      - "127.0.0.1:15000:15000"
+    networks:
+      edge:
+        ipv4_address: ${GT_PEBBLE_IP:-172.30.86.21}
+
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    networks:
+      - backend
+
+  caddy:
+    # Trust Pebble's ACME endpoint certificate (system roots + Pebble's test root).
+    environment:
+      SSL_CERT_FILE: /gt/ca-bundle.pem
+    volumes:
+      - ./test/out/ca-bundle.pem:/gt/ca-bundle.pem:ro
+    depends_on:
+      pebble:
+        condition: service_started
+
+  api:
+    # The real NodeDnsVerifier resolves the ownership TXT record through challtestsrv.
+    dns:
+      - ${GT_CHALLTESTSRV_IP:-172.30.86.20}
+    depends_on:
+      mongo:
+        condition: service_started
+      redis:
+        condition: service_healthy

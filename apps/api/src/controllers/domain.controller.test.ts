@@ -334,7 +334,8 @@ describe("GET /restaurants/by-domain/:hostname — public storefront resolution"
   it.each(["pending_verification", "verified", "unknown", "removed"])(
     "never resolves a %s domain — 404, no fallthrough to any restaurant",
     async (kind) => {
-      const hostname = uniqueHostname(`public-${kind}`);
+      // Phase 86 — underscores are no longer valid in a domain (never certificate-issuable).
+      const hostname = uniqueHostname(`public-${kind.replace(/_/g, "-")}`);
       if (kind === "unknown") {
         // never created at all
       } else {

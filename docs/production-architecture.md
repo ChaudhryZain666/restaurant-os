@@ -77,6 +77,15 @@ The edge (TLS terminator / reverse proxy / CDN) must:
 `infrastructure/docker/nginx/frontend.conf.template` implements 2, 3, 5 and 6 for a frontend
 container. TLS (1) and the `api.` WebSocket upgrade (4) belong to the edge in front of it.
 
+**Phase 86: the production edge is Caddy**, in `infrastructure/production/`:
+- `Caddyfile`: the seven fixed hostnames, plus on-demand TLS for restaurant custom domains, gated
+  by the API's private certificate-issuance check.
+- `docker-compose.yml`: Caddy is the only service publishing ports (80/443). The API, frontends and
+  optional Redis sit on private networks; Caddy's certificate state persists in a volume.
+
+Operations and the custom-domain lifecycle are in `docs/custom-domains-operations.md`. With this
+stack, `TRUST_PROXY` is the fixed private edge subnet (`GT_EDGE_SUBNET`), set by Compose.
+
 ### Trust model for client IPs (`TRUST_PROXY`)
 
 Every rate limiter (auth, signup, contact, invites, the global limiter) keys on `req.ip`. Behind a

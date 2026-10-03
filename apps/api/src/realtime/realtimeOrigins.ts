@@ -1,4 +1,4 @@
-import { DomainMapping } from "../models/DomainMapping.js";
+import { resolveCustomDomain } from "../services/customDomain.service.js";
 
 type OriginCallback = (err: Error | null, allow?: boolean) => void;
 
@@ -29,9 +29,10 @@ const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 1000;
 const cache = new Map<string, { allowed: boolean; expiresAt: number }>();
 
-/** True when `origin` is an https origin whose hostname is an ACTIVE custom domain. Cached
- *  briefly so a reconnect storm doesn't become a query storm; a domain deactivated in the admin
- *  stops being accepted within CACHE_TTL_MS. */
+/** True when `origin` is an https origin whose hostname is a LIVE custom domain — the same
+ *  decision the storefront and the TLS edge use (customDomain.service.ts). Cached briefly so a
+ *  reconnect storm doesn't become a query storm; a domain deactivated in the admin stops being
+ *  accepted within CACHE_TTL_MS. */
 export async function isActiveCustomDomainOrigin(origin: string, now = Date.now()): Promise<boolean> {
   let url: URL;
   try {
@@ -46,7 +47,7 @@ export async function isActiveCustomDomainOrigin(origin: string, now = Date.now(
   const cached = cache.get(hostname);
   if (cached && cached.expiresAt > now) return cached.allowed;
 
-  const allowed = (await DomainMapping.exists({ hostname, status: "active" })) !== null;
+  const allowed = (await resolveCustomDomain(hostname)).live;
   if (cache.size >= CACHE_MAX_ENTRIES) cache.clear();
   cache.set(hostname, { allowed, expiresAt: now + CACHE_TTL_MS });
   return allowed;

@@ -18,6 +18,7 @@ import { registerOrderEventListeners } from "./events/orderEventListeners.js";
 import { registerTicketEventListeners } from "./events/ticketEventListeners.js";
 import { logger } from "./common/logger.js";
 import { createShutdownHandler } from "./shutdown.js";
+import { createTlsAskApp } from "./edge/tlsAskServer.js";
 
 /**
  * A narrow, last-resort safety net — NOT a general "ignore all crashes" handler (that would be
@@ -82,6 +83,12 @@ async function main() {
     logger.info("server listening", { port: env.PORT });
   });
 
+  // Phase 86 — the TLS edge's private certificate-issuance check, on its own port (never published).
+  const tlsAskServer = env.CUSTOM_DOMAIN_TLS_ASK_PORT ? createServer(createTlsAskApp()) : null;
+  tlsAskServer?.listen(env.CUSTOM_DOMAIN_TLS_ASK_PORT, () => {
+    logger.info("tls ask listener listening", { port: env.CUSTOM_DOMAIN_TLS_ASK_PORT });
+  });
+
   // Phase 48 — hardened in three ways, all narrow: (1) a re-entrancy guard, since a platform can
   // send SIGTERM more than once (or SIGTERM followed by an operator's own SIGINT) and the old
   // version would run this whole sequence twice concurrently — a second httpServer.close()/
@@ -93,7 +100,11 @@ async function main() {
   // deployment platform's own supervisor can restart it. The sequencing itself lives in shutdown.ts
   // as a testable, dependency-injected factory — see shutdown.test.ts.
   const shutdown = createShutdownHandler({
-    closeServer: () => new Promise<void>((resolvePromise) => httpServer.close(() => resolvePromise())),
+    closeServer: () =>
+      Promise.all([
+        new Promise<void>((resolvePromise) => httpServer.close(() => resolvePromise())),
+        tlsAskServer ? new Promise<void>((resolvePromise) => tlsAskServer.close(() => resolvePromise())) : Promise.resolve(),
+      ]).then(() => undefined),
     closeWorker: async () => {
       await notificationWorker.close();
     },

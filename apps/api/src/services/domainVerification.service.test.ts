@@ -22,6 +22,14 @@ describe("normalizeHostname / isValidHostname", () => {
     ["[::1]", false, "a bracketed IPv6 address"],
     ["orders.example.com", true, "a genuinely valid hostname"],
     ["a.b.c.example.co.uk", true, "a multi-label valid hostname"],
+    ["printer.local", false, "Phase 86: private-network suffix"],
+    ["redis.internal", false, "Phase 86: private-network suffix"],
+    ["app.localhost", false, "Phase 86: localhost suffix"],
+    ["site.test", false, "Phase 86: reserved TLD"],
+    ["bad_name.example.com", false, "Phase 86: underscore (never certificate-issuable)"],
+    ["-x.example.com", false, "Phase 86: leading hyphen"],
+    [`${"a".repeat(64)}.example.com`, false, "Phase 86: label longer than 63"],
+    ["xn--caf-dma.example.com", true, "Phase 86: punycode label"],
   ])("isValidHostname(%s) === %s (%s)", (input, expected) => {
     expect(isValidHostname(input)).toBe(expected);
   });

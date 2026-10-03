@@ -56,6 +56,8 @@ describe("envSchema — production email safety (Phase 45)", () => {
       MARKETING_ORIGIN: "https://www.realdomain.example",
       API_PUBLIC_ORIGIN: "https://api.realdomain.example",
       TRUST_PROXY: "1",
+      CUSTOM_DOMAIN_CNAME_TARGET: "domains.realdomain.example",
+      CUSTOM_DOMAIN_TLS_ASK_PORT: "4001",
     });
     expect(result.success).toBe(true);
   });
@@ -91,6 +93,8 @@ describe("envSchema — production email safety (Phase 45)", () => {
       MARKETING_ORIGIN: "https://www.realdomain.example",
       API_PUBLIC_ORIGIN: "https://api.realdomain.example",
       TRUST_PROXY: "1",
+      CUSTOM_DOMAIN_CNAME_TARGET: "domains.realdomain.example",
+      CUSTOM_DOMAIN_TLS_ASK_PORT: "4001",
     });
     expect(result.success).toBe(true);
   });
@@ -229,6 +233,8 @@ const PRODUCTION_READY = {
   API_PUBLIC_ORIGIN: "https://api.garnishtable.com",
   PORTAL_ORIGINS: "https://agency.garnishtable.com,https://admin.garnishtable.com,https://pos.garnishtable.com",
   TRUST_PROXY: "10.0.0.0/8",
+  CUSTOM_DOMAIN_CNAME_TARGET: "domains.garnishtable.com",
+  CUSTOM_DOMAIN_TLS_ASK_PORT: "4001",
 };
 
 function fieldErrors(input: Record<string, unknown>) {
@@ -298,5 +304,27 @@ describe("envSchema — Phase 85A production hardening", () => {
     it("leaves development and test free to use the Paddle sandbox", () => {
       expect(envSchema.safeParse({ ...REQUIRED_BASE, BILLING_PROVIDER: "paddle", PADDLE_ENV: "sandbox" }).success).toBe(true);
     });
+  });
+});
+
+describe("envSchema — Phase 86 custom-domain edge settings", () => {
+  it("requires CUSTOM_DOMAIN_CNAME_TARGET and CUSTOM_DOMAIN_TLS_ASK_PORT in production", () => {
+    const errors = fieldErrors({ ...PRODUCTION_READY, CUSTOM_DOMAIN_CNAME_TARGET: undefined, CUSTOM_DOMAIN_TLS_ASK_PORT: undefined });
+    expect(errors.CUSTOM_DOMAIN_CNAME_TARGET?.[0]).toMatch(/Production requires CUSTOM_DOMAIN_CNAME_TARGET/);
+    expect(errors.CUSTOM_DOMAIN_TLS_ASK_PORT?.[0]).toMatch(/Production requires CUSTOM_DOMAIN_TLS_ASK_PORT/);
+  });
+
+  it("rejects a CNAME target that isn't a bare public hostname", () => {
+    for (const bad of ["https://domains.garnishtable.com/x", "localhost", "10.0.0.5", "edge.internal"]) {
+      expect(fieldErrors({ ...REQUIRED_BASE, CUSTOM_DOMAIN_CNAME_TARGET: bad }).CUSTOM_DOMAIN_CNAME_TARGET).toBeTruthy();
+    }
+  });
+
+  it("refuses an ask port equal to the public API port", () => {
+    expect(fieldErrors({ ...REQUIRED_BASE, PORT: "4000", CUSTOM_DOMAIN_TLS_ASK_PORT: "4000" }).CUSTOM_DOMAIN_TLS_ASK_PORT?.[0]).toMatch(/must differ from PORT/);
+  });
+
+  it("keeps both optional outside production", () => {
+    expect(envSchema.safeParse(REQUIRED_BASE).success).toBe(true);
   });
 });
