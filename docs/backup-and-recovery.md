@@ -4,6 +4,12 @@ Phase 77 — the runbook closing this project's second launch blocker ("no produ
 backup strategy, no restore runbook, no tested restore procedure"). Everything on this page was
 actually run this phase, not just written — see §8 for exact evidence.
 
+> **Phase 87 — on the production VPS** use `infrastructure/production/scripts/backup.sh` /
+> `restore.sh` (daily timer, `mongo:7` tools image, off-site copy hook), documented in
+> `docs/production-deployment-runbook.md` §7 and `docs/incident-runbook.md` §4. The production API
+> image has no `tsx` or MongoDB tools, so the `npm run backup` / `restore` scripts below are for a
+> developer machine with the repository checked out.
+
 ## 1. Architecture assumptions
 
 This repository's own `docker-compose.yml` runs MongoDB as a single-node replica set

@@ -145,8 +145,11 @@ cd apps/api && NODE_ENV=production node dist/index.js
 Image: `infrastructure/docker/api.prod.Dockerfile` (multi-stage; runtime has no dev dependencies;
 runs as the `node` user; healthcheck on `/health/live`; `CMD ["node", "dist/index.js"]`).
 
-**Deploy steps.** Run these from `apps/api`, using the compiled scripts, since `tsx` is a dev
-dependency:
+**Deploy steps.** Phase 87: `infrastructure/production/scripts/deploy.sh` runs the per-deploy
+steps itself (indexes on every deploy; `--init` adds the plan seed and demo storefront) in a one-off
+container of the new image, and the demo cleanup is an in-process scheduled job. See
+`docs/production-deployment-runbook.md`. The underlying commands, run from `apps/api` with the
+compiled scripts since `tsx` is a dev dependency:
 
 | When | Command |
 |---|---|
@@ -154,7 +157,7 @@ dependency:
 | First deploy, then whenever plans change | `node dist/scripts/seed.js` (plan catalog, idempotent) |
 | Once | `node dist/scripts/bootstrapPlatformAdmin.js` (with `PLATFORM_ADMIN_EMAIL`/`PASSWORD` set) |
 | First deploy (idempotent, safe to repeat) | `node dist/scripts/provisionProductionDemo.js` (marketing demo storefront) |
-| Scheduled, e.g. hourly | `node dist/scripts/cleanupDemoData.js` (expired public-demo guest accounts and their orders) |
+| Automatic, hourly (BullMQ `demo.cleanup_tick`, Phase 87) | same logic as `node dist/scripts/cleanupDemoData.js` (expired public-demo guest accounts and their orders), which remains for manual runs |
 
 Never run `seed-demo-data.ts` against production: it creates known-password accounts and fake
 orders.

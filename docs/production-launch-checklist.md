@@ -42,9 +42,9 @@ should close soon after) · 🔵 External dependency.
   production — `storage/index.ts` throws on the first upload without it; the local-disk adapter is
   development-only. Images need public read; menu-import source files under
   `restaurants/*/menu-imports/` are only ever read server-side.
-- 🔴 Run the deploy steps from `apps/api` with the compiled scripts (`tsx` is a dev dependency):
-  `node dist/scripts/ensureIndexes.js` on every deploy (production never auto-builds indexes),
-  `node dist/scripts/seed.js` (plan catalog), `node dist/scripts/bootstrapPlatformAdmin.js` once.
+- 🔴 Deploy with `infrastructure/production/scripts/deploy.sh sha-<commit>` (Phase 87): it runs
+  `ensureIndexes` on every deploy and, with `--init`, the plan seed and demo storefront. Still run
+  `node dist/scripts/bootstrapPlatformAdmin.js` once by hand (docs/production-deployment-runbook.md).
 - 🔴 Run exactly **one** API instance (HTTP + Socket.IO + in-process worker; no Socket.IO Redis
   adapter) under a supervisor with automatic restart, liveness `GET /health/live`, readiness
   `GET /health`, and a stop timeout of at least 15s. Image: `infrastructure/docker/api.prod.Dockerfile`.
@@ -161,8 +161,8 @@ should close soon after) · 🔵 External dependency.
   before launch (currently defaults to a placeholder `hello@garnishtable.local` if unset).
 - 🔴 Marketing demo: run `node dist/scripts/provisionProductionDemo.js` (Phase 85A — idempotent;
   creates only the `demo-restaurant` storefront and refuses if a real tenant owns the slug). Never
-  run `seed-demo-data.ts` against production. Schedule `node dist/scripts/cleanupDemoData.js`
-  (e.g. hourly) so expired demo-guest accounts and their orders don't accumulate.
+  run `seed-demo-data.ts` against production. Expired demo-guest cleanup runs automatically every
+  hour inside the API (Phase 87, BullMQ job `demo.cleanup_tick`); nothing to schedule.
 - 🟡 Menu import runs with `MENU_EXTRACTION_PROVIDER_MODE=live` (the mode is `live`, not `claude` as
   the Phase 83 report said). Keep `ANTHROPIC_MODEL=claude-sonnet-4-5`: the extractor forces
   `tool_choice: {type: "tool"}`, which newer models (Opus 5.5 / Sonnet 5.5) reject, so changing the

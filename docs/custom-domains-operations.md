@@ -54,11 +54,11 @@ first visit simply fails until it is, and Caddy retries issuance on later reques
 
 | Setting | Where | Notes |
 |---|---|---|
-| `CUSTOM_DOMAIN_CNAME_TARGET` | `infrastructure/production/.env` | Passed to Caddy (a site that redirects to marketing) and to the API (shown to restaurants). Required in production; validated as a bare public hostname. |
+| `CUSTOM_DOMAIN_CNAME_TARGET` | server `edge.env` (`/opt/garnishtable/config/edge.env`) | Passed to Caddy (a site that redirects to marketing) and to the API (shown to restaurants). Required in production; validated as a bare public hostname. |
 | `CUSTOM_DOMAIN_TLS_ASK_PORT` | same (default `4001`) | The API's private listener for the certificate check. Required in production; must differ from `PORT`; **never published**. |
 | `ACME_EMAIL`, `ACME_CA`, `CADDY_RENEW_INTERVAL` | same | CA account contact; the CA directory (Let's Encrypt production by default; use staging for rehearsals); the renewal scan interval. |
 | The seven hostnames, `GT_EDGE_SUBNET`, `GT_CADDY_IP` | same | Compose derives every `*_ORIGIN`, `PORTAL_ORIGINS` and `TRUST_PROXY` for the API from these, so the edge and the API can't disagree. |
-| API secrets | `apps/api/.env.production` (gitignored) | `MONGO_URI`, `REDIS_URL`, `JWT_*`, `SMTP_*`, `STORAGE_*`, … |
+| API secrets | server `api.env` (`GT_API_ENV_FILE`, mode 600) | `MONGO_URI`, `REDIS_URL`, `JWT_*`, `SMTP_*`, `STORAGE_*`, … |
 
 The template is `infrastructure/production/.env.example`.
 
@@ -112,18 +112,17 @@ own registered domain, so one restaurant can't exhaust another's quota.
 
 ## 5. Operations
 
-- **Deploy or update the stack:**
-  `cd infrastructure/production && docker compose up -d --build`
-  Add `--profile local-redis` for Redis on the host.
+- **Deploy or update the stack:** `scripts/deploy.sh sha-<commit>` on the server (Phase 87; images
+  are built by CI, never on the server). See `docs/production-deployment-runbook.md`.
 - **Apply a Caddyfile change without downtime:**
   `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
   A config error leaves the previous config running; check `docker compose logs caddy`.
-- **Roll back:** restore the previous `Caddyfile` (it's in git) and reload. For images,
-  `GT_IMAGE_TAG=<previous> docker compose up -d`.
+- **Roll back:** `scripts/rollback.sh` restores the previous deployment, images and Caddyfile
+  together (each deployment's Caddyfile comes from its own commit).
 - **Certificate state** lives in the `caddy_data` volume (`/data`: certificates, private keys,
   ACME account) and `caddy_config` (`/config`: autosaved config). It's persistent, so restarts and
   redeploys reuse certificates (verified in the edge test).
-  - **Back up `caddy_data`:** e.g. `docker run --rm -v garnishtable_caddy_data:/d -v $PWD:/b alpine tar czf /b/caddy_data.tgz -C /d .`
+  - **Back up `caddy_data`:** `scripts/backup.sh` (daily timer) archives it next to the MongoDB dump.
   - **Restore it** the same way before starting Caddy.
   - **Losing it is recoverable, but costly:** Caddy re-issues everything on demand, which counts
     against CA rate limits.

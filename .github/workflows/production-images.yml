@@ -77,6 +77,11 @@ jobs:
           JWT_REFRESH_SECRET=$b
           CREDENTIAL_ENCRYPTION_KEY=$k
           STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$w
+          # Format-valid placeholder: the Stripe Connect tests stub every Stripe HTTP call.
+          STRIPE_SECRET_KEY=sk_test_ci_$w
+          # Test-only limits, as in a developer .env (env.ts): the suite logs in far more than 30 times.
+          AUTH_RATE_LIMIT_MAX=10000
+          GLOBAL_RATE_LIMIT_MAX=50000
           GEOCODING_PROVIDER=test
           POS_TERMINAL_PROVIDER=mock
           PADDLE_ENV=sandbox

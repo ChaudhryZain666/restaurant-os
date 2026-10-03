@@ -310,8 +310,9 @@ and `listRestaurantOrders` (backing both Kitchen Display and Orders Management),
 counts all exclude `isDemo:true` by default — a public playground visitor's order is real (goes
 through the same server-authoritative pricing/tax/loyalty pipeline, via whichever `PAYMENT_PROVIDER`
 is configured — `mock` by default, so no real money ever moves) but invisible to the restaurant's real
-staff. `apps/api/src/scripts/cleanupDemoData.ts` (run externally, like every other maintenance script
-here — this repo has no in-process cron) deletes expired demo accounts and their orders/payments.
+staff. `apps/api/src/scripts/cleanupDemoData.ts` deletes expired demo accounts and their orders/payments
+(since Phase 87 the same logic, `services/demoCleanup.service.ts`, also runs hourly as the BullMQ
+repeatable job `demo.cleanup_tick`).
 
 ## Phase 33 — the premium theme collection
 
