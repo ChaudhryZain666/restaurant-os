@@ -94,7 +94,7 @@ Test from a second terminal: `ssh deploy@<ip>` then `sudo -v`. Keep the root ses
 ssh deploy@<ip>
 curl -fsSL https://raw.githubusercontent.com/ChaudhryZain666/restaurant-os/main/infrastructure/production/scripts/bootstrap.sh -o bootstrap.sh
 less bootstrap.sh                      # read what it does
-sudo bash bootstrap.sh https://github.com/ChaudhryZain666/restaurant-os.git deploy
+sudo bash bootstrap.sh https://github.com/ChaudhryZain666/restaurant-os.git deploy [<commit>]   # commit: until Phase 87 is on main
 ```
 
 It installs Docker Engine + Compose from Docker's repository, sets daemon-wide log rotation
@@ -137,16 +137,17 @@ nano config/api.env       # MONGO_URI, REDIS_URL, JWT_*, SMTP_*, STORAGE_*, prov
   `edge.env`. Don't duplicate them in `api.env`.
 - With local Redis: `REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379`.
 
-Registry access. GHCR packages are private by default; keep them private. Create a GitHub
-fine-grained or classic token with **only `read:packages`** for the server, then:
+Registry access. **As of Phase 87 the four GHCR packages are public** (they inherited the public
+repository's visibility; anonymous pulls succeed). No secret is baked into any image, and the
+source is public anyway, so this is safe, and the server can pull without logging in. If you make
+them private (GitHub → Packages → each package → Settings → Change visibility), create a token with
+**only `read:packages`** for the server, then:
 
 ```bash
 echo '<token>' | docker login ghcr.io -u <github-username> --password-stdin
 ```
 
-(The token is stored in `~/.docker/config.json` of the deploying user; `chmod 600` it.) After the
-first CI run, check the four packages under GitHub → Packages are **private** and linked to the
-repository.
+(The token is stored in `~/.docker/config.json` of the deploying user; `chmod 600` it.)
 
 ### 3.6 DNS checklist
 
@@ -309,4 +310,4 @@ infrastructure/production/scripts/smoke-test.sh --expect <commit>
 - Environment `production`: required reviewers; deployment branches: `main` only; the four SSH secrets.
 - Workflow permissions default: read-only. The workflows request only `packages: write` (image
   job) / `packages: read` (rehearsal, deploy).
-- Packages: private, linked to the repository, "Inherit access from source repository".
+- Packages: currently public (see §3.5); a founder decision whether to make them private.

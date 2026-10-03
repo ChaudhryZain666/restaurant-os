@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/<commit>/infrastructure/production/scripts/bootstrap.sh -o bootstrap.sh
 #   less bootstrap.sh            # read it first
-#   sudo bash bootstrap.sh <git clone URL> <your-ssh-user>
+#   sudo bash bootstrap.sh <git clone URL> <your-ssh-user> [<commit to check out>]
 #
 # Idempotent: safe to re-run. It does NOT touch SSH authentication (harden-ssh.sh does that, as a
 # separate, deliberately two-step operation) and it never deploys anything.
@@ -17,6 +17,7 @@ set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
 REPO_URL="${1:?usage: bootstrap.sh <git clone URL> <ssh user>}"
 OPERATOR="${2:?usage: bootstrap.sh <git clone URL> <ssh user>}"
+REF="${3:-}"   # e.g. the commit you will deploy (needed while the scripts are not on the default branch)
 GT_ROOT=/opt/garnishtable
 . /etc/os-release
 [ "$ID" = ubuntu ] && [ "$VERSION_ID" = "24.04" ] || echo "WARNING: written for Ubuntu 24.04, this is $PRETTY_NAME" >&2
@@ -87,6 +88,7 @@ install -d -m 755 "$GT_ROOT" "$GT_ROOT/releases" "$GT_ROOT/state"
 install -d -m 700 "$GT_ROOT/config" "$GT_ROOT/backups"
 if [ ! -d "$GT_ROOT/repo/.git" ]; then git clone --quiet "$REPO_URL" "$GT_ROOT/repo"; fi
 git -C "$GT_ROOT/repo" fetch --quiet origin
+[ -z "$REF" ] || git -C "$GT_ROOT/repo" checkout --quiet --detach "$REF"
 for f in edge.env api.env; do
   [ -f "$GT_ROOT/config/$f" ] || install -m 600 /dev/null "$GT_ROOT/config/$f"
 done

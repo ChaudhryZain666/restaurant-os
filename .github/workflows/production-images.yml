@@ -14,9 +14,7 @@ name: Production images
 
 on:
   push:
-    # TEMPORARY: phase-87-hostinger-deployment runs the pipeline for Phase 87 verification; remove
-    # once recorded in PHASE_87_HOSTINGER_PRODUCTION_DEPLOYMENT_REPORT.md.
-    branches: [main, phase-87-hostinger-deployment]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
