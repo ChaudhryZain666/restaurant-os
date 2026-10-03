@@ -167,6 +167,14 @@ else
   check "Deploy current version $CUR_SHA (first deploy, --init)" "exit $RC, $(grep -o 'DEPLOY.*' "$SIM/deploy-cur.log" | tail -1)" test "$RC" -eq 0
 fi
 [ "$RC" -eq 0 ] || { tail -60 "$SIM/deploy-cur.log"; }
+edge_diag() {
+  info "diag: certificates in caddy_data" "$(docker run --rm -v garnishtable_caddy_data:/d:ro caddy:2.10-alpine sh -c 'find /d -name "*.crt" | wc -l')"
+  info "diag: caddy → pebble ACME directory" "$(docker exec "$(cid caddy)" wget -q -O /dev/null https://pebble:14000/dir 2>&1 | head -1; echo "exit=$?")"
+  info "diag: CA bundle" "$(grep -c 'BEGIN CERTIFICATE' "$SIM/ca-bundle.pem") certs, minica $(test -s "$SIM/pebble.minica.pem" && echo present || echo MISSING), pebble root $(test -s "$GT_SMOKE_CACERT" && echo present || echo MISSING)"
+  docker logs "$(cid caddy)" 2>&1 | grep -iE 'error|obtain|acme|challenge|certificate' | grep -v 'handled request' | tail -8 | while read -r l; do info "diag: caddy" "$(echo "$l" | cut -c1-260)"; done
+  docker logs "$(docker ps -aq --filter label=com.docker.compose.service=pebble | head -1)" 2>&1 | tail -6 | while read -r l; do info "diag: pebble" "$(echo "$l" | cut -c1-260)"; done
+}
+grep -q '^RESULT: PASS' "$SIM/deploy-cur.log" || edge_diag
 check "Running system reports current commit (GET /health/live)" "$(api_commit)" test "$(api_commit)" = "$CUR_SHA"
 check "state/current names the deployed tag" "$(state current)" test "$(state current)" = "$CUR $REG"
 check "Deploy smoke test passed" "$(grep '^RESULT' "$SIM/deploy-cur.log" | tail -1)" grep -q '^RESULT: PASS' "$SIM/deploy-cur.log"
@@ -257,6 +265,7 @@ archive=$(tail -1 "$SIM/backup.log")
 check "backup.sh produced a MongoDB dump (mode 600)" "exit $RC, $(basename "$archive") $(du -h "$archive" 2> /dev/null | cut -f1)" \
   sh -c "[ $RC -eq 0 ] && [ -s '$archive' ] && [ \"\$(stat -c %a '$archive')\" = 600 ]"
 check "backup.sh saved the Caddy certificate store" "$(ls "$GT_ROOT/backups" | grep caddy- | head -1)" sh -c "ls '$GT_ROOT'/backups/caddy-*.tar.gz > /dev/null 2>&1"
+grep 'WARNING' "$SIM/backup.log" | while read -r l; do info "backup.sh" "${l:0:300}"; done
 check "Backup log never shows the connection string" "grep mongodb:// in logs" sh -c "! grep -q 'mongodb://' '$SIM/backup.log'"
 step restore "$SCRIPTS/restore.sh" "$archive" --to-db gt_restore_check
 count='db.getCollectionNames().reduce((n,c)=>n+db.getCollection(c).countDocuments(),0)'

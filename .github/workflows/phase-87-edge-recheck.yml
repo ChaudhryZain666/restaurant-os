@@ -1,0 +1,40 @@
+# TEMPORARY — Phase 87 re-run of the Phase 86 edge verification after the image-only compose split. Runs infrastructure/production/test/edge-e2e.sh
+# (the real production Compose stack + Pebble test CA) on a GitHub-hosted Linux runner, because the
+# development machine cannot run Docker. To be deleted once the results are recorded in
+# PHASE_87_HOSTINGER_PRODUCTION_DEPLOYMENT_REPORT.md. Uses no repository secrets.
+name: Phase 87 edge re-check (temporary)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase-87-hostinger-deployment]
+
+permissions:
+  contents: read
+
+jobs:
+  edge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tool versions
+        run: |
+          echo "::notice title=Runner::$(lsb_release -ds) / $(nproc) CPUs / Docker $(docker version --format '{{.Server.Version}}') / $(docker compose version --short)"
+
+      - name: Edge end-to-end (infrastructure/production/test/edge-e2e.sh)
+        run: bash infrastructure/production/test/edge-e2e.sh
+
+      - name: Publish results
+        if: always()
+        run: |
+          R=infrastructure/production/test/out/results.txt
+          [ -f "$R" ] || { echo "::error title=No results::edge-e2e.sh produced no results"; exit 1; }
+          p=$(grep -c '^PASS' "$R" || true); f=$(grep -c '^FAIL' "$R" || true)
+          echo "::notice title=TOTAL $p passed and $f failed::$p passed / $f failed"
+          split -l 15 "$R" "$RUNNER_TEMP/part-"
+          n=0; for part in "$RUNNER_TEMP"/part-*; do n=$((n+1))
+            body=$(cut -c1-230 "$part" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=RESULTS part $n::$body"
+          done

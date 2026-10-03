@@ -43,9 +43,10 @@ log "MongoDB dump OK ($(du -h "$out" | cut -f1))"
 
 caddy_out="$BACKUPS/caddy-$stamp.tar.gz"
 if docker volume inspect "${GT_PROJECT}_caddy_data" > /dev/null 2>&1; then
-  docker run --rm -v "${GT_PROJECT}_caddy_data:/data:ro" "$MONGO_IMAGE" tar -czf - -C /data . > "$caddy_out" \
+  docker run --rm -v "${GT_PROJECT}_caddy_data:/data:ro" "$MONGO_IMAGE" tar -czf - -C /data . > "$caddy_out" 2> "$caddy_out.err" \
     && log "Caddy certificate store OK ($(du -h "$caddy_out" | cut -f1))" \
-    || { rm -f "$caddy_out"; log "WARNING: Caddy certificate store backup failed"; }
+    || { rm -f "$caddy_out"; log "WARNING: Caddy certificate store backup failed: $(head -c 300 "$caddy_out.err")"; }
+  rm -f "$caddy_out.err"
 fi
 
 offsite="$(env_value "$GT_EDGE_ENV" GT_BACKUP_OFFSITE_CMD)"

@@ -11,6 +11,7 @@ GT_LOG_TAG=cleanup
 . "$SCRIPT_DIR/lib.sh"
 
 reg="$(registry)"
+[ -n "$(state_get current)" ] || die "no live deployment is recorded in $GT_STATE/current — refusing to guess which images to keep"
 keep_n="${GT_KEEP_RELEASES:-3}"
 keep="$(state_get current | cut -d' ' -f1) $(state_get previous | cut -d' ' -f1) \
   $(awk '$3 == "ok" {print $4}' "$GT_STATE/history.log" 2> /dev/null | tac | awk '!seen[$0]++' | head -n "$keep_n" | tr '\n' ' ')"

@@ -2,11 +2,13 @@
 # GarnishTable production smoke test (Phase 87). Prints one PASS/FAIL/WARN line per check and exits
 # non-zero if any check FAILs. Read-only: it creates, changes and deletes nothing.
 #
-#   smoke-test.sh [--expect <40-char commit>] [--public]
+#   smoke-test.sh [--expect <40-char commit>] [--public] [--wait <seconds>]
 #
 #   --expect   every component must report this Git commit (API /health/live, each /version.json)
 #   --public   go through public DNS instead of pinning the hostnames to this server (run it from
 #              anywhere to check DNS + certificates end to end; container checks are then skipped)
+#   --wait     first wait up to this long for every hostname to complete a verified TLS handshake
+#              (a first deploy obtains its certificates in the background after Caddy starts)
 #
 # Hostnames come from edge.env. By default each hostname is resolved to GT_SMOKE_TARGET
 # (127.0.0.1), so the check tests THIS server's edge even before DNS points at it.
@@ -17,11 +19,12 @@ GT_LOG_TAG=smoke
 . "$SCRIPT_DIR/lib.sh"
 set +e
 
-EXPECT="" PUBLIC=0
+EXPECT="" PUBLIC=0 WAIT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect) EXPECT="$2"; shift ;;
     --public) PUBLIC=1 ;;
+    --wait) WAIT="$2"; shift ;;
     *) die "unknown option $1" ;;
   esac
   shift
@@ -56,6 +59,17 @@ commit_ok() {  # commit_ok <label> <reported>
 }
 
 echo "GarnishTable smoke test — $(date -u +%Y-%m-%dT%H:%M:%SZ)${EXPECT:+ — expecting ${EXPECT:0:12}}"
+
+if [ "$WAIT" -gt 0 ] 2> /dev/null; then
+  deadline=$(( $(date +%s) + WAIT )); started=$(date +%s)
+  for h in "$MARKETING_HOST" "$APP_HOST" "$AGENCY_HOST" "$ADMIN_HOST" "$POS_HOST" "$ORDER_HOST" "$API_HOST"; do
+    until req "https://$h/" > /dev/null && [ "$CURL_RC" = 0 ]; do
+      [ "$(date +%s)" -lt "$deadline" ] || break 2
+      sleep 3
+    done
+  done
+  echo "(waited $(( $(date +%s) - started ))s for certificates)"
+fi
 
 # --- Containers ------------------------------------------------------------------------------------
 if [ "$PUBLIC" = 0 ]; then

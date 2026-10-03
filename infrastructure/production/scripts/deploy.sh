@@ -117,7 +117,8 @@ activate() {
   log "starting $tag"
   gt_compose "$tag" "$reg" up -d --no-build --remove-orphans --wait --wait-timeout "${GT_WAIT_TIMEOUT:-300}" || { log "services did not become healthy"; return 1; }
   log "running smoke test"
-  GT_SMOKE_QUIET="${GT_SMOKE_QUIET:-0}" "$SCRIPT_DIR/smoke-test.sh" --expect "$(tag_commit "$tag")" || { log "smoke test failed"; return 1; }
+  # --wait: on a first deploy (or a new hostname) Caddy obtains certificates after it starts.
+  "$SCRIPT_DIR/smoke-test.sh" --expect "$(tag_commit "$tag")" --wait "${GT_TLS_WAIT:-180}" || { log "smoke test failed"; return 1; }
 }
 
 diagnostics() {
