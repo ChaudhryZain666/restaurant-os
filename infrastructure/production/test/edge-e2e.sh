@@ -121,7 +121,9 @@ diag() {
 
 echo "=== 4. fixed GarnishTable hostnames (certificates from the ACME CA, verified by clients)"
 for h in "${HOSTS[@]}"; do
-  c=""; for i in $(seq 1 30); do c=$(code "$h" "/"); [ "$c" = 200 ] && break; sleep 2; done
+  # The API has no root route (404 at "/"); probe its liveness endpoint instead.
+  path=/; [ "$h" = "api.$BASE" ] && path=/health/live
+  c=""; for i in $(seq 1 30); do c=$(code "$h" "$path"); [ "$c" = 200 ] && break; sleep 2; done
   issuer=$(echo | openssl s_client -connect 127.0.0.1:443 -servername "$h" 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null | sed 's/issuer=//')
   check "HTTPS $h (cert verified against the test CA)" "$c issuer=$issuer" test "$c" = 200
 done
