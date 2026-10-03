@@ -50,15 +50,20 @@ valid_tag() { [[ "$1" =~ ^sha-[0-9a-f]{40}$ ]]; }
 tag_commit() { printf '%s' "${1#sha-}"; }
 
 # docker compose for one release: compose files from that release, interpolation from edge.env,
-# image tag/registry pinned explicitly (shell environment beats --env-file).
+# image tag/registry pinned explicitly. Compose lets the SHELL environment override --env-file, so
+# every key edge.env defines is removed from the environment first: a stray `export APP_HOST=…` in
+# an operator's shell (or a CI job's env) can never silently replace the server's configuration.
 gt_compose() {
   local tag="$1" reg="$2"; shift 2
-  local dir="$GT_RELEASES/$tag" args=() profiles f
+  local dir="$GT_RELEASES/$tag" args=() unset_args=() profiles f k
+  for k in $(sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)[[:space:]]*=.*/\1/p' "$GT_EDGE_ENV" | sort -u); do
+    unset_args+=(-u "$k")
+  done
   args+=(--project-name "$GT_PROJECT" --env-file "$GT_EDGE_ENV" --project-directory "$dir" -f "$dir/docker-compose.yml")
   for f in $GT_COMPOSE_EXTRA_FILES; do args+=(-f "$f"); done
   profiles="$(env_value "$GT_EDGE_ENV" GT_COMPOSE_PROFILES)"
   for f in ${profiles//,/ }; do args+=(--profile "$f"); done
-  GT_IMAGE_TAG="$tag" GT_IMAGE_REGISTRY="$reg" docker compose "${args[@]}" "$@"
+  env "${unset_args[@]}" GT_IMAGE_TAG="$tag" GT_IMAGE_REGISTRY="$reg" docker compose "${args[@]}" "$@"
 }
 
 state_get() { [ -f "$GT_STATE/$1" ] && cat "$GT_STATE/$1" || true; }

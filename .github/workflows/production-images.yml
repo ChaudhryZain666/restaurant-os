@@ -27,17 +27,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Public hostnames compiled into the frontend bundles. Override with repository variables
-  # (Settings → Secrets and variables → Actions → Variables) if the domain changes.
-  MARKETING_HOST: ${{ vars.GT_MARKETING_HOST || 'garnishtable.com' }}
-  APP_HOST: ${{ vars.GT_APP_HOST || 'app.garnishtable.com' }}
-  AGENCY_HOST: ${{ vars.GT_AGENCY_HOST || 'agency.garnishtable.com' }}
-  ADMIN_HOST: ${{ vars.GT_ADMIN_HOST || 'admin.garnishtable.com' }}
-  POS_HOST: ${{ vars.GT_POS_HOST || 'pos.garnishtable.com' }}
-  ORDER_HOST: ${{ vars.GT_ORDER_HOST || 'order.garnishtable.com' }}
-  API_HOST: ${{ vars.GT_API_HOST || 'api.garnishtable.com' }}
-
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -107,6 +96,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Public hostnames compiled into the frontend bundles (this job only: the same names in the
+    # rehearsal's environment would override the simulated server's edge.env). Override with
+    # repository variables (Settings → Secrets and variables → Actions → Variables).
+    env:
+      MARKETING_HOST: ${{ vars.GT_MARKETING_HOST || 'garnishtable.com' }}
+      APP_HOST: ${{ vars.GT_APP_HOST || 'app.garnishtable.com' }}
+      AGENCY_HOST: ${{ vars.GT_AGENCY_HOST || 'agency.garnishtable.com' }}
+      ADMIN_HOST: ${{ vars.GT_ADMIN_HOST || 'admin.garnishtable.com' }}
+      POS_HOST: ${{ vars.GT_POS_HOST || 'pos.garnishtable.com' }}
+      ORDER_HOST: ${{ vars.GT_ORDER_HOST || 'order.garnishtable.com' }}
+      API_HOST: ${{ vars.GT_API_HOST || 'api.garnishtable.com' }}
     strategy:
       fail-fast: true
       matrix:
