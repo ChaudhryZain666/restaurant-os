@@ -29,10 +29,19 @@ export GT_DISK_ALERT_PCT=97
 EDGE_ENV="$GT_ROOT/config/edge.env"
 
 pass() { echo "PASS | $1 | $2" | tee -a "$RESULTS"; }
-fail() { echo "FAIL | $1 | $2" | tee -a "$RESULTS"; }
+fail() {
+  echo "FAIL | $1 | $2" | tee -a "$RESULTS"
+  # Annotate immediately, so a failure is visible even if the job dies later.
+  [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=Rehearsal FAIL::$1 | ${2:0:300}"
+  return 0
+}
 info() { echo "INFO | $1 | $2" | tee -a "$RESULTS"; }
 check() { local name="$1" detail="$2"; shift 2; if "$@"; then pass "$name" "$detail"; else fail "$name" "$detail"; fi; }
-section() { echo; echo "=== $*"; }
+section() {
+  echo; echo "=== $*"
+  [ -n "${GITHUB_ACTIONS:-}" ] && echo "::notice title=Rehearsal progress::$* (so far $(grep -c '^PASS' "$RESULTS") passed, $(grep -c '^FAIL' "$RESULTS") failed)"
+  return 0
+}
 step() {  # step <logname> <cmd…> — full output to $SIM/<logname>.log, exit code in RC
  local log="$1"; shift; "$@" > "$SIM/$log.log" 2>&1; RC=$?; }
 
@@ -56,7 +65,12 @@ wait_healthy() {  # wait_healthy <seconds> — every app container healthy
 smoke() { "$SCRIPTS/smoke-test.sh" --expect "$1" > "$SIM/smoke-$2.log" 2>&1; }
 smoke_summary() { grep '^RESULT' "$SIM/smoke-$1.log" | head -1; }
 serial() { echo | openssl s_client -connect 127.0.0.1:443 -servername "app.$BASE" 2> /dev/null | openssl x509 -noout -serial 2> /dev/null | cut -d= -f2; }
-crash() { sudo kill -9 "$(docker inspect -f '{{.State.Pid}}' "$(cid "$1")")"; }
+# SIGKILL the container's main process from the host. Guarded: a container that is (re)starting
+# reports PID 0, and "kill -9 0" would signal this script's whole process group.
+crash() {
+  local pid; pid="$(docker inspect -f '{{.State.Pid}}' "$(cid "$1")" 2> /dev/null)"
+  if [ "${pid:-0}" -gt 1 ] 2> /dev/null; then sudo kill -9 "$pid"; else echo "crash $1: no running process (pid '${pid}')"; return 1; fi
+}
 
 teardown() {
   section "teardown"
@@ -205,7 +219,8 @@ fi
 section "6. crash and restart behaviour"
 s_before=$(serial)
 for svc in api web caddy; do
-  crash "$svc"
+  wait_healthy 120 > /dev/null
+  crash "$svc" || { fail "Crash of $svc (SIGKILL) → restarted by Docker and healthy" "container not running before the test"; continue; }
   sleep 2
   if wait_healthy 180; then pass "Crash of $svc (SIGKILL) → restarted by Docker and healthy" "restart count $(docker inspect -f '{{.RestartCount}}' "$(cid $svc)")"
   else fail "Crash of $svc (SIGKILL) → restarted by Docker and healthy" "$(docker ps -a --format '{{.Names}} {{.Status}}' | tr '\n' ';')"; fi
