@@ -43,7 +43,8 @@ log "MongoDB dump OK ($(du -h "$out" | cut -f1))"
 
 caddy_out="$BACKUPS/caddy-$stamp.tar.gz"
 if docker volume inspect "${GT_PROJECT}_caddy_data" > /dev/null 2>&1; then
-  docker run --rm -v "${GT_PROJECT}_caddy_data:/data:ro" "$MONGO_IMAGE" tar -czf - -C /data . > "$caddy_out" 2> "$caddy_out.err" \
+  # (Mounted at /caddy-data: the mongo image declares its own volumes under /data.)
+  docker run --rm -v "${GT_PROJECT}_caddy_data:/caddy-data:ro" "$MONGO_IMAGE" tar -czf - -C /caddy-data . > "$caddy_out" 2> "$caddy_out.err" \
     && log "Caddy certificate store OK ($(du -h "$caddy_out" | cut -f1))" \
     || { rm -f "$caddy_out"; log "WARNING: Caddy certificate store backup failed: $(head -c 300 "$caddy_out.err")"; }
   rm -f "$caddy_out.err"
