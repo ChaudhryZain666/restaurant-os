@@ -32,7 +32,7 @@ check() { local name="$1" detail="$2"; shift 2; if "$@"; then pass "$name" "$det
 dc() { docker compose --env-file "$OUT/edge.env" -f "$PROD/docker-compose.yml" -f "$PROD/test/docker-compose.test.yml" --profile local-redis "$@"; }
 # HTTPS through the edge, trusting only Pebble's test root (no -k).
 hc() { local host="$1" path="$2"; shift 2; curl -sS --max-time 20 --cacert "$OUT/pebble-root.pem" --resolve "$host:443:127.0.0.1" "$@" "https://$host$path"; }
-code() { hc "$1" "$2" -o /dev/null -w '%{http_code}' "${@:3}" 2>/dev/null || echo "000"; }
+code() { local c; c=$(hc "$1" "$2" -o /dev/null -w '%{http_code}' "${@:3}" 2>/dev/null); echo "${c:-000}"; }
 ask() { dc exec -T caddy wget -q -S -O /dev/null "http://api:4001/internal/tls/ask?domain=$1" 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | tail -1 | awk '{print $2}'; }
 serial() { echo | openssl s_client -connect 127.0.0.1:443 -servername "$1" 2>/dev/null | openssl x509 -noout -serial 2>/dev/null | cut -d= -f2; }
 api() { local method="$1" path="$2" body="${3:-}"; hc "app.$BASE" "/api/v1$path" -X "$method" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' ${body:+-d "$body"}; }
@@ -110,6 +110,15 @@ done
 # Pebble signs certificates with a root generated at start-up — fetch it for client-side verification.
 curl -sk https://127.0.0.1:15000/roots/0 > "$OUT/pebble-root.pem"
 
+diag() {
+  info "diag: CA bundle" "$(grep -c 'BEGIN CERTIFICATE' "$OUT/ca-bundle.pem") certs, pebble minica $(test -s "$OUT/pebble.minica.pem" && echo present || echo MISSING), pebble root $(test -s "$OUT/pebble-root.pem" && echo present || echo MISSING)"
+  info "diag: caddy can reach pebble" "$(dc exec -T caddy wget -q -O /dev/null https://pebble:14000/dir 2>&1 | head -1 || true) exit=$?"
+  caddy_logs | grep -iE 'error|obtain|acme|challenge|tls' | grep -v '"level":"info".*"msg":"handled request"' | tail -6 | while read -r l; do info "diag: caddy" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
+  dc logs --no-color pebble 2>/dev/null | tail -5 | while read -r l; do info "diag: pebble" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
+  dc logs --no-color challtestsrv 2>/dev/null | tail -3 | while read -r l; do info "diag: challtestsrv" "$(echo "$l" | sed -E 's/^[^|]*\| //' | cut -c1-220)"; done
+  info "diag: containers" "$(dc ps --format '{{.Service}}={{.State}}' | tr '\n' ' ')"
+}
+
 echo "=== 4. fixed GarnishTable hostnames (certificates from the ACME CA, verified by clients)"
 for h in "${HOSTS[@]}"; do
   c=""; for i in $(seq 1 30); do c=$(code "$h" "/"); [ "$c" = 200 ] && break; sleep 2; done
@@ -117,6 +126,11 @@ for h in "${HOSTS[@]}"; do
   check "HTTPS $h (cert verified against the test CA)" "$c issuer=$issuer" test "$c" = 200
 done
 c=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "app.$BASE:80:127.0.0.1" "http://app.$BASE/login")
+if [ "$(code "app.$BASE" /)" != 200 ]; then
+  diag
+  fail "Fixed hostnames obtained certificates" "no — stopping early; see diag lines (everything after depends on HTTPS)"
+  exit 1
+fi
 check "HTTP → HTTPS redirect on a fixed hostname" "$c" sh -c "echo '$c' | grep -qE '^30[18] https://app.$BASE/login'"
 check "Storefront deep link order.$BASE/r/demo-restaurant" "$(code "order.$BASE" /r/demo-restaurant)" test "$(code "order.$BASE" /r/demo-restaurant)" = 200
 check "POS deep link pos.$BASE/pos" "$(code "pos.$BASE" /pos)" test "$(code "pos.$BASE" /pos)" = 200
