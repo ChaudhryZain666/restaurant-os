@@ -38,6 +38,7 @@ warn() { WARNS=$((WARNS + 1)); echo "WARN  $1${2:+ — $2}"; }
 host() { local v; v="$(env_value "$GT_EDGE_ENV" "$1")"; [ -n "$v" ] || die "$1 is not set in $GT_EDGE_ENV"; printf '%s' "$v"; }
 MARKETING_HOST="$(host MARKETING_HOST)"; APP_HOST="$(host APP_HOST)"; AGENCY_HOST="$(host AGENCY_HOST)"
 ADMIN_HOST="$(host ADMIN_HOST)"; POS_HOST="$(host POS_HOST)"; ORDER_HOST="$(host ORDER_HOST)"; API_HOST="$(host API_HOST)"
+WWW_HOST="$(host WWW_HOST)"
 
 # curl pinned to this server (unless --public); TLS is always verified.
 # req <url> [curl args…] — body in $BODY, HTTP status in $CODE, curl exit code in $CURL_RC.
@@ -65,7 +66,7 @@ echo "GarnishTable smoke test — $(date -u +%Y-%m-%dT%H:%M:%SZ)${EXPECT:+ — e
 
 if [ "$WAIT" -gt 0 ] 2> /dev/null; then
   deadline=$(( $(date +%s) + WAIT )); started=$(date +%s)
-  for h in "$MARKETING_HOST" "$APP_HOST" "$AGENCY_HOST" "$ADMIN_HOST" "$POS_HOST" "$ORDER_HOST" "$API_HOST"; do
+  for h in "$MARKETING_HOST" "$WWW_HOST" "$APP_HOST" "$AGENCY_HOST" "$ADMIN_HOST" "$POS_HOST" "$ORDER_HOST" "$API_HOST"; do
     until req "https://$h/"; [ "$CURL_RC" = 0 ]; do
       [ "$(date +%s)" -lt "$deadline" ] || break 2
       sleep 3
@@ -88,6 +89,15 @@ req "http://$APP_HOST/" -I
 loc="$(curl -sS -m 10 -o /dev/null -w '%{redirect_url}' $([ "$PUBLIC" = 1 ] || echo --resolve "$APP_HOST:80:$TARGET") "http://$APP_HOST/" 2> /dev/null)"
 case "$CODE" in 301 | 308) [ "${loc#https://}" != "$loc" ] && pass "HTTP redirects to HTTPS" "$CODE → $loc" || fail "HTTP redirects to HTTPS" "$CODE → $loc" ;;
   *) fail "HTTP redirects to HTTPS" "got $CODE" ;; esac
+
+# www: a 301 to the canonical marketing URL (path and query kept), over HTTPS (its own verified
+# certificate) and straight from plain HTTP — never a copy of the site.
+for scheme in https http; do
+  req "$scheme://$WWW_HOST/pricing?smoke=1" -I
+  loc="$(grep -i '^location:' "$TMPB" | tr -d '\r' | cut -d' ' -f2-)"
+  if [ "$CODE" = 301 ] && [ "$loc" = "https://$MARKETING_HOST/pricing?smoke=1" ]; then pass "$scheme://$WWW_HOST redirects (301) to https://$MARKETING_HOST" "$loc"
+  else fail "$scheme://$WWW_HOST redirects (301) to https://$MARKETING_HOST" "HTTP $CODE location='${loc}' $(head -c 120 "$TMPE")"; fi
+done
 
 # --- API -------------------------------------------------------------------------------------------
 req "https://$API_HOST/health/live"; body="$BODY"

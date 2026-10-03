@@ -67,6 +67,14 @@
 	reverse_proxy api:4000
 }
 
+# www → the canonical marketing hostname. A redirect only (never a second copy of the marketing
+# site), for both HTTPS (its own managed certificate) and plain HTTP (one hop straight to the
+# canonical HTTPS URL; ACME HTTP-01 challenges are still answered first).
+{$WWW_HOST}, http://{$WWW_HOST} {
+	import edge
+	redir https://{$MARKETING_HOST}{uri} permanent
+}
+
 # The hostname restaurants CNAME their domains to. Browsed directly, it just leads to marketing.
 {$CUSTOM_DOMAIN_CNAME_TARGET} {
 	import edge

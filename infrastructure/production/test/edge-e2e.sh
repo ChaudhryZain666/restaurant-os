@@ -51,6 +51,7 @@ JWT_A=$(openssl rand -hex 32); JWT_B=$(openssl rand -hex 32); REDIS_PW=$(openssl
 OWNER_PW="Owner-$(openssl rand -hex 8)"
 cat > "$OUT/edge.env" <<EOF
 MARKETING_HOST=$BASE
+WWW_HOST=www.$BASE
 APP_HOST=app.$BASE
 AGENCY_HOST=agency.$BASE
 ADMIN_HOST=admin.$BASE

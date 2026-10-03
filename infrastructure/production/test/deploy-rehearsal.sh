@@ -87,6 +87,7 @@ REDIS_PW=$(openssl rand -hex 16); JWT_A=$(openssl rand -hex 32); JWT_B=$(openssl
 umask 077
 cat > "$EDGE_ENV" <<EOF
 MARKETING_HOST=$BASE
+WWW_HOST=www.$BASE
 APP_HOST=app.$BASE
 AGENCY_HOST=agency.$BASE
 ADMIN_HOST=admin.$BASE

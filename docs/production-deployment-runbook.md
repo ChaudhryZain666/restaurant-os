@@ -157,14 +157,14 @@ All records point at the VPS IPv4 (`A`) and, if the VPS has one, IPv6 (`AAAA`). 
 | Name | Type | Value |
 |---|---|---|
 | `garnishtable.com` (apex, marketing) | A / AAAA | VPS |
-| `www.garnishtable.com` | CNAME | `garnishtable.com` (only if you want www; add it to the Caddyfile first) |
+| `www.garnishtable.com` | A / AAAA (or CNAME → `garnishtable.com`) | VPS. **Required:** Caddy serves it as a 301 redirect to `https://garnishtable.com` (`WWW_HOST`), and the deploy waits for its certificate. |
 | `app`, `agency`, `admin`, `pos`, `order`, `api` | A / AAAA | VPS |
 | `domains` (the restaurant CNAME target) | A / AAAA | VPS |
 | `garnishtable.com` | CAA (optional) | `0 issue "letsencrypt.org"` |
 | mail records | TXT/MX | SPF, DKIM, DMARC as your SMTP provider specifies (§3.9) |
 
 Check before the first deploy (Let's Encrypt validates over HTTP-01 on port 80):
-`for h in garnishtable.com {app,agency,admin,pos,order,api,domains}.garnishtable.com; do echo "$h $(dig +short A $h) $(dig +short AAAA $h)"; done`
+`for h in garnishtable.com {www,app,agency,admin,pos,order,api,domains}.garnishtable.com; do echo "$h $(dig +short A $h) $(dig +short AAAA $h)"; done`
 should print the VPS address for every name. For a dress rehearsal on the real server, set
 `ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory`, then switch back and
 `docker volume rm garnishtable_caddy_data` **only** while still on staging certificates.

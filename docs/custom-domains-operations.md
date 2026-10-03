@@ -58,6 +58,7 @@ first visit simply fails until it is, and Caddy retries issuance on later reques
 | `CUSTOM_DOMAIN_TLS_ASK_PORT` | same (default `4001`) | The API's private listener for the certificate check. Required in production; must differ from `PORT`; **never published**. |
 | `ACME_EMAIL`, `ACME_CA`, `CADDY_RENEW_INTERVAL` | same | CA account contact; the CA directory (Let's Encrypt production by default; use staging for rehearsals); the renewal scan interval. |
 | The seven hostnames, `GT_EDGE_SUBNET`, `GT_CADDY_IP` | same | Compose derives every `*_ORIGIN`, `PORTAL_ORIGINS` and `TRUST_PROXY` for the API from these, so the edge and the API can't disagree. |
+| `WWW_HOST` | same | Edge only: a 301 redirect to `https://<MARKETING_HOST>`, with its own managed certificate. Not passed to the API: `www` is already a platform hostname for the custom-domain check (it's under the marketing apex). |
 | API secrets | server `api.env` (`GT_API_ENV_FILE`, mode 600) | `MONGO_URI`, `REDIS_URL`, `JWT_*`, `SMTP_*`, `STORAGE_*`, … |
 
 The template is `infrastructure/production/.env.example`.

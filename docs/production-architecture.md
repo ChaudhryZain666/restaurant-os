@@ -9,6 +9,7 @@ yet (see the Phase 85A report for what remains).
 | Surface | Production origin | Served by | Env (API) |
 |---|---|---|---|
 | Marketing | `https://garnishtable.com` | `apps/marketing` build | `MARKETING_ORIGIN` |
+| (www) | `https://www.garnishtable.com` | the edge only: a 301 redirect to `https://garnishtable.com` (`WWW_HOST`, Phase 87) | n/a |
 | Owner Portal | `https://app.garnishtable.com` | `apps/admin` build | `ADMIN_ORIGIN` |
 | Agency Portal | `https://agency.garnishtable.com` | `apps/admin` build (same) | `PORTAL_ORIGINS` |
 | Platform Admin | `https://admin.garnishtable.com` | `apps/admin` build (same) | `PORTAL_ORIGINS` |
