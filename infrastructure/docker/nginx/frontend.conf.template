@@ -9,6 +9,10 @@ server {
     # Any hostname: the storefront image also answers restaurants' custom domains.
     server_name _;
     root /usr/share/nginx/html;
+    # Phase 88 — this server only ever sees plain HTTP from the edge, so any redirect nginx generates
+    # itself (e.g. a directory's trailing slash) would point at http:// — a downgrade from the
+    # visitor's https://. Relative redirects keep the visitor's own scheme and host.
+    absolute_redirect off;
 
     # Menu imports upload up to 12 × 8 MB images or a 15 MB PDF through /api.
     client_max_body_size 100m;
@@ -30,14 +34,23 @@ server {
     location /assets/ {
         try_files $uri =404;
         add_header Cache-Control "public, max-age=31536000, immutable";
+        include /etc/nginx/conf.d/app-headers.inc;
     }
 
     # SPA fallback: every client-side route serves index.html, which must never be cached so a
     # deploy takes effect on the next load.
+    # Phase 88 — a URL that names a public/ subdirectory (marketing's /v3 images, the storefront's
+    # /menu-images) is an application route too: it goes to index.html instead of being served as a
+    # directory (which redirected to "<dir>/" and then answered 403). Real files are unaffected.
     location / {
-        try_files $uri $uri/ /index.html;
+        if (-d $request_filename) {
+            rewrite ^ /index.html last;
+        }
+        try_files $uri /index.html;
+        include /etc/nginx/conf.d/app-headers.inc;
     }
     location = /index.html {
         add_header Cache-Control "no-cache";
+        include /etc/nginx/conf.d/app-headers.inc;
     }
 }

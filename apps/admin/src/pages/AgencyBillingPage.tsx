@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatHistoryAmount } from "../lib/billingHistoryDisplay";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -35,6 +36,9 @@ const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
   cancelled: "Cancelled",
   reactivated: "Reactivated",
   expired: "Trial expired",
+  refunded: "Refund issued",
+  chargeback: "Chargeback",
+  chargeback_reversed: "Chargeback reversed",
 };
 
 function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): string | null {
@@ -530,11 +534,7 @@ export function AgencyBillingPage() {
               <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className="text-foreground">{HISTORY_LABEL[e.type]}</span>
                 <span className="text-muted">{new Date(e.occurredAt).toLocaleString()}</span>
-                {e.amountCents !== undefined && e.currency && (
-                  <span className="text-foreground">
-                    {(e.amountCents / 100).toLocaleString(undefined, { style: "currency", currency: e.currency })}
-                  </span>
-                )}
+                {formatHistoryAmount(e) && <span className="text-foreground">{formatHistoryAmount(e)}</span>}
                 {e.receiptUrl && (
                   <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                     Receipt

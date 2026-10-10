@@ -5,6 +5,7 @@ import type {
   CreateCheckoutSessionInput,
   CreateProviderSubscriptionInput,
   ProviderBillingCustomer,
+  ProviderBillingNotice,
   ProviderBillingWebhookEvent,
   ProviderCheckoutSession,
   ProviderInvoice,
@@ -267,9 +268,11 @@ export class PaddleBillingProvider implements BillingProvider {
     return this.toSnapshot(response);
   }
 
-  async changePlan(providerSubscriptionId: string, newPlanCode: string): Promise<ProviderSubscriptionSnapshot> {
-    const response = await this.request<PaddleSubscriptionResponse>("POST", `/subscriptions/${providerSubscriptionId}`, {
-      items: [{ price_id: newPlanCode, quantity: 1 }],
+  async changePlan(providerSubscriptionId: string, newProviderPriceId: string): Promise<ProviderSubscriptionSnapshot> {
+    // Phase 89 — Paddle's documented update is PATCH /subscriptions/{id} with the full new items
+    // list; the old POST sent a local plan CODE as price_id, which Paddle could never accept.
+    const response = await this.request<PaddleSubscriptionResponse>("PATCH", `/subscriptions/${providerSubscriptionId}`, {
+      items: [{ price_id: newProviderPriceId, quantity: 1 }],
       proration_billing_mode: "prorated_next_billing_period",
     });
     return this.toSnapshot(response);
@@ -300,6 +303,18 @@ export class PaddleBillingProvider implements BillingProvider {
       providerCustomerId: input.providerCustomerId,
       environment: this.environment,
     };
+  }
+
+  /** Phase 89 — read-only, for scripts/setPaddlePriceIds.ts's validation. Null on Paddle's 404
+   *  (an id from the other environment, or a typo); other errors are thrown. */
+  async retrievePrice(priceId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const response = await this.request<{ data?: Record<string, unknown> }>("GET", `/prices/${encodeURIComponent(priceId)}`);
+      return response.data ?? null;
+    } catch (err) {
+      if (err instanceof PaddleApiError && err.status === 404) return null;
+      throw err;
+    }
   }
 
   async retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null> {
@@ -361,18 +376,41 @@ export class PaddleBillingProvider implements BillingProvider {
 
     const eventId = parsed.event_id;
     const eventType = parsed.event_type;
-    const subscriptionId = parsed.data?.subscription_id ?? parsed.data?.id;
-    if (!eventId || !eventType || !subscriptionId) return null;
+    if (!eventId || !eventType) return null;
+    const data = parsed.data;
+    const occurredAt = parsed.occurred_at ? new Date(parsed.occurred_at) : undefined;
+    const base = { eventId, eventType, raw: parsed, occurredAt: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : undefined };
 
-    const customData = parsed.data?.custom_data as Record<string, string> | undefined;
+    // Phase 89 — only subscription.* events carry a SUBSCRIPTION status. A transaction's or an
+    // adjustment's own status ("completed", "approved"…) is a different vocabulary; reading it as a
+    // subscription status failed closed to past_due and marked paying customers past due.
+    if (!eventType.startsWith("subscription.")) {
+      return { ...base, providerSubscriptionId: data?.subscription_id ?? "", billingNotice: billingNoticeFor(eventType, data) };
+    }
+
+    const subscriptionId = data?.id;
+    if (!subscriptionId) return null;
+
+    const customData = data?.custom_data as Record<string, string> | undefined;
     const isCheckoutCreation = eventType === "subscription.created" && Boolean(customData?.ownerType);
+    const periodStart = data?.current_billing_period?.starts_at;
+    const periodEnd = data?.current_billing_period?.ends_at;
+    const scheduledChange = data?.scheduled_change;
 
     return {
-      eventId,
-      eventType,
+      ...base,
       providerSubscriptionId: subscriptionId,
-      status: mapPaddleStatus(parsed.data?.status),
-      raw: parsed,
+      status: mapPaddleStatus(data?.status),
+      currentPeriod: periodStart && periodEnd ? { start: new Date(periodStart), end: new Date(periodEnd) } : undefined,
+      // `scheduled_change` is always present on a subscription entity — null means nothing is
+      // scheduled, so a reactivation (cancel undone in Paddle) clears our cancelAt too.
+      scheduledCancelAt:
+        scheduledChange === undefined
+          ? undefined
+          : scheduledChange?.action === "cancel" && scheduledChange.effective_at
+            ? new Date(scheduledChange.effective_at)
+            : null,
+      providerPriceId: data?.items?.[0]?.price?.id,
       checkoutMetadata: isCheckoutCreation
         ? {
             ownerType: customData!.ownerType as "business" | "agency",
@@ -419,13 +457,56 @@ interface PaddleTransactionResponse {
 interface PaddleWebhookPayload {
   event_id?: string;
   event_type?: string;
-  data?: {
-    id?: string;
-    subscription_id?: string;
-    status?: string;
-    customer_id?: string;
-    custom_data?: Record<string, unknown>;
-  };
+  occurred_at?: string;
+  data?: PaddleWebhookData;
+}
+
+interface PaddleWebhookData {
+  id?: string;
+  subscription_id?: string | null;
+  status?: string;
+  customer_id?: string;
+  custom_data?: Record<string, unknown>;
+  current_billing_period?: { starts_at?: string; ends_at?: string } | null;
+  scheduled_change?: { action?: string; effective_at?: string } | null;
+  items?: Array<{ price?: { id?: string } }>;
+  // transaction.* only
+  origin?: string;
+  currency_code?: string;
+  details?: { totals?: { total?: string | number } };
+  // adjustment.* only
+  action?: string;
+  totals?: { total?: string | number };
+}
+
+/** Paddle amounts are strings in the currency's lowest denomination (cents for USD). */
+function toCents(value: string | number | undefined): number | undefined {
+  const n = Number(value);
+  return value === undefined || !Number.isFinite(n) || n < 0 ? undefined : Math.round(n);
+}
+
+/**
+ * Phase 89 — the money movements worth a billing-history row, from Paddle's transaction and
+ * adjustment events. Deliberately narrow:
+ *  - transaction.completed only for origin "subscription_recurring" (a renewal). The FIRST payment
+ *    is already recorded by the checkout-completion path, and plan-change/one-off charges aren't
+ *    renewals.
+ *  - adjustment.* only once Paddle has APPROVED it (a refund starts as pending_approval and may be
+ *    rejected). "credit"/"chargeback_warning" adjustments aren't money leaving the account yet.
+ * Failed payments need no notice: subscription.past_due already reports them as a status.
+ */
+function billingNoticeFor(eventType: string, data: PaddleWebhookData | undefined): ProviderBillingNotice | undefined {
+  if (!data) return undefined;
+  if (eventType === "transaction.completed" && data.origin === "subscription_recurring") {
+    return { type: "payment_succeeded", amountCents: toCents(data.details?.totals?.total), currency: data.currency_code, reference: data.id };
+  }
+  if ((eventType === "adjustment.created" || eventType === "adjustment.updated") && data.status === "approved") {
+    const type =
+      data.action === "refund" ? "refunded" : data.action === "chargeback" ? "chargeback" : data.action === "chargeback_reverse" ? "chargeback_reversed" : undefined;
+    if (!type) return undefined;
+    return { type, amountCents: toCents(data.totals?.total), currency: data.currency_code, reference: data.id };
+  }
+  return undefined;
 }
 
 /**

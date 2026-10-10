@@ -12,6 +12,9 @@ import { nextOrderNumber } from "../services/orderNumber.service.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
 import { checkDeliveryEligibility } from "../services/delivery.service.js";
+import { User } from "../models/User.js";
+import { thirdPartyCourierWillDispatch } from "../deliveryProviders/restaurantDeliveryProvider.js";
+import { normalizeCountryCode, normalizePhone } from "../deliveryProviders/contactNormalization.js";
 
 function roundCurrency(amount: number): number {
   return Math.round(amount * 100) / 100;
@@ -150,6 +153,22 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
     resolvedDeliveryFee = eligibility.deliveryFee ?? settings.deliveryFee;
   }
 
+  // Phase 89 — a third-party courier (Uber Direct) must be able to call the customer, so for those
+  // delivery orders a usable number is required up front: the one given for this delivery, else the
+  // one on the customer's account, normalized to international form. Not for marketplace orders (the
+  // marketplace delivers them) and not when the restaurant delivers itself.
+  let deliveryContactPhone = deliveryAddress?.phone?.trim() || undefined;
+  if (orderType === "delivery" && channel !== "marketplace" && (await thirdPartyCourierWillDispatch(restaurant))) {
+    const accountPhone = deliveryContactPhone ? undefined : (await User.findById(customerId).select("phone"))?.phone;
+    const normalized = normalizePhone(deliveryContactPhone ?? accountPhone, normalizeCountryCode(restaurant.country));
+    if (!normalized.ok) {
+      throw ApiError.badRequest(`A phone number is needed for courier delivery — the driver uses it to reach you. ${normalized.reason}`, {
+        "deliveryAddress.phone": [normalized.reason],
+      });
+    }
+    deliveryContactPhone = normalized.e164;
+  }
+
   const { items: pricedItems, subtotal } = await priceOrderItems(restaurantId, items);
 
   if (subtotal < settings.minOrderAmount) {
@@ -194,7 +213,7 @@ export async function createOrderForCustomer(params: CreateOrderForCustomerParam
             total,
             loyaltyPointsRedeemed: loyaltyDiscount,
             loyaltyPointsEarned: 0,
-            deliveryAddress: orderType === "delivery" ? deliveryAddress : undefined,
+            deliveryAddress: orderType === "delivery" ? { ...deliveryAddress!, phone: deliveryContactPhone } : undefined,
             deliveryDistanceKm: orderType === "delivery" ? deliveryDistanceKm : undefined,
             tableId: table?._id,
             tableName: table?.name,

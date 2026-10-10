@@ -83,6 +83,9 @@ test.describe("Legal pages (Phase 77)", () => {
     async ({ page }) => {
       for (const path of ["/terms", "/privacy", "/refund-policy"]) {
         await page.goto(`${MARKETING_BASE}${path}`);
+        // Phase 88 — the legal pages are lazy-loaded: wait for the page itself, or this reads the
+        // loading state, finds no markers and "passes" for the wrong reason (it did, every run).
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
         const bodyText = await page.locator("body").innerText();
         expect(bodyText).not.toMatch(/\[LEGAL_ENTITY_NAME\]|\[FOUNDER\/LEGAL REVIEW REQUIRED[^\]]*\]/);
       }

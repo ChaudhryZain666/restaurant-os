@@ -86,11 +86,40 @@ export interface ProviderInvoice {
   issuedAt: Date;
 }
 
+/** Phase 89 — a money movement a webhook reports that is NOT a subscription status change: a
+ *  renewal charge, a refund, or a chargeback. Recorded in billing history only — never changes a
+ *  subscription's status or access (see processBillingProviderEvent). */
+export interface ProviderBillingNotice {
+  type: "payment_succeeded" | "refunded" | "chargeback" | "chargeback_reversed";
+  amountCents?: number;
+  currency?: string;
+  /** The provider's own reference (e.g. a Paddle transaction or adjustment id). */
+  reference?: string;
+}
+
 export interface ProviderBillingWebhookEvent {
   eventId: string;
   eventType: string;
+  /** Empty when the event isn't about any subscription (acknowledged, nothing to do). */
   providerSubscriptionId: string;
-  status: ProviderSubscriptionStatus;
+  /** Phase 89 — present ONLY on events that genuinely report a subscription's own status. Absent on
+   *  transaction/adjustment events, which never move a subscription's status: a transaction's
+   *  "completed" is not a subscription status, and reading it as one marked a paying subscription
+   *  past_due. */
+  status?: ProviderSubscriptionStatus;
+  /** When the provider says this event happened — orders period/plan updates (see
+   *  Subscription.lastProviderEventAt). Absent when the provider doesn't say. */
+  occurredAt?: Date;
+  /** Phase 89 — the subscription's current billing period, when the event carries it (renewals
+   *  move it forward). */
+  currentPeriod?: { start: Date; end: Date };
+  /** Phase 89 — a scheduled cancellation's effective date; null means the event says none is
+   *  scheduled; undefined means the event doesn't say. */
+  scheduledCancelAt?: Date | null;
+  /** Phase 89 — the provider price the subscription is on now, so a plan change made outside this
+   *  app (e.g. in the provider's dashboard) is reflected locally. */
+  providerPriceId?: string;
+  billingNotice?: ProviderBillingNotice;
   raw: unknown;
   /**
    * Phase 27 — present ONLY on a checkout-completion event (a brand-new subscription being
@@ -131,7 +160,10 @@ export interface BillingProvider {
   cancelSubscription(providerSubscriptionId: string, atPeriodEnd: boolean): Promise<ProviderSubscriptionSnapshot>;
   /** Un-cancels a scheduled (not yet effective) cancellation. */
   reactivateSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionSnapshot>;
-  changePlan(providerSubscriptionId: string, newPlanCode: string): Promise<ProviderSubscriptionSnapshot>;
+  /** Phase 89 — takes the provider's own PRICE id for the new plan and the subscription's billing
+   *  interval (Plan.pricing[].providerPriceId), never a local plan code: the provider has no idea
+   *  what "owner_growth" means. */
+  changePlan(providerSubscriptionId: string, newProviderPriceId: string): Promise<ProviderSubscriptionSnapshot>;
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession>;
   /** Null if the provider has no record of this invoice reference. */
   retrieveInvoice(providerInvoiceId: string): Promise<ProviderInvoice | null>;

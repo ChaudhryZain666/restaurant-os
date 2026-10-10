@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { canSwitchToOwnStaff } from "../lib/deliveryActions";
 import type { Delivery, DeliveryStatus, Order } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
@@ -106,6 +107,22 @@ export function DeliveryStatusPanel({ order }: { order: Order }) {
     }
   }
 
+  // Phase 89 — take this one order over with the restaurant's own riders (the restaurant-wide
+  // courier setting is untouched).
+  async function dispatchManually() {
+    if (!window.confirm("Deliver this order with your own staff instead? No courier will be requested for it.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiClient.request(`/restaurants/${restaurantId}/orders/${order.id}/delivery/dispatch-manually`, { method: "POST" });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function retry() {
     setBusy(true);
     setError(null);
@@ -142,6 +159,11 @@ export function DeliveryStatusPanel({ order }: { order: Order }) {
         {delivery.status === "failed" && (
           <Button type="button" size="sm" disabled={busy} onClick={retry}>
             Retry
+          </Button>
+        )}
+        {canSwitchToOwnStaff(delivery) && (
+          <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={dispatchManually}>
+            Deliver with your own staff
           </Button>
         )}
         {CANCELLABLE.includes(delivery.status) && (

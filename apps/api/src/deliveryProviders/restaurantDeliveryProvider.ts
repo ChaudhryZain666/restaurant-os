@@ -11,7 +11,8 @@ export interface UberDirectCredentials {
   clientId: string;
   clientSecret: string;
   customerId: string;
-  webhookSigningSecret: string;
+  /** Phase 89 — optional: added after connecting, once Uber has issued it for our webhook URL. */
+  webhookSigningSecret?: string;
 }
 
 /**
@@ -24,7 +25,7 @@ export function buildDeliveryProviderFromAccount(account: RestaurantDeliveryProv
   if (account.provider === "uber_direct") {
     const blob = account.encryptedCredentials as EncryptedBlob;
     const creds = decryptCredentials<UberDirectCredentials>(blob);
-    return new UberDirectProvider(creds.clientId, creds.clientSecret, creds.customerId, creds.webhookSigningSecret);
+    return new UberDirectProvider(creds.clientId, creds.clientSecret, creds.customerId, creds.webhookSigningSecret ?? "");
   }
   throw new Error(`"${account.provider as string}" is not a BYOC-eligible delivery provider.`);
 }
@@ -42,7 +43,7 @@ export function buildDeliveryProviderFromAccount(account: RestaurantDeliveryProv
  */
 export async function resolveDeliveryProviderForRestaurant(
   restaurant: HydratedDocument<RestaurantDoc>
-): Promise<{ provider: DeliveryProvider; accountId?: string; fellBackToManual: boolean }> {
+): Promise<{ provider: DeliveryProvider; accountId?: string; fellBackToManual: boolean; fallbackReason?: string }> {
   const restaurantId = restaurant.id as string;
   const wanted = restaurant.settings.deliveryProvider ?? "manual";
   if (wanted === "manual") {
@@ -59,7 +60,18 @@ export async function resolveDeliveryProviderForRestaurant(
       restaurantId,
       wanted,
     });
-    return { provider: getManualDeliveryProvider(), fellBackToManual: true };
+    return { provider: getManualDeliveryProvider(), fellBackToManual: true, fallbackReason: "the courier account is not connected" };
+  }
+  // Phase 89 — no courier is booked until the webhook signing secret is added: without it every
+  // status update from the provider is rejected, so a booked delivery would never progress here.
+  // (Connecting and seeing the webhook URL still work before it — see the account controller.)
+  if (account.webhookSecretConfigured === false) {
+    logger.warn("courier account has no webhook signing secret yet — falling back to manual dispatch", { restaurantId, wanted });
+    return {
+      provider: getManualDeliveryProvider(),
+      fellBackToManual: true,
+      fallbackReason: "the courier account's webhook signing secret hasn't been added yet (Settings → Delivery)",
+    };
   }
 
   try {
@@ -70,6 +82,18 @@ export async function resolveDeliveryProviderForRestaurant(
       wanted,
       error: (err as Error).message,
     });
-    return { provider: getManualDeliveryProvider(), fellBackToManual: true };
+    return { provider: getManualDeliveryProvider(), fellBackToManual: true, fallbackReason: "the courier account could not be loaded" };
   }
+}
+
+/**
+ * Phase 89 — whether a delivery order for this restaurant would actually be booked with a
+ * third-party courier (connected, active, signing secret added) — the case where the courier needs
+ * the customer's phone, so checkout must collect one. Same conditions resolveDeliveryProviderForRestaurant uses.
+ */
+export async function thirdPartyCourierWillDispatch(restaurant: Pick<RestaurantDoc, "settings"> & { _id: unknown }): Promise<boolean> {
+  const wanted = restaurant.settings?.deliveryProvider ?? "manual";
+  if (wanted === "manual") return false;
+  const account = await RestaurantDeliveryProviderAccount.findOne({ restaurantId: restaurant._id, provider: wanted, status: "active" }).select("webhookSecretConfigured");
+  return Boolean(account) && account!.webhookSecretConfigured !== false;
 }

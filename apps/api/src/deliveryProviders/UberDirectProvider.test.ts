@@ -33,7 +33,8 @@ describe("UberDirectProvider.getQuote", () => {
   it("maps a successful quote response", async () => {
     mockAuthThen(200, { id: "quote_1", fee: 350, currency: "PKR", duration: 25 });
     const quote = await provider().getQuote({ pickup, dropoff, currency: "PKR" });
-    expect(quote).toEqual({ quoteId: "quote_1", fee: 350, currency: "PKR", estimatedDurationMinutes: 25, raw: expect.any(Object) });
+    // Phase 89 — Uber states fees in the smallest currency unit; stored in the main unit like every other amount.
+    expect(quote).toEqual({ quoteId: "quote_1", fee: 3.5, currency: "PKR", estimatedDurationMinutes: 25, raw: expect.any(Object) });
   });
 });
 
@@ -54,7 +55,7 @@ describe("UberDirectProvider.createDelivery", () => {
       providerDeliveryId: "del_1",
       status: "requested",
       trackingUrl: "https://track.uber.com/del_1",
-      fee: 400,
+      fee: 4,
       currency: "PKR",
       raw: expect.any(Object),
     });
@@ -265,5 +266,78 @@ describe("UberDirectProvider.verifyWebhookSignature", () => {
     const { rawBody, signatureHeader } = sign(payloadNoId);
     const event = provider().verifyWebhookSignature(rawBody, signatureHeader);
     expect(event?.eventId).toBe("del_2:delivered:2026-01-01T00:00:00.000Z");
+  });
+});
+
+// Phase 89 (U1/U4) — the request Uber actually receives, and how its answers are read back.
+describe("UberDirectProvider Phase 89 — structured requests", () => {
+  const structuredPickup: DeliveryContact = {
+    ...pickup,
+    addressParts: { street: ["1 Test St"], city: "Karachi", state: "Sindh", postalCode: "75500", country: "PK" },
+  };
+  const structuredDropoff: DeliveryContact = {
+    ...dropoff,
+    addressParts: { street: ["2 Customer Ave", "Flat 3"], city: "Karachi", country: "PK" },
+  };
+  const sentBody = (spy: ReturnType<typeof mockAuthThen>) => JSON.parse((spy.mock.calls[1] as [string, RequestInit])[1].body as string);
+
+  it("quotes with a structured address, exact coordinates and both phone numbers", async () => {
+    const spy = mockAuthThen(200, { id: "quote_2", fee: 1299, currency: "usd" });
+    const quote = await provider().getQuote({ pickup: structuredPickup, dropoff: structuredDropoff, currency: "USD" });
+    const body = sentBody(spy);
+    expect(JSON.parse(body.pickup_address)).toEqual({ street_address: ["1 Test St"], city: "Karachi", state: "Sindh", zip_code: "75500", country: "PK" });
+    expect(JSON.parse(body.dropoff_address)).toEqual({ street_address: ["2 Customer Ave", "Flat 3"], city: "Karachi", country: "PK" });
+    expect(body).toMatchObject({
+      pickup_latitude: 24.86,
+      pickup_longitude: 67.0,
+      dropoff_latitude: 24.87,
+      dropoff_longitude: 67.01,
+      pickup_phone_number: "+920000000000",
+      dropoff_phone_number: "+920000000001",
+    });
+    expect(quote).toMatchObject({ quoteId: "quote_2", fee: 12.99, currency: "USD" });
+  });
+
+  it("books against the quote it was given, with the same structured address and coordinates", async () => {
+    const spy = mockAuthThen(200, { id: "del_2", status: "pending", fee: 1299, currency: "USD" });
+    await provider().createDelivery({
+      orderId: "order-2",
+      restaurantId: "rest-1",
+      quoteId: "quote_2",
+      pickup: structuredPickup,
+      dropoff: structuredDropoff,
+      manifestItems: [{ name: "Burger", quantity: 1 }],
+      idempotencyKey: "delivery_create_order-2",
+    });
+    const body = sentBody(spy);
+    expect(body.quote_id).toBe("quote_2");
+    expect(JSON.parse(body.dropoff_address).street_address).toEqual(["2 Customer Ave", "Flat 3"]);
+    expect(body.dropoff_latitude).toBe(24.87);
+    expect(body.external_id).toBe("order-2");
+  });
+
+  it("falls back to the one-line address only when no structured parts are known", async () => {
+    const spy = mockAuthThen(200, { id: "quote_3", fee: 500, currency: "USD" });
+    await provider().getQuote({ pickup, dropoff, currency: "USD" });
+    expect(JSON.parse(sentBody(spy).pickup_address)).toEqual({ street_address: ["1 Test St"] });
+  });
+
+  it("does not divide fees in a currency with no minor unit", async () => {
+    mockAuthThen(200, { id: "quote_4", fee: 800, currency: "JPY" });
+    expect((await provider().getQuote({ pickup, dropoff, currency: "JPY" })).fee).toBe(800);
+  });
+
+  it("an address Uber does not serve is reported as outside the service area, not a malformed address", async () => {
+    mockAuthThen(400, { code: "address_undeliverable", message: "The specified location is not in a deliverable area." });
+    await expect(provider().getQuote({ pickup, dropoff, currency: "USD" })).rejects.toMatchObject({ code: "outside_service_area" });
+    mockAuthThen(422, { code: "invalid_params", message: "dropoff_address is invalid" });
+    await expect(provider().getQuote({ pickup, dropoff, currency: "USD" })).rejects.toMatchObject({ code: "invalid_address" });
+  });
+
+  it("with no webhook signing secret, rejects every webhook — even one signed with an empty key", () => {
+    const unsecured = new UberDirectProvider("client-id", "client-secret", "customer-id", "");
+    const rawBody = Buffer.from(JSON.stringify({ id: "evt_1", kind: "event.delivery_status", delivery_id: "del_1", status: "pickup" }));
+    expect(unsecured.hasWebhookSigningSecret).toBe(false);
+    expect(unsecured.verifyWebhookSignature(rawBody, createHmac("sha256", "").update(rawBody).digest("hex"))).toBeNull();
   });
 });

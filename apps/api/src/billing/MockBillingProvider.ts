@@ -147,10 +147,10 @@ export class MockBillingProvider implements BillingProvider {
     return this.snapshot(providerSubscriptionId, record);
   }
 
-  async changePlan(providerSubscriptionId: string, newPlanCode: string): Promise<ProviderSubscriptionSnapshot> {
+  async changePlan(providerSubscriptionId: string, newProviderPriceId: string): Promise<ProviderSubscriptionSnapshot> {
     const record = this.subscriptions.get(providerSubscriptionId);
     if (!record) throw new Error(`Unknown mock subscription reference: ${providerSubscriptionId}`);
-    record.planCode = newPlanCode;
+    record.planCode = newProviderPriceId;
     return this.snapshot(providerSubscriptionId, record);
   }
 

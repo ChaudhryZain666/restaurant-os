@@ -112,6 +112,12 @@ export function CartPage() {
   const [eligibility, setEligibility] = useState<DeliveryEligibilityResult | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(false);
   const [customerNotes, setCustomerNotes] = useState("");
+  // Phase 89 — the number a courier calls at the door. Required (server-enforced) only when the
+  // restaurant hands deliveries to a third-party courier; prefilled from the account when known.
+  const [contactPhone, setContactPhone] = useState("");
+  useEffect(() => {
+    if (user?.phone) setContactPhone((current) => current || user.phone!);
+  }, [user?.phone]);
   const [promoInput, setPromoInput] = useState("");
   const [checkingPromo, setCheckingPromo] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -350,6 +356,7 @@ export function CartPage() {
                   latitude: Number(deliveryDraft.latitude),
                   longitude: Number(deliveryDraft.longitude),
                   instructions: deliveryDraft.instructions || undefined,
+                  phone: contactPhone.trim() || undefined,
                 }
               : undefined,
           tableToken: orderType === "dine_in" ? tableToken ?? undefined : undefined,
@@ -776,6 +783,27 @@ export function CartPage() {
                 maxLength={300}
                 className="rounded-md border border-border bg-surface px-2 py-1.5"
               />
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span>
+                  Phone for the courier{restaurant?.courierPhoneRequired ? " (required)" : " (optional)"}
+                </span>
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="+1 212 555 0100"
+                  maxLength={30}
+                  required={Boolean(restaurant?.courierPhoneRequired)}
+                  className="rounded-md border border-border bg-surface px-2 py-1.5"
+                />
+                {restaurant?.courierPhoneRequired && (
+                  <span className="text-xs text-muted">
+                    A delivery driver uses this to reach you. Include your country code, starting with +.
+                  </span>
+                )}
+              </label>
             </div>
 
             {deliveryDraft.latitude && deliveryDraft.longitude && (

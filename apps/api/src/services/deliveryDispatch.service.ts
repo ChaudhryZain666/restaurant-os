@@ -10,6 +10,8 @@ import { applyOrderStatusTransition, type OrderStatusTransitionActor } from "./o
 import { emitOrderEvent, statusToEventType } from "../events/orderEvents.js";
 import { recordAuditEvent } from "./audit.service.js";
 import { resolveDeliveryProviderForRestaurant } from "../deliveryProviders/restaurantDeliveryProvider.js";
+import { normalizeCountryCode, normalizePhone } from "../deliveryProviders/contactNormalization.js";
+import { courierDispatchIneligibility } from "./courierDispatchEligibility.js";
 import { buildDeliveryProviderFromAccount } from "../deliveryProviders/restaurantDeliveryProvider.js";
 import { getManualDeliveryProvider } from "../deliveryProviders/index.js";
 import { RestaurantDeliveryProviderAccount } from "../models/RestaurantDeliveryProviderAccount.js";
@@ -132,7 +134,8 @@ export async function createDeliveryForOrder(orderId: string, restaurantId: stri
   ]);
   if (!order) throw ApiError.notFound("Order not found");
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
-  if (order.orderType !== "delivery") throw ApiError.badRequest("Only delivery orders can be dispatched to a courier");
+  const ineligible = courierDispatchIneligibility(order);
+  if (ineligible) throw ApiError.badRequest(ineligible);
   if (!order.deliveryAddress) throw ApiError.badRequest("This order has no delivery address on file");
   if (restaurant.latitude == null || restaurant.longitude == null) {
     throw ApiError.badRequest("This restaurant has no pickup coordinates configured — a courier cannot be requested");
@@ -179,6 +182,9 @@ export async function retryDeliveryCreation(deliveryId: string, restaurantId: st
     Restaurant.findOne({ _id: restaurantId }),
   ]);
   if (!order || !restaurant) throw ApiError.notFound("Order or restaurant not found");
+  // Phase 89 — the same server-side eligibility as the first attempt; a retry can't bypass it.
+  const ineligible = courierDispatchIneligibility(order);
+  if (ineligible) throw ApiError.badRequest(ineligible);
 
   delivery.status = "pending";
   delivery.failureReason = undefined;
@@ -193,38 +199,110 @@ async function dispatchPendingDelivery(
   // accountId (which RestaurantDeliveryProviderAccount was used) is deliberately not persisted on
   // Delivery itself — resolveProviderForDelivery looks the active account up fresh by
   // restaurantId+provider whenever one is needed later (e.g. cancelDelivery).
-  const { provider, fellBackToManual } = await resolveDeliveryProviderForRestaurant(restaurant);
+  const { provider, fellBackToManual, fallbackReason } = await resolveDeliveryProviderForRestaurant(restaurant);
   delivery.provider = provider.name;
   if (fellBackToManual) {
-    delivery.statusHistory.push({ status: "pending", at: new Date(), note: "Fell back to manual dispatch — configured provider unavailable" });
+    delivery.statusHistory.push({
+      status: "pending",
+      at: new Date(),
+      note: `Fell back to manual dispatch — ${fallbackReason ?? "configured provider unavailable"}`,
+    });
   }
 
   const customer = await User.findById(order.customerId).select("name phone");
   const restaurantCurrency = restaurant.settings.currency ?? order.currency;
 
+  const dropoffAddress = order.deliveryAddress!;
   const pickup: DeliveryContact = {
     name: restaurant.name,
-    phone: restaurant.phone ?? "",
+    phone: restaurant.phone?.trim() ?? "",
     address: [restaurant.address, restaurant.city, restaurant.state, restaurant.postalCode, restaurant.country].filter(Boolean).join(", "),
+    // Phase 89 — the structured form a courier API needs (Uber Direct), not just the display line.
+    addressParts: {
+      street: [restaurant.address].filter(Boolean) as string[],
+      city: restaurant.city ?? undefined,
+      state: restaurant.state ?? undefined,
+      postalCode: restaurant.postalCode ?? undefined,
+      country: restaurant.country ?? undefined,
+    },
     latitude: restaurant.latitude as number,
     longitude: restaurant.longitude as number,
   };
   const dropoff: DeliveryContact = {
     name: customer?.name ?? "Customer",
-    phone: customer?.phone ?? "",
-    address: [order.deliveryAddress!.line1, order.deliveryAddress!.line2, order.deliveryAddress!.city, order.deliveryAddress!.state, order.deliveryAddress!.postalCode]
-      .filter(Boolean)
-      .join(", "),
-    latitude: order.deliveryAddress!.latitude,
-    longitude: order.deliveryAddress!.longitude,
-    notes: order.deliveryAddress!.instructions ?? undefined,
+    phone: (dropoffAddress.phone ?? customer?.phone)?.trim() ?? "",
+    address: [dropoffAddress.line1, dropoffAddress.line2, dropoffAddress.city, dropoffAddress.state, dropoffAddress.postalCode].filter(Boolean).join(", "),
+    addressParts: {
+      street: [dropoffAddress.line1, dropoffAddress.line2].filter(Boolean) as string[],
+      city: dropoffAddress.city ?? undefined,
+      state: dropoffAddress.state ?? undefined,
+      postalCode: dropoffAddress.postalCode ?? undefined,
+      // A delivery never leaves the restaurant's country; the order's own country wins if set.
+      country: dropoffAddress.country ?? restaurant.country ?? undefined,
+    },
+    latitude: dropoffAddress.latitude,
+    longitude: dropoffAddress.longitude,
+    notes: dropoffAddress.instructions ?? undefined,
   };
   const manifestItems: ManifestItem[] = order.items.map((item) => ({ name: item.name, quantity: item.quantity }));
+  const isThirdParty = provider.name !== "manual";
+
+  // Phase 89 — a courier API needs ISO country codes and E.164 phone numbers, and both ends must be
+  // reachable. Normalized by fixed rules (contactNormalization.ts); anything that can't be is
+  // refused up front with a reason staff can act on — never sent as "" or guessed at.
+  if (isThirdParty) {
+    const restaurantCountry = normalizeCountryCode(restaurant.country);
+    if (!restaurantCountry) {
+      return failDispatch(
+        delivery,
+        order,
+        provider.name,
+        `The restaurant's country ${restaurant.country ? `("${restaurant.country}") isn't recognized` : "isn't set"} — set it in Settings → Location details (for example "United States" or "US") and retry, or dispatch this order yourself.`
+      );
+    }
+    const dropoffCountry = dropoffAddress.country ? normalizeCountryCode(dropoffAddress.country) : restaurantCountry;
+    if (!dropoffCountry) {
+      return failDispatch(delivery, order, provider.name, `The delivery address country ("${dropoffAddress.country}") isn't recognized — dispatch this order yourself.`);
+    }
+    const pickupPhone = normalizePhone(restaurant.phone, restaurantCountry);
+    if (!pickupPhone.ok) {
+      return failDispatch(
+        delivery,
+        order,
+        provider.name,
+        `The restaurant's phone number can't be given to a courier: ${pickupPhone.reason} Fix it in Settings → Location details and retry, or dispatch this order yourself.`
+      );
+    }
+    const dropoffPhone = normalizePhone(dropoffAddress.phone ?? customer?.phone, restaurantCountry);
+    if (!dropoffPhone.ok) {
+      return failDispatch(delivery, order, provider.name, `The customer's phone number can't be given to a courier: ${dropoffPhone.reason} Dispatch this order yourself.`);
+    }
+    pickup.phone = pickupPhone.e164;
+    pickup.addressParts!.country = restaurantCountry;
+    dropoff.phone = dropoffPhone.e164;
+    dropoff.addressParts!.country = dropoffCountry;
+  }
 
   try {
+    // Phase 89 — quote first: confirms the provider serves this pickup→dropoff pair before any
+    // courier is booked, and binds the booking to that quoted price.
+    let quoteId: string | undefined;
+    if (isThirdParty) {
+      const quote = await provider.getQuote({ pickup, dropoff, currency: restaurantCurrency });
+      quoteId = quote.quoteId;
+      delivery.quoteId = quote.quoteId;
+      const charged = order.deliveryFee ?? 0;
+      if (quote.currency.toUpperCase() === (order.currency ?? restaurantCurrency).toUpperCase() && quote.fee > charged) {
+        const note = `Courier fee ${quote.fee.toFixed(2)} ${quote.currency} is more than the ${charged.toFixed(2)} delivery fee the customer paid`;
+        delivery.statusHistory.push({ status: "pending", at: new Date(), note });
+        logger.warn("courier quote exceeds the customer's delivery fee", { deliveryId: delivery.id, orderId: order.id, provider: provider.name, quoteFee: quote.fee, charged });
+      }
+    }
+
     const result = await provider.createDelivery({
       orderId: order.id as string,
       restaurantId: restaurant.id as string,
+      quoteId,
       pickup,
       dropoff,
       manifestItems,
@@ -241,14 +319,24 @@ async function dispatchPendingDelivery(
     logger.info("delivery dispatched", { deliveryId: delivery.id, orderId: order.id, provider: provider.name, status: result.status });
   } catch (err) {
     const message = err instanceof DeliveryProviderError ? err.message : `Unexpected error dispatching delivery: ${(err as Error).message}`;
-    delivery.status = "failed";
-    delivery.failureReason = message;
-    delivery.lastProviderError = message;
-    delivery.statusHistory.push({ status: "failed", at: new Date(), note: message });
-    await delivery.save();
-    logger.warn("delivery dispatch failed", { deliveryId: delivery.id, orderId: order.id, provider: provider.name, error: message });
+    return failDispatch(delivery, order, provider.name, message);
   }
 
+  return delivery;
+}
+
+async function failDispatch(
+  delivery: HydratedDocument<DeliveryDoc>,
+  order: HydratedDocument<OrderDoc>,
+  providerName: string,
+  message: string
+): Promise<HydratedDocument<DeliveryDoc>> {
+  delivery.status = "failed";
+  delivery.failureReason = message;
+  delivery.lastProviderError = message;
+  delivery.statusHistory.push({ status: "failed", at: new Date(), note: message });
+  await delivery.save();
+  logger.warn("delivery dispatch failed", { deliveryId: delivery.id, orderId: order.id, provider: providerName, error: message });
   return delivery;
 }
 
@@ -409,6 +497,57 @@ async function advanceOrderForDeliveryStatus(
  * actually created through (resolveProviderForDelivery), never whatever the restaurant currently has
  * configured — those can differ if the restaurant reconfigured providers mid-flight.
  */
+/**
+ * Phase 89 — the per-order way out of a failed third-party dispatch (e.g. a customer phone the
+ * courier can't use): staff take THIS order over with their own riders. Only a delivery that
+ * failed before any courier was booked (no providerDeliveryId) qualifies — switching one that a
+ * courier may already be driving would double-dispatch. The restaurant-wide provider setting is
+ * untouched. Atomic on those conditions, audited, and noted in the delivery's own history.
+ */
+export async function switchDeliveryToManual(deliveryId: string, restaurantId: string, actor: OrderStatusTransitionActor): Promise<HydratedDocument<DeliveryDoc>> {
+  const existing = await Delivery.findOne({ _id: deliveryId, restaurantId });
+  if (!existing) throw ApiError.notFound("Delivery not found");
+  if (existing.provider === "manual") throw ApiError.conflict("This delivery is already dispatched by your own staff");
+  if (existing.providerDeliveryId) {
+    throw ApiError.conflict("A courier was already booked for this delivery — cancel it first, then dispatch it yourself");
+  }
+  if (existing.status !== "failed") {
+    throw ApiError.conflict("Only a delivery whose courier booking failed can be switched to your own staff");
+  }
+
+  const manual = await getManualDeliveryProvider().createDelivery({
+    orderId: existing.orderId.toString(),
+    restaurantId,
+    pickup: { name: "", phone: "", address: "", latitude: 0, longitude: 0 },
+    dropoff: { name: "", phone: "", address: "", latitude: 0, longitude: 0 },
+    manifestItems: [],
+    idempotencyKey: existing.idempotencyKey,
+  });
+  const previousProvider = existing.provider;
+  const switched = await Delivery.findOneAndUpdate(
+    { _id: existing._id, restaurantId, provider: previousProvider, status: "failed", providerDeliveryId: { $exists: false } },
+    {
+      $set: { provider: "manual", status: manual.status, providerDeliveryId: manual.providerDeliveryId },
+      $unset: { failureReason: "", quoteId: "", fee: "" },
+      $push: { statusHistory: { status: manual.status, at: new Date(), note: `Switched to manual dispatch by staff (was ${previousProvider})` } },
+    },
+    { new: true }
+  );
+  if (!switched) throw ApiError.conflict("This delivery changed while switching — reload and try again");
+
+  await recordAuditEvent({
+    restaurantId,
+    actorUserId: actor.userId,
+    actorRole: actor.role,
+    action: "delivery.switched_to_manual",
+    targetType: "delivery",
+    targetId: switched.id,
+    metadata: { from: previousProvider, to: "manual" },
+  });
+  await emitDeliveryStatusUpdatedEvent(switched, restaurantId);
+  return switched;
+}
+
 export async function cancelDelivery(deliveryId: string, restaurantId: string, reason: string | undefined, actor: OrderStatusTransitionActor): Promise<HydratedDocument<DeliveryDoc>> {
   const delivery = await Delivery.findOne({ _id: deliveryId, restaurantId });
   if (!delivery) throw ApiError.notFound("Delivery not found");

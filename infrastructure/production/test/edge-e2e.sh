@@ -66,6 +66,12 @@ CADDY_RENEW_INTERVAL=15s
 GT_EDGE_SUBNET=172.30.86.0/24
 GT_CADDY_IP=$CADDY_IP
 GT_IMAGE_TAG=edge-test
+# Test-harness build only (never production): the marketing build requires legal facts.
+LEGAL_ENTITY_NAME=GarnishTable Edge Harness Test Entity
+LEGAL_JURISDICTION=Edge Harness Test Jurisdiction
+LEGAL_CONTACT_EMAIL=legal@$BASE
+PRIVACY_CONTACT_EMAIL=privacy@$BASE
+BILLING_CONTACT_EMAIL=billing@$BASE
 GT_API_ENV_FILE=$OUT/api.env
 REDIS_PASSWORD=$REDIS_PW
 EOF

@@ -27,6 +27,8 @@ interface RecordBillingHistoryEventInput {
   receiptUrl?: string;
   occurredAt?: Date;
   metadata?: Record<string, unknown>;
+  /** Phase 89 — dedupe key for provider notices (see BillingHistoryEvent.noticeKey). */
+  noticeKey?: string;
 }
 
 /**
@@ -50,8 +52,13 @@ export async function recordBillingHistoryEvent(input: RecordBillingHistoryEvent
       receiptUrl: input.receiptUrl,
       occurredAt: input.occurredAt ?? new Date(),
       metadata: input.metadata,
+      noticeKey: input.noticeKey,
     });
   } catch (err) {
+    if (input.noticeKey && (err as { code?: number }).code === 11000) {
+      logger.info("billing notice already recorded — duplicate ignored", { type: input.type, noticeKey: input.noticeKey });
+      return;
+    }
     logger.error("failed to record billing history event", { error: (err as Error).message, type: input.type });
     return;
   }

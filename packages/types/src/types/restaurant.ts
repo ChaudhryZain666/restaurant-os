@@ -127,6 +127,10 @@ export interface Restaurant {
   id: string;
   name: string;
   slug: string;
+  /** Phase 89 — public storefront payload only: true when delivery orders are handed to a
+   *  third-party courier (Uber Direct) that needs a phone number to reach the customer, so checkout
+   *  must collect one. The server enforces it either way (orderCreation.service.ts). */
+  courierPhoneRequired?: boolean;
   description?: string;
   logo?: string;
   coverImage?: string;

@@ -3,6 +3,7 @@ import type { BillingHistoryEventType, BillingInterval, SubscriptionOwnerType, S
 import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
 import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
+import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
 import { env } from "../config/env.js";
@@ -248,6 +249,7 @@ async function cancelSubscriptionCore(
   }
 
   const provider = getBillingProvider();
+  const actedAt = new Date();
   if (subscription.providerSubscriptionId) {
     await provider.cancelSubscription(subscription.providerSubscriptionId, targetStatus === "cancelling");
   }
@@ -259,6 +261,7 @@ async function cancelSubscriptionCore(
         status: targetStatus,
         ...(targetStatus === "cancelling" ? { cancelAt: subscription.currentPeriodEnd } : { cancelledAt: new Date() }),
       },
+      ...providerActionMarker(subscription, actedAt),
     },
     { new: true }
   );
@@ -292,13 +295,14 @@ async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, owne
   }
 
   const provider = getBillingProvider();
+  const actedAt = new Date();
   if (subscription.providerSubscriptionId) {
     await provider.reactivateSubscription(subscription.providerSubscriptionId);
   }
 
   const updated = await Subscription.findOneAndUpdate(
     { _id: subscription._id, status: subscription.status },
-    { $set: { status: "active" }, $unset: { cancelAt: "" } },
+    { $set: { status: "active" }, $unset: { cancelAt: "" }, ...providerActionMarker(subscription, actedAt) },
     { new: true }
   );
   if (!updated) throw ApiError.conflict("This subscription was just modified — please retry");
@@ -356,11 +360,22 @@ async function changeSubscriptionPlanCore(
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
 
   const provider = getBillingProvider();
+  const actedAt = new Date();
   if (subscription.providerSubscriptionId) {
-    await provider.changePlan(subscription.providerSubscriptionId, newPlanCode);
+    // Phase 89 — the provider needs ITS price id for this plan at the subscription's own billing
+    // interval, never our plan code (which it can't resolve — every real plan change failed).
+    const newPricing = resolvePricing(plan, subscription.billingInterval as BillingInterval);
+    if (!newPricing?.providerPriceId) {
+      throw ApiError.badRequest(`The ${plan.name} plan has no ${subscription.billingInterval} price configured with the billing provider yet`);
+    }
+    await provider.changePlan(subscription.providerSubscriptionId, newPricing.providerPriceId);
   }
 
   subscription.planId = plan._id;
+  // Phase 89 — see providerActionMarker: an older provider event must not undo this change.
+  if (subscription.providerSubscriptionId && (!subscription.lastProviderEventAt || subscription.lastProviderEventAt < actedAt)) {
+    subscription.lastProviderEventAt = actedAt;
+  }
   await subscription.save();
 
   const pricing = resolvePricing(plan, subscription.billingInterval);
@@ -396,9 +411,143 @@ export async function getPlanForSubscription(subscription: Pick<SubscriptionDoc,
  * above directly (an owner action, immediate, never waits for a webhook), so a webhook can only
  * ever observe involuntary trial expiry from that starting state, never a deliberate cancel.
  */
-function resolveTransitionTarget(currentStatus: SubscriptionStatus, providerStatus: ProviderSubscriptionStatus): SubscriptionStatus {
+function resolveTransitionTarget(
+  currentStatus: SubscriptionStatus,
+  providerStatus: ProviderSubscriptionStatus,
+  scheduledCancelAt?: Date | null
+): SubscriptionStatus {
   if (providerStatus === "cancelled" && currentStatus === "trialing") return "expired";
+  // Phase 89 — Paddle keeps reporting "active" for a subscription whose cancellation is scheduled
+  // for period end; that is our "cancelling", not a reactivation (which this used to apply). Only
+  // an event that says NO cancellation is scheduled (null) un-cancels.
+  if (providerStatus === "active" && scheduledCancelAt) return "cancelling";
   return providerStatus;
+}
+
+const HISTORY_TYPE_BY_NOTICE: Record<NonNullable<ProviderBillingWebhookEvent["billingNotice"]>["type"], BillingHistoryEventType> = {
+  payment_succeeded: "payment_succeeded",
+  refunded: "refunded",
+  chargeback: "chargeback",
+  chargeback_reversed: "chargeback_reversed",
+};
+
+/**
+ * Phase 89 — event ordering. Subscription.lastProviderEventAt is the time of the newest SUBSCRIPTION
+ * state the record reflects: a subscription.* event's occurred_at, or the moment an in-app action
+ * (cancel/reactivate/plan change) called the provider. Only subscription events advance it or are
+ * judged by it — transaction/adjustment events report payments, not subscription state, so they never
+ * touch it (one arriving first must not make the matching subscription update look "old"). Every
+ * write a subscription event makes is guarded by this filter, so an older event — even one racing a
+ * newer one — can't overwrite newer status, dates, cancellation or plan.
+ */
+function notOlderThanApplied(occurredAt: Date | undefined): Record<string, unknown> {
+  return occurredAt ? { $or: [{ lastProviderEventAt: { $exists: false } }, { lastProviderEventAt: { $lte: occurredAt } }] } : {};
+}
+
+/** In-app provider actions record when they acted (only ever forward), so a provider event that
+ *  happened BEFORE the action but arrives after it can't undo it. Local-only subscriptions skip it. */
+function providerActionMarker(subscription: Pick<SubscriptionDoc, "providerSubscriptionId">, actedAt: Date): Record<string, unknown> {
+  return subscription.providerSubscriptionId ? { $max: { lastProviderEventAt: actedAt } } : {};
+}
+
+/**
+ * Phase 89 — renewals and outside changes. A subscription event can carry the current billing
+ * period, a scheduled cancellation date, and the price it's on now; until this phase only the status
+ * was read, so period dates froze at checkout. Returns the subscription as it stands after claiming
+ * this event's place in the order, or null when a newer subscription event (or in-app action) is
+ * already applied — the caller then changes nothing else either.
+ */
+async function applyProviderSubscriptionDetails(
+  subscription: HydratedDocument<SubscriptionDoc>,
+  event: ProviderBillingWebhookEvent
+): Promise<HydratedDocument<SubscriptionDoc> | null> {
+  let current = subscription;
+  if (event.occurredAt) {
+    const claimed = await Subscription.findOneAndUpdate(
+      { _id: subscription._id, ...notOlderThanApplied(event.occurredAt) },
+      { $set: { lastProviderEventAt: event.occurredAt } },
+      { new: true }
+    );
+    if (!claimed) {
+      logger.info("older subscription webhook event — not applied (a newer state is already recorded)", {
+        subscriptionId: subscription.id,
+        eventId: event.eventId,
+      });
+      return null;
+    }
+    current = claimed;
+  }
+
+  const set: Record<string, unknown> = {};
+  let planChange: { code: string; amountCents?: number | null; currency?: string | null } | null = null;
+  if (event.currentPeriod) {
+    set.currentPeriodStart = event.currentPeriod.start;
+    set.currentPeriodEnd = event.currentPeriod.end;
+  }
+  if (event.scheduledCancelAt) set.cancelAt = event.scheduledCancelAt;
+  if (event.providerPriceId) {
+    const plan = await Plan.findOne({ "pricing.providerPriceId": event.providerPriceId });
+    const pricing = plan?.pricing.find((p) => p.providerPriceId === event.providerPriceId);
+    if (!plan || !pricing) {
+      logger.warn("billing webhook reports a price no local plan maps to — plan left unchanged", {
+        subscriptionId: current.id,
+        providerPriceId: event.providerPriceId,
+      });
+    } else if (!plan._id.equals(current.planId) || pricing.interval !== current.billingInterval) {
+      set.planId = plan._id;
+      set.billingInterval = pricing.interval;
+      planChange = { code: plan.code, amountCents: pricing.amountCents, currency: pricing.currency };
+    }
+  }
+  if (!Object.keys(set).length) return current;
+
+  const updated = await Subscription.findOneAndUpdate({ _id: current._id, ...notOlderThanApplied(event.occurredAt) }, { $set: set }, { new: true });
+  if (!updated) return null; // a newer event claimed the order between our claim and this write
+  if (planChange) {
+    await recordBillingHistoryEvent({
+      ownerType: updated.ownerType as SubscriptionOwnerType,
+      ownerId: updated.ownerId.toString(),
+      subscriptionId: updated._id,
+      type: "plan_changed",
+      provider: updated.provider,
+      amountCents: planChange.amountCents ?? undefined,
+      currency: planChange.currency ?? undefined,
+      providerReference: event.eventId,
+      metadata: { newPlanCode: planChange.code, viaProvider: true },
+    });
+  }
+  return updated;
+}
+
+/** Phase 89 — renewal payments, refunds and chargebacks: a billing-history row only. Deliberately
+ *  never changes status or access — whether a refund or chargeback should end access is a business
+ *  decision this code doesn't make; the row (and the warning log for chargebacks) makes it visible.
+ *  Paddle reports one adjustment on both .created and .updated, so a row already recorded for the
+ *  same provider reference is not recorded twice. */
+async function recordProviderBillingNotice(subscription: HydratedDocument<SubscriptionDoc>, event: ProviderBillingWebhookEvent): Promise<void> {
+  const notice = event.billingNotice!;
+  const type = HISTORY_TYPE_BY_NOTICE[notice.type];
+  const reference = notice.reference ?? event.eventId;
+  const noticeKey = `${type}:${reference}`;
+  // Fast path for the common sequential redelivery; the unique (subscriptionId, noticeKey) index is
+  // what actually guarantees one row when two deliveries race (recordBillingHistoryEvent ignores
+  // the duplicate-key error).
+  if (await BillingHistoryEvent.exists({ subscriptionId: subscription._id, noticeKey })) return;
+  if (notice.type === "chargeback") {
+    logger.warn("chargeback reported for subscription — review the account", { subscriptionId: subscription.id, reference });
+  }
+  await recordBillingHistoryEvent({
+    ownerType: subscription.ownerType as SubscriptionOwnerType,
+    ownerId: subscription.ownerId.toString(),
+    subscriptionId: subscription._id,
+    type,
+    provider: subscription.provider,
+    amountCents: notice.amountCents,
+    currency: notice.currency,
+    providerReference: reference,
+    occurredAt: event.occurredAt,
+    noticeKey,
+  });
 }
 
 /** Maps a just-applied status transition to the billing-history event type it represents, or
@@ -457,6 +606,7 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
     existingLocalTrial.provider = providerName as SubscriptionDoc["provider"];
     existingLocalTrial.providerCustomerId = meta.providerCustomerId;
     existingLocalTrial.providerSubscriptionId = event.providerSubscriptionId;
+    if (event.occurredAt) existingLocalTrial.lastProviderEventAt = event.occurredAt; // Phase 89 — event ordering
     subscription = await existingLocalTrial.save();
   } else {
     try {
@@ -473,6 +623,7 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
         provider: providerName,
         providerCustomerId: meta.providerCustomerId,
         providerSubscriptionId: event.providerSubscriptionId,
+        lastProviderEventAt: event.occurredAt, // Phase 89 — event ordering
       });
     } catch (err) {
       if ((err as { code?: number }).code === 11000) {
@@ -616,42 +767,77 @@ export async function processBillingProviderEvent(providerName: string, event: P
       return;
     }
 
-    const subscription = await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId });
-    if (!subscription) {
-      logger.warn("billing webhook event for unknown subscription reference", {
-        provider: providerName,
-        providerSubscriptionId: event.providerSubscriptionId,
-      });
-      await BillingWebhookEvent.updateOne(
+    const markProcessed = () =>
+      BillingWebhookEvent.updateOne(
         { provider: providerName, eventId: event.eventId },
         { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+      );
+
+    const subscription = event.providerSubscriptionId
+      ? await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId })
+      : null;
+    if (!subscription) {
+      if (event.providerSubscriptionId) {
+        logger.warn("billing webhook event for unknown subscription reference", {
+          provider: providerName,
+          providerSubscriptionId: event.providerSubscriptionId,
+        });
+      }
+      await markProcessed();
+      return;
+    }
+
+    // Phase 89 — transaction/adjustment events: a billing-history notice at most. They carry no
+    // subscription status and never touch the subscription's event ordering.
+    if (!event.status) {
+      if (event.billingNotice) await recordProviderBillingNotice(subscription, event);
+      await markProcessed();
+      return;
+    }
+
+    const current = await applyProviderSubscriptionDetails(subscription, event);
+    if (!current) {
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date(), processingError: "Ignored: older than the subscription state already applied" }, $unset: { processingStartedAt: "" } }
       );
       return;
     }
 
-    const targetStatus = resolveTransitionTarget(subscription.status, event.status);
-    if (!isValidSubscriptionTransition(subscription.status, targetStatus)) {
+    const targetStatus = resolveTransitionTarget(current.status, event.status, event.scheduledCancelAt);
+    if (!isValidSubscriptionTransition(current.status, targetStatus)) {
       logger.warn("ignored invalid subscription status transition from webhook", {
-        subscriptionId: subscription.id,
-        from: subscription.status,
+        subscriptionId: current.id,
+        from: current.status,
         to: targetStatus,
       });
       await BillingWebhookEvent.updateOne(
         { provider: providerName, eventId: event.eventId },
-        { $set: { processedAt: new Date(), processingError: `Ignored: ${subscription.status} -> ${targetStatus}` }, $unset: { processingStartedAt: "" } }
+        { $set: { processedAt: new Date(), processingError: `Ignored: ${current.status} -> ${targetStatus}` }, $unset: { processingStartedAt: "" } }
       );
       return;
     }
 
-    // Guarded by status: {$ne: to} so a race between two deliveries of the same real-world
-    // transition can't apply it twice — mirrors payment.service.ts's webhook-driven status guard.
+    // Guarded by the status it was read with, so a race between two deliveries of the same
+    // real-world transition can't apply it twice, and (Phase 89) by the event order, so a newer
+    // subscription event that landed meanwhile always wins.
     const applied = await Subscription.findOneAndUpdate(
-      { _id: subscription._id, status: { $ne: targetStatus } },
-      { $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) } },
+      { _id: current._id, status: current.status, ...notOlderThanApplied(event.occurredAt) },
+      {
+        $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) },
+        // Un-cancelled at the provider (cancelling -> active): the scheduled end date no longer applies.
+        ...(targetStatus === "active" && current.status === "cancelling" ? { $unset: { cancelAt: "" } } : {}),
+      },
       { new: true }
     );
 
-    const historyType = HISTORY_TYPE_BY_TARGET_STATUS[targetStatus];
+    // Phase 89 — a provider-side un-cancel or scheduled cancel is not a payment.
+    const historyType =
+      current.status === "cancelling" && targetStatus === "active"
+        ? "reactivated"
+        : targetStatus === "cancelling"
+          ? "cancellation_requested"
+          : HISTORY_TYPE_BY_TARGET_STATUS[targetStatus];
     if (applied && historyType) {
       await recordBillingHistoryEvent({
         ownerType: subscription.ownerType as SubscriptionOwnerType,

@@ -19,9 +19,17 @@ export const connectUberDirectAccountSchema = z.object({
   clientId: z.string().min(1).max(500),
   clientSecret: z.string().min(1).max(500),
   customerId: z.string().min(1).max(200),
-  webhookSigningSecret: z.string().min(1).max(500),
+  // Phase 89 — optional at connect: Uber only issues the signing secret once our webhook URL is
+  // registered in its dashboard, and that URL only exists after connecting. Added later with
+  // updateDeliveryWebhookSecretSchema; webhooks are rejected until then.
+  webhookSigningSecret: z.string().min(1).max(500).optional(),
 });
 export type ConnectUberDirectAccountInput = z.infer<typeof connectUberDirectAccountSchema>;
+
+export const updateDeliveryWebhookSecretSchema = z.object({
+  webhookSigningSecret: z.string().trim().min(1).max(500),
+});
+export type UpdateDeliveryWebhookSecretInput = z.infer<typeof updateDeliveryWebhookSecretSchema>;
 
 export const cancelDeliverySchema = z.object({
   reason: z.string().max(300).optional(),

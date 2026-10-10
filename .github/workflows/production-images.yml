@@ -45,6 +45,13 @@ jobs:
           for app in web admin marketing; do (cd apps/$app && npx tsc -b); done
       - name: Shell scripts (shellcheck, errors fail the build)
         run: shellcheck -S error infrastructure/production/scripts/*.sh infrastructure/production/test/*.sh infrastructure/docker/*.sh
+      - name: Alert delivery (lib.sh alert, local capture server only)
+        run: bash infrastructure/production/test/alert-test.sh
+      - name: Legal pages configuration (all five values or none; "being finalized" build)
+        run: |
+          npm test -w apps/marketing
+          bash infrastructure/production/test/check-build-env-test.sh
+          bash infrastructure/production/test/marketing-legal-build-test.sh
       - name: Test databases (MongoDB 7 replica set, Redis 7) on localhost
         run: |
           docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all > /dev/null
@@ -105,6 +112,15 @@ jobs:
       POS_HOST: ${{ vars.GT_POS_HOST || 'pos.garnishtable.com' }}
       ORDER_HOST: ${{ vars.GT_ORDER_HOST || 'order.garnishtable.com' }}
       API_HOST: ${{ vars.GT_API_HOST || 'api.garnishtable.com' }}
+      # Phase 88 — founder-supplied legal facts for the marketing legal pages. No defaults, never
+      # placeholders. Phase 89 (option C): with none set, the marketing image builds with
+      # "Legal documents are being finalized" pages and a warning annotation (a launch blocker); a
+      # partial or invalid set fails the build (check-build-env.sh).
+      LEGAL_ENTITY_NAME: ${{ vars.GT_LEGAL_ENTITY_NAME }}
+      LEGAL_JURISDICTION: ${{ vars.GT_LEGAL_JURISDICTION }}
+      LEGAL_CONTACT_EMAIL: ${{ vars.GT_LEGAL_CONTACT_EMAIL }}
+      PRIVACY_CONTACT_EMAIL: ${{ vars.GT_PRIVACY_CONTACT_EMAIL }}
+      BILLING_CONTACT_EMAIL: ${{ vars.GT_BILLING_CONTACT_EMAIL }}
     strategy:
       fail-fast: true
       matrix:
@@ -133,7 +149,15 @@ jobs:
           VITE_PLATFORM_ADMIN_URL=https://$ADMIN_HOST" ;;
               marketing) args="VITE_SITE_URL=https://$MARKETING_HOST
           VITE_STOREFRONT_URL=https://$ORDER_HOST
-          VITE_ADMIN_URL=https://$APP_HOST" ;;
+          VITE_ADMIN_URL=https://$APP_HOST
+          VITE_LEGAL_ENTITY_NAME=$LEGAL_ENTITY_NAME
+          VITE_LEGAL_JURISDICTION=$LEGAL_JURISDICTION
+          VITE_LEGAL_CONTACT_EMAIL=$LEGAL_CONTACT_EMAIL
+          VITE_PRIVACY_CONTACT_EMAIL=$PRIVACY_CONTACT_EMAIL
+          VITE_BILLING_CONTACT_EMAIL=$BILLING_CONTACT_EMAIL"
+                if [ -z "$LEGAL_ENTITY_NAME$LEGAL_JURISDICTION$LEGAL_CONTACT_EMAIL$PRIVACY_CONTACT_EMAIL$BILLING_CONTACT_EMAIL" ]; then
+                  echo "::warning title=Legal pages not configured::No GT_LEGAL_* repository variables are set — the marketing legal pages will say 'Legal documents are being finalized'. Production-readiness blocker."
+                fi ;;
             esac
             args="APP=${{ matrix.service }}
           $args"

@@ -9,6 +9,7 @@ import {
   cancelOrderDelivery,
   getDeliveryForOrder,
   retryOrderDeliveryCreation,
+  dispatchOrderDeliveryManually,
   updateManualDeliveryStatus,
 } from "../controllers/deliveryDispatch.controller.js";
 
@@ -27,3 +28,4 @@ deliveryDispatchRouter.get("/", asyncHandler(getDeliveryForOrder));
 deliveryDispatchRouter.post("/manual-status", validateBody(updateManualDeliverySchema), asyncHandler(updateManualDeliveryStatus));
 deliveryDispatchRouter.post("/cancel", validateBody(cancelDeliverySchema), asyncHandler(cancelOrderDelivery));
 deliveryDispatchRouter.post("/retry", asyncHandler(retryOrderDeliveryCreation));
+deliveryDispatchRouter.post("/dispatch-manually", asyncHandler(dispatchOrderDeliveryManually));

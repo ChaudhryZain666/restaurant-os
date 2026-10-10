@@ -6,6 +6,7 @@ import { Business } from "../models/Business.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { RestaurantDeliveryProviderAccount } from "../models/RestaurantDeliveryProviderAccount.js";
 import { User } from "../models/User.js";
+import { decryptCredentials, type EncryptedBlob } from "../utils/credentialEncryption.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { Agency } from "../models/Agency.js";
 import {
@@ -183,5 +184,63 @@ describe("POST /restaurants/:restaurantId/delivery-account/disconnect", () => {
       .post(`/api/v1/restaurants/${restaurant.id}/delivery-account/disconnect`)
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(res.status).toBe(404);
+  });
+});
+
+// Phase 89 (U2) — connect first (to learn the webhook URL Uber needs), add the signing secret after,
+// on the same account so the URL registered with Uber never changes.
+describe("Phase 89 — webhook signing secret added after connecting", () => {
+  const withoutSecret = { clientId: validCredentials.clientId, clientSecret: validCredentials.clientSecret, customerId: validCredentials.customerId };
+
+  async function connectWithoutSecret() {
+    const ctx = await ownedRestaurant();
+    mockFetchOnce(200, { access_token: "tok_verify", expires_in: 2_592_000 });
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${ctx.restaurant.id}/delivery-account`)
+      .set("Authorization", `Bearer ${ctx.ownerToken}`)
+      .send(withoutSecret);
+    return { ...ctx, res };
+  }
+
+  it("connects without a signing secret, shows the webhook URL, and says the secret is still missing", async () => {
+    const { res } = await connectWithoutSecret();
+    expect(res.status).toBe(201);
+    expect(res.body.data.account.status).toBe("active");
+    expect(res.body.data.account.webhookSecretConfigured).toBe(false);
+    expect(res.body.data.webhookUrl).toEqual(expect.stringContaining(`/webhooks/deliveries/uber_direct/${res.body.data.account.id}`));
+  });
+
+  it("adds the secret in place: same account id and URL, other credentials untouched, secret never returned", async () => {
+    const { restaurant, ownerToken, res: connected } = await connectWithoutSecret();
+    const accountId = connected.body.data.account.id;
+
+    const res = await request(app)
+      .put(`/api/v1/restaurants/${restaurant.id}/delivery-account/webhook-signing-secret`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ webhookSigningSecret: "whsec_added_later" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.account.id).toBe(accountId);
+    expect(res.body.data.account.webhookSecretConfigured).toBe(true);
+    expect(res.body.data.webhookUrl).toBe(connected.body.data.webhookUrl);
+    expect(JSON.stringify(res.body)).not.toContain("whsec_added_later");
+
+    const stored = await RestaurantDeliveryProviderAccount.findById(accountId);
+    expect(decryptCredentials(stored!.encryptedCredentials as EncryptedBlob)).toEqual({ ...withoutSecret, webhookSigningSecret: "whsec_added_later" });
+    expect(await RestaurantDeliveryProviderAccount.countDocuments({ restaurantId: restaurant._id })).toBe(1);
+  });
+
+  it("only the owner can set it, it can't be blank, and there must be an active account", async () => {
+    const { restaurant, staffToken, ownerToken } = await connectWithoutSecret();
+    const path = `/api/v1/restaurants/${restaurant.id}/delivery-account/webhook-signing-secret`;
+    expect((await request(app).put(path).set("Authorization", `Bearer ${staffToken}`).send({ webhookSigningSecret: "x" })).status).toBe(403);
+    expect((await request(app).put(path).set("Authorization", `Bearer ${ownerToken}`).send({ webhookSigningSecret: "   " })).status).toBe(400);
+
+    const other = await ownedRestaurant();
+    const none = await request(app)
+      .put(`/api/v1/restaurants/${other.restaurant.id}/delivery-account/webhook-signing-secret`)
+      .set("Authorization", `Bearer ${other.ownerToken}`)
+      .send({ webhookSigningSecret: "whsec_x" });
+    expect(none.status).toBe(404);
   });
 });

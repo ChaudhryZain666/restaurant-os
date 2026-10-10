@@ -32,7 +32,9 @@ export function DeliveryProviderAccountSettingsPanel({
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"connect" | "disconnect" | "provider" | null>(null);
+  const [busy, setBusy] = useState<"connect" | "disconnect" | "provider" | "secret" | null>(null);
+  const [secretDraft, setSecretDraft] = useState("");
+  const [showSecretForm, setShowSecretForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState({ clientId: "", clientSecret: "", customerId: "", webhookSigningSecret: "" });
 
@@ -73,9 +75,33 @@ export function DeliveryProviderAccountSettingsPanel({
     setError(null);
     setBusy("connect");
     try {
-      await apiClient.request(`/restaurants/${restaurantId}/delivery-account`, { method: "POST", body: draft });
+      // Phase 89 — the signing secret is optional here: Uber issues it only after the webhook URL
+      // (shown once connected) is registered, so it is usually added in a second step.
+      const { webhookSigningSecret, ...required } = draft;
+      await apiClient.request(`/restaurants/${restaurantId}/delivery-account`, {
+        method: "POST",
+        body: webhookSigningSecret.trim() ? { ...required, webhookSigningSecret: webhookSigningSecret.trim() } : required,
+      });
       setDraft({ clientId: "", clientSecret: "", customerId: "", webhookSigningSecret: "" });
       setShowForm(false);
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSaveSecret() {
+    setError(null);
+    setBusy("secret");
+    try {
+      await apiClient.request(`/restaurants/${restaurantId}/delivery-account/webhook-signing-secret`, {
+        method: "PUT",
+        body: { webhookSigningSecret: secretDraft },
+      });
+      setSecretDraft("");
+      setShowSecretForm(false);
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -177,6 +203,30 @@ export function DeliveryProviderAccountSettingsPanel({
               <p className="font-medium text-foreground">Webhook URL — paste this into your Uber Direct dashboard</p>
               <p className="text-muted">Delivery status updates (picked up, delivered, etc.) arrive here.</p>
               <code className="max-w-full truncate rounded bg-surface px-1.5 py-0.5">{webhookUrl}</code>
+              {account!.webhookSecretConfigured === false ? (
+                <p className="text-warning">
+                  Signing secret not added yet — until it is, no Uber courier is booked (delivery orders go to your own
+                  staff) and Uber's status updates are rejected. Register the URL above in Uber Direct for the
+                  delivery-status event, then paste the signing secret Uber shows.
+                </p>
+              ) : (
+                <p className="text-muted">Signing secret added. Replacing it keeps this URL.</p>
+              )}
+              {showSecretForm || account!.webhookSecretConfigured === false ? (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="flex flex-1 flex-col gap-1 text-sm">
+                    Webhook signing secret
+                    <input type="password" value={secretDraft} onChange={(e) => setSecretDraft(e.target.value)} className={inputClass} autoComplete="off" />
+                  </label>
+                  <Button type="button" size="sm" disabled={busy === "secret" || !secretDraft.trim()} onClick={handleSaveSecret}>
+                    {busy === "secret" ? "Saving..." : "Save secret"}
+                  </Button>
+                </div>
+              ) : (
+                <Button type="button" size="sm" variant="secondary" onClick={() => setShowSecretForm(true)} className="self-start">
+                  Replace signing secret
+                </Button>
+              )}
             </div>
           )}
           <Button type="button" size="sm" variant="destructive" disabled={busy === "disconnect"} onClick={handleDisconnect} className="self-start">
@@ -207,7 +257,7 @@ export function DeliveryProviderAccountSettingsPanel({
                 <input type="password" value={draft.customerId} onChange={(e) => setDraft({ ...draft, customerId: e.target.value })} className={inputClass} autoComplete="off" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                Webhook signing secret
+                Webhook signing secret <span className="text-xs text-muted">(optional now — you can add it after connecting)</span>
                 <input
                   type="password"
                   value={draft.webhookSigningSecret}

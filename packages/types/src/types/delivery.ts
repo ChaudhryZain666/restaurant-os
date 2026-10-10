@@ -105,6 +105,10 @@ export interface RestaurantDeliveryProviderAccount {
   /** Display-safe, never reversible — e.g. "customer_id ····4a2f" — same fingerprint-not-secret
    *  pattern as RestaurantPaymentAccount. */
   credentialFingerprint?: string;
+  /** Phase 89 — whether the webhook signing secret has been added yet (it can follow the connect
+   *  step). False means Uber's status updates are rejected until it is. Absent on accounts saved
+   *  before this field existed. */
+  webhookSecretConfigured?: boolean;
   lastVerifiedAt?: string;
   lastVerificationError?: string;
   createdAt: string;

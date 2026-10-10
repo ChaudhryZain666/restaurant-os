@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { LegalPageLayout } from "../components/LegalPageLayout";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { LegalReviewNote } from "../components/LegalReviewNote";
+import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
+import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
 const LAST_UPDATED = "September 14, 2026";
 
@@ -9,6 +12,7 @@ export function RefundPolicyPage() {
     title: "Refund & Cancellation Policy — GarnishTable",
     description: "How subscription cancellation, trial expiry, and refunds work on GarnishTable, and how they differ from a restaurant's own customer order refunds.",
   });
+  if (SHOW_LEGAL_PENDING_NOTICE) return <LegalPendingNotice title="Refund & Cancellation Policy" currentPath="/refund-policy" />;
   return (
     <LegalPageLayout title="Refund & Cancellation Policy" lastUpdated={LAST_UPDATED} currentPath="/refund-policy">
       <p>
@@ -54,7 +58,7 @@ export function RefundPolicyPage() {
 
       <h2>5. Refunds</h2>
       <p>
-        <strong>[FOUNDER/LEGAL REVIEW REQUIRED — refund policy not yet finalized.]</strong> A specific refund window
+        <LegalReviewNote>refund policy not yet finalized.</LegalReviewNote> A specific refund window
         (for example, a number of days after a charge within which a refund may be requested) has not yet been
         approved and must not be assumed from this page. Until a specific policy is published here, refund requests
         are reviewed individually — contact us as described in Section 8.
@@ -96,7 +100,7 @@ export function RefundPolicyPage() {
       <p>
         We may update this policy from time to time, including once the refund window referenced in Section 5 is
         finalized. For a billing question, a refund request, or anything else covered by this page, contact us
-        through our <Link to="/contact">contact page</Link>, or by email to <strong>[BILLING_CONTACT_EMAIL]</strong>.
+        through our <Link to="/contact">contact page</Link>, or by email to <strong><a href={`mailto:${LEGAL.billingEmail}`}>{LEGAL.billingEmail}</a></strong>.
       </p>
     </LegalPageLayout>
   );

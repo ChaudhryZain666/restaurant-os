@@ -35,6 +35,10 @@ const subscriptionSchema = new Schema(
     // never overloaded onto BillingHistoryEvent, which exists for financial history, not
     // notification bookkeeping.
     trialEndingReminderSentAt: { type: Date },
+    // Phase 89 — `occurred_at` of the newest provider webhook whose period/plan details were
+    // applied; an older event arriving late must not roll them back (subscription.service.ts's
+    // applyProviderSubscriptionDetails).
+    lastProviderEventAt: { type: Date },
   },
   { timestamps: true, toJSON: idTransform }
 );

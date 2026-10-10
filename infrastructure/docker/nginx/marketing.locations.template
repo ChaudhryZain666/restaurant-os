@@ -1,2 +1,15 @@
 # Marketing — robots.txt and sitemap.xml are static files from the build (rewritten to the real
-# origin by apps/marketing/vite.config.ts when VITE_SITE_URL is set). Nothing extra here.
+# origin by apps/marketing/vite.config.ts when VITE_SITE_URL is set; the legal pages are left out of
+# the sitemap while unconfigured).
+
+# Phase 89 (legal option C) — the three legal pages, served exactly like the SPA fallback (index.html,
+# never cached) with the usual security headers, plus legal-robots.inc: written at image build
+# (frontend.prod.Dockerfile), it sends "X-Robots-Tag: noindex, nofollow" while the legal values are
+# not configured and nothing once they are. Server-side, so crawlers that don't run JavaScript see it
+# too. try_files with a file (not a URI) serves it here, keeping this location's headers.
+location ~ ^/(terms|privacy|refund-policy)/?$ {
+    try_files /index.html =404;
+    add_header Cache-Control "no-cache";
+    include /etc/nginx/conf.d/app-headers.inc;
+    include /etc/nginx/conf.d/legal-robots.inc;
+}

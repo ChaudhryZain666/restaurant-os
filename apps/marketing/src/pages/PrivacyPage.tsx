@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { LegalPageLayout } from "../components/LegalPageLayout";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { LegalReviewNote } from "../components/LegalReviewNote";
+import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
+import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
 const LAST_UPDATED = "September 14, 2026";
 
@@ -9,11 +12,12 @@ export function PrivacyPage() {
     title: "Privacy Policy — GarnishTable",
     description: "How GarnishTable collects, uses, and protects information for restaurant owners, agencies, staff, and their customers.",
   });
+  if (SHOW_LEGAL_PENDING_NOTICE) return <LegalPendingNotice title="Privacy Policy" currentPath="/privacy" />;
   return (
     <LegalPageLayout title="Privacy Policy" lastUpdated={LAST_UPDATED} currentPath="/privacy">
       <p>
         This Privacy Policy explains what information GarnishTable (operated by{" "}
-        <strong>[LEGAL_ENTITY_NAME]</strong>) collects through the Service, how it is used, and the choices available
+        <strong>{LEGAL.entityName}</strong>) collects through the Service, how it is used, and the choices available
         to you. It applies to restaurant owners, agencies, invited staff, and the customers who order through a
         restaurant's storefront.
       </p>
@@ -79,9 +83,11 @@ export function PrivacyPage() {
       </ul>
       <p>
         These providers are only permitted to use the information we share with them to perform services for us,
-        not for their own independent purposes. <strong>[FOUNDER/LEGAL REVIEW REQUIRED]</strong> — a complete,
-        named subprocessor list should be published here once the production provider set (payment, email, hosting)
-        is finalized.
+        not for their own independent purposes.
+        <LegalReviewNote>
+          a complete, named subprocessor list should be published here once the production provider set (payment,
+          email, hosting) is finalized.
+        </LegalReviewNote>
       </p>
 
       <h2>5. Data retention</h2>
@@ -90,8 +96,8 @@ export function PrivacyPage() {
         afterward to meet legal, accounting, and dispute-resolution obligations. A customer may request deletion of
         their account (see Section 7); where we retain order records after deletion, it is to preserve the accuracy
         of a restaurant's own order and financial history, with personal identifiers removed or minimized where
-        possible. <strong>[FOUNDER/LEGAL REVIEW REQUIRED]</strong> — specific retention periods per data category
-        should be finalized and stated here.
+        possible.
+        <LegalReviewNote>specific retention periods per data category should be finalized and stated here.</LegalReviewNote>
       </p>
 
       <h2>6. Security</h2>
@@ -113,9 +119,10 @@ export function PrivacyPage() {
       <h2>8. International data considerations</h2>
       <p>
         The Service may be accessed from, and information may be processed in, locations other than your own.{" "}
-        <strong>[FOUNDER/LEGAL REVIEW REQUIRED]</strong> — the specific hosting region(s) and any cross-border
-        transfer mechanism (e.g. standard contractual clauses) should be documented here once production
-        infrastructure is finalized.
+        <LegalReviewNote>
+          the specific hosting region(s) and any cross-border transfer mechanism (e.g. standard contractual clauses)
+          should be documented here once production infrastructure is finalized.
+        </LegalReviewNote>
       </p>
 
       <h2>9. Children's privacy</h2>
@@ -133,7 +140,7 @@ export function PrivacyPage() {
       <h2>11. Contact</h2>
       <p>
         Questions about this policy, or requests relating to your personal information, can be sent through our{" "}
-        <Link to="/contact">contact page</Link>, or by email to <strong>[PRIVACY_CONTACT_EMAIL]</strong>.
+        <Link to="/contact">contact page</Link>, or by email to <strong><a href={`mailto:${LEGAL.privacyEmail}`}>{LEGAL.privacyEmail}</a></strong>.
       </p>
     </LegalPageLayout>
   );

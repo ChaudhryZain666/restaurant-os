@@ -35,6 +35,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "payment_account.connected": "Payment account connected",
   "payment_account.disconnected": "Payment account disconnected",
   "delivery_account.connected": "Delivery account connected",
+  "delivery_account.webhook_secret_updated": "Delivery webhook signing secret updated",
+  "delivery.switched_to_manual": "Delivery switched to own staff",
   "delivery_account.disconnected": "Delivery account disconnected",
   "delivery.cancelled": "Delivery cancelled",
   "delivery.status_updated": "Delivery status updated",

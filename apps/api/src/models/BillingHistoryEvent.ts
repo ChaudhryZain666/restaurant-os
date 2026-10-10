@@ -25,11 +25,20 @@ const billingHistoryEventSchema = new Schema(
     receiptUrl: { type: String },
     occurredAt: { type: Date, required: true, default: () => new Date() },
     metadata: { type: Schema.Types.Mixed },
+    // Phase 89 — set ONLY on rows recorded from a provider's money-movement notice (renewal
+    // payment, refund, chargeback): "<type>:<provider reference>". The unique index below makes a
+    // concurrent redelivery of the same notice impossible to record twice; every other row leaves it
+    // unset and is unaffected.
+    noticeKey: { type: String },
   },
   { timestamps: true, toJSON: idTransform }
 );
 
 billingHistoryEventSchema.index({ ownerType: 1, ownerId: 1, occurredAt: -1 });
+billingHistoryEventSchema.index(
+  { subscriptionId: 1, noticeKey: 1 },
+  { unique: true, partialFilterExpression: { noticeKey: { $type: "string" } } }
+);
 
 export type BillingHistoryEventDoc = InferSchemaType<typeof billingHistoryEventSchema> & { _id: Types.ObjectId };
 export const BillingHistoryEvent = model<BillingHistoryEventDoc>("BillingHistoryEvent", billingHistoryEventSchema);

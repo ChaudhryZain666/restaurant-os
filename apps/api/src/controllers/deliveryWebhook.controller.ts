@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError.js";
-import { KNOWN_DELIVERY_PROVIDER_NAMES, type KnownDeliveryProviderName } from "../deliveryProviders/index.js";
+import { KNOWN_DELIVERY_PROVIDER_NAMES, type KnownDeliveryProviderName, type ProviderDeliveryWebhookEvent } from "../deliveryProviders/index.js";
 import { buildDeliveryProviderFromAccount } from "../deliveryProviders/restaurantDeliveryProvider.js";
 import { RestaurantDeliveryProviderAccount } from "../models/RestaurantDeliveryProviderAccount.js";
 import { DeliveryWebhookEvent } from "../models/DeliveryWebhookEvent.js";
@@ -40,18 +40,14 @@ export async function handleDeliveryProviderWebhook(req: Request, res: Response)
   const event = provider.verifyWebhookSignature(rawBody, signatureHeader);
   if (!event) throw ApiError.badRequest("Invalid webhook signature");
 
-  // Insert-first-then-process — DeliveryWebhookEvent's unique (provider, eventId) index is the
-  // whole idempotency mechanism: a provider's at-least-once webhook redelivery always collides here
-  // and is acknowledged without being processed a second time.
-  try {
-    await DeliveryWebhookEvent.create({ provider: providerName, eventId: event.eventId, eventType: event.eventType, payload: event.raw });
-  } catch (err) {
-    if ((err as { code?: number }).code === 11000) {
-      logger.info("duplicate delivery webhook event ignored", { provider: providerName, eventId: event.eventId });
-      res.status(200).json({ received: true });
-      return;
-    }
-    throw err;
+  // Phase 89 — claim-then-process. DeliveryWebhookEvent's unique (provider, eventId) index still
+  // stops two copies running at once, but only a PROCESSED event counts as a duplicate: one whose
+  // processing failed (or whose worker died mid-way) is claimed again on the provider's retry,
+  // instead of being acknowledged and lost as before.
+  if (!(await claimDeliveryWebhookEvent(providerName, event))) {
+    logger.info("duplicate delivery webhook event ignored", { provider: providerName, eventId: event.eventId });
+    res.status(200).json({ received: true });
+    return;
   }
 
   const delivery = await Delivery.findOne({
@@ -68,7 +64,7 @@ export async function handleDeliveryProviderWebhook(req: Request, res: Response)
     logger.warn("delivery webhook for an unrecognized providerDeliveryId", {
       provider: providerName, providerDeliveryId: event.providerDeliveryId, eventId: event.eventId,
     });
-    await DeliveryWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+    await DeliveryWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "" } });
     res.status(200).json({ received: true });
     return;
   }
@@ -82,11 +78,52 @@ export async function handleDeliveryProviderWebhook(req: Request, res: Response)
       trackingUrl: event.trackingUrl,
       cancelReason: event.cancelReason,
     });
-    await DeliveryWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+    await DeliveryWebhookEvent.updateOne(
+      { provider: providerName, eventId: event.eventId },
+      { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+    );
   } catch (err) {
-    await DeliveryWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processingError: (err as Error).message } });
+    await DeliveryWebhookEvent.updateOne(
+      { provider: providerName, eventId: event.eventId },
+      { $set: { processingError: (err as Error).message }, $unset: { processingStartedAt: "" } }
+    );
     logger.error("delivery webhook processing failed", { provider: providerName, eventId: event.eventId, error: (err as Error).message });
+    // Phase 89 — a non-2xx makes the provider redeliver; the claim above lets that retry run.
+    throw ApiError.serviceUnavailable("Delivery webhook processing failed; please retry");
   }
 
   res.status(200).json({ received: true });
+}
+
+/** A claim older than this is treated as abandoned (the process died mid-way) and may be retaken. */
+const CLAIM_STALE_MS = 5 * 60 * 1000;
+
+/**
+ * Phase 89 — true when this request may process the event: it's new, or an earlier attempt failed
+ * or was abandoned. False when it's already processed, or another request is processing it right
+ * now. Mirrors subscription.service.ts's claimWebhookEventForProcessing.
+ */
+async function claimDeliveryWebhookEvent(providerName: string, event: ProviderDeliveryWebhookEvent): Promise<boolean> {
+  try {
+    await DeliveryWebhookEvent.create({
+      provider: providerName,
+      eventId: event.eventId,
+      eventType: event.eventType,
+      payload: event.raw,
+      processingStartedAt: new Date(),
+    });
+    return true;
+  } catch (err) {
+    if ((err as { code?: number }).code !== 11000) throw err;
+  }
+  const claimed = await DeliveryWebhookEvent.findOneAndUpdate(
+    {
+      provider: providerName,
+      eventId: event.eventId,
+      processedAt: { $exists: false },
+      $or: [{ processingStartedAt: { $exists: false } }, { processingStartedAt: { $lt: new Date(Date.now() - CLAIM_STALE_MS) } }],
+    },
+    { $set: { processingStartedAt: new Date() } }
+  );
+  return Boolean(claimed);
 }

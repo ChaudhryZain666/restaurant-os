@@ -70,7 +70,7 @@ Docker volumes (project `garnishtable`): `garnishtable_caddy_data` (certificates
 | SMTP provider | all e-mail | §3.9 |
 | Object storage (S3-compatible) | uploads | required in production (`STORAGE_*`) |
 | Paddle production account | billing | `PADDLE_ENV=production` is enforced at boot when `BILLING_PROVIDER=paddle` |
-| Alert channel | alerts | Slack/Discord webhook or ntfy topic → `ALERT_WEBHOOK_URL` |
+| Alert channel | alerts | Slack/Discord webhook or ntfy topic → `ALERT_WEBHOOK_URL` (ntfy: also `ALERT_WEBHOOK_FORMAT=ntfy`, plus `ALERT_WEBHOOK_TOKEN` for a protected topic) |
 | External uptime monitor | "the whole server is down" | UptimeRobot / Better Stack / Hostinger monitoring on `https://api.<domain>/health` |
 | Off-site backup target | backups that survive the VPS | any rclone remote (Backblaze B2, S3, R2…) |
 
@@ -311,3 +311,58 @@ infrastructure/production/scripts/smoke-test.sh --expect <commit>
 - Workflow permissions default: read-only. The workflows request only `packages: write` (image
   job) / `packages: read` (rehearsal, deploy).
 - Packages: currently public (see §3.5); a founder decision whether to make them private.
+- **Legal facts for the marketing site (Phase 88), repository variables** (Settings → Secrets and
+  variables → Actions → Variables): `GT_LEGAL_ENTITY_NAME`, `GT_LEGAL_JURISDICTION`,
+  `GT_LEGAL_CONTACT_EMAIL`, `GT_PRIVACY_CONTACT_EMAIL`, `GT_BILLING_CONTACT_EMAIL`. They are compiled
+  into the Terms, Privacy and Refund pages (`apps/marketing/src/lib/legal.ts`). **All five, or none**
+  (Phase 89, option C):
+  - **None set:** the build continues, and the three pages show only their title and "Legal
+    documents are being finalized" (noindexed; no draft text, no placeholders). This is a
+    **production-readiness blocker**, kept visible on purpose: a CI warning annotation, a build-log
+    warning, `"legalConfigured":false` in `https://<MARKETING_HOST>/version.json`, and a `WARN` line
+    in `smoke-test.sh`. Paddle's website review needs the real pages, so paid plans stay blocked.
+  - **Some set, a placeholder, or a malformed email:** the build fails (`check-build-env.sh`,
+    `apps/marketing/legalConfig.mjs`).
+
+  Every built image is also scanned for leftover placeholder tokens (`check-build-output.sh`).
+  Never fill the values with guesses.
+
+## 11. Legal pages: open founder/legal review items (Phase 88)
+
+The published pages never show review markers (they render only in local development, through
+`apps/marketing/src/components/LegalReviewNote.tsx`), but these passages still need founder/counsel
+input before the policies are final:
+
+| Page | Item |
+|---|---|
+| Terms §14 (limitation of liability) | a specific liability cap |
+| Terms §17 (governing law) | final jurisdiction and dispute-resolution mechanism (courts vs. arbitration) |
+| Privacy §4 (service providers) | a complete, named subprocessor list |
+| Privacy §5 (retention) | retention periods per data category |
+| Privacy §8 (international) | hosting region(s) and cross-border transfer mechanism |
+| Refund §5 (refunds) | the refund window/policy |
+
+When a passage is finalized, replace its `<LegalReviewNote>` with the approved wording.
+
+## 12. Edge and frontend behaviour notes (Phase 88)
+
+- **Security headers.** Every frontend page and asset carries `Content-Security-Policy`
+  (`frame-ancestors`, `object-src 'none'`, `base-uri 'self'`), `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: strict-origin-when-cross-origin` (`infrastructure/docker/nginx/<app>.headers.template`).
+  Marketing and the portals may only be framed by themselves (`X-Frame-Options: SAMEORIGIN` too).
+  The storefront may additionally be framed by the marketing site (live demo) and the four portal
+  hosts (live menu preview); `FRAME_ANCESTORS` is derived from the hostnames in `docker-compose.yml`.
+  The CSP deliberately has no `script-src`/`connect-src`, so API calls, Socket.IO and Paddle are
+  unaffected. The API sets its own (stricter) headers via helmet.
+- **No HTTP downgrades / directory listings.** nginx uses relative redirects
+  (`absolute_redirect off`), and a URL naming a `public/` folder (e.g. `/v3`, `/menu-images`) is an
+  application route, served `index.html`.
+- **Readiness is `GET /health`** (503 when MongoDB or Redis is down); liveness is `GET /health/live`.
+  There is no `/ready` endpoint and nothing references one.
+- **Unknown frontend paths return HTTP 200** with the app's own not-found page and
+  `noindex, nofollow`. The routes are client-side (and the storefront/portals have dynamic routes such
+  as `/r/:slug`, `/orders/:id`), so nginx cannot know which paths exist without duplicating every
+  router table; search engines honour the `noindex`.
+- **Expected anonymous request:** on page load the storefront and portals call `POST /auth/refresh`
+  once to restore a session from the httpOnly cookie (which scripts cannot see); a visitor without a
+  session gets 401. This is the session-restore mechanism, not an error.

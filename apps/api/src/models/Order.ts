@@ -45,6 +45,9 @@ const deliveryAddressSchema = new Schema(
     latitude: { type: Number, required: true, min: -90, max: 90 },
     longitude: { type: Number, required: true, min: -180, max: 180 },
     instructions: { type: String, maxlength: 300 },
+    // Phase 89 — who the courier calls at the door. Required (and stored normalized, E.164) when a
+    // third-party courier (Uber Direct) will deliver — see orderCreation.service.ts. Optional otherwise.
+    phone: { type: String, maxlength: 30 },
   },
   { _id: false }
 );

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useMatch } from "react-router-dom";
 import type { Restaurant, RestaurantAvailability, SupportIdentity } from "@restaurant/types";
 import { apiClient } from "../lib/api";
+import { isPlatformStorefrontHost } from "../lib/platformHost";
 
 /**
  * Phase 8: the storefront is genuinely multi-tenant — the restaurant is resolved from the
@@ -89,6 +90,13 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     if (!slug && !isBareStorefrontPath) {
       // Not on a /r/:restaurantSlug/* route or a bare storefront-shaped route (e.g. /login,
       // /orders, /support) — nothing to resolve.
+      setLoading(false);
+      return;
+    }
+    if (!slug && isPlatformStorefrontHost(window.location.hostname, import.meta.env.VITE_SITE_URL)) {
+      // Phase 88 — a bare path on the platform's own storefront host: never a custom domain (see
+      // lib/platformHost.ts), so skip the guaranteed-404 lookup; LegacyRedirect decides as before.
+      setResolvedVia("none");
       setLoading(false);
       return;
     }

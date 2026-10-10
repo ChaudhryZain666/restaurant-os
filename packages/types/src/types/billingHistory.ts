@@ -18,6 +18,11 @@ export const BILLING_HISTORY_EVENT_TYPES = [
   "cancelled",
   "reactivated",
   "expired",
+  // Phase 89 — recorded from the billing provider's approved adjustments; history only, they never
+  // change a subscription's status or access by themselves.
+  "refunded",
+  "chargeback",
+  "chargeback_reversed",
 ] as const;
 
 export type BillingHistoryEventType = (typeof BILLING_HISTORY_EVENT_TYPES)[number];

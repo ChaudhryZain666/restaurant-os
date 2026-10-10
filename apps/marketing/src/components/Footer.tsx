@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Logo } from "@restaurant/ui";
 import { Container } from "./Container";
-import { ADMIN_LOGIN_URL, STOREFRONT_URL } from "../lib/links";
+import { ADMIN_LOGIN_URL, DEMO_STOREFRONT_URL } from "../lib/links";
 
 const COLUMNS = [
   {
@@ -91,7 +91,7 @@ export function Footer() {
           <Link to="/refund-policy" className="transition-colors hover:text-white">
             Refunds
           </Link>
-          <a href={STOREFRONT_URL} className="transition-colors hover:text-white">
+          <a href={DEMO_STOREFRONT_URL} className="transition-colors hover:text-white">
             View live demo restaurant
           </a>
           <a href={ADMIN_LOGIN_URL} className="transition-colors hover:text-white">

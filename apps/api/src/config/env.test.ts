@@ -301,6 +301,14 @@ describe("envSchema — Phase 85A production hardening", () => {
       expect(fieldErrors({ ...PADDLE_LIVE, PADDLE_CLIENT_TOKEN: "test_abc" }).PADDLE_CLIENT_TOKEN?.[0]).toMatch(/sandbox token/);
     });
 
+    // Phase 89 (P5) — a sandbox API key is refused in production; an unprefixed (older) key is left
+    // to Paddle itself, which rejects a key from the wrong environment.
+    it("refuses a sandbox API key in production", () => {
+      expect(fieldErrors({ ...PADDLE_LIVE, PADDLE_API_KEY: "pdl_sdbx_apikey_abc" }).PADDLE_API_KEY?.[0]).toMatch(/sandbox key/);
+      expect(envSchema.safeParse({ ...PADDLE_LIVE, PADDLE_API_KEY: "pdl_live_apikey_abc" }).success).toBe(true);
+      expect(envSchema.safeParse({ ...PADDLE_LIVE, PADDLE_API_KEY: "0123456789abcdef" }).success).toBe(true);
+    });
+
     it("leaves development and test free to use the Paddle sandbox", () => {
       expect(envSchema.safeParse({ ...REQUIRED_BASE, BILLING_PROVIDER: "paddle", PADDLE_ENV: "sandbox" }).success).toBe(true);
     });

@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
-import type { ConnectUberDirectAccountInput } from "@restaurant/validation";
+import type { ConnectUberDirectAccountInput, UpdateDeliveryWebhookSecretInput } from "@restaurant/validation";
 import { Restaurant } from "../models/Restaurant.js";
 import { RestaurantDeliveryProviderAccount } from "../models/RestaurantDeliveryProviderAccount.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
-import { encryptCredentials } from "../utils/credentialEncryption.js";
+import { decryptCredentials, encryptCredentials, type EncryptedBlob } from "../utils/credentialEncryption.js";
+import type { UberDirectCredentials } from "../deliveryProviders/restaurantDeliveryProvider.js";
 import { buildDeliveryProviderFromAccount } from "../deliveryProviders/restaurantDeliveryProvider.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { env } from "../config/env.js";
@@ -53,6 +54,7 @@ export async function connectUberDirectAccount(req: Request, res: Response) {
     status: "pending_verification",
     encryptedCredentials,
     credentialFingerprint: fingerprint(input.customerId),
+    webhookSecretConfigured: Boolean(input.webhookSigningSecret),
     connectedByUserId: req.user!.id,
   });
 
@@ -99,6 +101,37 @@ export async function connectUberDirectAccount(req: Request, res: Response) {
     },
     201
   );
+}
+
+/**
+ * Phase 89 — adds (or replaces) the webhook signing secret on the restaurant's ACTIVE account, in
+ * place: same account id, so the webhook URL already registered with Uber keeps working. The other
+ * credentials are untouched; the secret is stored encrypted with them and never returned.
+ */
+export async function updateDeliveryWebhookSigningSecret(req: Request, res: Response) {
+  const input = req.body as UpdateDeliveryWebhookSecretInput;
+  const account = await RestaurantDeliveryProviderAccount.findOne({ restaurantId: req.params.restaurantId, status: "active" });
+  if (!account) throw ApiError.notFound("Connect a delivery provider account before adding its webhook signing secret");
+
+  const credentials = decryptCredentials<UberDirectCredentials>(account.encryptedCredentials as EncryptedBlob);
+  account.encryptedCredentials = encryptCredentials({ ...credentials, webhookSigningSecret: input.webhookSigningSecret });
+  account.webhookSecretConfigured = true;
+  await account.save();
+
+  await recordAuditEvent({
+    restaurantId: account.restaurantId!,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "delivery_account.webhook_secret_updated",
+    targetType: "delivery_account",
+    targetId: account._id,
+    metadata: { provider: account.provider, fingerprint: account.credentialFingerprint },
+  });
+
+  sendSuccess(res, {
+    account: account.toJSON(),
+    webhookUrl: `${env.API_PUBLIC_ORIGIN}/api/v1/webhooks/deliveries/${account.provider}/${account._id.toString()}`,
+  });
 }
 
 export async function disconnectRestaurantDeliveryProviderAccount(req: Request, res: Response) {

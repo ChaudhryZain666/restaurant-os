@@ -7,6 +7,7 @@ import { reverseLoyaltyForOrderIfNeeded } from "./loyalty.service.js";
 import { recordAuditEvent } from "./audit.service.js";
 import { notificationQueue } from "../queues/notification.queue.js";
 import { logger } from "../common/logger.js";
+import { courierDispatchIneligibility } from "./courierDispatchEligibility.js";
 
 export interface OrderStatusTransitionActor {
   userId: string;
@@ -85,7 +86,9 @@ export async function applyOrderStatusTransition(params: {
   // deliveryDispatch.service.ts's createDeliveryForOrder for why a provider-side failure there is
   // still never thrown back up to this job anyway (it lands the Delivery in a retryable "failed"
   // state instead).
-  if (nextStatus === "ready" && order.orderType === "delivery") {
+  // Phase 89 — and only for orders a courier may take at all: never a marketplace order (the
+  // marketplace's couriers deliver those; see courierDispatchEligibility.ts).
+  if (nextStatus === "ready" && courierDispatchIneligibility(order) === null) {
     // Phase 50 — a few retries with backoff, unlike every other job on this queue (which default to
     // BullMQ's own 1-attempt/no-retry). Safe specifically here because createDeliveryForOrder is
     // fully idempotent (Delivery's unique orderId/idempotencyKey indexes — see

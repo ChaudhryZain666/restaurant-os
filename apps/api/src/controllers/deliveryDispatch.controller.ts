@@ -3,7 +3,7 @@ import type { CancelDeliveryInput, UpdateManualDeliveryInput } from "@restaurant
 import { Delivery } from "../models/Delivery.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
-import { cancelDelivery, retryDeliveryCreation, updateDeliveryStatus } from "../services/deliveryDispatch.service.js";
+import { cancelDelivery, retryDeliveryCreation, switchDeliveryToManual, updateDeliveryStatus } from "../services/deliveryDispatch.service.js";
 
 /** GET /restaurants/:restaurantId/orders/:orderId/delivery — staff-facing delivery status/tracking
  *  view for one order (POS and the admin order detail page both use this). Returns null, not a
@@ -57,6 +57,15 @@ export async function cancelOrderDelivery(req: Request, res: Response) {
 /** POST /restaurants/:restaurantId/orders/:orderId/delivery/retry — re-attempts courier creation
  *  for a delivery stuck in "pending"/"failed" (see retryDeliveryCreation's own doc comment for the
  *  exact guard against retrying an already-dispatched delivery). */
+/** Phase 89 — POST /restaurants/:restaurantId/orders/:orderId/delivery/dispatch-manually. */
+export async function dispatchOrderDeliveryManually(req: Request, res: Response) {
+  const { restaurantId, orderId } = req.params;
+  const delivery = await Delivery.findOne({ orderId, restaurantId });
+  if (!delivery) throw ApiError.notFound("This order has no delivery");
+  const updated = await switchDeliveryToManual(delivery.id as string, restaurantId, { userId: req.user!.id, role: req.user!.role });
+  sendSuccess(res, { delivery: updated.toJSON() });
+}
+
 export async function retryOrderDeliveryCreation(req: Request, res: Response) {
   const { restaurantId, orderId } = req.params;
   const delivery = await Delivery.findOne({ orderId, restaurantId });

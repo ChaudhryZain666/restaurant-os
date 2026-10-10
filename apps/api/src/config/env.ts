@@ -419,6 +419,15 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         message: 'PADDLE_CLIENT_TOKEN is a sandbox token ("test_…"). Production needs the live client-side token.',
       });
     }
+    // Phase 89 — Paddle API keys name their environment too ("pdl_sdbx_…" sandbox, "pdl_live_…"
+    // live). Older keys without a prefix carry no such signal and are left to the live API itself.
+    if (data.PADDLE_API_KEY?.startsWith("pdl_sdbx_")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PADDLE_API_KEY"],
+        message: 'PADDLE_API_KEY is a sandbox key ("pdl_sdbx_…"). Production needs a live API key.',
+      });
+    }
   }
 
   if (data.EMAIL_PROVIDER !== "smtp") {

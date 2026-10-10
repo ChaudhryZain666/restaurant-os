@@ -324,3 +324,97 @@ describe("PaddleBillingProvider.getPaymentMethodUpdateUrl (Phase 85A)", () => {
     await expect(provider().getPaymentMethodUpdateUrl("sub_1")).resolves.toBeNull();
   });
 });
+
+// Phase 89 — live-readiness fixes P1/P2/P3 and the price lookup behind scripts/setPaddlePriceIds.ts.
+describe("PaddleBillingProvider Phase 89", () => {
+  function sign(payload: object, secret = "webhook-secret") {
+    const ts = Math.floor(Date.now() / 1000);
+    const rawBody = Buffer.from(JSON.stringify(payload), "utf-8");
+    const h1 = createHmac("sha256", secret).update(`${ts}:${rawBody.toString("utf-8")}`).digest("hex");
+    return { rawBody, signatureHeader: `ts=${ts};h1=${h1}` };
+  }
+  const verify = (payload: object) => {
+    const { rawBody, signatureHeader } = sign(payload);
+    return provider().verifyWebhookSignature(rawBody, signatureHeader);
+  };
+
+  it("changePlan PATCHes the subscription with the given Paddle price id", async () => {
+    const fetchSpy = mockFetchOnce(200, { data: { id: "sub_123", status: "active" } });
+    await provider().changePlan("sub_123", "pri_01growthmonthly");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://sandbox-api.paddle.com/subscriptions/sub_123");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string).items).toEqual([{ price_id: "pri_01growthmonthly", quantity: 1 }]);
+  });
+
+  it("a completed renewal transaction carries no subscription status — only a payment notice", () => {
+    const event = verify({
+      event_id: "evt_t1",
+      event_type: "transaction.completed",
+      occurred_at: "2026-11-01T00:00:05Z",
+      data: { id: "txn_1", subscription_id: "sub_123", status: "completed", origin: "subscription_recurring", currency_code: "USD", details: { totals: { total: "5900" } } },
+    });
+    expect(event).not.toBeNull();
+    expect(event!.status).toBeUndefined();
+    expect(event!.providerSubscriptionId).toBe("sub_123");
+    expect(event!.billingNotice).toEqual({ type: "payment_succeeded", amountCents: 5900, currency: "USD", reference: "txn_1" });
+  });
+
+  it("a first-payment (checkout) transaction or a failed one yields neither status nor notice", () => {
+    for (const payload of [
+      { event_id: "evt_t2", event_type: "transaction.completed", data: { id: "txn_2", subscription_id: "sub_123", status: "completed", origin: "web" } },
+      { event_id: "evt_t3", event_type: "transaction.payment_failed", data: { id: "txn_3", subscription_id: "sub_123", status: "past_due" } },
+      { event_id: "evt_t4", event_type: "transaction.paid", data: { id: "txn_4", subscription_id: null, status: "paid" } },
+    ]) {
+      const event = verify(payload);
+      expect(event).not.toBeNull();
+      expect(event!.status).toBeUndefined();
+      expect(event!.billingNotice).toBeUndefined();
+    }
+  });
+
+  it("approved refund, chargeback and chargeback reversal adjustments become notices; pending or rejected ones do not", () => {
+    const adjustment = (action: string, status: string) =>
+      verify({ event_id: `evt_${action}_${status}`, event_type: "adjustment.updated", data: { id: "adj_1", subscription_id: "sub_123", action, status, currency_code: "USD", totals: { total: "5900" } } });
+    expect(adjustment("refund", "approved")!.billingNotice).toEqual({ type: "refunded", amountCents: 5900, currency: "USD", reference: "adj_1" });
+    expect(adjustment("chargeback", "approved")!.billingNotice?.type).toBe("chargeback");
+    expect(adjustment("chargeback_reverse", "approved")!.billingNotice?.type).toBe("chargeback_reversed");
+    expect(adjustment("refund", "pending_approval")!.billingNotice).toBeUndefined();
+    expect(adjustment("refund", "rejected")!.billingNotice).toBeUndefined();
+    expect(adjustment("credit", "approved")!.billingNotice).toBeUndefined();
+    expect(adjustment("refund", "approved")!.status).toBeUndefined();
+  });
+
+  it("a subscription event surfaces its billing period, scheduled cancellation, current price and occurred_at", () => {
+    const base = {
+      event_type: "subscription.updated",
+      occurred_at: "2026-11-01T00:00:00Z",
+      data: {
+        id: "sub_123",
+        status: "active",
+        current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" },
+        items: [{ price: { id: "pri_01growthmonthly" } }],
+      },
+    };
+    const scheduled = verify({ ...base, event_id: "evt_s1", data: { ...base.data, scheduled_change: { action: "cancel", effective_at: "2026-12-01T00:00:00Z" } } });
+    expect(scheduled).toMatchObject({
+      status: "active",
+      currentPeriod: { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") },
+      scheduledCancelAt: new Date("2026-12-01T00:00:00Z"),
+      providerPriceId: "pri_01growthmonthly",
+      occurredAt: new Date("2026-11-01T00:00:00Z"),
+    });
+    expect(verify({ ...base, event_id: "evt_s2", data: { ...base.data, scheduled_change: null } })!.scheduledCancelAt).toBeNull();
+    expect(verify({ ...base, event_id: "evt_s3", data: { ...base.data, scheduled_change: { action: "pause", effective_at: "2026-12-01T00:00:00Z" } } })!.scheduledCancelAt).toBeNull();
+    expect(verify({ ...base, event_id: "evt_s4" })!.scheduledCancelAt).toBeUndefined();
+  });
+
+  it("retrievePrice returns the price, and null for an id this environment doesn't have", async () => {
+    mockFetchOnce(200, { data: { id: "pri_1", status: "active" } });
+    expect(await provider().retrievePrice("pri_1")).toEqual({ id: "pri_1", status: "active" });
+    mockFetchOnce(404, { error: { code: "entity_not_found", detail: "not found" } });
+    expect(await provider().retrievePrice("pri_missing")).toBeNull();
+    mockFetchOnce(401, { error: { code: "authentication_failed" } });
+    await expect(provider().retrievePrice("pri_1")).rejects.toThrow(/401/);
+  });
+});

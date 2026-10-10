@@ -14,6 +14,9 @@ const deliveryWebhookEventSchema = new Schema(
     eventType: { type: String, required: true },
     payload: { type: Schema.Types.Mixed },
     processedAt: { type: Date },
+    // Phase 89 — set while a request is processing this event; cleared on success or failure, so a
+    // failed event can be claimed again by the provider's retry (deliveryWebhook.controller.ts).
+    processingStartedAt: { type: Date },
     processingError: { type: String },
   },
   { timestamps: true }

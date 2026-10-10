@@ -54,11 +54,13 @@ export const AUDIT_ACTIONS = [
   // Phase 40 — restaurant-owned courier-provider accounts (BYOC — see
   // RestaurantDeliveryProviderAccount.ts), same metadata-shape rule as payment_account above.
   "delivery_account.connected",
+  "delivery_account.webhook_secret_updated",
   "delivery_account.disconnected",
   // Staff-initiated delivery actions — provider-webhook-driven status changes deliberately do NOT
   // write an audit entry (see orderTransition.service.ts's applyOrderStatusTransition doc comment
   // on why: no real user to attribute it to). Only an explicit staff action does.
   "delivery.cancelled",
+  "delivery.switched_to_manual",
   "delivery.status_updated",
   // Phase 57 — printer configuration changes and print-job failures. Successful prints are not
   // logged individually (that would make the audit log a print-volume log, not a record of

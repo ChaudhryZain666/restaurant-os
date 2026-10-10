@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { DeliveryProviderError, type CreateDeliveryInput, type DeliveryProvider, type DeliveryQuoteInput, type DeliveryQuoteResult, type ProviderDeliveryResult, type ProviderDeliverySnapshot, type ProviderDeliveryWebhookEvent } from "./DeliveryProvider.js";
+import { DeliveryProviderError, type CreateDeliveryInput, type DeliveryContact, type DeliveryProvider, type DeliveryQuoteInput, type DeliveryQuoteResult, type ProviderDeliveryResult, type ProviderDeliverySnapshot, type ProviderDeliveryWebhookEvent } from "./DeliveryProvider.js";
 import type { DeliveryStatus } from "@restaurant/types";
 
 const AUTH_URL = "https://auth.uber.com/oauth/v2/token";
@@ -138,17 +138,37 @@ export class UberDirectProvider implements DeliveryProvider {
       if (res.status === 401 || res.status === 403) throw new DeliveryProviderError(`Uber Direct rejected these credentials: ${message}`, "invalid_credentials");
       if (res.status === 429) throw new DeliveryProviderError(`Uber Direct rate limit reached: ${message}`, "rate_limited");
       if (res.status === 404) throw new DeliveryProviderError(`Uber Direct: ${message}`, "not_found");
-      if (res.status === 422) throw new DeliveryProviderError(`Uber Direct could not deliver to this address: ${message}`, "invalid_address");
+      // Phase 89 — Uber's "address_undeliverable…" codes mean the address is outside its service
+      // area (or no couriers serve it), which is a different fix from a malformed address.
+      const code = (json as { code?: string })?.code ?? "";
+      if (code.startsWith("address_undeliverable")) throw new DeliveryProviderError(`Uber Direct does not deliver between these addresses: ${message}`, "outside_service_area");
+      if (res.status === 422 || code === "invalid_params") throw new DeliveryProviderError(`Uber Direct could not deliver to this address: ${message}`, "invalid_address");
       throw new DeliveryProviderError(`Uber Direct error: ${message}`, "provider_error");
     }
     return json;
   }
 
-  /** Uber's documented address format: a JSON-encoded string of a structured address. Only the
-   *  fields this adapter can honestly populate from what it's given are set — see this file's
-   *  header comment on what's verified vs inferred here. */
-  private formatAddress(address: string): string {
-    return JSON.stringify({ street_address: [address] });
+  /** Uber's documented address format: a JSON-encoded string of a structured address
+   *  (street_address[], city, state, zip_code, country). Phase 89 — built from the real address
+   *  fields; the old version put the whole one-line address into street_address, leaving Uber to
+   *  guess the city/postcode/country. Falls back to that single line only when no parts exist. */
+  private formatAddress(contact: Pick<DeliveryContact, "address" | "addressParts">): string {
+    const parts = contact.addressParts;
+    if (!parts || !parts.street.length) return JSON.stringify({ street_address: [contact.address] });
+    return JSON.stringify({
+      street_address: parts.street,
+      ...(parts.city ? { city: parts.city } : {}),
+      ...(parts.state ? { state: parts.state } : {}),
+      ...(parts.postalCode ? { zip_code: parts.postalCode } : {}),
+      ...(parts.country ? { country: parts.country } : {}),
+    });
+  }
+
+  /** Phase 89 — exact coordinates, so Uber never has to geocode an address we already resolved. */
+  private coordinates(prefix: "pickup" | "dropoff", contact: Pick<DeliveryContact, "latitude" | "longitude">): Record<string, number> {
+    return Number.isFinite(contact.latitude) && Number.isFinite(contact.longitude)
+      ? { [`${prefix}_latitude`]: contact.latitude, [`${prefix}_longitude`]: contact.longitude }
+      : {};
   }
 
   async healthCheck(): Promise<boolean> {
@@ -162,10 +182,15 @@ export class UberDirectProvider implements DeliveryProvider {
 
   async getQuote(input: DeliveryQuoteInput): Promise<DeliveryQuoteResult> {
     const res = await this.request<{ id: string; fee: number; currency: string; duration?: number }>("POST", "/delivery_quotes", {
-      pickup_address: this.formatAddress(input.pickup.address),
-      dropoff_address: this.formatAddress(input.dropoff.address),
+      pickup_address: this.formatAddress(input.pickup),
+      dropoff_address: this.formatAddress(input.dropoff),
+      ...this.coordinates("pickup", input.pickup),
+      ...this.coordinates("dropoff", input.dropoff),
+      ...(input.pickup.phone ? { pickup_phone_number: input.pickup.phone } : {}),
+      ...(input.dropoff.phone ? { dropoff_phone_number: input.dropoff.phone } : {}),
     });
-    return { quoteId: res.id, fee: res.fee, currency: res.currency ?? input.currency, estimatedDurationMinutes: res.duration, raw: res };
+    const currency = (res.currency ?? input.currency).toUpperCase();
+    return { quoteId: res.id, fee: fromMinorUnits(res.fee, currency), currency, estimatedDurationMinutes: res.duration, raw: res };
   }
 
   async createDelivery(input: CreateDeliveryInput): Promise<ProviderDeliveryResult> {
@@ -175,11 +200,13 @@ export class UberDirectProvider implements DeliveryProvider {
       {
         quote_id: input.quoteId,
         pickup_name: input.pickup.name,
-        pickup_address: this.formatAddress(input.pickup.address),
+        pickup_address: this.formatAddress(input.pickup),
+        ...this.coordinates("pickup", input.pickup),
         pickup_phone_number: input.pickup.phone,
         pickup_notes: input.pickup.notes,
         dropoff_name: input.dropoff.name,
-        dropoff_address: this.formatAddress(input.dropoff.address),
+        dropoff_address: this.formatAddress(input.dropoff),
+        ...this.coordinates("dropoff", input.dropoff),
         dropoff_phone_number: input.dropoff.phone,
         dropoff_notes: input.dropoff.notes,
         manifest_items: input.manifestItems.map((item) => ({ name: item.name, quantity: item.quantity })),
@@ -191,8 +218,8 @@ export class UberDirectProvider implements DeliveryProvider {
       providerDeliveryId: res.id,
       status: mapUberStatus(res.status),
       trackingUrl: res.tracking_url,
-      fee: res.fee,
-      currency: res.currency,
+      fee: res.fee == null ? undefined : fromMinorUnits(res.fee, res.currency),
+      currency: res.currency?.toUpperCase(),
       raw: res,
     };
   }
@@ -212,8 +239,8 @@ export class UberDirectProvider implements DeliveryProvider {
       providerDeliveryId: res.id,
       status: mapUberStatus(res.status),
       trackingUrl: res.tracking_url,
-      fee: res.fee,
-      currency: res.currency,
+      fee: res.fee == null ? undefined : fromMinorUnits(res.fee, res.currency),
+      currency: res.currency?.toUpperCase(),
       courierName: res.courier?.name,
       courierPhone: res.courier?.phone_number,
       pickupEta: res.pickup_eta,
@@ -227,8 +254,15 @@ export class UberDirectProvider implements DeliveryProvider {
     return { cancelled: true };
   }
 
+  /** Phase 89 — an account can be connected before its webhook signing secret is added (the
+   *  owner needs the webhook URL to obtain one). Until then EVERY webhook is rejected: an HMAC keyed
+   *  with an empty secret is one anyone could compute. */
+  get hasWebhookSigningSecret(): boolean {
+    return this.webhookSigningSecret.length > 0;
+  }
+
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderDeliveryWebhookEvent | null {
-    if (!signatureHeader) return null;
+    if (!signatureHeader || !this.hasWebhookSigningSecret) return null;
     const expected = createHmac("sha256", this.webhookSigningSecret).update(rawBody).digest("hex");
     const expectedBuf = Buffer.from(expected, "utf-8");
     const actualBuf = Buffer.from(signatureHeader, "utf-8");
@@ -297,4 +331,12 @@ function mapUberStatus(uberStatus: string): DeliveryStatus {
   }
 }
 
-export { mapUberStatus };
+/** Uber states fees in the currency's smallest unit ("cents"); this platform stores money in the
+ *  main unit (Order.deliveryFee is 3.99, not 399) — Phase 89 converts at the boundary so a
+ *  Delivery's provider fee and the customer's delivery fee are directly comparable. */
+const ZERO_DECIMAL_CURRENCIES = new Set(["JPY", "KRW", "CLP", "VND", "ISK", "UGX", "XAF", "XOF", "PYG"]);
+function fromMinorUnits(amount: number, currency?: string): number {
+  return ZERO_DECIMAL_CURRENCIES.has((currency ?? "").toUpperCase()) ? amount : Math.round(amount) / 100;
+}
+
+export { mapUberStatus, fromMinorUnits };

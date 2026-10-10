@@ -1,0 +1,10 @@
+# Phase 88 — security headers for the storefront (included by every content location of
+# frontend.conf.template; nginx drops server-level add_header inside a location that sets its own).
+# The storefront is legitimately framed by the marketing site's live demo and the portals' live
+# menu preview, so there is no X-Frame-Options (it can't list several origins); frame-ancestors
+# names exactly those origins. FRAME_ANCESTORS comes from docker-compose.yml (default 'self').
+# Deliberately no script-src/connect-src: the storefront talks to the API host, Socket.IO and
+# payment providers, and this baseline must not break them.
+add_header Content-Security-Policy "frame-ancestors ${FRAME_ANCESTORS}; object-src 'none'; base-uri 'self'" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;

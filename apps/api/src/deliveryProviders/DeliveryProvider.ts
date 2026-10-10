@@ -4,9 +4,21 @@ export interface DeliveryContact {
   name: string;
   phone: string;
   address: string;
+  /** Phase 89 — the same address as separate fields, for providers that require a structured
+   *  address (Uber Direct). `address` stays the single display line. */
+  addressParts?: DeliveryAddressParts;
   latitude: number;
   longitude: number;
   notes?: string;
+}
+
+export interface DeliveryAddressParts {
+  /** Street lines in order (line1, then line2 when present). */
+  street: string[];
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 export interface ManifestItem {
@@ -15,8 +27,8 @@ export interface ManifestItem {
 }
 
 export interface DeliveryQuoteInput {
-  pickup: Pick<DeliveryContact, "address" | "latitude" | "longitude">;
-  dropoff: Pick<DeliveryContact, "address" | "latitude" | "longitude">;
+  pickup: Pick<DeliveryContact, "address" | "addressParts" | "latitude" | "longitude"> & { phone?: string };
+  dropoff: Pick<DeliveryContact, "address" | "addressParts" | "latitude" | "longitude"> & { phone?: string };
   /** The restaurant's configured currency — a hint a real provider's quote should normally already
    *  match (most quote APIs infer currency from pickup location); "manual" has no real quote to
    *  make and simply echoes this back. */

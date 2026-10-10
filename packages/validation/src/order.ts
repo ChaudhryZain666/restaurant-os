@@ -23,6 +23,9 @@ const deliveryAddressInputSchema = z
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
     instructions: z.string().max(300).optional(),
+    // Phase 89 — a contact number for this delivery; required server-side only when a third-party
+    // courier will deliver it (orderCreation.service.ts), which also normalizes it.
+    phone: z.string().trim().max(30).optional(),
   })
   // Phase 47 — (0, 0) ("Null Island") is a syntactically valid pair under the range checks above
   // but never a real customer location; it's exactly the placeholder POS's delivery flow used to

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { connectUberDirectAccountSchema } from "@restaurant/validation";
+import { connectUberDirectAccountSchema, updateDeliveryWebhookSecretSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenantMatch } from "../middleware/tenant.js";
@@ -9,6 +9,7 @@ import {
   connectUberDirectAccount,
   disconnectRestaurantDeliveryProviderAccount,
   getRestaurantDeliveryProviderAccount,
+  updateDeliveryWebhookSigningSecret,
 } from "../controllers/restaurantDeliveryProviderAccount.controller.js";
 
 /**
@@ -30,4 +31,5 @@ export const restaurantDeliveryProviderAccountRouter = Router({ mergeParams: tru
 restaurantDeliveryProviderAccountRouter.use(requireAuth, requireTenantMatch(), requirePermission("restaurant.payments.manage"));
 restaurantDeliveryProviderAccountRouter.get("/", asyncHandler(getRestaurantDeliveryProviderAccount));
 restaurantDeliveryProviderAccountRouter.post("/", validateBody(connectUberDirectAccountSchema), asyncHandler(connectUberDirectAccount));
+restaurantDeliveryProviderAccountRouter.put("/webhook-signing-secret", validateBody(updateDeliveryWebhookSecretSchema), asyncHandler(updateDeliveryWebhookSigningSecret));
 restaurantDeliveryProviderAccountRouter.post("/disconnect", asyncHandler(disconnectRestaurantDeliveryProviderAccount));

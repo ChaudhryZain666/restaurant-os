@@ -23,7 +23,8 @@ export function LegalPageLayout({
   children,
 }: {
   title: string;
-  lastUpdated: string;
+  /** Omitted for the "being finalized" notice, which is not a dated document. */
+  lastUpdated?: string;
   currentPath: string;
   children: ReactNode;
 }) {
@@ -31,7 +32,7 @@ export function LegalPageLayout({
     <Section className="pt-14 sm:pt-20">
       <div className="mx-auto max-w-3xl">
         <h1 className="font-heading text-3xl font-semibold text-foreground sm:text-4xl">{title}</h1>
-        <p className="mt-2 text-sm text-muted">Last updated {lastUpdated}</p>
+        {lastUpdated && <p className="mt-2 text-sm text-muted">Last updated {lastUpdated}</p>}
 
         <div
           className="mt-10 [&_h2]:mb-3 [&_h2]:mt-9 [&_h2]:font-heading [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-foreground

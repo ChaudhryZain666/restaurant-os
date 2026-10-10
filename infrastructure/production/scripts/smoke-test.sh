@@ -99,6 +99,85 @@ for scheme in https http; do
   else fail "$scheme://$WWW_HOST redirects (301) to https://$MARKETING_HOST" "HTTP $CODE location='${loc}' $(head -c 120 "$TMPE")"; fi
 done
 
+# --- Phase 88 regressions: static/route collision, frontend security headers, published content ---
+# /v3 is a marketing app route that shares its name with a public/ folder: it must reach the app
+# (200, no redirect — nginx used to answer 301 to http:// then 403).
+for path in /v3 /v3/; do
+  req "https://$MARKETING_HOST$path" -I
+  loc="$(grep -i '^location:' "$TMPB" | tr -d '\r' | cut -d' ' -f2-)"
+  ctype="$(grep -i '^content-type:' "$TMPB" | tr -d '\r' | cut -d' ' -f2-)"
+  if [ "$CODE" = 200 ] && [ -z "$loc" ] && [ "${ctype#text/html}" != "$ctype" ]; then pass "https://$MARKETING_HOST$path reaches the app (200, no redirect)"
+  else fail "https://$MARKETING_HOST$path reaches the app (200, no redirect)" "HTTP $CODE location='${loc}' type='${ctype}'"; fi
+done
+# Clickjacking/sniffing baseline on every frontend hostname. The storefront may be framed by the
+# marketing demo and the portals' live preview; everything else only by itself.
+header() { grep -i "^$1:" "$TMPB" | head -1 | tr -d '\r' | cut -d' ' -f2-; }
+for h in "$MARKETING_HOST" "$ORDER_HOST" "$APP_HOST" "$AGENCY_HOST" "$ADMIN_HOST" "$POS_HOST"; do
+  req "https://$h/" -I
+  csp="$(header content-security-policy)"; xfo="$(header x-frame-options)"; nosniff="$(header x-content-type-options)"; ref="$(header referrer-policy)"
+  problems=""
+  [ "$nosniff" = nosniff ] || problems="$problems nosniff"
+  [ -n "$ref" ] || problems="$problems referrer-policy"
+  case "$csp" in *"frame-ancestors"*) ;; *) problems="$problems csp-frame-ancestors" ;; esac
+  if [ "$h" = "$ORDER_HOST" ]; then
+    case "$csp" in *"https://$MARKETING_HOST"*) ;; *) problems="$problems storefront-allows-marketing-demo" ;; esac
+  else
+    [ "$xfo" = SAMEORIGIN ] || problems="$problems x-frame-options"
+  fi
+  [ -z "$problems" ] && pass "security headers on https://$h" || fail "security headers on https://$h" "missing/wrong:$problems"
+done
+# The deployed marketing bundle must never publish legal placeholders. (The "View live demo
+# restaurant" link is covered by e2e/marketing-demo-cta.spec.ts: the minifier doesn't emit that URL
+# as one literal string, so a bundle grep can't check it reliably.)
+req "https://$MARKETING_HOST/"
+bundle_hits="" scanned=""
+entry_js=$(printf '%s' "$BODY" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | sort -u)
+scan_js() {  # scan_js <path>
+  req "https://$MARKETING_HOST$1"; scanned="$scanned $1"
+  printf '%s' "$BODY" | grep -qE '\[(LEGAL_ENTITY_NAME|GOVERNING_JURISDICTION|LEGAL_CONTACT_EMAIL|PRIVACY_CONTACT_EMAIL|BILLING_CONTACT_EMAIL)\]|FOUNDER/LEGAL REVIEW REQUIRED' && bundle_hits="$bundle_hits $1"
+  return 0
+}
+# The legal pages are lazy-loaded chunks: follow just those (not the whole 3D bundle) — the three
+# pages plus the shared chunk holding src/lib/legal.ts and the layout/notice (Phase 89: Rollup
+# names it after one of its modules, e.g. LegalPendingNotice-*.js), wherever they are referenced.
+LEGAL_CHUNK='(TermsPage|PrivacyPage|RefundPolicyPage|LegalPendingNotice|LegalPageLayout|LegalReviewNote|legal)-[A-Za-z0-9_-]+\.js'
+queue="$entry_js"
+while [ -n "$queue" ]; do
+  next=""
+  for js in $queue; do
+    case " $scanned " in *" $js "*) continue ;; esac
+    scan_js "$js"
+    for chunk in $(printf '%s' "$BODY" | grep -oE "$LEGAL_CHUNK" | sort -u); do next="$next /assets/$chunk"; done
+  done
+  queue="$next"
+done
+case "$scanned" in *TermsPage-*PrivacyPage-*|*PrivacyPage-*TermsPage-*) ;; *) warn "legal page chunks not found in the marketing entry bundle" "placeholder scan covered:${scanned}" ;; esac
+[ -z "$bundle_hits" ] && pass "marketing bundle publishes no legal placeholders" || fail "marketing bundle publishes no legal placeholders" "found in$bundle_hits"
+# Phase 89 (legal option C) — a marketing build without the legal values is allowed and shows
+# "Legal documents are being finalized", but it stays a visible launch blocker: a warning, never a
+# silent pass. (Images built before Phase 89 don't report the flag; nothing is printed for them.)
+req "https://$MARKETING_HOST/version.json"
+legal_flag=""
+case "$BODY" in
+  *'"legalConfigured":false'*) legal_flag=false; warn "legal pages not configured (production-readiness blocker)" "/terms, /privacy and /refund-policy say \"Legal documents are being finalized\"" ;;
+  *'"legalConfigured":true'*) legal_flag=true; pass "legal pages configured" ;;
+esac
+# …and while unconfigured, nginx must tell crawlers not to index them (X-Robots-Tag), and must stop
+# once they are configured. Both directions are failures: one leaks a placeholder into search, the
+# other hides the real legal pages.
+if [ -n "$legal_flag" ]; then
+  robots_problems=""
+  for p in /terms /privacy /refund-policy; do
+    req "https://$MARKETING_HOST$p" -I
+    tag="$(header x-robots-tag)"
+    if [ "$CODE" != 200 ]; then robots_problems="$robots_problems $p:HTTP$CODE"
+    elif [ "$legal_flag" = false ] && [ "$tag" != "noindex, nofollow" ]; then robots_problems="$robots_problems $p:no-noindex"
+    elif [ "$legal_flag" = true ] && [ -n "$tag" ]; then robots_problems="$robots_problems $p:unexpected-noindex"
+    fi
+  done
+  [ -z "$robots_problems" ] && pass "legal pages' robots header matches their status ($legal_flag)" || fail "legal pages' robots header matches their status ($legal_flag)" "$robots_problems"
+fi
+
 # --- API -------------------------------------------------------------------------------------------
 req "https://$API_HOST/health/live"; body="$BODY"
 if [ "$CODE" = 200 ]; then pass "API liveness https://$API_HOST/health/live" "TLS verified"; commit_ok "API" "$(json_str commit <<< "$body")"

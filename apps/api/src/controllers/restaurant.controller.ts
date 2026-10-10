@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { thirdPartyCourierWillDispatch } from "../deliveryProviders/restaurantDeliveryProvider.js";
 import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import type { Request, Response } from "express";
@@ -330,7 +331,7 @@ export async function getRestaurantBySlug(req: Request, res: Response) {
   // that gap; both URLs stay fully functional, only the canonical <link> value changes.
   const activeDomain = await DomainMapping.findOne({ locationId: restaurant._id, status: "active" }).select("hostname");
   sendSuccess(res, {
-    restaurant: toPublicRestaurant(restaurant),
+    restaurant: { ...toPublicRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
     activeCustomDomain: activeDomain?.hostname ?? null,
@@ -355,7 +356,7 @@ export async function previewRestaurantBySlug(req: Request, res: Response) {
   if (!isOwnTenant) throw ApiError.forbidden("You do not have access to this restaurant");
 
   sendSuccess(res, {
-    restaurant: toPreviewRestaurant(restaurant),
+    restaurant: { ...toPreviewRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
   });
@@ -389,7 +390,7 @@ export async function getRestaurantByDomain(req: Request, res: Response) {
   if (!restaurant) throw ApiError.notFound("No storefront is configured for this domain");
 
   sendSuccess(res, {
-    restaurant: toPublicRestaurant(restaurant),
+    restaurant: { ...toPublicRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
     supportIdentity: getSupportIdentity(restaurant),
   });

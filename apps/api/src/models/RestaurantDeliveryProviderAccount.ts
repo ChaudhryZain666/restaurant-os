@@ -36,6 +36,9 @@ const restaurantDeliveryProviderAccountSchema = new Schema(
     // Display-safe, never reversible — e.g. "customer_id ····4a2f" — lets the settings page show
     // "which account is connected" without ever storing or returning anything replayable.
     credentialFingerprint: { type: String },
+    // Phase 89 — whether the encrypted credentials include the webhook signing secret (it can be
+    // added after connecting). Display-safe: says only "set or not", never anything about the value.
+    webhookSecretConfigured: { type: Boolean, default: false },
     lastVerifiedAt: { type: Date },
     // Generic/safe message only — never the raw provider error body.
     lastVerificationError: { type: String },

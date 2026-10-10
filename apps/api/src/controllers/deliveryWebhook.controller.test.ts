@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import { createHmac } from "node:crypto";
 import request from "supertest";
 import mongoose from "mongoose";
@@ -244,5 +244,92 @@ describe("webhook idempotency and duplicate protection", () => {
 
     const storedOrder = await Order.findById(order._id);
     expect(storedOrder!.status).toBe("out_for_delivery");
+  });
+});
+
+// Phase 89 (U3) — a failed processing attempt is retried by the provider, not lost; (U2) an account
+// connected before its signing secret was added rejects every webhook until it is.
+describe("Phase 89 — retry after a processing failure, and accounts without a signing secret", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function post(accountId: string, rawBody: Buffer, signature: string) {
+    return request(app)
+      .post(`/api/v1/webhooks/deliveries/uber_direct/${accountId}`)
+      .set("Content-Type", "application/json")
+      .set("x-uber-signature", signature)
+      .send(rawBody.toString("utf-8"));
+  }
+
+  it("a processing failure answers 503 so the provider redelivers, and the redelivery is applied exactly once", async () => {
+    const { account, delivery } = await accountAndDelivery();
+    const { rawBody, signature, eventId } = signedWebhook(delivery.providerDeliveryId!, "pickup_complete");
+
+    // Fail the SECOND Delivery.findOne of the request (inside updateDeliveryStatus) once — a
+    // transient database error mid-processing, after the event has been recorded.
+    const realFindOne = Delivery.findOne.bind(Delivery);
+    let calls = 0;
+    jest.spyOn(Delivery, "findOne").mockImplementation(((...args: Parameters<typeof Delivery.findOne>) => {
+      calls += 1;
+      if (calls === 2) throw new Error("transient database error");
+      return realFindOne(...args);
+    }) as typeof Delivery.findOne);
+
+    const first = await post(account.id, rawBody, signature);
+    expect(first.status).toBe(503);
+    const failed = await DeliveryWebhookEvent.findOne({ provider: "uber_direct", eventId });
+    expect(failed!.processedAt).toBeUndefined();
+    expect(failed!.processingError).toMatch(/transient database error/);
+    expect(failed!.processingStartedAt).toBeUndefined();
+    expect((await Delivery.findById(delivery._id))!.status).toBe("accepted");
+
+    jest.restoreAllMocks();
+    const retry = await post(account.id, rawBody, signature);
+    expect(retry.status).toBe(200);
+    expect((await Delivery.findById(delivery._id))!.status).toBe("picked_up");
+    const processed = await DeliveryWebhookEvent.findOne({ provider: "uber_direct", eventId });
+    expect(processed!.processedAt).toBeInstanceOf(Date);
+    expect(processed!.processingError).toBeUndefined();
+
+    // A third delivery of the same event is a true duplicate now.
+    const third = await post(account.id, rawBody, signature);
+    expect(third.status).toBe(200);
+    expect(await DeliveryWebhookEvent.countDocuments({ provider: "uber_direct", eventId })).toBe(1);
+  });
+
+  it("an event another request is processing right now is not processed twice", async () => {
+    const { account, delivery } = await accountAndDelivery();
+    const { rawBody, signature, eventId } = signedWebhook(delivery.providerDeliveryId!, "pickup_complete");
+    await DeliveryWebhookEvent.create({ provider: "uber_direct", eventId, eventType: "event.delivery_status", processingStartedAt: new Date() });
+
+    const res = await post(account.id, rawBody, signature);
+    expect(res.status).toBe(200);
+    expect((await Delivery.findById(delivery._id))!.status).toBe("accepted");
+  });
+
+  it("an abandoned claim (the worker died) is retaken after it goes stale", async () => {
+    const { account, delivery } = await accountAndDelivery();
+    const { rawBody, signature, eventId } = signedWebhook(delivery.providerDeliveryId!, "pickup_complete");
+    await DeliveryWebhookEvent.create({ provider: "uber_direct", eventId, eventType: "event.delivery_status", processingStartedAt: new Date(Date.now() - 10 * 60 * 1000) });
+
+    const res = await post(account.id, rawBody, signature);
+    expect(res.status).toBe(200);
+    expect((await Delivery.findById(delivery._id))!.status).toBe("picked_up");
+  });
+
+  it("an account with no signing secret yet rejects every webhook — including one HMAC'd with an empty key", async () => {
+    const { account, delivery } = await accountAndDelivery();
+    account.encryptedCredentials = encryptCredentials({ clientId: "client_x", clientSecret: "secret_x", customerId: "cus_x" });
+    account.webhookSecretConfigured = false;
+    await account.save();
+
+    const payload = { id: "evt_empty_key", kind: "event.delivery_status", delivery_id: delivery.providerDeliveryId, status: "pickup_complete", data: {} };
+    const rawBody = Buffer.from(JSON.stringify(payload));
+    const forged = createHmac("sha256", "").update(rawBody).digest("hex");
+
+    const res = await post(account.id, rawBody, forged);
+    expect(res.status).toBe(400);
+    expect((await Delivery.findById(delivery._id))!.status).toBe("accepted");
   });
 });

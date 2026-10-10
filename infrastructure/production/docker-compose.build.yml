@@ -48,4 +48,10 @@ services:
         VITE_SITE_URL: https://${MARKETING_HOST}
         VITE_STOREFRONT_URL: https://${ORDER_HOST}
         VITE_ADMIN_URL: https://${APP_HOST}
+        # Phase 88 — founder-supplied facts for the legal pages (apps/marketing/src/lib/legal.ts).
+        VITE_LEGAL_ENTITY_NAME: ${LEGAL_ENTITY_NAME:?set LEGAL_ENTITY_NAME for a marketing build}
+        VITE_LEGAL_JURISDICTION: ${LEGAL_JURISDICTION:?set LEGAL_JURISDICTION for a marketing build}
+        VITE_LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:?set LEGAL_CONTACT_EMAIL for a marketing build}
+        VITE_PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:?set PRIVACY_CONTACT_EMAIL for a marketing build}
+        VITE_BILLING_CONTACT_EMAIL: ${BILLING_CONTACT_EMAIL:?set BILLING_CONTACT_EMAIL for a marketing build}
         GIT_SHA: ${GT_GIT_SHA:-local}

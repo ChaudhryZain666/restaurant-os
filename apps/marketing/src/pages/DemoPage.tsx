@@ -3,7 +3,7 @@ import { Section } from "../components/Section";
 import { MarketingPageHero } from "../components/MarketingPageHero";
 import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import { LeadForm } from "../components/LeadForm";
-import { STOREFRONT_URL } from "../lib/links";
+import { DEMO_EXPERIENCE_URL, STOREFRONT_URL } from "../lib/links";
 import { IconArrowRight, IconCheck, IconHeadset, IconPalette, IconStore } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
 
@@ -12,7 +12,7 @@ import { usePageMeta } from "../hooks/usePageMeta";
 // the storefront in a raw iframe here (that pattern stays only where it's honest — a small
 // preview screenshot-in-a-browser-chrome, not the primary demo experience) and no longer displays
 // the real owner's login credentials in plaintext on a public page.
-const EXPERIENCE_URL = `${STOREFRONT_URL}/r/demo-restaurant/experience`;
+const EXPERIENCE_URL = DEMO_EXPERIENCE_URL;
 
 // Named, real themes the demo restaurant can switch between (matches the theme picker inside the
 // playground itself) — represented here as abstract character swatches, never as screenshots we
@@ -71,7 +71,7 @@ export function DemoPage() {
           >
             Open the demo <IconArrowRight className="h-4 w-4" />
           </a>
-          <span className="truncate text-xs text-muted">{EXPERIENCE_URL.replace("http://", "")}</span>
+          <span className="truncate text-xs text-muted">{EXPERIENCE_URL.replace(/^https?:\/\//, "")}</span>
         </Reveal>
         <p className="mt-4 text-center text-xs text-muted">
           If this doesn't load, the demo storefront isn't running locally right now.

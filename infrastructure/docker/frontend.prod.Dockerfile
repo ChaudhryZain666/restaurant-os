@@ -34,6 +34,7 @@ RUN npm ci
 COPY packages ./packages
 COPY apps/${APP} ./apps/${APP}
 COPY infrastructure/docker/check-build-env.sh /usr/local/bin/check-build-env.sh
+COPY infrastructure/docker/check-build-output.sh /usr/local/bin/check-build-output.sh
 ARG VITE_API_URL
 ARG VITE_SITE_URL
 ARG VITE_ADMIN_URL
@@ -43,20 +44,47 @@ ARG VITE_POS_URL
 ARG VITE_AGENCY_URL
 ARG VITE_PLATFORM_ADMIN_URL
 ARG VITE_RESTAURANT_SLUG
+# Phase 88 — marketing only: founder-supplied facts the legal pages state (apps/marketing/src/lib/legal.ts).
+ARG VITE_LEGAL_ENTITY_NAME
+ARG VITE_LEGAL_JURISDICTION
+ARG VITE_LEGAL_CONTACT_EMAIL
+ARG VITE_PRIVACY_CONTACT_EMAIL
+ARG VITE_BILLING_CONTACT_EMAIL
 RUN sh /usr/local/bin/check-build-env.sh "${APP}" \
  && npm run build:packages \
- && npm run build -w "apps/${APP}"
+ && npm run build -w "apps/${APP}" \
+ && sh /usr/local/bin/check-build-output.sh "apps/${APP}/dist" \
+ && if [ "${APP}" = marketing ]; then \
+      # Phase 89 — all five legal values or none get past check-build-env.sh, so one says which.
+      if [ -n "${VITE_LEGAL_ENTITY_NAME}" ]; then echo true; else echo false; fi > "apps/${APP}/dist/.legal-configured"; \
+    fi
 
 FROM nginx:1.27-alpine AS runtime
 ARG APP
 ENV API_UPSTREAM=http://api:4000
+# Who may frame this app (storefront only uses it; docker-compose.yml sets the real origins).
+ENV FRAME_ANCESTORS="'self'"
 COPY --from=build /repo/apps/${APP}/dist /usr/share/nginx/html
 # Phase 87 — which commit this image was built from (set by CI): served at /version.json and
 # recorded as an image label, so a deployment can be verified and traced to a Git commit.
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=
-RUN printf '{"app":"%s","commit":"%s","builtAt":"%s"}' "${APP}" "${GIT_SHA}" "${BUILD_TIME}" > /usr/share/nginx/html/version.json
+# Phase 89 — marketing also reports legalConfigured, so "legal pages not published yet" stays a
+# visible launch blocker (smoke-test.sh warns on false).
+# Also writes legal-robots.inc (included by marketing.locations.template's legal-page location):
+# "X-Robots-Tag: noindex, nofollow" only while the marketing legal values are unconfigured; a
+# comment otherwise and for the other apps, so the include always exists.
+RUN legal=""; marker=/usr/share/nginx/html/.legal-configured; robots="# legal pages configured (or not the marketing app)"; \
+    if [ -f "$marker" ]; then \
+      legal=",\"legalConfigured\":$(cat "$marker")"; \
+      if [ "$(cat "$marker")" = false ]; then robots='add_header X-Robots-Tag "noindex, nofollow" always;'; fi; \
+      rm -f "$marker"; \
+    fi; \
+    printf '%s\n' "$robots" > /etc/nginx/conf.d/legal-robots.inc; \
+    printf '{"app":"%s","commit":"%s","builtAt":"%s"%s}' "${APP}" "${GIT_SHA}" "${BUILD_TIME}" "$legal" > /usr/share/nginx/html/version.json
 LABEL org.opencontainers.image.revision=${GIT_SHA}       org.opencontainers.image.created=${BUILD_TIME}       org.opencontainers.image.title="garnishtable-${APP}"
 COPY infrastructure/docker/nginx/frontend.conf.template /etc/nginx/templates/default.conf.template
 COPY infrastructure/docker/nginx/${APP}.locations.template /etc/nginx/templates/app-locations.inc.template
+# Phase 88 — per-app security headers (frame-ancestors, nosniff, Referrer-Policy).
+COPY infrastructure/docker/nginx/${APP}.headers.template /etc/nginx/templates/app-headers.inc.template
 EXPOSE 80

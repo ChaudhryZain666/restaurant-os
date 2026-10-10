@@ -79,12 +79,24 @@ state_get() { [ -f "$GT_STATE/$1" ] && cat "$GT_STATE/$1" || true; }
 state_set() { mkdir -p "$GT_STATE"; printf '%s\n' "$2" > "$GT_STATE/$1.tmp" && mv "$GT_STATE/$1.tmp" "$GT_STATE/$1"; }
 history() { mkdir -p "$GT_STATE"; printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$GT_STATE/history.log"; }
 
-# Optional operator alert (ALERT_WEBHOOK_URL in edge.env: any endpoint accepting a JSON POST, e.g. a
-# Slack/Discord/ntfy webhook). Never fails the caller.
+# Optional operator alert (ALERT_WEBHOOK_URL in edge.env). Never fails the caller.
+#   ALERT_WEBHOOK_FORMAT=json (default) — a JSON {"text","content"} body for Slack/Discord webhooks,
+#     escaped so a quote, backslash or newline in the message can't break it.
+#   ALERT_WEBHOOK_FORMAT=ntfy — a plain-text body with a title (Phase 89: ntfy shows a JSON body
+#     verbatim when it is posted to a topic URL).
+#   ALERT_WEBHOOK_TOKEN (optional) — sent as "Authorization: Bearer …", never in the URL, never logged.
 alert() {
-  local url; url="$(env_value "$GT_EDGE_ENV" ALERT_WEBHOOK_URL)"
+  local url fmt token; url="$(env_value "$GT_EDGE_ENV" ALERT_WEBHOOK_URL)"
   [ -n "$url" ] || return 0
+  fmt="$(env_value "$GT_EDGE_ENV" ALERT_WEBHOOK_FORMAT)"; token="$(env_value "$GT_EDGE_ENV" ALERT_WEBHOOK_TOKEN)"
   local msg="[garnishtable $(hostname)] $*"
-  curl -fsS -m 10 -H 'Content-Type: application/json' \
-    -d "$(printf '{"text":"%s","content":"%s"}' "${msg//\"/\'}" "${msg//\"/\'}")" "$url" > /dev/null 2>&1 || log "alert delivery failed"
+  local auth=(); [ -z "$token" ] || auth=(-H "Authorization: Bearer $token")
+  if [ "$fmt" = ntfy ]; then
+    curl -fsS -m 10 "${auth[@]}" -H "Title: GarnishTable alert ($(hostname))" -H "Priority: high" -H "Tags: warning" \
+      --data-binary "$msg" "$url" > /dev/null 2>&1 || log "alert delivery failed"
+  else
+    local esc; esc="$(printf '%s' "$msg" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n\r\t' '   ')"
+    curl -fsS -m 10 "${auth[@]}" -H 'Content-Type: application/json' \
+      --data-binary "{\"text\":\"$esc\",\"content\":\"$esc\"}" "$url" > /dev/null 2>&1 || log "alert delivery failed"
+  fi
 }

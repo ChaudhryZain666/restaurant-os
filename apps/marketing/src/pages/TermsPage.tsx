@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { LegalPageLayout } from "../components/LegalPageLayout";
 import { usePageMeta } from "../hooks/usePageMeta";
+import { LegalReviewNote } from "../components/LegalReviewNote";
+import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
+import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
 const LAST_UPDATED = "September 14, 2026";
 
@@ -9,11 +12,12 @@ export function TermsPage() {
     title: "Terms of Service — GarnishTable",
     description: "The terms that govern use of GarnishTable's online ordering platform, for restaurant owners, agencies, and their customers.",
   });
+  if (SHOW_LEGAL_PENDING_NOTICE) return <LegalPendingNotice title="Terms of Service" currentPath="/terms" />;
   return (
     <LegalPageLayout title="Terms of Service" lastUpdated={LAST_UPDATED} currentPath="/terms">
       <p>
         These Terms of Service ("Terms") govern access to and use of GarnishTable (the "Service"), operated by{" "}
-        <strong>[LEGAL_ENTITY_NAME]</strong> ("GarnishTable," "we," "us," or "our"). By creating an account, starting a
+        <strong>{LEGAL.entityName}</strong> ("GarnishTable," "we," "us," or "our"). By creating an account, starting a
         trial, or otherwise using the Service, you agree to these Terms. If you do not agree, do not use the Service.
       </p>
 
@@ -133,9 +137,11 @@ export function TermsPage() {
       <p>
         To the maximum extent permitted by applicable law, GarnishTable will not be liable for any indirect,
         incidental, special, consequential, or punitive damages, or any loss of profits, revenue, data, or business
-        opportunity, arising out of or in connection with your use of the Service. <strong>[FOUNDER/LEGAL REVIEW
-        REQUIRED]</strong> — a specific liability cap (e.g. fees paid in a preceding period) should be set once the
-        commercial and legal structure is finalized.
+        opportunity, arising out of or in connection with your use of the Service.
+        <LegalReviewNote>
+          a specific liability cap (e.g. fees paid in a preceding period) should be set once the commercial and legal
+          structure is finalized.
+        </LegalReviewNote>
       </p>
 
       <h2>15. Termination</h2>
@@ -155,15 +161,18 @@ export function TermsPage() {
 
       <h2>17. Governing law</h2>
       <p>
-        These Terms are governed by the laws of <strong>[GOVERNING_JURISDICTION]</strong>, without regard to its
-        conflict-of-laws principles. <strong>[FOUNDER/LEGAL REVIEW REQUIRED]</strong> — final governing jurisdiction
-        and dispute-resolution mechanism (courts vs. arbitration) should be confirmed with counsel before launch.
+        These Terms are governed by the laws of <strong>{LEGAL.jurisdiction}</strong>, without regard to its
+        conflict-of-laws principles.
+        <LegalReviewNote>
+          final governing jurisdiction and dispute-resolution mechanism (courts vs. arbitration) should be confirmed
+          with counsel before launch.
+        </LegalReviewNote>
       </p>
 
       <h2>18. Contact</h2>
       <p>
         Questions about these Terms can be sent through our <Link to="/contact">contact page</Link>, or by email to{" "}
-        <strong>[LEGAL_CONTACT_EMAIL]</strong>.
+        <strong><a href={`mailto:${LEGAL.legalEmail}`}>{LEGAL.legalEmail}</a></strong>.
       </p>
     </LegalPageLayout>
   );
