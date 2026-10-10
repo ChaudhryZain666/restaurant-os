@@ -39,7 +39,7 @@ describe("UberDirectProvider.getQuote", () => {
 });
 
 describe("UberDirectProvider.createDelivery", () => {
-  it("creates a delivery, mapping the provider status and sending the idempotency key header", async () => {
+  it("creates a delivery, mapping the provider status and sending Uber's idempotency_key body field", async () => {
     const fetchSpy = mockAuthThen(200, { id: "del_1", status: "pending", tracking_url: "https://track.uber.com/del_1", fee: 400, currency: "PKR" });
 
     const result = await provider().createDelivery({
@@ -60,7 +60,9 @@ describe("UberDirectProvider.createDelivery", () => {
       raw: expect.any(Object),
     });
     const [, init] = fetchSpy.mock.calls[1] as [string, RequestInit];
-    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe("delivery_create_order-1");
+    // Phase 89 — Uber's API documents idempotency as a body field, not a header.
+    expect(JSON.parse(init.body as string).idempotency_key).toBe("delivery_create_order-1");
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBeUndefined();
   });
 });
 
@@ -339,5 +341,55 @@ describe("UberDirectProvider Phase 89 — structured requests", () => {
     const rawBody = Buffer.from(JSON.stringify({ id: "evt_1", kind: "event.delivery_status", delivery_id: "del_1", status: "pickup" }));
     expect(unsecured.hasWebhookSigningSecret).toBe(false);
     expect(unsecured.verifyWebhookSignature(rawBody, createHmac("sha256", "").update(rawBody).digest("hex"))).toBeNull();
+  });
+});
+
+// Phase 89 — checked against the OpenAPI types in Uber's official SDK (uber/uber-direct-sdk).
+describe("UberDirectProvider Phase 89 — matches Uber's documented API", () => {
+  it("cancels with no request body (Uber's cancel endpoint takes none)", async () => {
+    const spy = mockAuthThen(200, { id: "del_1", status: "canceled" });
+    await provider().cancelDelivery("del_1", "customer changed their mind");
+    const [url, init] = spy.mock.calls[1] as [string, RequestInit];
+    expect(url.endsWith("/deliveries/del_1/cancel")).toBe(true);
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
+  it.each([
+    [400, "invalid_params", "invalid_address", /rejected the delivery details/],
+    [401, "unauthorized", "invalid_credentials", /rejected these credentials/],
+    [402, "customer_suspended", "invalid_credentials", /suspended/],
+    [403, "customer_blocked", "invalid_credentials", /blocked/],
+    [404, "customer_not_found", "invalid_credentials", /doesn't recognize this Customer ID/],
+    [404, "delivery_not_found", "not_found", /Uber Direct:/],
+    [408, "request_timeout", "timeout", /timed out/],
+    [409, "duplicate_delivery", "provider_error", /already requested \(duplicate_delivery\)/],
+    [429, "customer_limited", "rate_limited", /rate limit/],
+    [503, "couriers_busy", "provider_unavailable", /No Uber couriers are available/],
+    [500, "internal_server_error", "provider_error", /Uber Direct error/],
+  ])("maps HTTP %i %s to %s with an actionable message", async (status, code, expectedCode, message) => {
+    mockAuthThen(status, { code, message: "detail from Uber" });
+    await expect(provider().getQuote({ pickup, dropoff, currency: "USD" })).rejects.toMatchObject({
+      code: expectedCode,
+      message: expect.stringMatching(message),
+    });
+  });
+});
+
+describe("UberDirectProvider test-mode robo courier (sandbox check only)", () => {
+  const input = { orderId: "o-robo", restaurantId: "r1", pickup, dropoff, manifestItems: [{ name: "Item", quantity: 1 }], idempotencyKey: "k-robo" };
+
+  it("is never requested by default — production deliveries don't send test_specifications", async () => {
+    const spy = mockAuthThen(200, { id: "del_r", status: "pending" });
+    await provider().createDelivery(input);
+    const [, init] = spy.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).test_specifications).toBeUndefined();
+  });
+
+  it("asks for Uber's robo courier only when the test option is set", async () => {
+    const spy = mockAuthThen(200, { id: "del_r", status: "pending" });
+    await new UberDirectProvider("client-id", "client-secret", "customer-id", "", { testRoboCourier: true }).createDelivery(input);
+    const [, init] = spy.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).test_specifications).toEqual({ robo_courier_specification: { mode: "auto" } });
   });
 });

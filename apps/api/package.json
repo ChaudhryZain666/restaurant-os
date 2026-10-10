@@ -24,6 +24,7 @@
     "backup": "tsx src/scripts/backupDatabase.ts",
     "restore": "tsx src/scripts/restoreDatabase.ts",
     "billing:set-paddle-prices": "tsx src/scripts/setPaddlePriceIds.ts",
+    "uber:sandbox-check": "tsx src/scripts/uberDirectSandboxCheck.ts",
     "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch"

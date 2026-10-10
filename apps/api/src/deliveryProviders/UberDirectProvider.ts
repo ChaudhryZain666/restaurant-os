@@ -71,7 +71,11 @@ export class UberDirectProvider implements DeliveryProvider {
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly customerId: string,
-    private readonly webhookSigningSecret: string
+    private readonly webhookSigningSecret: string,
+    /** Phase 89 — TEST MODE ONLY (scripts/uberDirectSandboxCheck.ts): ask Uber for its simulated
+     *  "robo courier" (test_specifications), so a test-mode delivery runs its full lifecycle with no
+     *  real courier. Never set by restaurantDeliveryProvider.ts — production deliveries never send it. */
+    private readonly options: { testRoboCourier?: boolean } = {}
   ) {}
 
   private async getAccessToken(): Promise<string> {
@@ -118,33 +122,18 @@ export class UberDirectProvider implements DeliveryProvider {
     }
   }
 
-  private async request<T>(method: "GET" | "POST", path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
+  private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
     const token = await this.getAccessToken();
     const res = await this.withTimeout((signal) =>
       fetch(`${API_BASE_URL}/customers/${this.customerId}${path}`, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: body ? JSON.stringify(body) : undefined,
         signal,
       })
     );
     const json = await this.parseJson<T & { code?: string; message?: string }>(res, path);
-    if (!res.ok) {
-      const message = (json as { message?: string })?.message ?? `HTTP ${res.status}`;
-      if (res.status === 401 || res.status === 403) throw new DeliveryProviderError(`Uber Direct rejected these credentials: ${message}`, "invalid_credentials");
-      if (res.status === 429) throw new DeliveryProviderError(`Uber Direct rate limit reached: ${message}`, "rate_limited");
-      if (res.status === 404) throw new DeliveryProviderError(`Uber Direct: ${message}`, "not_found");
-      // Phase 89 — Uber's "address_undeliverable…" codes mean the address is outside its service
-      // area (or no couriers serve it), which is a different fix from a malformed address.
-      const code = (json as { code?: string })?.code ?? "";
-      if (code.startsWith("address_undeliverable")) throw new DeliveryProviderError(`Uber Direct does not deliver between these addresses: ${message}`, "outside_service_area");
-      if (res.status === 422 || code === "invalid_params") throw new DeliveryProviderError(`Uber Direct could not deliver to this address: ${message}`, "invalid_address");
-      throw new DeliveryProviderError(`Uber Direct error: ${message}`, "provider_error");
-    }
+    if (!res.ok) throw uberError(res.status, json as { code?: string; message?: string });
     return json;
   }
 
@@ -211,8 +200,12 @@ export class UberDirectProvider implements DeliveryProvider {
         dropoff_notes: input.dropoff.notes,
         manifest_items: input.manifestItems.map((item) => ({ name: item.name, quantity: item.quantity })),
         external_id: input.orderId,
-      },
-      input.idempotencyKey
+        // Phase 89 — Uber's documented idempotency is this BODY field (kept by Uber for 60 minutes);
+        // the Idempotency-Key header sent before isn't part of its API. Stable per order, so a
+        // retry after a lost response can't book a second courier.
+        idempotency_key: input.idempotencyKey,
+        ...(this.options.testRoboCourier ? { test_specifications: { robo_courier_specification: { mode: "auto" } } } : {}),
+      }
     );
     return {
       providerDeliveryId: res.id,
@@ -249,8 +242,10 @@ export class UberDirectProvider implements DeliveryProvider {
     };
   }
 
-  async cancelDelivery(providerDeliveryId: string, reason?: string): Promise<{ cancelled: boolean }> {
-    await this.request("POST", `/deliveries/${providerDeliveryId}/cancel`, reason ? { cancellation_reason: reason } : undefined);
+  /** Uber's cancel endpoint takes no request body (Phase 89 — the cancellation_reason sent before
+   *  isn't part of its API); the reason stays in our own delivery history only. */
+  async cancelDelivery(providerDeliveryId: string, _reason?: string): Promise<{ cancelled: boolean }> {
+    await this.request("POST", `/deliveries/${providerDeliveryId}/cancel`);
     return { cancelled: true };
   }
 
@@ -337,6 +332,50 @@ function mapUberStatus(uberStatus: string): DeliveryStatus {
 const ZERO_DECIMAL_CURRENCIES = new Set(["JPY", "KRW", "CLP", "VND", "ISK", "UGX", "XAF", "XOF", "PYG"]);
 function fromMinorUnits(amount: number, currency?: string): number {
   return ZERO_DECIMAL_CURRENCIES.has((currency ?? "").toUpperCase()) ? amount : Math.round(amount) / 100;
+}
+
+/**
+ * Phase 89 — Uber Direct's documented error responses (status → code), checked against the
+ * OpenAPI types of Uber's official SDK (github.com/uber/uber-direct-sdk, src/types/deliveries.d.ts):
+ * 400 invalid_params, 401 unauthorized, 402 customer_suspended, 403 customer_blocked,
+ * 404 customer_not_found (quote/create) or delivery_not_found, 408 request_timeout,
+ * 409 duplicate_delivery, 429 customer_limited, 500 internal_server_error, 503 couriers_busy.
+ * Each becomes a message a restaurant's staff can act on; Uber's own message is appended.
+ */
+function uberError(status: number, body: { code?: string; message?: string }): DeliveryProviderError {
+  const code = body?.code ?? "";
+  const detail = body?.message ?? `HTTP ${status}`;
+  if (code.startsWith("address_undeliverable")) {
+    return new DeliveryProviderError(`Uber Direct does not deliver between these addresses: ${detail}`, "outside_service_area");
+  }
+  switch (status) {
+    case 400:
+    case 422:
+      return new DeliveryProviderError(`Uber Direct rejected the delivery details: ${detail}`, "invalid_address");
+    case 401:
+      return new DeliveryProviderError(`Uber Direct rejected these credentials: ${detail}`, "invalid_credentials");
+    case 402:
+      return new DeliveryProviderError(`The Uber Direct account is suspended — contact Uber: ${detail}`, "invalid_credentials");
+    case 403:
+      return new DeliveryProviderError(`The Uber Direct account is blocked — contact Uber: ${detail}`, "invalid_credentials");
+    case 404:
+      return code === "customer_not_found"
+        ? new DeliveryProviderError(`Uber Direct doesn't recognize this Customer ID — check the connected account: ${detail}`, "invalid_credentials")
+        : new DeliveryProviderError(`Uber Direct: ${detail}`, "not_found");
+    case 408:
+      return new DeliveryProviderError(`Uber Direct timed out: ${detail}`, "timeout");
+    case 409:
+      return new DeliveryProviderError(
+        `Uber Direct says this delivery was already requested (duplicate_delivery) — check the Uber Direct dashboard before retrying: ${detail}`,
+        "provider_error"
+      );
+    case 429:
+      return new DeliveryProviderError(`Uber Direct rate limit reached: ${detail}`, "rate_limited");
+    case 503:
+      return new DeliveryProviderError(`No Uber couriers are available right now — retry shortly: ${detail}`, "provider_unavailable");
+    default:
+      return new DeliveryProviderError(`Uber Direct error: ${detail}`, "provider_error");
+  }
 }
 
 export { mapUberStatus, fromMinorUnits };
