@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { getMockBillingProvider } from "../billing/index.js";
@@ -359,5 +359,117 @@ describe("checkout provider-customer reuse — the real 409 class of bug", () =>
     await expect(
       provider.createCustomer({ ownerType: "agency", ownerId: otherAgency.id as string, email: sharedEmail, name: "Shared Email Agency" })
     ).rejects.toThrow(/different owner/);
+  });
+});
+
+describe("POST /businesses/:businessId/subscription/checkout — a no-card trial converts on its own plan (Phase 89)", () => {
+  it("refuses a different plan or interval before any provider call, and still allows the trial's own", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    const starter = await createTestPlan({
+      trialDays: 14,
+      pricing: [
+        { interval: "monthly", amountCents: 5900, currency: "USD", providerPriceId: "mock_price_starter_m" },
+        { interval: "yearly", amountCents: 59000, currency: "USD", providerPriceId: "mock_price_starter_y" },
+      ],
+    });
+    const growth = await createTestPlan({
+      trialDays: 14,
+      pricing: [{ interval: "monthly", amountCents: 9900, currency: "USD", providerPriceId: "mock_price_growth_m" }],
+    });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(starter.id, growth.id);
+    const auth = `Bearer ${tokenFor(owner)}`;
+
+    const trial = await request(app)
+      .post(`/api/v1/businesses/${business.id}/subscription`)
+      .set("Authorization", auth)
+      .send({ planCode: starter.code, billingInterval: "monthly" });
+    expect(trial.status).toBe(201);
+    const before = await Subscription.findOne({ ownerType: "business", ownerId: business._id }).lean();
+    expect(before?.status).toBe("trialing");
+    expect(before?.providerSubscriptionId).toBeUndefined();
+
+    const createCustomer = jest.spyOn(getMockBillingProvider(), "createCustomer");
+    try {
+      for (const body of [
+        { planCode: growth.code, billingInterval: "monthly" },
+        { planCode: starter.code, billingInterval: "yearly" },
+      ]) {
+        const res = await request(app).post(`/api/v1/businesses/${business.id}/subscription/checkout`).set("Authorization", auth).send(body);
+        expect(res.status).toBe(409);
+        expect(res.body.error.message).toMatch(/trial's current plan and billing interval/);
+      }
+      expect(createCustomer).not.toHaveBeenCalled();
+
+      const own = await request(app)
+        .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+        .set("Authorization", auth)
+        .send({ planCode: starter.code, billingInterval: "monthly" });
+      expect(own.status).toBe(200);
+      expect(own.body.data.checkout.mode).toBe("redirect");
+      expect(createCustomer).toHaveBeenCalledTimes(1);
+    } finally {
+      createCustomer.mockRestore();
+    }
+
+    // Launching (or refusing) checkout changes nothing locally.
+    const after = await Subscription.findOne({ ownerType: "business", ownerId: business._id }).lean();
+    expect(String(after?.planId)).toBe(String(starter._id));
+    expect(after?.billingInterval).toBe("monthly");
+    expect(after?.status).toBe("trialing");
+  });
+});
+
+describe("billing history for a no-card trial (Phase 89)", () => {
+  it("records the trial start without a charge, and a later real payment with its actual amount", async () => {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    const plan = await createTestPlan({
+      trialDays: 14,
+      pricing: [{ interval: "monthly", amountCents: 5900, currency: "USD", providerPriceId: "mock_price_trial_history" }],
+    });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(plan.id);
+    const auth = `Bearer ${tokenFor(owner)}`;
+
+    // 1. No-card trial: one "trial_started" row, no amount — never a $59 "subscription started".
+    const trial = await request(app).post(`/api/v1/businesses/${business.id}/subscription`).set("Authorization", auth).send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(trial.status).toBe(201);
+    const afterTrial = await BillingHistoryEvent.find({ ownerType: "business", ownerId: business._id }).lean();
+    expect(afterTrial.map((e) => e.type)).toEqual(["trial_started"]);
+    expect(afterTrial[0].amountCents).toBeUndefined();
+    expect(afterTrial[0].currency).toBeUndefined();
+    const historyRes = await request(app).get(`/api/v1/businesses/${business.id}/subscription/billing-history`).set("Authorization", auth);
+    expect(historyRes.status).toBe(200);
+    expect(historyRes.body.data.items).toHaveLength(1);
+    expect(historyRes.body.data.items[0].type).toBe("trial_started");
+    expect(historyRes.body.data.items[0].amountCents).toBeUndefined();
+
+    // 2. The owner subscribes early: the real payment row carries the actual amount.
+    const checkoutRes = await request(app).post(`/api/v1/businesses/${business.id}/subscription/checkout`).set("Authorization", auth).send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(checkoutRes.status).toBe(200);
+    const token = (checkoutRes.body.data.checkout.url as string).split("/mock-checkout/")[1].split("?")[0];
+    expect((await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`)).status).toBe(200);
+
+    const subscription = await Subscription.findOne({ ownerType: "business", ownerId: business._id }).lean();
+    expect(subscription?.status).toBe("active");
+    expect(subscription?.trialEnd).toBeUndefined();
+    const afterPayment = await BillingHistoryEvent.find({ ownerType: "business", ownerId: business._id }).sort({ occurredAt: 1, _id: 1 }).lean();
+    expect(afterPayment.map((e) => e.type)).toEqual(["trial_started", "subscription_created", "payment_succeeded"]);
+    const payment = afterPayment.find((e) => e.type === "payment_succeeded");
+    expect(payment?.amountCents).toBe(5900);
+    expect(payment?.currency).toBe("USD");
+
+    // 3. A repeated completion is refused and changes nothing.
+    expect((await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`)).status).not.toBe(200);
+    expect(await BillingHistoryEvent.countDocuments({ ownerType: "business", ownerId: business._id })).toBe(3);
+    expect(await Subscription.countDocuments({ ownerType: "business", ownerId: business._id, status: { $in: ["trialing", "active", "past_due", "cancelling"] } })).toBe(1);
   });
 });

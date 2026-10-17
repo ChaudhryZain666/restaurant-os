@@ -9,6 +9,9 @@ import type { SubscriptionOwnerType, SubscriptionProvider } from "./subscription
  * agency, which AuditLog (restaurantId-required) structurally cannot.
  */
 export const BILLING_HISTORY_EVENT_TYPES = [
+  // Phase 89 — a no-card trial starting (createSubscriptionCore). No money moves, so it never
+  // carries an amount; before this it was recorded as "subscription_created" with the plan price.
+  "trial_started",
   "subscription_created",
   "plan_changed",
   "payment_succeeded",
