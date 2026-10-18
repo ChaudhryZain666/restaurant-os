@@ -920,6 +920,39 @@ describe("PATCH /agencies/:agencyId — profile settings (Phase 58)", () => {
     expect(asOwner.body.data.agency.description).toBe("Updated description");
   });
 
+  it("agency owner can save white-label brand settings, while unrelated agencies remain isolated", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        brandName: "Northstar Restaurant Group",
+        brandPrimaryColor: "#6B2130",
+        whiteLabelEnabled: true,
+        logo: "https://example.test/northstar-logo.png",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.agency).toMatchObject({
+      brandName: "Northstar Restaurant Group",
+      brandPrimaryColor: "#6B2130",
+      whiteLabelEnabled: true,
+      logo: "https://example.test/northstar-logo.png",
+    });
+
+    const other = await Agency.findById(otherAgency.id).lean();
+    expect(other?.brandName).toBeUndefined();
+    expect(other?.whiteLabelEnabled).not.toBe(true);
+  });
+
+  it("rejects invalid agency brand colors", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ brandPrimaryColor: "red; background:url(javascript:alert(1))" });
+
+    expect(res.status).toBe(400);
+  });
+
   it("a member of a different agency cannot update this agency's profile", async () => {
     const res = await request(app)
       .patch(`/api/v1/agencies/${agency.id}`)
