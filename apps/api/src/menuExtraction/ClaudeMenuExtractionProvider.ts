@@ -156,12 +156,14 @@ export class ClaudeMenuExtractionProvider implements MenuExtractionProvider {
   }
 }
 
-const SYSTEM_PROMPT = `You extract restaurant menu data from a source document, image set, or web page.
+export const SYSTEM_PROMPT = `You extract restaurant menu data from a source document, image set, or web page.
 Report exactly what is present — never invent ingredients, dietary labels, prices, or descriptions
 that are not explicitly shown. If a field is illegible or absent, omit it rather than guessing, and
 give that row a low confidence score. Always call the record_menu tool with your result.`;
 
-const RECORD_MENU_TOOL = {
+/** Phase 89 — also the source of the OpenAI adapter's strict JSON schema (OpenAIMenuExtractionProvider.ts),
+ *  so both providers describe a menu with exactly the same fields. */
+export const RECORD_MENU_TOOL = {
   name: "record_menu",
   description: "Records the menu items extracted from the provided source.",
   input_schema: {

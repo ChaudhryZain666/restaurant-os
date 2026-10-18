@@ -241,6 +241,13 @@ const baseEnvSchema = z.object({
   MENU_EXTRACTION_PROVIDER_MODE: z.enum(["mock", "live"]).default("mock"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-5"),
+  // Phase 89 — which real provider "live" mode uses. "claude" (the default) keeps every existing
+  // deployment exactly as it was; "openai" uses OpenAIMenuExtractionProvider and requires
+  // OPENAI_API_KEY (checked below for production, and by getMenuExtractionProvider everywhere).
+  // OPENAI_MODEL must be a vision-capable model that accepts PDF input (OpenAI: "gpt-4o and later").
+  MENU_EXTRACTION_PROVIDER: z.enum(["claude", "openai"]).default("claude"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4.1"),
 
   // DNS verification (Phase 22 custom domains). "mock" (default outside production, mirroring
   // PAYMENT_PROVIDER's default-mock precedent) reads from the MockDnsRecord collection, seeded
@@ -394,6 +401,17 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
   // Production billing must be real Paddle production when Paddle is selected — never a silent
   // sandbox. (BILLING_PROVIDER=mock in production stays allowed for a pre-Paddle launch, but every
   // mock billing driver/webhook is refused at runtime — see config/mockDrivers.ts.)
+  // Phase 89 — choosing OpenAI for live menu extraction without its key is a configuration
+  // mistake, refused at boot. (The Claude default keeps its existing behavior: a missing
+  // ANTHROPIC_API_KEY is reported when an import runs, so deployments that don't use AI import
+  // aren't forced to configure it.)
+  if (data.MENU_EXTRACTION_PROVIDER_MODE === "live" && data.MENU_EXTRACTION_PROVIDER === "openai" && !data.OPENAI_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["OPENAI_API_KEY"],
+      message: "MENU_EXTRACTION_PROVIDER=openai with MENU_EXTRACTION_PROVIDER_MODE=live requires OPENAI_API_KEY.",
+    });
+  }
   if (data.BILLING_PROVIDER === "paddle") {
     if (data.PADDLE_ENV !== "production") {
       ctx.addIssue({

@@ -274,6 +274,29 @@ describe("envSchema — Phase 85A production hardening", () => {
     expect(fieldErrors({ ...PRODUCTION_READY, POS_TERMINAL_PROVIDER: "mock" }).POS_TERMINAL_PROVIDER).toBeTruthy();
   });
 
+  // Phase 89 — OpenAI as the live menu-extraction provider needs its key; Claude's default is unchanged.
+  describe("menu extraction provider in production", () => {
+    it("defaults to claude, and production still boots on the Claude default without a key (unchanged)", () => {
+      const parsed = envSchema.safeParse({ ...PRODUCTION_READY, MENU_EXTRACTION_PROVIDER_MODE: "live" });
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.MENU_EXTRACTION_PROVIDER).toBe("claude");
+    });
+
+    it("refuses openai in live mode without OPENAI_API_KEY", () => {
+      const errors = fieldErrors({ ...PRODUCTION_READY, MENU_EXTRACTION_PROVIDER_MODE: "live", MENU_EXTRACTION_PROVIDER: "openai" });
+      expect(errors.OPENAI_API_KEY?.[0]).toMatch(/requires OPENAI_API_KEY/);
+    });
+
+    it("accepts openai with a key, and openai in mock mode without one", () => {
+      expect(envSchema.safeParse({ ...PRODUCTION_READY, MENU_EXTRACTION_PROVIDER_MODE: "live", MENU_EXTRACTION_PROVIDER: "openai", OPENAI_API_KEY: "o-key" }).success).toBe(true);
+      expect(envSchema.safeParse({ ...PRODUCTION_READY, MENU_EXTRACTION_PROVIDER_MODE: "mock", MENU_EXTRACTION_PROVIDER: "openai" }).success).toBe(true);
+    });
+
+    it("rejects an unknown provider name", () => {
+      expect(envSchema.safeParse({ ...PRODUCTION_READY, MENU_EXTRACTION_PROVIDER: "gemini" }).success).toBe(false);
+    });
+  });
+
   describe("Paddle in production", () => {
     const PADDLE_LIVE = {
       ...PRODUCTION_READY,
