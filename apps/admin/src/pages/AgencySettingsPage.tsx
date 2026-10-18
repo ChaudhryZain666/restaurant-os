@@ -39,6 +39,7 @@ export function AgencySettingsPage() {
   const [brandPrimaryColor, setBrandPrimaryColor] = useState("#6B2130");
   const [logo, setLogo] = useState("");
   const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
+  const [whiteLabelOfferings, setWhiteLabelOfferings] = useState<string[]>([]);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
@@ -58,6 +59,7 @@ export function AgencySettingsPage() {
     setBrandPrimaryColor(data.brandPrimaryColor ?? "#6B2130");
     setLogo(data.logo ?? "");
     setWhiteLabelEnabled(Boolean(data.whiteLabelEnabled));
+    setWhiteLabelOfferings(data.whiteLabelOfferings ?? []);
     setDomainDraft(data.domain ?? "");
   }
 
@@ -85,6 +87,7 @@ export function AgencySettingsPage() {
           brandPrimaryColor,
           logo: logo.trim() || undefined,
           whiteLabelEnabled,
+          whiteLabelOfferings: whiteLabelEnabled ? whiteLabelOfferings : [],
         },
       });
       await Promise.all([reload(), refetchAgencies()]);
@@ -178,8 +181,21 @@ export function AgencySettingsPage() {
             Enable white-label mode
           </label>
           <p className="text-xs text-muted sm:col-span-2">
-            White-label mode is stored as agency configuration. Customer-facing storefront, support, sign-in and email branding must be connected in the remaining rollout before this switch changes every surface.
+            White-label is optional. Turn it off to use GarnishTable's standard experience, or choose exactly which capabilities your agency offers below. Some options require the corresponding customer-facing integration before they become active.
           </p>
+          {whiteLabelEnabled && (
+            <fieldset className="sm:col-span-2 rounded-xl border border-border p-3">
+              <legend className="px-1 text-sm font-medium text-foreground">Capabilities available to client restaurants</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("storefront_branding")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "storefront_branding"])] : current.filter((item) => item !== "storefront_branding"))} /><span><span className="font-medium text-foreground">Storefront branding</span><span className="block text-xs text-muted">Apply the agency name, logo and color where supported.</span></span></label>
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("custom_domain")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "custom_domain"])] : current.filter((item) => item !== "custom_domain"))} /><span><span className="font-medium text-foreground">Custom domain</span><span className="block text-xs text-muted">Use a verified custom domain for this restaurant.</span></span></label>
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("hide_platform_branding")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "hide_platform_branding"])] : current.filter((item) => item !== "hide_platform_branding"))} /><span><span className="font-medium text-foreground">Hide platform branding</span><span className="block text-xs text-muted">Hide GarnishTable branding on supported storefront surfaces.</span></span></label>
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("support_branding")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "support_branding"])] : current.filter((item) => item !== "support_branding"))} /><span><span className="font-medium text-foreground">Branded support</span><span className="block text-xs text-muted">Show the agency's support identity on supported help surfaces.</span></span></label>
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("email_branding")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "email_branding"])] : current.filter((item) => item !== "email_branding"))} /><span><span className="font-medium text-foreground">Branded emails</span><span className="block text-xs text-muted">Agency-branded transactional emails (requires email infrastructure).</span></span></label>
+                <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" disabled={!canManage} checked={whiteLabelOfferings.includes("branded_login")} onChange={(e) => setWhiteLabelOfferings((current) => e.target.checked ? [...new Set([...current, "branded_login"])] : current.filter((item) => item !== "branded_login"))} /><span><span className="font-medium text-foreground">Branded sign-in</span><span className="block text-xs text-muted">Agency-branded login and onboarding (requires auth routing).</span></span></label>
+              </div>
+            </fieldset>
+          )}
           {canManage && (
             <Button type="submit" size="sm" disabled={savingProfile} className="self-end">
               {savingProfile ? "Saving..." : "Save profile"}
