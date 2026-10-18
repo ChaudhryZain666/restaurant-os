@@ -93,6 +93,9 @@ export const updateAgencySchema = z
     name: z.string().min(2).max(120).optional(),
     description: z.string().max(500).optional(),
     logo: z.string().max(500).optional(),
+    brandName: z.string().trim().min(2).max(120).optional(),
+    brandPrimaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color, e.g. #6B2130").optional(),
+    whiteLabelEnabled: z.boolean().optional(),
     contactEmail: z.string().email().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update" });
