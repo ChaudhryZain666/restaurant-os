@@ -1,12 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { Alert, Button, Card } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { useRestaurant } from "../context/RestaurantContext";
 
 export function LoginPage() {
   useNoIndex();
   const { login } = useAuth();
+  const { whiteLabelBrand } = useRestaurant();
+  const brandedLogin = whiteLabelBrand?.brandedLogin === true;
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
