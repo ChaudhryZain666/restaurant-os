@@ -13,6 +13,18 @@ The agency owner can edit these values under Agency settings. The API validates 
 
 **Important:** saving these settings does not yet rebrand customer-facing pages. The toggle is configuration only until the later integration phases below are implemented. Do not market the platform as fully white-labelled based on this phase alone.
 
+## Optional agency defaults and per-client choices
+
+White-labeling is deliberately opt-in. `whiteLabelEnabled` defaults to false, and `whiteLabelOfferings` defaults to an empty list. The agency owner chooses which capabilities it offers in Agency Settings.
+
+For each managed business, the agency can select a subset of those offered capabilities in the client's detail page. The API enforces all three boundaries:
+
+- white-label mode must be enabled for the agency before any client features can be assigned;
+- a client can only be assigned capabilities included in the agency's offering list;
+- the endpoint is scoped to the agency/business pair and requires `agency.businesses.manage`, with audit logging.
+
+This is a configuration and permission layer. A selected option does not imply its customer-facing integration is complete: storefront branding, email sender setup, branded login, and agency-level domain routing still require the relevant follow-up work below. If white-label is off, the normal GarnishTable experience remains the intended fallback.
+
 ## Required follow-up phases
 
 1. **Customer-facing storefront identity**
