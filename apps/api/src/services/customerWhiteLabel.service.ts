@@ -38,8 +38,8 @@ export async function getCustomerWhiteLabelProjection(
     .select("name brandName brandPrimaryColor logo whiteLabelEnabled whiteLabelOfferings");
   if (!agency?.whiteLabelEnabled) return fallback;
 
-  const selected = new Set(business.whiteLabelFeatures);
-  const offered = new Set(agency.whiteLabelOfferings ?? []);
+  const selected = new Set<string>(business.whiteLabelFeatures);
+  const offered = new Set<string>(agency.whiteLabelOfferings ?? []);
   const enabled = (feature: string) => selected.has(feature) && offered.has(feature);
   const storefront = enabled("storefront_branding");
   const hidePlatformBranding = enabled("hide_platform_branding");
