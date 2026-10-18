@@ -425,6 +425,10 @@ export async function updateBusinessWhiteLabel(req: Request, res: Response) {
   if (!agency.whiteLabelEnabled && enabledFeatures.length > 0) {
     throw ApiError.badRequest("Enable white-label mode in agency settings before assigning features to clients");
   }
+  const pendingSetup = enabledFeatures.filter((feature) => feature === "custom_domain" || feature === "email_branding");
+  if (pendingSetup.length) {
+    throw ApiError.badRequest(`These white-label features require setup and cannot be enabled yet: ${pendingSetup.join(", ")}`);
+  }
   const offered = new Set(agency.whiteLabelOfferings ?? []);
   const unavailable = enabledFeatures.filter((feature) => !offered.has(feature));
   if (unavailable.length) {
