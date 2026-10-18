@@ -446,7 +446,7 @@ export function AgencyBusinessDetailPage() {
                       hide_platform_branding: "Active on the storefront footer; other platform references still need an audit.",
                       email_branding: "Pending: the current sender is deployment-wide; per-agency sender verification is not configured.",
                       branded_login: "Works only when the restaurant is resolved on an active custom domain; agency-domain routing is not connected yet.",
-                      storefront_branding: "Applies the agency primary color; agency logo/name still need broader storefront integration.",
+                      storefront_branding: "Applies the agency color and a shared storefront brand mark; theme-specific placement remains incomplete.",
                     };
                     return (
                       <label key={feature} className="flex items-start gap-2 text-sm">
