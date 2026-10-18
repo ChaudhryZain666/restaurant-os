@@ -65,7 +65,7 @@ Implemented in this branch:
 - Client configuration UI labels pending capabilities and does not save `email_branding` or `custom_domain` as active client features.
 
 Still not implemented / not active:
-- Full agency logo/name integration throughout all storefront themes and SEO metadata.
+- The shared storefront now shows the agency brand mark; theme-specific logo/name integration and SEO metadata remain incomplete.
 - Agency-owned domain routing. The existing agency domain flow proves DNS ownership only; it does not route customer traffic.
 - Per-agency transactional email templates and sender identities, provider-side sender/domain verification, and delivery/readiness status.
 - Global suppression audit across every customer-facing surface.
