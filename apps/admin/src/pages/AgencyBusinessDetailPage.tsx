@@ -437,16 +437,29 @@ export function AgencyBusinessDetailPage() {
                       email_branding: "Branded emails",
                       branded_login: "Branded sign-in",
                     };
+                    // These capabilities need infrastructure not yet implemented. Keep previously
+                    // stored choices visible as pending, but never let a checkbox imply they are live.
+                    const pendingSetup = feature === "custom_domain" || feature === "hide_platform_branding" || feature === "email_branding";
+                    const setupNote: Partial<Record<AgencyWhiteLabelFeature, string>> = {
+                      custom_domain: "Pending: agency-domain routing is not connected yet.",
+                      hide_platform_branding: "Pending: platform-brand suppression is not wired across all customer surfaces.",
+                      email_branding: "Pending: the current sender is deployment-wide; per-agency sender verification is not configured.",
+                      branded_login: "Works only when the restaurant is resolved on an active custom domain; agency-domain routing is not connected yet.",
+                      storefront_branding: "Applies the agency primary color; agency logo/name still need broader storefront integration.",
+                    };
                     return (
                       <label key={feature} className="flex items-start gap-2 text-sm">
                         <input
                           type="checkbox"
                           className="mt-1"
-                          checked={whiteLabelDraft.includes(feature)}
+                          checked={!pendingSetup && whiteLabelDraft.includes(feature)}
                           onChange={(e) => setWhiteLabelDraft((current) => e.target.checked ? [...new Set([...current, feature])] : current.filter((item) => item !== feature))}
-                          disabled={!agencyRoleHasPermission(myRole, "agency.businesses.manage") || savingWhiteLabel}
+                          disabled={!agencyRoleHasPermission(myRole, "agency.businesses.manage") || savingWhiteLabel || pendingSetup}
                         />
-                        <span>{labels[feature]}</span>
+                        <span className="flex flex-col gap-1">
+                          <span>{labels[feature]}{pendingSetup ? " — setup required" : ""}</span>
+                          {setupNote[feature] && <span className="text-xs text-muted">{setupNote[feature]}</span>}
+                        </span>
                       </label>
                     );
                   })}
