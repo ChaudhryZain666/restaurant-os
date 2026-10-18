@@ -18,6 +18,12 @@ export interface Agency {
   slug: string;
   description?: string;
   logo?: string;
+  /** Public-facing brand name; falls back to `name` when unset. */
+  brandName?: string;
+  /** Strict six-digit hex color used by agency-branded customer-facing surfaces. */
+  brandPrimaryColor?: string;
+  /** False by default so existing agencies retain the current GarnishTable experience. */
+  whiteLabelEnabled?: boolean;
   contactEmail: string;
   status: AgencyStatus;
   /** Maintained counter, incremented atomically on business creation — the entitlement guard for
