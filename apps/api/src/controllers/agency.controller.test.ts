@@ -981,6 +981,26 @@ describe("PUT /agencies/:agencyId/businesses/:businessId/white-label", () => {
     expect(res.body.data.business.whiteLabelFeatures).toEqual(["storefront_branding"]);
   });
 
+  it("rejects email branding and agency-domain routing until their runtime setup exists", async () => {
+    const setup = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        whiteLabelEnabled: true,
+        whiteLabelOfferings: ["email_branding", "custom_domain"],
+      });
+    expect(setup.status).toBe(200);
+
+    for (const feature of ["email_branding", "custom_domain"]) {
+      const res = await request(app)
+        .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ enabledFeatures: [feature] });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain("require setup");
+    }
+  });
+
   it("rejects a client feature the agency has not offered", async () => {
     const res = await request(app)
       .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
