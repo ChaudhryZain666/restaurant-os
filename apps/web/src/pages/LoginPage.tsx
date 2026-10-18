@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button, Card, isDarkColor, hexToRgbTriplet } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useNoIndex } from "../hooks/useNoIndex";
 import { useRestaurant } from "../context/RestaurantContext";
@@ -37,7 +37,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4" style={brandedLogin && whiteLabelBrand?.primaryColor ? { "--color-primary": whiteLabelBrand.primaryColor } as CSSProperties : undefined}>
+      <Card className="animate-scale-in flex flex-col gap-4" style={brandedLogin && whiteLabelBrand?.primaryColor ? { "--color-primary": whiteLabelBrand.primaryColor, "--color-primary-rgb": hexToRgbTriplet(whiteLabelBrand.primaryColor), "--color-primary-foreground": isDarkColor(whiteLabelBrand.primaryColor) ? "#fffaf5" : "#1c1917" } as CSSProperties : undefined}>
         {brandedLogin && (whiteLabelBrand.logo || whiteLabelBrand.name) ? (
           <div className="flex items-center gap-3">
             {whiteLabelBrand.logo && <img src={whiteLabelBrand.logo} alt="" className="h-10 max-w-36 object-contain" />}
