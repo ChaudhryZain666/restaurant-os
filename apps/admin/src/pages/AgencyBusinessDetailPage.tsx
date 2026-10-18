@@ -134,7 +134,7 @@ export function AgencyBusinessDetailPage() {
     try {
       const res = await apiClient.request<{ business: BusinessDetail }>(
         `/agencies/${activeAgencyId}/businesses/${businessId}/white-label`,
-        { method: "PUT", body: { enabledFeatures: whiteLabelDraft.filter((feature) => feature !== "custom_domain" && feature !== "hide_platform_branding" && feature !== "email_branding") } }
+        { method: "PUT", body: { enabledFeatures: whiteLabelDraft.filter((feature) => feature !== "custom_domain" && feature !== "email_branding") } }
       );
       setData((current) => current ? { ...current, business: res.business } : current);
       setWhiteLabelDraft(res.business.whiteLabelFeatures ?? []);
@@ -440,10 +440,10 @@ export function AgencyBusinessDetailPage() {
                     };
                     // These capabilities need infrastructure not yet implemented. Keep previously
                     // stored choices visible as pending, but never let a checkbox imply they are live.
-                    const pendingSetup = feature === "custom_domain" || feature === "hide_platform_branding" || feature === "email_branding";
+                    const pendingSetup = feature === "custom_domain" || feature === "email_branding";
                     const setupNote: Partial<Record<AgencyWhiteLabelFeature, string>> = {
                       custom_domain: "Pending: agency-domain routing is not connected yet.",
-                      hide_platform_branding: "Pending: platform-brand suppression is not wired across all customer surfaces.",
+                      hide_platform_branding: "Active on the storefront footer; other platform references still need an audit.",
                       email_branding: "Pending: the current sender is deployment-wide; per-agency sender verification is not configured.",
                       branded_login: "Works only when the restaurant is resolved on an active custom domain; agency-domain routing is not connected yet.",
                       storefront_branding: "Applies the agency primary color; agency logo/name still need broader storefront integration.",
