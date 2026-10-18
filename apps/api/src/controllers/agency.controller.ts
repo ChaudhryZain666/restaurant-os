@@ -11,6 +11,7 @@ import type {
   SetAgencyDomainInput,
   SetClientCommercialTermsInput,
   UpdateAgencyInput,
+  UpdateBusinessWhiteLabelInput,
 } from "@restaurant/validation";
 import type { AgencyAuditLogEntry } from "@restaurant/types";
 import { Agency, type AgencyDoc } from "../models/Agency.js";
@@ -408,6 +409,41 @@ export async function getAgencyBusiness(req: Request, res: Response) {
  * managed by a different agency" way as getAgencyBusiness/resendAgencyBusinessOwnerInvite, so a
  * caller can never distinguish "doesn't exist" from "belongs to someone else's agency."
  */
+/**
+ * PUT /agencies/:agencyId/businesses/:businessId/white-label — choose the subset of
+ * white-label features offered to one client. The agency's global opt-in must be enabled and
+ * every selected feature must be present in its allow-list.
+ */
+export async function updateBusinessWhiteLabel(req: Request, res: Response) {
+  const { agencyId, businessId } = req.params;
+  const { enabledFeatures } = req.body as UpdateBusinessWhiteLabelInput;
+  const [agency, business] = await Promise.all([
+    Agency.findById(agencyId).select("whiteLabelEnabled whiteLabelOfferings"),
+    Business.findOne({ _id: businessId, agencyId }),
+  ]);
+  if (!agency || !business) throw ApiError.notFound("Business or agency not found");
+  if (!agency.whiteLabelEnabled && enabledFeatures.length > 0) {
+    throw ApiError.badRequest("Enable white-label mode in agency settings before assigning features to clients");
+  }
+  const offered = new Set(agency.whiteLabelOfferings ?? []);
+  const unavailable = enabledFeatures.filter((feature) => !offered.has(feature));
+  if (unavailable.length) {
+    throw ApiError.badRequest(`These features are not offered by your agency: ${unavailable.join(", ")}`);
+  }
+  business.whiteLabelFeatures = enabledFeatures;
+  await business.save();
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.client_white_label_updated",
+    targetType: "business",
+    targetId: business._id,
+    metadata: { enabledFeatures },
+  });
+  sendSuccess(res, { business: business.toJSON() });
+}
+
 export async function setClientCommercialTerms(req: Request, res: Response) {
   const { agencyId, businessId } = req.params;
   const updates = req.body as SetClientCommercialTermsInput;
