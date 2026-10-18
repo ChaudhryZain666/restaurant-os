@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { PDFDocument } from "pdf-lib";
 import request from "supertest";
 import mongoose from "mongoose";
 import { createApp } from "../app.js";
@@ -86,8 +87,15 @@ afterAll(async () => {
   await closeTestConnections();
 });
 
+/** Phase 89 — uploads are checked by their real bytes, so test images carry a JPEG signature. */
 function jpeg(label: string): Buffer {
-  return Buffer.from(`fake-jpeg-bytes-${label}`);
+  return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(`fake-jpeg-bytes-${label}`)]);
+}
+
+async function realPdf(pages: number): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < pages; i++) doc.addPage([200, 200]);
+  return Buffer.from(await doc.save());
 }
 
 const base = `/api/v1/restaurants`;
@@ -154,6 +162,28 @@ describe("POST /restaurants/:restaurantId/menu/import-jobs — validation", () =
       .attach("files", Buffer.from("not an image"), { filename: "menu.txt", contentType: "text/plain" })
       .field("sourceType", "images");
     expect(res.status).toBe(400);
+  });
+
+  // Phase 89 — the file's real bytes decide, not the browser's claimed type.
+  it("rejects a file labelled application/pdf that isn't a PDF, before storing or queueing anything", async () => {
+    const res = await request(app)
+      .post(`${base}/${restaurantA.id}/menu/import-jobs`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .attach("files", Buffer.from("<html>definitely not a pdf</html>"), { filename: "menu.pdf", contentType: "application/pdf" })
+      .field("sourceType", "pdf");
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/"menu.pdf" isn't a PDF file/);
+    expect(await MenuImportJob.countDocuments({ restaurantId: restaurantA._id, "sourceFiles.originalFileName": "menu.pdf", status: "pending" })).toBe(0);
+  });
+
+  it("rejects a PDF over the page limit with how to fix it", async () => {
+    const res = await request(app)
+      .post(`${base}/${restaurantA.id}/menu/import-jobs`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .attach("files", await realPdf(21), { filename: "long-menu.pdf", contentType: "application/pdf" })
+      .field("sourceType", "pdf");
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe('"long-menu.pdf" has 21 pages; menu imports accept up to 20. Split it into smaller PDFs, or upload only the menu pages.');
   });
 
   it("rejects a 'pdf' sourceType with more than one file", async () => {
@@ -269,7 +299,7 @@ describe("duplicate handling — merge only fills empty fields", () => {
     const created = await request(app)
       .post(`${base}/${restaurantA.id}/menu/import-jobs`)
       .set("Authorization", `Bearer ${ownerAToken}`)
-      .attach("files", Buffer.from("pdf"), { filename: "menu.pdf", contentType: "application/pdf" })
+      .attach("files", await realPdf(1), { filename: "menu.pdf", contentType: "application/pdf" })
       .field("sourceType", "pdf");
     const jobId = created.body.data.job.id;
     await runMenuImportExtraction(jobId, { attemptsMade: 0, maxAttempts: 3 });

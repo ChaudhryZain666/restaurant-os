@@ -95,9 +95,12 @@ export class ClaudeMenuExtractionProvider implements MenuExtractionProvider {
       } catch {
         // Non-JSON error body — fall through to the generic message below rather than guessing.
       }
+      // Phase 89 — a rejected request (other 4xx: bad input, oversized, unsupported) fails the same
+      // way every time, so it isn't retried; rate limits (429) and server errors (5xx) are.
       throw new MenuExtractionError(
         `Extraction service error (HTTP ${res.status})${providerMessage ? `: ${providerMessage}` : ""}`,
-        "provider_error"
+        "provider_error",
+        { retryable: res.status === 429 || res.status >= 500 }
       );
     }
 

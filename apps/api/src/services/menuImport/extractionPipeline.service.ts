@@ -1,7 +1,9 @@
 import { Types } from "mongoose";
+import { UnrecoverableError } from "bullmq";
 import { MenuImportJob, type MenuImportJobDoc, type MenuImportDraftRowSubdoc } from "../../models/MenuImportJob.js";
 import { getStorageService } from "../../storage/index.js";
-import { getMenuExtractionProvider, type MenuExtractionInput } from "../../menuExtraction/index.js";
+import { getMenuExtractionProvider, MenuExtractionError, type MenuExtractionInput } from "../../menuExtraction/index.js";
+import { assertPdfWithinPageLimit, MenuImportFileError } from "./menuFileValidation.js";
 import { safeUrlFetch, SafeFetchError } from "../../utils/safeUrlFetch.js";
 import { resolveImport, type ImportScope } from "./resolveImport.js";
 import { extractionResultToNormalizedRows, reviewCategoryFor } from "./extractionResultToRows.js";
@@ -33,10 +35,23 @@ async function buildExtractionInput(job: MenuImportJobDoc): Promise<MenuExtracti
         timeoutMs: URL_FETCH_TIMEOUT_MS,
       });
     } catch (err) {
-      if (err instanceof SafeFetchError) throw new Error(describeSafeFetchError(err));
+      if (err instanceof SafeFetchError) {
+        // Phase 89 — a URL that is invalid, internal, too big or not a page/PDF fails the same way
+        // every time: no retry. Timeouts, DNS and HTTP errors may be temporary and are retried.
+        const message = describeSafeFetchError(err);
+        if (PERMANENT_FETCH_ERRORS.has(err.code)) throw new MenuExtractionError(message, "invalid_source");
+        throw new Error(message);
+      }
       throw err;
     }
     if (fetched.contentType === "application/pdf") {
+      // Phase 89 — the same real-bytes and page-limit check an uploaded PDF gets, before paid extraction.
+      try {
+        await assertPdfWithinPageLimit(fetched.body, "The PDF at that URL");
+      } catch (err) {
+        if (err instanceof MenuImportFileError) throw new MenuExtractionError(err.message, "invalid_source");
+        throw err;
+      }
       return { kind: "pdf", buffer: fetched.body, fileName: "menu.pdf" };
     }
     return { kind: "html", html: fetched.body.toString("utf-8"), sourceUrl: fetched.finalUrl };
@@ -162,7 +177,14 @@ export async function runMenuImportExtraction(jobId: string, attemptInfo: { atte
     job.progress = { stage: "ready_for_review", percent: 100 };
     await job.save();
   } catch (err) {
-    const isLastAttempt = attemptInfo.attemptsMade >= attemptInfo.maxAttempts;
+    // Phase 89 — a permanent failure (bad credentials, a rejected or refused request, an unusable
+    // source) would fail identically on every retry, each one a paid call: it ends the job now.
+    const permanent = err instanceof MenuExtractionError && !err.retryable;
+    // BullMQ's attemptsMade counts the attempts that have ALREADY failed (0 on the first run), so
+    // the final configured attempt runs with attemptsMade = maxAttempts - 1. (Before Phase 89 this
+    // compared attemptsMade >= maxAttempts, which never happens: the last failure reset the job to
+    // "pending" and it stayed there for good.)
+    const isLastAttempt = permanent || attemptInfo.attemptsMade + 1 >= attemptInfo.maxAttempts;
     // Both branches exclude an already-"cancelled" job: a user-triggered cancel (a separate,
     // synchronous API call — see cancelMenuImportJob) can land at any instant, including the
     // narrow window between this attempt throwing and this update running. Without the $ne
@@ -172,7 +194,12 @@ export async function runMenuImportExtraction(jobId: string, attemptInfo: { atte
         { _id: jobId, status: { $ne: "cancelled" } },
         { $set: { status: "failed", error: { message: (err as Error).message, stage: job.status, occurredAt: new Date() } } }
       );
-      logger.error("menu import extraction failed permanently", { jobId, error: (err as Error).message });
+      logger.error("menu import extraction failed permanently", {
+        jobId,
+        error: (err as Error).message,
+        code: err instanceof MenuExtractionError ? err.code : undefined,
+        retriesSkipped: permanent,
+      });
     } else {
       // Reset to "pending" so the next retry's own atomic claim above can actually acquire the
       // job — without this, a retry would find status still "processing"/"extracting"/
@@ -183,6 +210,18 @@ export async function runMenuImportExtraction(jobId: string, attemptInfo: { atte
       // forever with no error and no result).
       await MenuImportJob.updateOne({ _id: jobId, status: { $ne: "cancelled" } }, { $set: { status: "pending" } });
     }
-    throw err; // BullMQ's own retry/backoff applies unless this was the last attempt
+    // UnrecoverableError tells BullMQ not to schedule the remaining attempts; anything else gets
+    // BullMQ's exponential backoff unless this was the last attempt.
+    if (permanent) throw new UnrecoverableError((err as Error).message);
+    throw err;
   }
 }
+
+/** URL-fetch failures that won't change on a retry (see describeSafeFetchError for their messages). */
+const PERMANENT_FETCH_ERRORS: ReadonlySet<string> = new Set([
+  "invalid_protocol",
+  "private_ip",
+  "too_many_redirects",
+  "response_too_large",
+  "unsupported_content_type",
+]);
