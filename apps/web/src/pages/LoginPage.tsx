@@ -37,8 +37,13 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Log in</h1>
+      <Card className="animate-scale-in flex flex-col gap-4" style={brandedLogin && whiteLabelBrand?.primaryColor ? { "--color-primary": whiteLabelBrand.primaryColor } as CSSProperties : undefined}>
+        {brandedLogin && (whiteLabelBrand.logo || whiteLabelBrand.name) ? (
+          <div className="flex items-center gap-3">
+            {whiteLabelBrand.logo && <img src={whiteLabelBrand.logo} alt="" className="h-10 max-w-36 object-contain" />}
+            <h1 className="font-heading text-2xl font-semibold text-foreground">{whiteLabelBrand.name}</h1>
+          </div>
+        ) : <h1 className="font-heading text-2xl font-semibold text-foreground">Log in</h1>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <label htmlFor="login-email" className="flex flex-col gap-1 text-sm font-medium text-foreground">
             Email
