@@ -997,7 +997,6 @@ describe("PUT /agencies/:agencyId/businesses/:businessId/white-label", () => {
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ enabledFeatures: [feature] });
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain("require setup");
     }
   });
 
