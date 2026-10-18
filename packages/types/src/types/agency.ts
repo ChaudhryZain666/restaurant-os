@@ -12,6 +12,16 @@ export type AgencyStatus = "pending" | "active" | "suspended";
 
 export type AgencyDomainStatus = "pending_verification" | "verified";
 
+export const AGENCY_WHITE_LABEL_FEATURES = [
+  "storefront_branding",
+  "custom_domain",
+  "hide_platform_branding",
+  "support_branding",
+  "email_branding",
+  "branded_login",
+] as const;
+export type AgencyWhiteLabelFeature = (typeof AGENCY_WHITE_LABEL_FEATURES)[number];
+
 export interface Agency {
   id: string;
   name: string;
@@ -24,6 +34,8 @@ export interface Agency {
   brandPrimaryColor?: string;
   /** False by default so existing agencies retain the current GarnishTable experience. */
   whiteLabelEnabled?: boolean;
+  /** Capabilities this agency chooses to offer to its client restaurants. */
+  whiteLabelOfferings?: AgencyWhiteLabelFeature[];
   contactEmail: string;
   status: AgencyStatus;
   /** Maintained counter, incremented atomically on business creation — the entitlement guard for
