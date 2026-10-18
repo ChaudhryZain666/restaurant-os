@@ -240,7 +240,7 @@ const baseEnvSchema = z.object({
   // ANTHROPIC_API_KEY throws clearly (getMenuExtractionProvider) rather than silently falling back.
   MENU_EXTRACTION_PROVIDER_MODE: z.enum(["mock", "live"]).default("mock"),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-5"),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-6"),
   // Phase 89 — which real provider "live" mode uses. "claude" (the default) keeps every existing
   // deployment exactly as it was; "openai" uses OpenAIMenuExtractionProvider and requires
   // OPENAI_API_KEY (checked below for production, and by getMenuExtractionProvider everywhere).
