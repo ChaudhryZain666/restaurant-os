@@ -37,7 +37,7 @@ import { useThemeOverride } from "../theme/ThemeOverrideContext";
  * has, rather than permanently shadowing it.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { restaurant } = useRestaurant();
+  const { restaurant, whiteLabelBrand } = useRestaurant();
   const { override } = useThemeOverride();
 
   const { active, hasThemePrimaryOverride } = useMemo(() => {
@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [restaurant, override]);
 
-  const brandColor = restaurant?.settings.brandColor;
+  const brandColor = whiteLabelBrand?.storefrontBranding ? whiteLabelBrand.primaryColor : restaurant?.settings.brandColor;
   const brandColorVars: CSSProperties =
     brandColor && HEX_COLOR_PATTERN.test(brandColor) && !hasThemePrimaryOverride
       ? {
