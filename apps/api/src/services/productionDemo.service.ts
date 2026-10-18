@@ -6,6 +6,7 @@ import { MenuItem } from "../models/MenuItem.js";
 import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
+import { createStaffInvite } from "./staffInvite.service.js";
 import {
   DEMO_CATEGORIES,
   DEMO_MENU_ITEMS,
@@ -162,4 +163,58 @@ export async function provisionProductionDemo({
   }
 
   return { restaurantId: restaurant.id as string, created };
+}
+
+/**
+ * Lane A — operating access to the demo tenant for a GarnishTable team member, WITHOUT merging the
+ * demo owner placeholder into anyone's account and without widening platform_admin's permissions.
+ *
+ * One email is one account with one role, so a platform admin's own address can't also be a
+ * restaurant identity. Instead the team member gets a SEPARATE restaurant_manager login (a different
+ * address — e.g. a plus-address of their own) through the exact invite flow an owner's "Invite
+ * staff" uses (services/staffInvite.service.ts): a one-time email link, they set their own
+ * password. A manager can run the menu, orders, POS and settings for the demo only, and holds
+ * neither billing.manage nor any platform permission, so nothing done in the demo can touch real
+ * customers' billing or data. Their platform-admin account is unchanged.
+ *
+ * Refuses (changing nothing) unless the demo tenant exists and is owned by DEMO_OWNER_EMAIL, and if
+ * the email already has any account. If the invite email can't be sent, the new account is removed
+ * again so a re-run starts clean.
+ */
+export async function inviteDemoManager({
+  name,
+  email,
+  slug = DEMO_SLUG,
+  ownerEmail = DEMO_OWNER_EMAIL,
+}: {
+  name: string;
+  email: string;
+  slug?: string;
+  ownerEmail?: string;
+}): Promise<{ restaurantId: string; userId: string }> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const [owner, restaurant] = await Promise.all([User.findOne({ email: ownerEmail }), Restaurant.findOne({ slug })]);
+  if (!restaurant) throw new DemoProvisioningConflictError(`No restaurant with slug "${slug}" exists. Provision the demo first.`);
+  if (!owner || !restaurant.ownerId.equals(owner._id)) {
+    throw new DemoProvisioningConflictError(
+      `The restaurant "${slug}" is not the GarnishTable demo tenant (owner is not ${ownerEmail}). Nothing was changed.`
+    );
+  }
+  if (await User.exists({ email: normalizedEmail })) {
+    throw new DemoProvisioningConflictError(
+      `${normalizedEmail} already has a GarnishTable account. Use a separate address for demo access ` +
+        "(for example a plus-address of your own), so your existing account keeps its role. Nothing was changed."
+    );
+  }
+
+  const { staff, emailSent } = await createStaffInvite(
+    restaurant,
+    { name, email: normalizedEmail, role: "restaurant_manager" },
+    "GarnishTable"
+  );
+  if (!emailSent) {
+    await User.deleteOne({ _id: staff._id });
+    throw new Error("The invite email could not be sent (check SMTP settings), so the account was not kept. Nothing was changed.");
+  }
+  return { restaurantId: restaurant.id as string, userId: staff.id as string };
 }

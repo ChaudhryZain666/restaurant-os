@@ -1,10 +1,7 @@
-import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
 import type { Request, Response } from "express";
-import type { HydratedDocument } from "mongoose";
 import type { InviteStaffInput, UpdateStaffInput } from "@restaurant/validation";
 import { STAFF_ROLES } from "@restaurant/validation";
-import { User, type UserDoc } from "../models/User.js";
+import { User } from "../models/User.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
@@ -13,14 +10,7 @@ import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
 import { staffInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
-
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-const ROLE_LABELS: Record<string, string> = {
-  restaurant_manager: "Manager",
-  restaurant_staff: "Staff",
-  kitchen_staff: "Kitchen Staff",
-};
+import { INVITE_TTL_MS, ROLE_LABELS, createStaffInvite } from "../services/staffInvite.service.js";
 
 export async function listStaff(req: Request, res: Response) {
   const { restaurantId } = req.params;
@@ -28,71 +18,16 @@ export async function listStaff(req: Request, res: Response) {
   sendSuccess(res, { staff: staff.map((s) => s.toJSON()) });
 }
 
-/**
- * No password ever passes through this endpoint or an email — the owner names a role, the
- * invitee gets a one-time link (POST /auth/accept-invite) that lets them set their own password.
- * The account is created with a random, immediately-discarded password hash so bcrypt.compare in
- * login() can never succeed against it before the invite is accepted.
- */
+/** POST /restaurants/:restaurantId/staff — see services/staffInvite.service.ts. */
 export async function inviteStaff(req: Request, res: Response) {
   const { restaurantId } = req.params;
-  const { name, email, role, phone } = req.body as InviteStaffInput;
-
-  const existing = await User.findOne({ email });
-  if (existing) throw ApiError.conflict("An account with this email already exists");
+  const body = req.body as InviteStaffInput;
 
   const restaurant = await Restaurant.findById(restaurantId);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
   const inviter = await User.findById(req.user!.id);
 
-  const unusablePassword = randomBytes(32).toString("hex");
-  const passwordHash = await bcrypt.hash(unusablePassword, 12);
-  const { raw, hash } = generateSecureToken();
-
-  // Phase 49 — the pre-check above narrows the common case, but can't close a genuine race: two
-  // concurrent invites (or an invite racing a self-registration) for the same email can both pass
-  // it before either insert commits. User.email's unique index is the real backstop; this
-  // translates its raw duplicate-key error into the same clean 409 the pre-check would have given
-  // a slightly-slower request, rather than letting it surface as an unhandled 500.
-  let staff: HydratedDocument<UserDoc>;
-  try {
-    staff = await User.create({
-      name,
-      email,
-      passwordHash,
-      role,
-      phone,
-      restaurantId,
-      // Phase 18, additive — mirrors today's single-location restaurantId assignment exactly
-      // (businessId may still be undefined if this restaurant hasn't been migrated yet; locationIds
-      // defaults to just this one restaurant, same reach as restaurantId gave before this field
-      // existed, extendable later via updateStaff without re-inviting).
-      businessId: restaurant.businessId,
-      locationIds: [restaurantId],
-      isActive: true,
-      inviteTokenHash: hash,
-      inviteExpiresAt: new Date(Date.now() + INVITE_TTL_MS),
-    });
-  } catch (err) {
-    if ((err as { code?: number }).code === 11000) {
-      throw ApiError.conflict("An account with this email already exists");
-    }
-    throw err;
-  }
-
-  const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
-  try {
-    await getEmailService().send(
-      staffInviteEmail(email, acceptUrl, {
-        restaurantName: restaurant.name,
-        inviterName: inviter?.name ?? "Your restaurant",
-        roleLabel: ROLE_LABELS[role] ?? role,
-      })
-    );
-  } catch (err) {
-    logger.error("failed to send staff-invite email", { error: (err as Error).message });
-  }
-
+  const { staff } = await createStaffInvite(restaurant, body, inviter?.name ?? "Your restaurant");
   sendSuccess(res, { staff: staff.toJSON() }, 201);
 }
 
