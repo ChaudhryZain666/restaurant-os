@@ -382,3 +382,126 @@ describe("email templates", () => {
     expect(reset.replyTo).toBeUndefined();
   });
 });
+
+describe("agency-owned domain namespace", () => {
+  const nsDomain = `ns-${run}.example.org`;
+  let nsAgency: Awaited<ReturnType<typeof createTestAgency>>;
+  let nsBusiness: Awaited<ReturnType<typeof createTestBusiness>>;
+  let nsRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let foreignRestaurant: Awaited<ReturnType<typeof createTestRestaurant>>;
+  let nsToken: string;
+  let foreignToken: string;
+
+  beforeAll(async () => {
+    nsAgency = await createTestAgency({ domain: nsDomain, domainStatus: "verified", whiteLabelEnabled: true, whiteLabelOfferings: ALL });
+    nsBusiness = await createTestBusiness({ agencyId: nsAgency._id, whiteLabelFeatures: ["custom_domain", "branded_login"] });
+    nsRestaurant = await createTestRestaurant({ businessId: nsBusiness._id, status: "active", slug: `ns-client-${run}` });
+    const plan = await createTestPlan();
+    planIds.push(plan._id);
+    await createTestSubscription("business", nsBusiness._id, plan._id);
+    await createTestSubscription("business", otherBusiness._id, plan._id);
+    foreignRestaurant = await createTestRestaurant({ businessId: otherBusiness._id, status: "active", slug: `ns-foreign-${run}` });
+    const nsOwner = await createTestUser("agency_member");
+    userIds.push(nsOwner._id);
+    await createTestAgencyMembership(nsAgency._id, nsOwner._id);
+    nsToken = tokenFor(nsOwner, [{ agencyId: nsAgency.id, role: "agency_owner" }]);
+    foreignToken = otherOwnerToken;
+  });
+
+  afterAll(async () => {
+    await Promise.all([
+      Agency.deleteOne({ _id: nsAgency._id }),
+      AgencyMembership.deleteMany({ agencyId: nsAgency._id }),
+      Business.deleteOne({ _id: nsBusiness._id }),
+      Restaurant.deleteMany({ _id: { $in: [nsRestaurant._id, foreignRestaurant._id] } }),
+      DomainMapping.deleteMany({ locationId: { $in: [nsRestaurant._id, foreignRestaurant._id] } }),
+      Subscription.deleteMany({ ownerId: { $in: [nsBusiness._id, otherBusiness._id] } }),
+    ]);
+  });
+
+  it("verifies a client hostname under the agency's verified domain without a per-host TXT record", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${nsRestaurant.id}/domains`)
+      .set("Authorization", `Bearer ${nsToken}`)
+      .send({ hostname: `shop.${nsDomain}` });
+    expect(res.status).toBe(201);
+    expect(res.body.data.domain.status).toBe("verified");
+  });
+
+  it("refuses a hostname under that domain to another agency's client", async () => {
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${foreignRestaurant.id}/domains`)
+      .set("Authorization", `Bearer ${foreignToken}`)
+      .send({ hostname: `other.${nsDomain}` });
+    expect(res.status).toBe(409);
+  });
+
+  it("never serves a foreign tenant's pre-existing mapping under the agency's domain", async () => {
+    await DomainMapping.create({
+      hostname: `legacy.${nsDomain}`,
+      businessId: otherBusiness._id,
+      locationId: foreignRestaurant._id,
+      status: "active",
+      verificationToken: "t",
+    });
+    const res = await request(app).get(`/api/v1/restaurants/by-domain/legacy.${nsDomain}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("serves the agency's own client hostname once activated, with branded sign-in", async () => {
+    const mapping = await DomainMapping.findOne({ hostname: `shop.${nsDomain}` });
+    const act = await request(app)
+      .post(`/api/v1/restaurants/${nsRestaurant.id}/domains/${mapping!.id}/activate`)
+      .set("Authorization", `Bearer ${nsToken}`);
+    expect(act.status).toBe(200);
+    const res = await request(app).get(`/api/v1/restaurants/by-domain/shop.${nsDomain}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.whiteLabelBrand.brandedLogin).toBe(true);
+  });
+
+  it("stops serving (and branding sign-in) as soon as the domain is deactivated", async () => {
+    const mapping = await DomainMapping.findOne({ hostname: `shop.${nsDomain}` });
+    await request(app).post(`/api/v1/restaurants/${nsRestaurant.id}/domains/${mapping!.id}/deactivate`).set("Authorization", `Bearer ${nsToken}`);
+    const res = await request(app).get(`/api/v1/restaurants/by-domain/shop.${nsDomain}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("sender revocation and template escaping", () => {
+  it("a revoked sender falls back to the platform address immediately", async () => {
+    // Re-establish a verified sender on a fresh verified domain for the main agency.
+    const fresh = `rev-${run}.example.net`;
+    await Agency.updateOne(
+      { _id: agency._id },
+      { domain: fresh, domainStatus: "verified", emailSender: { address: `orders@${fresh}`, status: "pending_authorization", requestedAt: new Date() } }
+    );
+    await select(["email_branding"]);
+    await request(app)
+      .post(`/api/v1/platform/agencies/${agency.id}/email-sender/review`)
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ decision: "verified" });
+    expect((await resolveEmailBrandForBusiness(business._id))!.from.address).toBe(`orders@${fresh}`);
+
+    const revoke = await request(app)
+      .post(`/api/v1/platform/agencies/${agency.id}/email-sender/review`)
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ decision: "failed", reason: "Provider no longer authorizes this domain" });
+    expect(revoke.status).toBe(200);
+    expect((await resolveEmailBrandForBusiness(business._id))!.from.address).toBeUndefined();
+    const audit = await AgencyAuditLog.findOne({ agencyId: agency._id, action: "agency.email_sender_rejected" }).sort({ createdAt: -1 });
+    expect(audit?.metadata).toMatchObject({ previousStatus: "verified" });
+  });
+
+  it("escapes tenant-provided names in every branded template", () => {
+    const evil = `<img src=x onerror="alert(1)">`;
+    const email = orderConfirmationEmail("c@example.com", {
+      restaurantName: evil,
+      orderNumber: evil,
+      total: "$1",
+      orderType: "pickup",
+      trackingUrl: "https://x/orders/1",
+    });
+    expect(email.html).not.toContain("<img src=x");
+    expect(email.html).toContain("&lt;img src=x");
+  });
+});

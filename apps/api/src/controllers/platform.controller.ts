@@ -658,6 +658,7 @@ export async function reviewAgencyEmailSender(req: Request, res: Response) {
   if (!agency) throw ApiError.notFound("Agency not found");
   const sender = agency.emailSender;
   if (!sender) throw ApiError.badRequest("This agency hasn't requested a custom sender");
+  const previousStatus = sender.status;
 
   if (decision === "verified") {
     if (sender.status !== "pending_authorization") {
@@ -686,7 +687,8 @@ export async function reviewAgencyEmailSender(req: Request, res: Response) {
     action: decision === "verified" ? "agency.email_sender_verified" : "agency.email_sender_rejected",
     targetType: "agency",
     targetId: agency._id,
-    metadata: { address: sender.address, ...(reason ? { reason } : {}) },
+    // previousStatus "verified" on a rejection = a revocation of a sender that was in use.
+    metadata: { address: sender.address, previousStatus, ...(reason ? { reason } : {}) },
   });
   sendSuccess(res, { emailSender: { address: sender.address, status: sender.status, failureReason: sender.failureReason ?? null } });
 }

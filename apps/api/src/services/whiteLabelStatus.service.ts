@@ -84,7 +84,10 @@ export async function checkBusinessDomains(businessId: unknown, checkDns: boolea
   );
 }
 
-function domainReadiness(domains: WhiteLabelDomainCheck[]): { ready: boolean; blockers: string[]; failed: boolean } {
+function domainReadiness(
+  domains: WhiteLabelDomainCheck[],
+  agencyDomain: string | null
+): { ready: boolean; blockers: string[]; failed: boolean } {
   if (!env.CUSTOM_DOMAIN_CNAME_TARGET) {
     return {
       ready: false,
@@ -94,7 +97,15 @@ function domainReadiness(domains: WhiteLabelDomainCheck[]): { ready: boolean; bl
   }
   if (domains.some((d) => d.live && d.dnsPointsToEdge !== false)) return { ready: true, blockers: [], failed: false };
   if (domains.length === 0) {
-    return { ready: false, failed: false, blockers: ["Add a domain to one of this client's locations (location Settings → Custom domain)."] };
+    return {
+      ready: false,
+      failed: false,
+      blockers: [
+        agencyDomain
+          ? `Add a domain to one of this client's locations (location Settings → Custom domain). A hostname under your verified domain, e.g. client.${agencyDomain}, is verified automatically.`
+          : "Add a domain to one of this client's locations (location Settings → Custom domain).",
+      ],
+    };
   }
   const blockers: string[] = [];
   let failed = false;
@@ -105,7 +116,9 @@ function domainReadiness(domains: WhiteLabelDomainCheck[]): { ready: boolean; bl
       blockers.push(`${d.hostname}: ownership is verified — activate it for its location.`);
     } else if (!d.live) {
       failed = true;
-      blockers.push(`${d.hostname}: activated, but not being served — the location isn't published or the plan no longer includes custom domains.`);
+      blockers.push(
+        `${d.hostname}: activated, but not being served — the location isn't published, the plan no longer includes custom domains, or the hostname is under another agency's verified domain.`
+      );
     } else if (d.dnsPointsToEdge === false) {
       blockers.push(`${d.hostname}: point a CNAME record at ${env.CUSTOM_DOMAIN_CNAME_TARGET} (no CNAME to it was found).`);
     }
@@ -135,7 +148,7 @@ export async function getBusinessWhiteLabelStatus(
   const offered = new Set<string>(agency.whiteLabelOfferings ?? []);
   const needsDomains = selected.has("custom_domain") || selected.has("branded_login");
   const domains = needsDomains ? await checkBusinessDomains(business._id, checkDns) : [];
-  const domain = domainReadiness(domains);
+  const domain = domainReadiness(domains, agency.domainStatus === "verified" && agency.domain ? agency.domain : null);
   const usableSender = selected.has("email_branding") ? await senderIsUsable(agency) : false;
 
   const capabilities: WhiteLabelCapabilityStatus[] = AGENCY_WHITE_LABEL_FEATURES.map((feature) => {

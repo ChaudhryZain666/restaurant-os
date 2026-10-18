@@ -5,6 +5,8 @@ import { DomainMapping } from "../models/DomainMapping.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { isSelfClaim } from "./domainVerification.service.js";
 import { hasFeatureEntitlement } from "./entitlementLimit.service.js";
+import { findVerifiedAgencyForHostname } from "./agencyDomainNamespace.service.js";
+import { Business } from "../models/Business.js";
 
 /**
  * Phase 86 — the single answer to "is this hostname a live custom storefront domain right now?",
@@ -31,7 +33,8 @@ export type CustomDomainDenyReason =
   | "not_mapped"
   | "not_active"
   | "restaurant_inactive"
-  | "not_entitled";
+  | "not_entitled"
+  | "agency_namespace_conflict";
 
 /** Canonical form, or null when the input can never be a custom domain. */
 export function canonicalCustomDomain(raw: unknown): string | null {
@@ -54,6 +57,15 @@ export async function resolveCustomDomain(raw: unknown): Promise<CustomDomainDec
   if (!restaurant) return { live: false, hostname, reason: "restaurant_inactive" };
   if (restaurant.businessId && !(await hasFeatureEntitlement("business", restaurant.businessId.toString(), "custom_domains"))) {
     return { live: false, hostname, reason: "not_entitled" };
+  }
+  // White-label — a hostname inside an agency's verified domain is served only for that agency's
+  // own clients, even if a mapping for another tenant pre-dates the agency's verification.
+  const namespaceOwner = await findVerifiedAgencyForHostname(hostname);
+  if (namespaceOwner) {
+    const business = restaurant.businessId ? await Business.findById(restaurant.businessId).select("agencyId").lean() : null;
+    if (!business?.agencyId || String(business.agencyId) !== String(namespaceOwner._id)) {
+      return { live: false, hostname, reason: "agency_namespace_conflict" };
+    }
   }
   return { live: true, hostname, restaurantId: restaurant._id.toString() };
 }

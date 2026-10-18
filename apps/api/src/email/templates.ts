@@ -32,7 +32,7 @@ function layout(title: string, bodyHtml: string, brand?: EmailBrand): string {
   <body style="font-family: -apple-system, sans-serif; background: #f7f2ed; padding: 24px;">
     <div style="max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 32px;">
       ${logo}
-      <h1 style="font-size: 20px; margin: 0 0 16px;">${title}</h1>
+      <h1 style="font-size: 20px; margin: 0 0 16px;">${escapeHtml(title)}</h1>
       ${bodyHtml}
       ${footer}
     </div>
@@ -59,7 +59,7 @@ export function passwordResetEmail(to: string, resetUrl: string): EmailMessage {
     html: layout(
       "Reset your password",
       `<p>We received a request to reset your password. This link expires in 1 hour and can only be used once.</p>
-       <p><a href="${resetUrl}" style="color:#4e1d25;">Reset your password</a></p>
+       <p><a href="${escapeHtml(resetUrl)}" style="color:#4e1d25;">Reset your password</a></p>
        <p style="color:#78716c; font-size: 13px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>`
     ),
     text: `Reset your GarnishTable password: ${resetUrl}\n\nThis link expires in 1 hour and can only be used once. If you didn't request this, ignore this email.`,
@@ -73,7 +73,7 @@ export function emailVerificationEmail(to: string, verifyUrl: string): EmailMess
     html: layout(
       "Verify your email address",
       `<p>Confirm this is really your email address to continue setting up your restaurant. This link expires in 24 hours and can only be used once.</p>
-       <p><a href="${verifyUrl}" style="color:#4e1d25;">Verify my email address</a></p>
+       <p><a href="${escapeHtml(verifyUrl)}" style="color:#4e1d25;">Verify my email address</a></p>
        <p style="color:#78716c; font-size: 13px;">If you didn't create a GarnishTable account, you can safely ignore this email.</p>`
     ),
     text: `Verify your GarnishTable email address: ${verifyUrl}\n\nThis link expires in 24 hours and can only be used once. If you didn't create an account, ignore this email.`,
@@ -87,7 +87,7 @@ export function emailChangeVerificationEmail(to: string, confirmUrl: string): Em
     html: layout(
       "Confirm your new email address",
       `<p>We received a request to change the email address on your GarnishTable account to this one. This link expires in 1 hour and can only be used once.</p>
-       <p><a href="${confirmUrl}" style="color:#4e1d25;">Confirm this email address</a></p>
+       <p><a href="${escapeHtml(confirmUrl)}" style="color:#4e1d25;">Confirm this email address</a></p>
        <p style="color:#78716c; font-size: 13px;">If you didn't request this, you can safely ignore this email — your account's email address won't change.</p>`
     ),
     text: `Confirm your new GarnishTable email address: ${confirmUrl}\n\nThis link expires in 1 hour and can only be used once. If you didn't request this, ignore this email.`,
@@ -109,8 +109,8 @@ export function ownerInviteEmail(
       subject: `You've been invited to set up ${details.restaurantName} on ${product}`,
       html: layout(
         `You're invited to set up ${details.restaurantName}`,
-        `<p>${who} has created <strong>${details.restaurantName}</strong> and invited you as its owner.</p>
-       <p><a href="${acceptUrl}" style="color:#4e1d25;">Accept invitation &amp; set your password</a></p>
+        `<p>${who} has created <strong>${escapeHtml(details.restaurantName)}</strong> and invited you as its owner.</p>
+       <p><a href="${escapeHtml(acceptUrl)}" style="color:#4e1d25;">Accept invitation &amp; set your password</a></p>
        <p style="color:#78716c; font-size: 13px;">Once you're in, you'll be guided through setting up your menu and configuration before your restaurant goes live. This invite link expires in 7 days.</p>`,
         brand
       ),
@@ -137,8 +137,8 @@ export function agencyMemberInviteEmail(
     subject: `You've been invited to join ${details.agencyName} on GarnishTable`,
     html: layout(
       `You're invited to ${details.agencyName}`,
-      `<p>${details.inviterName} has invited you to join <strong>${details.agencyName}</strong> as a <strong>${details.roleLabel}</strong>.</p>
-       <p><a href="${acceptUrl}" style="color:#4e1d25;">${setupLine}</a></p>
+      `<p>${escapeHtml(details.inviterName)} has invited you to join <strong>${escapeHtml(details.agencyName)}</strong> as a <strong>${escapeHtml(details.roleLabel)}</strong>.</p>
+       <p><a href="${escapeHtml(acceptUrl)}" style="color:#4e1d25;">${escapeHtml(setupLine)}</a></p>
        <p style="color:#78716c; font-size: 13px;">This invite link expires in 7 days.</p>`
     ),
     text: `${details.inviterName} invited you to join ${details.agencyName} on GarnishTable as a ${details.roleLabel}.\n\n${setupLine}: ${acceptUrl}\n\nThis link expires in 7 days.`,
@@ -155,9 +155,9 @@ export function newOrderRestaurantEmail(
     subject: `New order ${details.orderNumber} — ${details.total}`,
     html: layout(
       "You've got a new order",
-      `<p><strong>${details.restaurantName}</strong> just received order <strong>${details.orderNumber}</strong>
-       (${details.orderType}, ${details.total}).</p>
-       <p><a href="${details.ordersUrl}" style="color:#4e1d25;">View and accept it</a></p>
+      `<p><strong>${escapeHtml(details.restaurantName)}</strong> just received order <strong>${escapeHtml(details.orderNumber)}</strong>
+       (${escapeHtml(details.orderType)}, ${escapeHtml(details.total)}).</p>
+       <p><a href="${escapeHtml(details.ordersUrl)}" style="color:#4e1d25;">View and accept it</a></p>
        <p style="color:#78716c; font-size: 13px;">You're getting this because no one was watching the live orders
        page when it came in — it's already waiting there too.</p>`,
       brand
@@ -176,9 +176,9 @@ export function orderConfirmationEmail(
     subject: `Your order from ${details.restaurantName} — ${details.orderNumber}`,
     html: layout(
       "Order confirmed",
-      `<p>Thanks for your order from <strong>${details.restaurantName}</strong>. We've sent it to the restaurant.</p>
-       <p>Order <strong>${details.orderNumber}</strong> · ${details.orderType} · ${details.total}</p>
-       <p><a href="${details.trackingUrl}" style="color:#4e1d25;">Track your order</a></p>`,
+      `<p>Thanks for your order from <strong>${escapeHtml(details.restaurantName)}</strong>. We've sent it to the restaurant.</p>
+       <p>Order <strong>${escapeHtml(details.orderNumber)}</strong> · ${escapeHtml(details.orderType)} · ${escapeHtml(details.total)}</p>
+       <p><a href="${escapeHtml(details.trackingUrl)}" style="color:#4e1d25;">Track your order</a></p>`,
       brand
     ),
     text: `Thanks for your order from ${details.restaurantName}.\n\nOrder ${details.orderNumber} · ${details.orderType} · ${details.total}\n\nTrack your order: ${details.trackingUrl}`,
@@ -195,9 +195,9 @@ export function orderCancelledEmail(
     subject: `Your order from ${details.restaurantName} was cancelled — ${details.orderNumber}`,
     html: layout(
       "Order cancelled",
-      `<p>Order <strong>${details.orderNumber}</strong> from <strong>${details.restaurantName}</strong> has been
+      `<p>Order <strong>${escapeHtml(details.orderNumber)}</strong> from <strong>${escapeHtml(details.restaurantName)}</strong> has been
        cancelled. If you paid online, any refund will follow the restaurant's usual process.</p>
-       <p><a href="${details.trackingUrl}" style="color:#4e1d25;">View order details</a></p>`,
+       <p><a href="${escapeHtml(details.trackingUrl)}" style="color:#4e1d25;">View order details</a></p>`,
       brand
     ),
     text: `Order ${details.orderNumber} from ${details.restaurantName} has been cancelled.\n\nView order details: ${details.trackingUrl}`,
@@ -214,9 +214,9 @@ export function paymentReceiptEmail(
     subject: `Payment received — ${details.orderNumber}`,
     html: layout(
       "Payment received",
-      `<p>We've received your payment of <strong>${details.total}</strong> for order <strong>${details.orderNumber}</strong>
-       from <strong>${details.restaurantName}</strong>.</p>
-       <p><a href="${details.trackingUrl}" style="color:#4e1d25;">View your order</a></p>`,
+      `<p>We've received your payment of <strong>${escapeHtml(details.total)}</strong> for order <strong>${escapeHtml(details.orderNumber)}</strong>
+       from <strong>${escapeHtml(details.restaurantName)}</strong>.</p>
+       <p><a href="${escapeHtml(details.trackingUrl)}" style="color:#4e1d25;">View your order</a></p>`,
       brand
     ),
     text: `We've received your payment of ${details.total} for order ${details.orderNumber} from ${details.restaurantName}.\n\nView your order: ${details.trackingUrl}`,
@@ -233,9 +233,9 @@ export function paymentFailedEmail(
     subject: `Payment failed — ${details.orderNumber}`,
     html: layout(
       "Payment failed",
-      `<p>Your payment for order <strong>${details.orderNumber}</strong> from <strong>${details.restaurantName}</strong>
+      `<p>Your payment for order <strong>${escapeHtml(details.orderNumber)}</strong> from <strong>${escapeHtml(details.restaurantName)}</strong>
        didn't go through. No charge was made.</p>
-       <p><a href="${details.trackingUrl}" style="color:#4e1d25;">Try again</a></p>`,
+       <p><a href="${escapeHtml(details.trackingUrl)}" style="color:#4e1d25;">Try again</a></p>`,
       brand
     ),
     text: `Your payment for order ${details.orderNumber} from ${details.restaurantName} didn't go through. No charge was made.\n\nTry again: ${details.trackingUrl}`,
@@ -252,10 +252,10 @@ export function refundConfirmationEmail(
     subject: `Refund issued — ${details.orderNumber}`,
     html: layout(
       "Refund issued",
-      `<p>A refund of <strong>${details.amount}</strong> has been issued for order <strong>${details.orderNumber}</strong>
-       from <strong>${details.restaurantName}</strong>. It may take a few business days to appear on your original
+      `<p>A refund of <strong>${escapeHtml(details.amount)}</strong> has been issued for order <strong>${escapeHtml(details.orderNumber)}</strong>
+       from <strong>${escapeHtml(details.restaurantName)}</strong>. It may take a few business days to appear on your original
        payment method.</p>
-       <p><a href="${details.trackingUrl}" style="color:#4e1d25;">View your order</a></p>`,
+       <p><a href="${escapeHtml(details.trackingUrl)}" style="color:#4e1d25;">View your order</a></p>`,
       brand
     ),
     text: `A refund of ${details.amount} has been issued for order ${details.orderNumber} from ${details.restaurantName}. It may take a few business days to appear on your original payment method.\n\nView your order: ${details.trackingUrl}`,
@@ -268,9 +268,9 @@ export function trialEndingEmail(to: string, details: { planName: string; trialE
     subject: `Your GarnishTable trial ends ${details.trialEndsAt}`,
     html: layout(
       "Your trial is ending soon",
-      `<p>Your <strong>${details.planName}</strong> trial ends on <strong>${details.trialEndsAt}</strong>. After that,
+      `<p>Your <strong>${escapeHtml(details.planName)}</strong> trial ends on <strong>${escapeHtml(details.trialEndsAt)}</strong>. After that,
        billing begins automatically unless you cancel first.</p>
-       <p><a href="${details.billingUrl}" style="color:#4e1d25;">Review your plan</a></p>`
+       <p><a href="${escapeHtml(details.billingUrl)}" style="color:#4e1d25;">Review your plan</a></p>`
     ),
     text: `Your ${details.planName} trial ends on ${details.trialEndsAt}. After that, billing begins automatically unless you cancel first.\n\nReview your plan: ${details.billingUrl}`,
   };
@@ -282,9 +282,9 @@ export function subscriptionPastDueEmail(to: string, details: { planName: string
     subject: "Your last payment didn't go through",
     html: layout(
       "Payment failed",
-      `<p>Your last payment for the <strong>${details.planName}</strong> plan didn't go through. Your account keeps
+      `<p>Your last payment for the <strong>${escapeHtml(details.planName)}</strong> plan didn't go through. Your account keeps
        full access for now — please update your payment method to avoid losing access.</p>
-       <p><a href="${details.billingUrl}" style="color:#4e1d25;">Update payment method</a></p>`
+       <p><a href="${escapeHtml(details.billingUrl)}" style="color:#4e1d25;">Update payment method</a></p>`
     ),
     text: `Your last payment for the ${details.planName} plan didn't go through. Your account keeps full access for now — please update your payment method to avoid losing access.\n\nUpdate payment method: ${details.billingUrl}`,
   };
@@ -296,8 +296,8 @@ export function subscriptionCancelledEmail(to: string, details: { planName: stri
     subject: "Your GarnishTable subscription was cancelled",
     html: layout(
       "Subscription cancelled",
-      `<p>Your <strong>${details.planName}</strong> subscription has been cancelled. You're welcome back any time.</p>
-       <p><a href="${details.billingUrl}" style="color:#4e1d25;">Resubscribe</a></p>`
+      `<p>Your <strong>${escapeHtml(details.planName)}</strong> subscription has been cancelled. You're welcome back any time.</p>
+       <p><a href="${escapeHtml(details.billingUrl)}" style="color:#4e1d25;">Resubscribe</a></p>`
     ),
     text: `Your ${details.planName} subscription has been cancelled. You're welcome back any time.\n\nResubscribe: ${details.billingUrl}`,
   };
@@ -316,8 +316,8 @@ export function staffInviteEmail(
       subject: `You've been invited to join ${details.restaurantName} on ${product}`,
       html: layout(
         `You're invited to ${details.restaurantName}`,
-        `<p>${details.inviterName} has invited you to join <strong>${details.restaurantName}</strong> as a <strong>${details.roleLabel}</strong>.</p>
-       <p><a href="${acceptUrl}" style="color:#4e1d25;">Accept invitation &amp; set your password</a></p>
+        `<p>${escapeHtml(details.inviterName)} has invited you to join <strong>${escapeHtml(details.restaurantName)}</strong> as a <strong>${escapeHtml(details.roleLabel)}</strong>.</p>
+       <p><a href="${escapeHtml(acceptUrl)}" style="color:#4e1d25;">Accept invitation &amp; set your password</a></p>
        <p style="color:#78716c; font-size: 13px;">This invite link expires in 7 days.</p>`,
         brand
       ),
