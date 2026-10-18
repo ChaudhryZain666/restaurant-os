@@ -51,3 +51,27 @@ This is a configuration and permission layer. A selected option does not imply i
 - No production environment variables, DNS records, email provider configuration, database migrations, or deployment settings are changed by this phase.
 - Existing agency data remains valid because all new fields are optional and the toggle defaults off.
 - Keep this work on a feature branch until CI and a review of the full customer-facing integration are complete.
+
+
+## Runtime integration status (branch: feat/agency-white-label-runtime)
+
+The runtime branch now adds a safe, public-only agency brand projection to the existing restaurant slug and restaurant custom-domain responses. It resolves the restaurant's Business and active Agency, then requires agency white-label mode plus the intersection of agency offerings and that client's selected features. It does not expose contact email, verification tokens, membership, or internal agency fields.
+
+Implemented in this branch:
+- Branded support identity when `support_branding` is both offered and selected.
+- Agency primary color when `storefront_branding` is both offered and selected.
+- Footer platform-credit suppression when `hide_platform_branding` is offered and selected.
+- Agency name/logo/color on the customer login screen when `branded_login` is offered and selected and the restaurant resolves on an active restaurant custom domain.
+- Client configuration UI labels pending capabilities and does not save `email_branding` or `custom_domain` as active client features.
+
+Still not implemented / not active:
+- Full agency logo/name integration throughout all storefront themes and SEO metadata.
+- Agency-owned domain routing. The existing agency domain flow proves DNS ownership only; it does not route customer traffic.
+- Per-agency transactional email templates and sender identities, provider-side sender/domain verification, and delivery/readiness status.
+- Global suppression audit across every customer-facing surface.
+
+### Transactional email provider inspection
+
+The repository supports `EMAIL_PROVIDER=console` (default) and `EMAIL_PROVIDER=smtp`. SMTP requires `SMTP_HOST`, `SMTP_PORT`, and `EMAIL_FROM`; optional credentials use `SMTP_USER` and `SMTP_PASSWORD`. The source default is console, which logs email rather than delivering it. The production process environment is not readable through the GitHub repository connector, so this branch does not assume SMTP is configured live and does not change deployment secrets. Generic SMTP does not provide a provider API for sender-domain verification; email branding stays pending until the live configured sender and a verifiable per-agency sender setup are established.
+
+No deployment, DNS, live sender configuration, or production secret was changed. Build/test verification is still required before merging.
