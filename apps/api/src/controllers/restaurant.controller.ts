@@ -16,6 +16,7 @@ import { sendSuccess } from "../common/response.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
 import { computeReadiness, computeSetupChecklist } from "../services/restaurantReadiness.service.js";
 import { getCustomerWhiteLabelProjection } from "../services/customerWhiteLabel.service.js";
+import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { releaseLocationSlot, reserveLocationSlot } from "../services/entitlementLimit.service.js";
