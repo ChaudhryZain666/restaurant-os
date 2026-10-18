@@ -137,6 +137,7 @@ export function AgencyBusinessDetailPage() {
         { method: "PUT", body: { enabledFeatures: whiteLabelDraft.filter((feature) => feature !== "custom_domain" && feature !== "hide_platform_branding" && feature !== "email_branding") } }
       );
       setData((current) => current ? { ...current, business: res.business } : current);
+      setWhiteLabelDraft(res.business.whiteLabelFeatures ?? []);
       setWhiteLabelMessage("Client white-label options saved.");
     } catch (err) {
       setError((err as Error).message);
