@@ -39,6 +39,27 @@ const agencySchema = new Schema(
     domainStatus: { type: String, enum: ["pending_verification", "verified"] },
     domainVerificationToken: { type: String },
     domainVerifiedAt: { type: Date },
+    // White-label runtime — customer-facing support contact, shown only while `support_branding`
+    // is active for a client (customerWhiteLabel.service.ts). Validated by updateAgencySchema.
+    supportEmail: { type: String, trim: true, lowercase: true, maxlength: 254 },
+    supportUrl: { type: String, trim: true, maxlength: 500 },
+    // Optional custom "From" address for branded email (packages/types AgencyEmailSender). Used as
+    // a sender ONLY in status "verified", which only a platform admin can set, and re-checked
+    // against the agency's verified domain at send time (emailBranding.service.ts).
+    emailSender: {
+      type: new Schema(
+        {
+          address: { type: String, required: true, trim: true, lowercase: true, maxlength: 254 },
+          status: { type: String, enum: ["pending_domain", "pending_authorization", "verified", "failed"], required: true },
+          requestedAt: { type: Date, required: true },
+          verifiedAt: { type: Date },
+          verifiedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+          failureReason: { type: String, maxlength: 300 },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
   },
   { timestamps: true, toJSON: idTransform }
 );

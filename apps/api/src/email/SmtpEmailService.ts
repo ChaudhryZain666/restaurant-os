@@ -1,6 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { logger } from "../common/logger.js";
-import type { EmailMessage, EmailService } from "./EmailService.js";
+import { addressOf, sanitizeDisplayName, type EmailMessage, type EmailService } from "./EmailService.js";
 
 export interface SmtpConfig {
   host: string;
@@ -48,14 +48,25 @@ export class SmtpEmailService implements EmailService {
     });
   }
 
+  /** The platform's EMAIL_FROM unchanged, or — for a branded message — an address object (which
+   *  Nodemailer encodes safely) with the tenant's sanitized display name, on the platform address
+   *  unless emailBranding.service.ts supplied a verified custom address. */
+  private fromFor(message: EmailMessage): string | { name: string; address: string } {
+    if (!message.from) return this.from;
+    const name = sanitizeDisplayName(message.from.name);
+    const address = message.from.address ?? addressOf(this.from);
+    return name ? { name, address } : address;
+  }
+
   async send(message: EmailMessage): Promise<void> {
     try {
       await this.transporter.sendMail({
-        from: this.from,
+        from: this.fromFor(message),
         to: message.to,
         subject: message.subject,
         html: message.html,
         text: message.text,
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       });
     } catch (err) {
       // Never logs message.text/html (may carry a reset/invite link) or SMTP credentials — only

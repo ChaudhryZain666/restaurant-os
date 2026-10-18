@@ -13,6 +13,7 @@ import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
 import { staffInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
+import { resolveEmailBrandForBusiness } from "../services/emailBranding.service.js";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -83,11 +84,16 @@ export async function inviteStaff(req: Request, res: Response) {
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
     await getEmailService().send(
-      staffInviteEmail(email, acceptUrl, {
-        restaurantName: restaurant.name,
-        inviterName: inviter?.name ?? "Your restaurant",
-        roleLabel: ROLE_LABELS[role] ?? role,
-      })
+      staffInviteEmail(
+        email,
+        acceptUrl,
+        {
+          restaurantName: restaurant.name,
+          inviterName: inviter?.name ?? "Your restaurant",
+          roleLabel: ROLE_LABELS[role] ?? role,
+        },
+        (await resolveEmailBrandForBusiness(restaurant.businessId)) ?? undefined
+      )
     );
   } catch (err) {
     logger.error("failed to send staff-invite email", { error: (err as Error).message });
@@ -167,11 +173,16 @@ export async function resendStaffInvite(req: Request, res: Response) {
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
     await getEmailService().send(
-      staffInviteEmail(staff.email, acceptUrl, {
-        restaurantName: restaurant?.name ?? "Your restaurant",
-        inviterName: inviter?.name ?? "Your restaurant",
-        roleLabel: ROLE_LABELS[staff.role] ?? staff.role,
-      })
+      staffInviteEmail(
+        staff.email,
+        acceptUrl,
+        {
+          restaurantName: restaurant?.name ?? "Your restaurant",
+          inviterName: inviter?.name ?? "Your restaurant",
+          roleLabel: ROLE_LABELS[staff.role] ?? staff.role,
+        },
+        (await resolveEmailBrandForBusiness(restaurant?.businessId)) ?? undefined
+      )
     );
   } catch (err) {
     logger.error("failed to send staff-invite resend email", { error: (err as Error).message });

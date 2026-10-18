@@ -12,4 +12,9 @@ export class MockDnsVerifier implements DnsVerifier {
     const record = await MockDnsRecord.findOne({ hostname: hostname.toLowerCase() });
     return record?.txtValues ?? [];
   }
+
+  async resolveCname(hostname: string): Promise<string[]> {
+    const record = await MockDnsRecord.findOne({ hostname: hostname.toLowerCase() });
+    return (record?.cnameValues ?? []).map((value) => value.toLowerCase().replace(/\.$/, ""));
+  }
 }

@@ -4,6 +4,7 @@ import {
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
   paginationQuerySchema,
+  reviewAgencyEmailSenderSchema,
   updateRestaurantStatusSchema,
   updateUserStatusSchema,
 } from "@restaurant/validation";
@@ -24,6 +25,7 @@ import {
   listPlatformSubscriptions,
   listPlatformUsers,
   resendOwnerInvite,
+  reviewAgencyEmailSender,
   updateRestaurantStatus,
   updateUserStatus,
 } from "../controllers/platform.controller.js";
@@ -73,6 +75,12 @@ platformRouter.get(
   requirePermission("platform.restaurants.manage"),
   validateQuery(paginationQuerySchema),
   asyncHandler(listPlatformAgencies)
+);
+platformRouter.post(
+  "/agencies/:agencyId/email-sender/review",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(reviewAgencyEmailSenderSchema),
+  asyncHandler(reviewAgencyEmailSender)
 );
 platformRouter.get("/revenue", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformRevenue));
 platformRouter.get("/analytics", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformAnalytics));

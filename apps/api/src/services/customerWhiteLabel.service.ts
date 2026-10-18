@@ -1,7 +1,7 @@
+import type { SupportIdentity } from "@restaurant/types";
 import type { RestaurantDoc } from "../models/Restaurant.js";
-import { Business } from "../models/Business.js";
-import { Agency } from "../models/Agency.js";
 import { getSupportIdentity } from "./supportIdentity.service.js";
+import { isFeatureInForce, loadClientWhiteLabelContext } from "./whiteLabelStatus.service.js";
 
 export interface CustomerWhiteLabelBrand {
   name: string;
@@ -14,54 +14,67 @@ export interface CustomerWhiteLabelBrand {
 
 export interface CustomerWhiteLabelProjection {
   whiteLabelBrand: CustomerWhiteLabelBrand | null;
-  supportIdentity: { name: string; isWhiteLabel: boolean };
+  supportIdentity: SupportIdentity;
+}
+
+/** Only https URLs are ever rendered on a public page (the schema already refuses anything else;
+ *  this also covers values stored before that validation existed). */
+export function safeHttpsUrl(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * Only returns customer-facing agency identity when the agency has explicitly enabled
- * white-label mode AND this business has selected the corresponding feature. DNS ownership
- * verification alone is deliberately not treated as a live storefront/email capability.
+ * The public, customer-facing white-label projection for a restaurant's storefront response. Each
+ * part appears only while its capability is in force (agency active + white-label on + offered +
+ * selected — whiteLabelStatus.service.ts isFeatureInForce). Never includes the agency's contact
+ * email, domain, verification tokens, sender settings, membership or any internal field.
+ *
+ * `resolvedVia` is how the storefront found this restaurant. Branded sign-in is only granted for
+ * "domain" — the restaurant's own verified, active custom domain (resolveCustomDomain) — so the
+ * shared platform host and any /r/:slug URL never show another brand's sign-in screen.
  */
 export async function getCustomerWhiteLabelProjection(
-  restaurant: RestaurantDoc,
+  restaurant: Pick<RestaurantDoc, "businessId">,
+  resolvedVia: "slug" | "domain" = "slug"
 ): Promise<CustomerWhiteLabelProjection> {
-  const fallback = {
-    whiteLabelBrand: null,
-    supportIdentity: getSupportIdentity(restaurant),
-  };
-  if (!restaurant.businessId) return fallback;
+  const fallback = { whiteLabelBrand: null, supportIdentity: getSupportIdentity() };
+  const ctx = await loadClientWhiteLabelContext(restaurant.businessId);
+  if (!ctx) return fallback;
 
-  const business = await Business.findById(restaurant.businessId).select("agencyId whiteLabelFeatures");
-  if (!business?.agencyId || !business.whiteLabelFeatures?.length) return fallback;
+  const { agency } = ctx;
+  const storefront = isFeatureInForce(ctx, "storefront_branding");
+  const hidePlatformBranding = isFeatureInForce(ctx, "hide_platform_branding");
+  const brandedLogin = resolvedVia === "domain" && isFeatureInForce(ctx, "branded_login");
+  const supportBranding = isFeatureInForce(ctx, "support_branding");
+  const brandName = agency.brandName?.trim() || agency.name;
+  const logo = safeHttpsUrl(agency.logo);
 
-  const agency = await Agency.findOne({ _id: business.agencyId, status: "active" })
-    .select("name brandName brandPrimaryColor logo whiteLabelEnabled whiteLabelOfferings");
-  if (!agency?.whiteLabelEnabled) return fallback;
+  const whiteLabelBrand =
+    storefront || hidePlatformBranding || brandedLogin
+      ? {
+          name: brandName,
+          ...(logo && (storefront || brandedLogin) ? { logo } : {}),
+          ...((storefront || brandedLogin) && agency.brandPrimaryColor ? { primaryColor: agency.brandPrimaryColor } : {}),
+          hidePlatformBranding,
+          brandedLogin,
+          storefrontBranding: storefront,
+        }
+      : null;
 
-  const selected = new Set<string>(business.whiteLabelFeatures);
-  const offered = new Set<string>(agency.whiteLabelOfferings ?? []);
-  const enabled = (feature: string) => selected.has(feature) && offered.has(feature);
-  const storefront = enabled("storefront_branding");
-  const hidePlatformBranding = enabled("hide_platform_branding");
-  const brandedLogin = enabled("branded_login");
-  const supportBranding = enabled("support_branding");
-
-  const hasCustomerBrand = storefront || hidePlatformBranding || brandedLogin || supportBranding;
-  const whiteLabelBrand = hasCustomerBrand
+  const supportUrl = safeHttpsUrl(agency.supportUrl);
+  const supportIdentity: SupportIdentity = supportBranding
     ? {
-        name: agency.brandName?.trim() || agency.name,
-        ...(agency.logo ? { logo: agency.logo } : {}),
-        ...((storefront || brandedLogin) && agency.brandPrimaryColor ? { primaryColor: agency.brandPrimaryColor } : {}),
-        hidePlatformBranding,
-        brandedLogin,
-        storefrontBranding: storefront,
+        name: brandName,
+        isWhiteLabel: true,
+        ...(agency.supportEmail ? { email: agency.supportEmail } : {}),
+        ...(supportUrl ? { url: supportUrl } : {}),
       }
-    : null;
+    : getSupportIdentity();
 
-  return {
-    whiteLabelBrand,
-    supportIdentity: supportBranding
-      ? { name: agency.brandName?.trim() || agency.name, isWhiteLabel: true }
-      : getSupportIdentity(restaurant),
-  };
+  return { whiteLabelBrand, supportIdentity };
 }
