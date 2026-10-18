@@ -50,7 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [restaurant, override]);
 
-  const brandColor = whiteLabelBrand?.storefrontBranding ? whiteLabelBrand.primaryColor : restaurant?.settings.brandColor;
+  const brandColor = whiteLabelBrand?.storefrontBranding && whiteLabelBrand.primaryColor ? whiteLabelBrand.primaryColor : restaurant?.settings.brandColor;
   const brandColorVars: CSSProperties =
     brandColor && HEX_COLOR_PATTERN.test(brandColor) && !hasThemePrimaryOverride
       ? {
