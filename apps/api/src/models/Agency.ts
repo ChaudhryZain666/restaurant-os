@@ -20,6 +20,8 @@ const agencySchema = new Schema(
     brandName: { type: String, trim: true, maxlength: 120 },
     brandPrimaryColor: { type: String, match: /^#[0-9a-fA-F]{6}$/ },
     whiteLabelEnabled: { type: Boolean, default: false },
+    // Capabilities this agency chooses to offer. An empty list is the safe default.
+    whiteLabelOfferings: { type: [String], enum: ["storefront_branding", "custom_domain", "hide_platform_branding", "support_branding", "email_branding", "branded_login"], default: [] },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     status: { type: String, enum: ["pending", "active", "suspended"], default: "active" },
     // Maintained counter, incremented ATOMICALLY on business creation (see
