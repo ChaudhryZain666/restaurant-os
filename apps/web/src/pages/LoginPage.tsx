@@ -38,7 +38,7 @@ export function LoginPage() {
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
       <Card className="animate-scale-in flex flex-col gap-4" style={brandedLogin && whiteLabelBrand?.primaryColor ? { "--color-primary": whiteLabelBrand.primaryColor, "--color-primary-rgb": hexToRgbTriplet(whiteLabelBrand.primaryColor), "--color-primary-foreground": isDarkColor(whiteLabelBrand.primaryColor) ? "#fffaf5" : "#1c1917" } as CSSProperties : undefined}>
-        {brandedLogin && (whiteLabelBrand.logo || whiteLabelBrand.name) ? (
+        {whiteLabelBrand?.brandedLogin === true && (whiteLabelBrand.logo || whiteLabelBrand.name) ? (
           <div className="flex items-center gap-3">
             {whiteLabelBrand.logo && <img src={whiteLabelBrand.logo} alt="" className="h-10 max-w-36 object-contain" />}
             <h1 className="font-heading text-2xl font-semibold text-foreground">{whiteLabelBrand.name}</h1>
