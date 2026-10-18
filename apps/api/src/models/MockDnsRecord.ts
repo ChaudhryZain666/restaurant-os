@@ -15,6 +15,8 @@ const mockDnsRecordSchema = new Schema(
   {
     hostname: { type: String, required: true, trim: true, lowercase: true, unique: true, index: true },
     txtValues: { type: [String], default: [] },
+    // CNAME targets for the white-label custom-domain routing check (dns/MockDnsVerifier.ts).
+    cnameValues: { type: [String], default: [] },
   },
   { timestamps: true, toJSON: idTransform }
 );

@@ -981,7 +981,33 @@ describe("PUT /agencies/:agencyId/businesses/:businessId/white-label", () => {
     expect(res.body.data.business.whiteLabelFeatures).toEqual(["storefront_branding"]);
   });
 
+  it("saves custom domain and branded sign-in as requests that stay pending until a live domain exists", async () => {
+    const setup = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ whiteLabelEnabled: true, whiteLabelOfferings: ["email_branding", "custom_domain", "branded_login"] });
+    expect(setup.status).toBe(200);
+
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["custom_domain", "branded_login"] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.whiteLabelFeatures).toEqual(["custom_domain", "branded_login"]);
+    const states = Object.fromEntries(
+      (res.body.data.status.capabilities as { feature: string; state: string }[]).map((c) => [c.feature, c.state])
+    );
+    expect(states.custom_domain).toBe("pending_setup");
+    expect(states.branded_login).toBe("pending_setup");
+    expect(states.email_branding).toBe("off");
+    expect(states.storefront_branding).toBe("not_offered");
+  });
+
   it("rejects a client feature the agency has not offered", async () => {
+    await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ whiteLabelEnabled: true, whiteLabelOfferings: ["storefront_branding"] });
     const res = await request(app)
       .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
       .set("Authorization", `Bearer ${ownerToken}`)

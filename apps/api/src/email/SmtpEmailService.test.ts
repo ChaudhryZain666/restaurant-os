@@ -55,4 +55,31 @@ describe("SmtpEmailService", () => {
       service.send({ to: "owner@example.com", subject: "Hello", html: "<p>hi</p>", text: "hi" })
     ).rejects.toThrow("connection refused");
   });
+
+  it("keeps the platform address with the tenant's display name when no verified address is given", async () => {
+    const sendMail = mockTransport(async () => ({}));
+    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "GarnishTable <no-reply@garnishtable.local>" });
+    await service.send({ to: "c@example.com", subject: "S", html: "h", text: "t", from: { name: "Northstar Kitchens" } });
+    expect(sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: { name: "Northstar Kitchens", address: "no-reply@garnishtable.local" } })
+    );
+  });
+
+  it("uses a verified tenant address and reply-to, and strips header-injection characters from the name", async () => {
+    const sendMail = mockTransport(async () => ({}));
+    const service = new SmtpEmailService({ host: "smtp.example.com", port: 587, from: "no-reply@garnishtable.local" });
+    await service.send({
+      to: "c@example.com",
+      subject: "S",
+      html: "h",
+      text: "t",
+      from: { name: 'Evil\r\nBcc: victim@example.com "<x>"', address: "orders@agency.example.com" },
+      replyTo: "help@agency.example.com",
+    });
+    const call = (sendMail.mock.calls[0] as unknown[])[0] as { from: { name: string; address: string }; replyTo: string };
+    expect(call.from.address).toBe("orders@agency.example.com");
+    expect(call.from.name).not.toMatch(/[\r\n"<>]/);
+    expect(call.from.name).toBe("Evil Bcc: victim@example.com x");
+    expect(call.replyTo).toBe("help@agency.example.com");
+  });
 });

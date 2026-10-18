@@ -13,6 +13,8 @@ export class ConsoleEmailProvider implements EmailService {
     logger.info("email (console provider — not actually sent)", {
       to: message.to,
       subject: message.subject,
+      ...(message.from ? { fromName: message.from.name, fromAddress: message.from.address ?? "(platform sender)" } : {}),
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       text: message.text,
     });
   }

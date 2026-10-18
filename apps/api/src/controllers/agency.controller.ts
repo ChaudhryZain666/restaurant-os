@@ -12,9 +12,12 @@ import type {
   SetClientCommercialTermsInput,
   UpdateAgencyInput,
   UpdateBusinessWhiteLabelInput,
+  SetAgencyEmailSenderInput,
 } from "@restaurant/validation";
 import type { AgencyAuditLogEntry } from "@restaurant/types";
 import { Agency, type AgencyDoc } from "../models/Agency.js";
+import { resolveEmailBrandForBusiness } from "../services/emailBranding.service.js";
+import { getBusinessWhiteLabelStatus } from "../services/whiteLabelStatus.service.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { AgencyAuditLog } from "../models/AgencyAuditLog.js";
 import { Business, type BusinessDoc } from "../models/Business.js";
@@ -357,7 +360,13 @@ export async function createAgencyBusiness(req: Request, res: Response) {
 
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
-    await getEmailService().send(ownerInviteEmail(ownerEmail, acceptUrl, { restaurantName: businessName }));
+    const [inviter, brand] = await Promise.all([
+      Agency.findById(agencyId).select("name brandName"),
+      resolveEmailBrandForBusiness(business._id),
+    ]);
+    await getEmailService().send(
+      ownerInviteEmail(ownerEmail, acceptUrl, { restaurantName: businessName, invitedBy: inviter?.brandName || inviter?.name }, brand ?? undefined)
+    );
   } catch (err) {
     logger.error("failed to send agency-business owner-invite email", { error: (err as Error).message });
   }
@@ -401,36 +410,40 @@ export async function getAgencyBusiness(req: Request, res: Response) {
 }
 
 /**
- * PUT /agencies/:agencyId/businesses/:businessId/commercial-terms — Phase 59. Records what THIS
- * agency charges its OWN client; never a payment-collection action (no provider, no webhook, no
- * invoice — see ClientCommercialTerms.ts's doc comment). Upserts so the agency can set-then-adjust
- * terms freely; `agencyId` is re-confirmed against the URL's on every write (never trusted from the
- * body) exactly like every other write in this file. Scoped the same "404, not 403, for a business
- * managed by a different agency" way as getAgencyBusiness/resendAgencyBusinessOwnerInvite, so a
- * caller can never distinguish "doesn't exist" from "belongs to someone else's agency."
+ * GET /agencies/:agencyId/businesses/:businessId/white-label — the real readiness of all six
+ * capabilities for one client (whiteLabelStatus.service.ts), including live custom-domain and DNS
+ * checks. Scoped like getAgencyBusiness: a business of another agency reads as not found.
  */
+export async function getBusinessWhiteLabel(req: Request, res: Response) {
+  const { agencyId, businessId } = req.params;
+  const [agency, business] = await Promise.all([Agency.findById(agencyId), Business.findOne({ _id: businessId, agencyId })]);
+  if (!agency || !business) throw ApiError.notFound("Business or agency not found");
+  sendSuccess(res, { status: await getBusinessWhiteLabelStatus(agency, business) });
+}
+
 /**
- * PUT /agencies/:agencyId/businesses/:businessId/white-label — choose the subset of
- * white-label features offered to one client. The agency's global opt-in must be enabled and
- * every selected feature must be present in its allow-list.
+ * PUT /agencies/:agencyId/businesses/:businessId/white-label — choose which white-label
+ * capabilities this client gets. White-label mode must be on and every selected capability must be
+ * one the agency offers. Selecting a capability only requests it: the response carries the
+ * computed status, and a capability whose prerequisites aren't met reads `pending_setup` — saving
+ * never makes anything active by itself.
  */
 export async function updateBusinessWhiteLabel(req: Request, res: Response) {
   const { agencyId, businessId } = req.params;
   const { enabledFeatures } = req.body as UpdateBusinessWhiteLabelInput;
-  const [agency, business] = await Promise.all([
-    Agency.findById(agencyId).select("whiteLabelEnabled whiteLabelOfferings"),
-    Business.findOne({ _id: businessId, agencyId }),
-  ]);
+  const [agency, business] = await Promise.all([Agency.findById(agencyId), Business.findOne({ _id: businessId, agencyId })]);
   if (!agency || !business) throw ApiError.notFound("Business or agency not found");
   if (!agency.whiteLabelEnabled && enabledFeatures.length > 0) {
-    throw ApiError.badRequest("Enable white-label mode in agency settings before assigning features to clients");
+    throw ApiError.badRequest("Turn on white-label mode in Agency settings before assigning capabilities to clients");
   }
-  const offered = new Set(agency.whiteLabelOfferings ?? []);
+  const offered = new Set<string>(agency.whiteLabelOfferings ?? []);
   const unavailable = enabledFeatures.filter((feature) => !offered.has(feature));
   if (unavailable.length) {
-    throw ApiError.badRequest(`These features are not offered by your agency: ${unavailable.join(", ")}`);
+    throw ApiError.badRequest(`These capabilities are not offered by your agency: ${unavailable.join(", ")}`);
   }
-  business.whiteLabelFeatures = enabledFeatures;
+  const previous = [...(business.whiteLabelFeatures ?? [])];
+  const next = [...new Set(enabledFeatures)];
+  business.whiteLabelFeatures = next;
   await business.save();
   await recordAgencyAuditEvent({
     agencyId,
@@ -439,11 +452,80 @@ export async function updateBusinessWhiteLabel(req: Request, res: Response) {
     action: "agency.client_white_label_updated",
     targetType: "business",
     targetId: business._id,
-    metadata: { enabledFeatures },
+    metadata: { previous, enabledFeatures: next },
   });
-  sendSuccess(res, { business: business.toJSON() });
+  sendSuccess(res, { business: business.toJSON(), status: await getBusinessWhiteLabelStatus(agency, business) });
 }
 
+/**
+ * PUT /agencies/:agencyId/email-sender — request a custom "From" address for branded email. Its
+ * domain must be this agency's own domain. The request is stored as pending; it is used only after
+ * the domain is DNS-verified AND a platform admin confirms the SMTP relay is authorized for it
+ * (platform.controller.ts reviewAgencyEmailSender). Changing the address restarts that process.
+ */
+export async function setAgencyEmailSender(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const { address } = req.body as SetAgencyEmailSenderInput;
+  const agency = await Agency.findById(agencyId);
+  if (!agency) throw ApiError.notFound("Agency not found");
+  if (!agency.domain) throw ApiError.badRequest("Add your agency domain first — the sender address must be on it");
+  if (address.split("@")[1] !== agency.domain) {
+    throw ApiError.badRequest(`The sender address must be on your agency domain (${agency.domain})`);
+  }
+  if (agency.emailSender?.address === address && agency.emailSender.status !== "failed") {
+    sendSuccess(res, { agency: agency.toJSON() }); // idempotent: same request, state unchanged
+    return;
+  }
+  agency.set("emailSender", {
+    address,
+    status: agency.domainStatus === "verified" ? "pending_authorization" : "pending_domain",
+    requestedAt: new Date(),
+  });
+  await agency.save();
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: "agency.email_sender_requested",
+    targetType: "agency",
+    targetId: agency._id,
+    metadata: { address, status: agency.emailSender?.status },
+  });
+  sendSuccess(res, { agency: agency.toJSON() });
+}
+
+/** DELETE /agencies/:agencyId/email-sender — stop using/requesting a custom sender; branded email
+ *  falls back to the platform address with the agency's display name. Idempotent. */
+export async function removeAgencyEmailSender(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const agency = await Agency.findById(agencyId);
+  if (!agency) throw ApiError.notFound("Agency not found");
+  if (agency.emailSender) {
+    const address = agency.emailSender.address;
+    agency.set("emailSender", undefined);
+    await agency.save();
+    await recordAgencyAuditEvent({
+      agencyId,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "agency.email_sender_removed",
+      targetType: "agency",
+      targetId: agency._id,
+      metadata: { address },
+    });
+  }
+  sendSuccess(res, { agency: agency.toJSON() });
+}
+
+/**
+ * PUT /agencies/:agencyId/businesses/:businessId/commercial-terms — Phase 59. Records what THIS
+ * agency charges its OWN client; never a payment-collection action (no provider, no webhook, no
+ * invoice — see ClientCommercialTerms.ts's doc comment). Upserts so the agency can set-then-adjust
+ * terms freely; `agencyId` is re-confirmed against the URL's on every write (never trusted from the
+ * body) exactly like every other write in this file. Scoped the same "404, not 403, for a business
+ * managed by a different agency" way as getAgencyBusiness/resendAgencyBusinessOwnerInvite, so a
+ * caller can never distinguish "doesn't exist" from "belongs to someone else's agency."
+ */
 export async function setClientCommercialTerms(req: Request, res: Response) {
   const { agencyId, businessId } = req.params;
   const updates = req.body as SetClientCommercialTermsInput;
@@ -497,7 +579,13 @@ export async function resendAgencyBusinessOwnerInvite(req: Request, res: Respons
 
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
-    await getEmailService().send(ownerInviteEmail(owner.email, acceptUrl, { restaurantName: business.name }));
+    const [inviter, brand] = await Promise.all([
+      Agency.findById(agencyId).select("name brandName"),
+      resolveEmailBrandForBusiness(business._id),
+    ]);
+    await getEmailService().send(
+      ownerInviteEmail(owner.email, acceptUrl, { restaurantName: business.name, invitedBy: inviter?.brandName || inviter?.name }, brand ?? undefined)
+    );
   } catch (err) {
     logger.error("failed to send agency-business owner-invite resend email", { error: (err as Error).message });
   }
@@ -663,7 +751,20 @@ export async function updateAgency(req: Request, res: Response) {
   const { agencyId } = req.params;
   const updates = req.body as UpdateAgencyInput;
 
-  const agency = await Agency.findByIdAndUpdate(agencyId, { $set: updates }, { new: true, runValidators: true });
+  // An empty string clears an optional customer-facing field (logo, support contact) rather than
+  // storing "" — so "not configured" is always genuinely absent, never a blank value rendered.
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, ""> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
+    if (value === "" && ["logo", "supportEmail", "supportUrl"].includes(key)) $unset[key] = "";
+    else $set[key] = value;
+  }
+  const agency = await Agency.findByIdAndUpdate(
+    agencyId,
+    { ...(Object.keys($set).length ? { $set } : {}), ...(Object.keys($unset).length ? { $unset } : {}) },
+    { new: true, runValidators: true }
+  );
   if (!agency) throw ApiError.notFound("Agency not found");
 
   await recordAgencyAuditEvent({
@@ -673,6 +774,7 @@ export async function updateAgency(req: Request, res: Response) {
     action: "agency.updated",
     targetType: "agency",
     targetId: agency._id,
+    metadata: { fields: Object.keys($set).concat(Object.keys($unset)) },
   });
 
   sendSuccess(res, { agency: agency.toJSON() });
@@ -695,9 +797,30 @@ export async function setAgencyDomain(req: Request, res: Response) {
     throw ApiError.badRequest("This platform's own domain can't be claimed as a white-label domain");
   }
 
+  // White-label runtime — a domain verified by one agency can't be claimed by another: its
+  // verified status is what authorizes a custom email sender on it (whiteLabelStatus.service.ts).
+  if (await Agency.exists({ _id: { $ne: agencyId }, domain, domainStatus: "verified" })) {
+    throw ApiError.conflict("This domain is already verified by another agency");
+  }
+
+  const existing = await Agency.findById(agencyId).select("domain emailSender");
+  if (!existing) throw ApiError.notFound("Agency not found");
+  // Changing the domain invalidates any custom sender on the old one: it goes back to waiting for a
+  // verified domain, and is never left "verified" on a domain the agency no longer holds.
+  const senderReset: Record<string, unknown> =
+    existing.emailSender && existing.domain !== domain ? { "emailSender.status": "pending_domain", "emailSender.verifiedAt": undefined } : {};
+
   const agency = await Agency.findByIdAndUpdate(
     agencyId,
-    { $set: { domain, domainStatus: "pending_verification", domainVerificationToken: generateVerificationToken(), domainVerifiedAt: undefined } },
+    {
+      $set: {
+        domain,
+        domainStatus: "pending_verification",
+        domainVerificationToken: generateVerificationToken(),
+        domainVerifiedAt: undefined,
+        ...senderReset,
+      },
+    },
     { new: true, runValidators: true }
   );
   if (!agency) throw ApiError.notFound("Agency not found");
@@ -727,10 +850,18 @@ export async function verifyAgencyDomain(req: Request, res: Response) {
     throw ApiError.badRequest("No domain has been configured for this agency yet");
   }
 
+  if (await Agency.exists({ _id: { $ne: agency._id }, domain: agency.domain, domainStatus: "verified" })) {
+    throw ApiError.conflict("This domain is already verified by another agency");
+  }
+
   const verified = await checkDomainVerification(agency.domain, agency.domainVerificationToken);
   if (verified && agency.domainStatus !== "verified") {
     agency.domainStatus = "verified";
     agency.domainVerifiedAt = new Date();
+    // A custom sender waiting on this domain moves on to the platform's relay-authorization step.
+    if (agency.emailSender?.status === "pending_domain" && agency.emailSender.address.split("@")[1] === agency.domain) {
+      agency.emailSender.status = "pending_authorization";
+    }
     await agency.save();
     await recordAgencyAuditEvent({
       agencyId,

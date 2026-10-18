@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { AuthCard } from "../components/AuthCard";
 
 export function RegisterPage() {
   useNoIndex();
@@ -33,8 +34,7 @@ export function RegisterPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Create account</h1>
+      <AuthCard title="Create account">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <label htmlFor="register-name" className="flex flex-col gap-1 text-sm font-medium text-foreground">
             Name
@@ -81,7 +81,7 @@ export function RegisterPage() {
             {submitting ? "Creating account..." : "Create account"}
           </Button>
         </form>
-      </Card>
+      </AuthCard>
       <p className="text-center text-sm text-muted">
         Already have an account?{" "}
         <Link to="/login" className="font-medium text-primary hover:opacity-80">
