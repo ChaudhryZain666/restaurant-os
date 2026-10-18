@@ -3,6 +3,8 @@ import { paginationQueryShape, sortableQueryShape } from "./pagination.js";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const AGENCY_WHITE_LABEL_FEATURES = ["storefront_branding", "custom_domain", "hide_platform_branding", "support_branding", "email_branding", "branded_login"] as const;
+
 export const createAgencySchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
@@ -96,10 +98,16 @@ export const updateAgencySchema = z
     brandName: z.string().trim().min(2).max(120).optional(),
     brandPrimaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color, e.g. #6B2130").optional(),
     whiteLabelEnabled: z.boolean().optional(),
+    whiteLabelOfferings: z.array(z.enum(AGENCY_WHITE_LABEL_FEATURES)).max(AGENCY_WHITE_LABEL_FEATURES.length).optional(),
     contactEmail: z.string().email().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update" });
 export type UpdateAgencyInput = z.infer<typeof updateAgencySchema>;
+
+export const updateBusinessWhiteLabelSchema = z.object({
+  enabledFeatures: z.array(z.enum(AGENCY_WHITE_LABEL_FEATURES)).max(AGENCY_WHITE_LABEL_FEATURES.length),
+});
+export type UpdateBusinessWhiteLabelInput = z.infer<typeof updateBusinessWhiteLabelSchema>;
 
 /**
  * Phase 58, Section 12A — sets the CANDIDATE white-label domain an agency wants to eventually
