@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { AuthCard } from "../components/AuthCard";
 
 export function ForgotPasswordPage() {
   useNoIndex();
@@ -27,8 +28,7 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Reset your password</h1>
+      <AuthCard title="Reset your password">
         {submitted ? (
           <Alert tone="success">
             If an account exists for <strong>{email}</strong>, we've sent a link to reset your password. It expires
@@ -59,7 +59,7 @@ export function ForgotPasswordPage() {
             </Button>
           </form>
         )}
-      </Card>
+      </AuthCard>
       <p className="text-center text-sm text-muted">
         <Link to="/login" className="font-medium text-primary hover:opacity-80">
           Back to log in

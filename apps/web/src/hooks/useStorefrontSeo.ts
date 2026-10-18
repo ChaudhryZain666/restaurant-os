@@ -1,3 +1,4 @@
+import { useRestaurant } from "../context/RestaurantContext";
 import { useEffect } from "react";
 import type { Category, MenuItem, ModifierGroup, Restaurant } from "@restaurant/types";
 import { applyJsonLd, applySeoMeta } from "@restaurant/utils/seoMeta";
@@ -32,6 +33,14 @@ interface UseStorefrontSeoInput {
  */
 export function useStorefrontSeo({ restaurant, menu, isTableRoute, isPreview, resolvedVia, activeCustomDomain }: UseStorefrontSeoInput): void {
   const skip = !restaurant || isTableRoute || isPreview;
+  // White-label — og:site_name is the agency brand under storefront branding, the restaurant itself
+  // when platform branding is hidden, and the platform otherwise.
+  const { whiteLabelBrand } = useRestaurant();
+  const siteName = whiteLabelBrand?.storefrontBranding
+    ? whiteLabelBrand.name
+    : whiteLabelBrand?.hidePlatformBranding
+      ? restaurant?.name ?? "GarnishTable"
+      : "GarnishTable";
 
   useEffect(() => {
     if (skip || !restaurant) return;
@@ -60,7 +69,7 @@ export function useStorefrontSeo({ restaurant, menu, isTableRoute, isPreview, re
         description,
         type: "website",
         url: canonicalUrl,
-        siteName: "GarnishTable",
+        siteName,
         image: restaurant.logo,
       },
       twitter: {
@@ -70,7 +79,7 @@ export function useStorefrontSeo({ restaurant, menu, isTableRoute, isPreview, re
         image: restaurant.logo,
       },
     });
-  }, [skip, restaurant, resolvedVia, activeCustomDomain]);
+  }, [skip, restaurant, resolvedVia, activeCustomDomain, siteName]);
 
   useEffect(() => {
     if (skip || !restaurant) return;

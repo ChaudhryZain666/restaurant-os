@@ -41,7 +41,9 @@ export interface WhiteLabelBrand {
   logo?: string;
   primaryColor?: string;
   hidePlatformBranding: boolean;
+  /** True only when the restaurant was resolved through its own verified custom domain. */
   brandedLogin: boolean;
+  storefrontBranding: boolean;
 }
 
 interface RestaurantContextValue {
@@ -75,7 +77,24 @@ interface RestaurantContextValue {
 
 const RestaurantContext = createContext<RestaurantContextValue | undefined>(undefined);
 
-const BARE_STOREFRONT_PATHS = [/^\/$/, /^\/cart$/, /^\/loyalty$/, /^\/t\/[^/]+$/, /^\/login$/, /^\/register$/, /^\/forgot-password$/, /^\/reset-password$/];
+// Bare (non-/r/:slug) paths that resolve the restaurant from the hostname. On a restaurant's own
+// verified custom domain that brings its branding to the account, order-tracking (linked from
+// branded emails) and support pages too; on the shared platform host the lookup is skipped below.
+const BARE_STOREFRONT_PATHS = [
+  /^\/$/,
+  /^\/cart$/,
+  /^\/loyalty$/,
+  /^\/t\/[^/]+$/,
+  /^\/login$/,
+  /^\/register$/,
+  /^\/forgot-password$/,
+  /^\/reset-password$/,
+  /^\/verify-email$/,
+  /^\/confirm-email-change$/,
+  /^\/orders(\/[^/]+)?$/,
+  /^\/account$/,
+  /^\/support(\/.*)?$/,
+];
 
 export function RestaurantProvider({ children }: { children: ReactNode }) {
   const publicMatch = useMatch("/r/:restaurantSlug/*");

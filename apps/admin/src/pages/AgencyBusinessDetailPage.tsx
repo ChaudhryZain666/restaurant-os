@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
-import { AGENCY_WHITE_LABEL_FEATURES, agencyRoleGrantsPermission, agencyRoleHasPermission, type AgencyMembershipRole, type AgencyWhiteLabelFeature, type ClientCommercialTerms } from "@restaurant/types";
+import { agencyRoleGrantsPermission, agencyRoleHasPermission, type AgencyMembershipRole, type AgencyWhiteLabelFeature, type ClientCommercialTerms } from "@restaurant/types";
+import { ClientWhiteLabelCard } from "../components/ClientWhiteLabelCard";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
@@ -100,14 +101,6 @@ export function AgencyBusinessDetailPage() {
   const [editingCommercial, setEditingCommercial] = useState(false);
   const [commercialDraft, setCommercialDraft] = useState({ planLabel: "", priceDollars: "", currency: "USD", billingCycle: "monthly" as "monthly" | "yearly", status: "active" as "trial" | "active" | "cancelled" });
   const [savingCommercial, setSavingCommercial] = useState(false);
-  const [whiteLabelDraft, setWhiteLabelDraft] = useState<AgencyWhiteLabelFeature[]>([]);
-  const [savingWhiteLabel, setSavingWhiteLabel] = useState(false);
-  const [whiteLabelMessage, setWhiteLabelMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setWhiteLabelDraft(data?.business.whiteLabelFeatures ?? []);
-  }, [data?.business.id, data?.business.whiteLabelFeatures]);
-
   const currentAgency = agencies.find((a) => a.id === activeAgencyId);
   const myRole: AgencyMembershipRole | undefined = currentAgency?.myRole;
 
@@ -125,26 +118,6 @@ export function AgencyBusinessDetailPage() {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAgencyId, businessId]);
-
-  async function handleSaveWhiteLabel() {
-    if (!activeAgencyId || !businessId) return;
-    setSavingWhiteLabel(true);
-    setError(null);
-    setWhiteLabelMessage(null);
-    try {
-      const res = await apiClient.request<{ business: BusinessDetail }>(
-        `/agencies/${activeAgencyId}/businesses/${businessId}/white-label`,
-        { method: "PUT", body: { enabledFeatures: whiteLabelDraft.filter((feature) => feature !== "custom_domain" && feature !== "email_branding") } }
-      );
-      setData((current) => current ? { ...current, business: res.business } : current);
-      setWhiteLabelDraft(res.business.whiteLabelFeatures ?? []);
-      setWhiteLabelMessage("Client white-label options saved.");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSavingWhiteLabel(false);
-    }
-  }
 
   async function handleResendInvite() {
     if (!activeAgencyId || !businessId) return;
@@ -416,65 +389,13 @@ export function AgencyBusinessDetailPage() {
             )}
           </Card>
 
-          <Card className="flex flex-col gap-3">
-            <div>
-              <h2 className="font-heading text-lg font-medium text-foreground">White-label options</h2>
-              <p className="text-sm text-muted">Choose the white-label capabilities offered to this restaurant. Only options enabled in Agency Settings can be assigned here.</p>
-            </div>
-            {whiteLabelMessage && <Alert tone="success">{whiteLabelMessage}</Alert>}
-            {!currentAgency?.whiteLabelEnabled ? (
-              <Alert tone="neutral">White-label mode is off for this agency. Enable it in Agency Settings before assigning options.</Alert>
-            ) : (currentAgency.whiteLabelOfferings ?? []).length === 0 ? (
-              <Alert tone="neutral">Your agency has not selected any white-label offerings yet. Configure the available options in Agency Settings first.</Alert>
-            ) : (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {AGENCY_WHITE_LABEL_FEATURES.filter((feature) => currentAgency.whiteLabelOfferings?.includes(feature)).map((feature) => {
-                    const labels: Record<AgencyWhiteLabelFeature, string> = {
-                      storefront_branding: "Storefront branding",
-                      custom_domain: "Custom domain",
-                      hide_platform_branding: "Hide platform branding",
-                      support_branding: "Branded support",
-                      email_branding: "Branded emails",
-                      branded_login: "Branded sign-in",
-                    };
-                    // These capabilities need infrastructure not yet implemented. Keep previously
-                    // stored choices visible as pending, but never let a checkbox imply they are live.
-                    const pendingSetup = feature === "custom_domain" || feature === "email_branding";
-                    const setupNote: Partial<Record<AgencyWhiteLabelFeature, string>> = {
-                      custom_domain: "Pending: agency-domain routing is not connected yet.",
-                      hide_platform_branding: "Active on the storefront footer; other platform references still need an audit.",
-                      email_branding: "Pending: the current sender is deployment-wide; per-agency sender verification is not configured.",
-                      branded_login: "Works only when the restaurant is resolved on an active custom domain; agency-domain routing is not connected yet.",
-                      storefront_branding: "Applies the agency color and a shared storefront brand mark; theme-specific placement remains incomplete.",
-                    };
-                    return (
-                      <label key={feature} className="flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="mt-1"
-                          checked={!pendingSetup && whiteLabelDraft.includes(feature)}
-                          onChange={(e) => setWhiteLabelDraft((current) => e.target.checked ? [...new Set([...current, feature])] : current.filter((item) => item !== feature))}
-                          disabled={!agencyRoleHasPermission(myRole, "agency.businesses.manage") || savingWhiteLabel || pendingSetup}
-                        />
-                        <span className="flex flex-col gap-1">
-                          <span>{labels[feature]}{pendingSetup ? " — setup required" : ""}</span>
-                          {setupNote[feature] && <span className="text-xs text-muted">{setupNote[feature]}</span>}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {agencyRoleHasPermission(myRole, "agency.businesses.manage") && (
-                  <div>
-                    <Button size="sm" onClick={handleSaveWhiteLabel} disabled={savingWhiteLabel}>
-                      {savingWhiteLabel ? "Saving..." : "Save client options"}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
+          {activeAgencyId && businessId && (
+            <ClientWhiteLabelCard
+              agencyId={activeAgencyId}
+              businessId={businessId}
+              canManage={myRole ? agencyRoleHasPermission(myRole, "agency.businesses.manage") : false}
+            />
+          )}
 
           <Card>
             <h2 className="mb-2 font-heading text-lg font-medium text-foreground">Locations</h2>

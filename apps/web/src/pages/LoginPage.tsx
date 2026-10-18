@@ -1,15 +1,13 @@
-import { useState, type FormEvent, type CSSProperties } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { Alert, Button, Card, isDarkColor, hexToRgbTriplet } from "@restaurant/ui";
+import { Alert, Button } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useNoIndex } from "../hooks/useNoIndex";
-import { useRestaurant } from "../context/RestaurantContext";
+import { AuthCard } from "../components/AuthCard";
 
 export function LoginPage() {
   useNoIndex();
   const { login } = useAuth();
-  const { whiteLabelBrand } = useRestaurant();
-  const brandedLogin = whiteLabelBrand?.brandedLogin === true;
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -37,13 +35,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4" style={brandedLogin && whiteLabelBrand?.primaryColor ? { "--color-primary": whiteLabelBrand.primaryColor, "--color-primary-rgb": hexToRgbTriplet(whiteLabelBrand.primaryColor), "--color-primary-foreground": isDarkColor(whiteLabelBrand.primaryColor) ? "#fffaf5" : "#1c1917" } as CSSProperties : undefined}>
-        {whiteLabelBrand?.brandedLogin === true && (whiteLabelBrand.logo || whiteLabelBrand.name) ? (
-          <div className="flex items-center gap-3">
-            {whiteLabelBrand.logo && <img src={whiteLabelBrand.logo} alt="" className="h-10 max-w-36 object-contain" />}
-            <h1 className="font-heading text-2xl font-semibold text-foreground">{whiteLabelBrand.name}</h1>
-          </div>
-        ) : <h1 className="font-heading text-2xl font-semibold text-foreground">Log in</h1>}
+      <AuthCard title="Log in">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <label htmlFor="login-email" className="flex flex-col gap-1 text-sm font-medium text-foreground">
             Email
@@ -83,7 +75,7 @@ export function LoginPage() {
             {submitting ? "Logging in..." : "Log in"}
           </Button>
         </form>
-      </Card>
+      </AuthCard>
       <p className="text-center text-sm text-muted">
         New here?{" "}
         <Link to="/register" className="font-medium text-primary hover:opacity-80">

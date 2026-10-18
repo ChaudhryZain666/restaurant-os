@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { AuthCard } from "../components/AuthCard";
 
 export function ResetPasswordPage() {
   useNoIndex();
@@ -46,8 +47,7 @@ export function ResetPasswordPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Set a new password</h1>
+      <AuthCard title="Set a new password">
         {done ? (
           <Alert tone="success">Password updated. Redirecting to log in...</Alert>
         ) : (
@@ -75,7 +75,7 @@ export function ResetPasswordPage() {
             </Button>
           </form>
         )}
-      </Card>
+      </AuthCard>
     </div>
   );
 }
