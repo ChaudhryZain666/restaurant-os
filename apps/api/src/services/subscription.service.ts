@@ -33,6 +33,19 @@ export function resolveTrialDays(plan: Pick<PlanDoc, "trialDays">): number | und
   return days > 0 ? days : undefined;
 }
 
+/**
+ * Lane A — a private plan (`isPubliclyListed: false`, e.g. a negotiated client price) is assigned by
+ * a platform admin, never picked self-serve: its code must not work for anyone who learns it. A
+ * self-serve request may use one only for the subscription that is already on it (e.g. converting
+ * an assigned trial through checkout). Same message as an unknown plan, so its existence isn't
+ * confirmed either.
+ */
+function assertSelfServePlan(plan: Pick<PlanDoc, "isPubliclyListed"> & { _id: unknown }, current?: { planId: unknown } | null) {
+  if (plan.isPubliclyListed !== false) return;
+  if (current && String(current.planId) === String(plan._id)) return;
+  throw ApiError.badRequest("Unknown or inactive plan");
+}
+
 /** The interval-matched price, if the plan has one configured — used both to stamp economic terms
  *  onto a BillingHistoryEvent and to resolve a real provider's price identifier for checkout. */
 function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: BillingInterval) {
@@ -60,7 +73,8 @@ async function createSubscriptionCore(
   ownerType: SubscriptionOwnerType,
   ownerId: string,
   planCode: string,
-  billingInterval: BillingInterval
+  billingInterval: BillingInterval,
+  { assignedByPlatform = false }: { assignedByPlatform?: boolean } = {}
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
@@ -73,6 +87,7 @@ async function createSubscriptionCore(
   if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
     throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
   }
+  if (!assignedByPlatform) assertSelfServePlan(plan);
 
   const trialDays = resolveTrialDays(plan);
   if (!trialDays) {
@@ -155,6 +170,8 @@ async function createCheckoutSessionCore(
     throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
   }
 
+  assertSelfServePlan(plan, existing);
+
   // Phase 89 — a local-only trial converts on its OWN plan and interval. A client that sent a
   // different one (e.g. a plan picker's default) would otherwise start a checkout — and, on
   // completion, a paid subscription — for a plan the owner never chose. Refused before any
@@ -210,6 +227,24 @@ export async function createSubscriptionForAgency(
   billingInterval: BillingInterval
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   return createSubscriptionCore("agency", agencyId, planCode, billingInterval);
+}
+
+/** Lane A — platform-admin assignment (platformSubscription.controller.ts): the same lifecycle as a
+ *  self-serve trial, except that a private (unlisted) plan is allowed. */
+export async function assignPlanToBusiness(
+  businessId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("business", businessId, planCode, billingInterval, { assignedByPlatform: true });
+}
+
+export async function assignPlanToAgency(
+  agencyId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("agency", agencyId, planCode, billingInterval, { assignedByPlatform: true });
 }
 
 export async function getSubscriptionForBusiness(businessId: string): Promise<HydratedDocument<SubscriptionDoc> | null> {
@@ -365,6 +400,10 @@ async function changeSubscriptionPlanCore(
   }
   const plan = await Plan.findOne({ code: newPlanCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
+  if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
+    throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
+  }
+  assertSelfServePlan(plan, subscription);
 
   const provider = getBillingProvider();
   const actedAt = new Date();

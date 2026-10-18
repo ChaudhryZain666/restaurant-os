@@ -203,7 +203,8 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
 
   // Phase 24 — read-only billing visibility for investigation, same rationale as domains above:
   // platform_admin has no write access to billing (that stays owner-only via billing.manage,
-  // which platform_admin never holds). Provider IDs are stripped — they're an external billing
+  // which platform_admin never holds) — the one exception is assigning a plan as a no-card trial
+  // when there's no live subscription (platformSubscription.controller.ts). Provider IDs are stripped — they're an external billing
   // system's internal reference, not something a support investigation needs to see.
   const subscription = restaurant.businessId
     ? await Subscription.findOne({ ownerType: "business", ownerId: restaurant.businessId }).sort({ createdAt: -1 })

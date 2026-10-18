@@ -4,6 +4,7 @@ import type { PlatformRestaurantDetail } from "@restaurant/types";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
+import { PlatformPlanCard } from "../components/PlatformPlanCard";
 
 const STATUS_TONE: Record<string, "success" | "neutral" | "danger"> = {
   active: "success",
@@ -115,8 +116,18 @@ export function PlatformRestaurantDetailPage() {
     );
   if (!detail) return null;
 
-  const { restaurant, owner, readiness, analytics, orderCountLifetime, recentAuditLog, businessLocationCount, paymentAccount, marketplaceIntegrations } =
-    detail;
+  const {
+    restaurant,
+    owner,
+    readiness,
+    analytics,
+    orderCountLifetime,
+    recentAuditLog,
+    businessLocationCount,
+    paymentAccount,
+    marketplaceIntegrations,
+    subscription,
+  } = detail;
   const foodpandaIntegration = marketplaceIntegrations.find((m) => m.provider === "foodpanda");
   const foodpandaNeedsLinking = !foodpandaIntegration || foodpandaIntegration.status !== "active";
 
@@ -269,6 +280,8 @@ export function PlatformRestaurantDetailPage() {
           </dl>
         </Card>
       </div>
+
+      <PlatformPlanCard businessId={restaurant.businessId} subscription={subscription} onAssigned={reload} />
 
       <Card>
         <h2 className="mb-2 font-heading text-sm font-semibold text-foreground">Payment &amp; marketplace connections</h2>

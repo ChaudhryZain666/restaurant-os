@@ -127,6 +127,20 @@ describe("restaurant creation (Phase 14 provisioning)", () => {
     expect(res.status).toBe(409);
   });
 
+  it("explains the conflict, creating nothing, when an admin enters their own platform-admin email", async () => {
+    const admin = await User.findById(platformAdminId);
+    const slug = `own-email-${Date.now()}`;
+    const res = await request(app)
+      .post("/api/v1/restaurants")
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ name: "Own Email", slug, owner: { name: "Admin Self", email: admin!.email } });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toMatch(/platform admin account/);
+    expect(await Restaurant.exists({ slug })).toBeNull();
+    expect((await User.findById(platformAdminId))!.role).toBe("platform_admin");
+  });
+
   it("a non-platform_admin cannot create a restaurant", async () => {
     const res = await request(app)
       .post("/api/v1/restaurants")

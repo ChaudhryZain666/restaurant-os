@@ -30,6 +30,24 @@ import { ownerInviteEmail } from "../email/templates.js";
 const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches staff.controller.ts's invite TTL
 
 /**
+ * Lane A — one email is one account with one role, so the new owner's email must be unused. The
+ * usual way this goes wrong is a platform admin entering their OWN address; say so, rather than a
+ * bare "already exists", since the fix (enter the client's email) isn't obvious from that.
+ */
+function ownerEmailConflictMessage(existing: { role: string; businessId?: unknown }): string {
+  if (existing.role === "platform_admin") {
+    return (
+      "That email belongs to a platform admin account, so it can't also own a restaurant. Enter the client's own email — " +
+      "they get an invite to set up their owner login. You can still open this restaurant from the platform console."
+    );
+  }
+  if (existing.role === "restaurant_owner" && existing.businessId) {
+    return "That email already owns a business. To give them another location, add it under their existing business instead.";
+  }
+  return "An account with this email already exists. Use a different email for the restaurant owner.";
+}
+
+/**
  * Provisions a restaurant AND its first owner atomically — closing the chicken-and-egg gap the
  * Phase 13 audit found (the old ownerId-based shape required a user to already exist with no
  * restaurant, but nothing in the UI could ever create that user first). Follows the exact
@@ -61,8 +79,8 @@ export async function createRestaurant(req: Request, res: Response) {
     existingBusiness = await Business.findById(businessId);
     if (!existingBusiness) throw ApiError.notFound("Business not found");
   } else {
-    const existingOwnerEmail = await User.findOne({ email: owner!.email });
-    if (existingOwnerEmail) throw ApiError.conflict("An account with this email already exists");
+    const existingOwnerEmail = await User.findOne({ email: owner!.email }).select("role businessId");
+    if (existingOwnerEmail) throw ApiError.conflict(ownerEmailConflictMessage(existingOwnerEmail));
   }
 
   const unusablePassword = randomBytes(32).toString("hex");
