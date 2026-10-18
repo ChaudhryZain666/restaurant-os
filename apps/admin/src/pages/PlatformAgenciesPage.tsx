@@ -106,7 +106,7 @@ export function PlatformAgenciesPage() {
                   <td className="px-4 py-3 tabular-nums">{agency.businessCount}</td>
                   <td className="px-4 py-3">
                     {agency.domain ? (
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col items-start gap-1">
                         <span className="font-mono text-xs">{agency.domain}</span>
                         <Badge tone={agency.domainStatus === "verified" ? "success" : "warning"}>
                           {agency.domainStatus === "verified" ? "Verified" : "Pending"}
@@ -118,7 +118,7 @@ export function PlatformAgenciesPage() {
                   </td>
                   <td className="px-4 py-3">
                     {agency.emailSender ? (
-                      <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-col items-start gap-1.5">
                         <span className="font-mono text-xs">{agency.emailSender.address}</span>
                         <Badge tone={EMAIL_SENDER_STATUS_COPY[agency.emailSender.status].tone}>
                           {EMAIL_SENDER_STATUS_COPY[agency.emailSender.status].label}

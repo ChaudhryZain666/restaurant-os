@@ -283,10 +283,12 @@ export function AgencySettingsPage() {
 
         <Alert tone="neutral">
           <p className="text-sm">
-            <strong>What verifying this domain does:</strong> it proves you own it, which lets you use a sender address on it for
-            branded emails (below, after platform authorization). <strong>What it doesn't do:</strong> route customers anywhere —
-            each client's storefront gets its own domain from the location's Settings → Custom domain. Password-reset and
-            verification emails always stay on the platform's own address and links.
+            <strong>What verifying this domain does:</strong> it proves you own it. Your clients' locations can then use hostnames
+            under it (e.g. <span className="font-mono">client.yourdomain.com</span>, added in the location's Settings → Custom
+            domain) without a separate DNS proof, no other agency can claim them, and you can request a sender address on it for
+            branded emails (below, after platform authorization). <strong>What it doesn't do:</strong> route customers by itself —
+            each hostname still needs activating and a DNS record pointing to the platform. Password-reset and verification
+            emails always stay on the platform's own address and links.
           </p>
         </Alert>
 

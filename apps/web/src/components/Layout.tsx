@@ -6,6 +6,7 @@ import { useRestaurant } from "../context/RestaurantContext";
 import { useActiveTheme } from "../theme/useActiveTheme";
 import { useCartPop } from "../theme/useCartPop";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { useBrandFavicon } from "../hooks/useBrandFavicon";
 import { AvailabilityBanner } from "./AvailabilityBanner";
 import { TableBanner } from "./TableBanner";
 import { HelpWidget } from "./HelpWidget";
@@ -32,6 +33,7 @@ export function Layout() {
   const { lines } = useCart();
   const { restaurant, whiteLabelBrand, loading: restaurantLoading, error: restaurantError, resolvedVia } = useRestaurant();
   const { definition } = useActiveTheme();
+  useBrandFavicon();
   const { Header, Footer } = definition.components;
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
@@ -70,7 +72,9 @@ export function Layout() {
 
       {whiteLabelBrand?.storefrontBranding && (
         <div
-          className="border-b px-4 py-2 sm:px-6"
+          // Own stacking layer + opaque ground: themes whose hero pulls up under the header
+          // (cinematic) must not paint over the agency strip.
+          className="relative z-50 border-b bg-background px-4 py-2 sm:px-6"
           style={whiteLabelBrand.primaryColor ? { borderColor: whiteLabelBrand.primaryColor } : undefined}
           aria-label={`${whiteLabelBrand.name} branding`}
         >
