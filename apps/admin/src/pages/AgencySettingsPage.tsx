@@ -177,7 +177,7 @@ export function AgencySettingsPage() {
             <input disabled={!canManage} type="color" value={brandPrimaryColor} onChange={(e) => setBrandPrimaryColor(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background p-1" />
           </label>
           <label className="flex items-center gap-2 self-end text-sm">
-            <input type="checkbox" disabled={!canManage} checked={whiteLabelEnabled} onChange={(e) => setWhiteLabelEnabled(e.target.checked)} />
+            <input type="checkbox" disabled={!canManage} checked={whiteLabelEnabled} onChange={(e) => { const enabled = e.target.checked; setWhiteLabelEnabled(enabled); if (!enabled) setWhiteLabelOfferings([]); }} />
             Enable white-label mode
           </label>
           <p className="text-xs text-muted sm:col-span-2">
