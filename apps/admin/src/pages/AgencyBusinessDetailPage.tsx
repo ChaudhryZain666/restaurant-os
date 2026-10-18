@@ -134,7 +134,7 @@ export function AgencyBusinessDetailPage() {
     try {
       const res = await apiClient.request<{ business: BusinessDetail }>(
         `/agencies/${activeAgencyId}/businesses/${businessId}/white-label`,
-        { method: "PUT", body: { enabledFeatures: whiteLabelDraft } }
+        { method: "PUT", body: { enabledFeatures: whiteLabelDraft.filter((feature) => feature !== "custom_domain" && feature !== "hide_platform_branding" && feature !== "email_branding") } }
       );
       setData((current) => current ? { ...current, business: res.business } : current);
       setWhiteLabelMessage("Client white-label options saved.");
