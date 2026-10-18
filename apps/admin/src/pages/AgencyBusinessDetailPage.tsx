@@ -104,6 +104,10 @@ export function AgencyBusinessDetailPage() {
   const [savingWhiteLabel, setSavingWhiteLabel] = useState(false);
   const [whiteLabelMessage, setWhiteLabelMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    setWhiteLabelDraft(data?.business.whiteLabelFeatures ?? []);
+  }, [data?.business.id, data?.business.whiteLabelFeatures]);
+
   const currentAgency = agencies.find((a) => a.id === activeAgencyId);
   const myRole: AgencyMembershipRole | undefined = currentAgency?.myRole;
 
