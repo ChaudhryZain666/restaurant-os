@@ -52,7 +52,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const brandColor = whiteLabelBrand?.storefrontBranding && whiteLabelBrand.primaryColor ? whiteLabelBrand.primaryColor : restaurant?.settings.brandColor;
   const brandColorVars: CSSProperties =
-    brandColor && HEX_COLOR_PATTERN.test(brandColor) && !hasThemePrimaryOverride
+    brandColor && HEX_COLOR_PATTERN.test(brandColor) && (!hasThemePrimaryOverride || Boolean(whiteLabelBrand?.storefrontBranding && whiteLabelBrand.primaryColor))
       ? {
           ["--color-primary" as string]: brandColor,
           ["--color-primary-rgb" as string]: hexToRgbTriplet(brandColor),
