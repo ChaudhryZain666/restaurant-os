@@ -117,6 +117,14 @@ URL).
   at; needs a product decision on data retention/ownership transfer before it's safe to implement.
 - True SSR/prerendering for non-JS-executing crawlers (see the SEO section referenced above).
 
+## Launch readiness — demo ownership and admin access (open)
+
+- **Transfer Wildwood Kitchen demo ownership to the existing platform administrator account** `zaynchaudhary.666@gmail.com`, while preserving that account's `platform_admin` role and avoiding a duplicate user account.
+- **Retire `demo-owner@demo-restaurant.garnishtable.invalid`** only after the demo's ownership references and any dependent access have been safely transferred and verified. Do not delete the placeholder first.
+- Ensure the existing administrator can actually manage the demo's menu, orders, and settings through an explicitly authorized, tenant-scoped access path; changing `ownerId` alone is not sufficient because platform-admin permissions differ from restaurant-owner permissions.
+- Update production demo provisioning so repeat runs recognize the transferred demo safely and remain idempotent, without weakening the protection against taking over an unrelated tenant with the same slug.
+- Add targeted tests and a documented, reversible production transfer procedure. Verify the live demo and its menu after the change. **Status: planned; production data has not been changed.**
+
 ## Suggested next phase
 
 With scalability (pagination), authorization architecture (permission-derived RBAC), and account
