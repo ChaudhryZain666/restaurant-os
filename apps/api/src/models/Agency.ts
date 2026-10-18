@@ -15,6 +15,11 @@ const agencySchema = new Schema(
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     description: { type: String },
     logo: { type: String },
+    // Agency-owned identity used by customer-facing white-label surfaces. Kept separate from
+    // `name` so internal/legal agency naming can differ from the public brand.
+    brandName: { type: String, trim: true, maxlength: 120 },
+    brandPrimaryColor: { type: String, match: /^#[0-9a-fA-F]{6}$/ },
+    whiteLabelEnabled: { type: Boolean, default: false },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     status: { type: String, enum: ["pending", "active", "suspended"], default: "active" },
     // Maintained counter, incremented ATOMICALLY on business creation (see
