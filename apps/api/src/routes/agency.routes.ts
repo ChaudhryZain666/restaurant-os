@@ -7,6 +7,7 @@ import {
   setAgencyDomainSchema,
   setClientCommercialTermsSchema,
   updateAgencySchema,
+  updateBusinessWhiteLabelSchema,
 } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -28,6 +29,7 @@ import {
   setAgencyDomain,
   setClientCommercialTerms,
   updateAgency,
+  updateBusinessWhiteLabel,
   verifyAgencyDomain,
 } from "../controllers/agency.controller.js";
 
@@ -74,6 +76,13 @@ agencyRouter.post(
   asyncHandler(createAgencyBusiness)
 );
 agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
+agencyRouter.put(
+  "/:agencyId/businesses/:businessId/white-label",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.businesses.manage"),
+  validateBody(updateBusinessWhiteLabelSchema),
+  asyncHandler(updateBusinessWhiteLabel)
+);
 agencyRouter.put(
   "/:agencyId/businesses/:businessId/commercial-terms",
   requireAgencyMatch(),
