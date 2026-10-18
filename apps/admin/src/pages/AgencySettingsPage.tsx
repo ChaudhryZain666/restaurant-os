@@ -35,6 +35,10 @@ export function AgencySettingsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [brandName, setBrandName] = useState("");
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState("#6B2130");
+  const [logo, setLogo] = useState("");
+  const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
@@ -50,6 +54,10 @@ export function AgencySettingsPage() {
     setName(data.name);
     setDescription(data.description ?? "");
     setContactEmail(data.contactEmail);
+    setBrandName(data.brandName ?? data.name);
+    setBrandPrimaryColor(data.brandPrimaryColor ?? "#6B2130");
+    setLogo(data.logo ?? "");
+    setWhiteLabelEnabled(Boolean(data.whiteLabelEnabled));
     setDomainDraft(data.domain ?? "");
   }
 
@@ -69,7 +77,15 @@ export function AgencySettingsPage() {
     try {
       await apiClient.request(`/agencies/${activeAgencyId}`, {
         method: "PATCH",
-        body: { name, description: description || undefined, contactEmail },
+        body: {
+          name,
+          description: description || undefined,
+          contactEmail,
+          brandName: brandName.trim() || name,
+          brandPrimaryColor,
+          logo: logo.trim() || undefined,
+          whiteLabelEnabled,
+        },
       });
       await Promise.all([reload(), refetchAgencies()]);
       setProfileSaved(true);
@@ -145,6 +161,25 @@ export function AgencySettingsPage() {
             Contact email
             <input required type="email" disabled={!canManage} value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className={inputClass} />
           </label>
+          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            Customer-facing brand name
+            <input disabled={!canManage} value={brandName} onChange={(e) => setBrandName(e.target.value)} maxLength={120} className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            Logo image URL (optional)
+            <input disabled={!canManage} type="url" value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://your-domain.com/logo.png" className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Brand primary color
+            <input disabled={!canManage} type="color" value={brandPrimaryColor} onChange={(e) => setBrandPrimaryColor(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background p-1" />
+          </label>
+          <label className="flex items-center gap-2 self-end text-sm">
+            <input type="checkbox" disabled={!canManage} checked={whiteLabelEnabled} onChange={(e) => setWhiteLabelEnabled(e.target.checked)} />
+            Enable white-label mode
+          </label>
+          <p className="text-xs text-muted sm:col-span-2">
+            White-label mode is stored as agency configuration. Customer-facing storefront, support, sign-in and email branding must be connected in the remaining rollout before this switch changes every surface.
+          </p>
           {canManage && (
             <Button type="submit" size="sm" disabled={savingProfile} className="self-end">
               {savingProfile ? "Saving..." : "Save profile"}
