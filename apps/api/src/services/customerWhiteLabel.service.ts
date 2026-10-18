@@ -9,6 +9,7 @@ export interface CustomerWhiteLabelBrand {
   primaryColor?: string;
   hidePlatformBranding: boolean;
   brandedLogin: boolean;
+  storefrontBranding: boolean;
 }
 
 export interface CustomerWhiteLabelProjection {
@@ -50,9 +51,10 @@ export async function getCustomerWhiteLabelProjection(
     ? {
         name: agency.brandName?.trim() || agency.name,
         ...(agency.logo ? { logo: agency.logo } : {}),
-        ...(agency.brandPrimaryColor ? { primaryColor: agency.brandPrimaryColor } : {}),
+        ...((storefront || brandedLogin) && agency.brandPrimaryColor ? { primaryColor: agency.brandPrimaryColor } : {}),
         hidePlatformBranding,
         brandedLogin,
+        storefrontBranding: storefront,
       }
     : null;
 
