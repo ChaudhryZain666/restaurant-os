@@ -962,6 +962,42 @@ describe("PATCH /agencies/:agencyId — profile settings (Phase 58)", () => {
   });
 });
 
+describe("PUT /agencies/:agencyId/businesses/:businessId/white-label", () => {
+  it("lets an agency owner assign only features the agency has opted to offer", async () => {
+    const setup = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        whiteLabelEnabled: true,
+        whiteLabelOfferings: ["storefront_branding", "support_branding"],
+      });
+    expect(setup.status).toBe(200);
+
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["storefront_branding"] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.whiteLabelFeatures).toEqual(["storefront_branding"]);
+  });
+
+  it("rejects a client feature the agency has not offered", async () => {
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["branded_login"] });
+    expect(res.status).toBe(400);
+  });
+
+  it("does not allow another agency to change this client's white-label options", async () => {
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ enabledFeatures: [] });
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("POST /agencies/:agencyId/domain and /domain/verify — white-label domain ownership (Phase 58, Section 12A)", () => {
   it("rejects claiming the platform's own configured origin as a white-label domain", async () => {
     const res = await request(app)
