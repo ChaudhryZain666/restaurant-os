@@ -68,6 +68,19 @@ export function Layout() {
         Skip to content
       </a>
 
+      {whiteLabelBrand?.storefrontBranding && (
+        <div
+          className="border-b px-4 py-2 sm:px-6"
+          style={whiteLabelBrand.primaryColor ? { borderColor: whiteLabelBrand.primaryColor } : undefined}
+          aria-label={`${whiteLabelBrand.name} branding`}
+        >
+          <div className="mx-auto flex max-w-6xl items-center gap-2">
+            {whiteLabelBrand.logo && <img src={whiteLabelBrand.logo} alt="" className="h-6 max-w-28 object-contain" />}
+            <span className="text-xs font-semibold tracking-wide text-muted">{whiteLabelBrand.name}</span>
+          </div>
+        </div>
+      )}
+
       <Header
         restaurant={restaurant}
         restaurantLoading={restaurantLoading}
