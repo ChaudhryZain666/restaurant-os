@@ -4,7 +4,8 @@
 > sender* on it, after a platform admin confirms the SMTP relay can send for it — see
 > `docs/agency-white-label-rollout.md` ("Branded email and the custom sender"). Branded email
 > templates, a branded sender name, and branded customer sign-in on a client's verified storefront
-> domain now exist. A domain can be verified by only one agency. The agency domain still routes no
+> domain now exist. A domain can be verified by only one agency. Client storefront hostnames under a
+> verified agency domain are verified through it and served for that agency's clients only. The agency domain itself routes no
 > customer traffic, and security email (reset/verification) stays on the platform's address and
 > links. The sections below describe the original Phase 58 boundary and are kept for history.
 

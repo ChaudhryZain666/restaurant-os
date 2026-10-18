@@ -79,8 +79,9 @@ configuration-driven specifically so the future theme system doesn't require a r
 
 **Agency white-label is now partly built** — six status-tracked capabilities (storefront
 branding, custom domain, hidden platform branding, branded support, branded email, branded
-customer sign-in); see `docs/agency-white-label-rollout.md`. Still out of scope there: routing on
-an agency's own domain, branded operator sign-in, and provider-API email-sender verification.
+customer sign-in); see `docs/agency-white-label-rollout.md`. Still out of scope there:
+an agency portal on the agency's own domain (client storefronts under it are supported), branded
+operator sign-in, and provider-API email-sender verification.
 
 **SEO is no longer fully in this list** — see `docs/multi-tenant-storefront-architecture.md`'s SEO
 section: sitemap, robots.txt, canonical URLs, Twitter Cards, and Restaurant/Menu JSON-LD

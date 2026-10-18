@@ -38,8 +38,8 @@ is on, the capability is offered, and it's selected (`isFeatureInForce`,
 
 | Capability | What customers see when active | Prerequisites to be `active` |
 |---|---|---|
-| `storefront_branding` | Agency name and logo bar, agency color as the theme primary, `og:site_name` = agency brand. The restaurant keeps its own name, menu, prices and theme. | In force. |
-| `hide_platform_branding` | No "Powered by" line in any theme footer; no platform credit in branded emails; `og:site_name` = the restaurant's name. Legal, payment and security notices are unchanged. | In force. |
+| `storefront_branding` | Agency name and logo bar above every theme's header, agency color as the theme primary, the agency logo as the tab icon, `og:site_name` = agency brand. The restaurant keeps its own name, menu, prices and theme. | In force. |
+| `hide_platform_branding` | No "Powered by" line in any theme footer; no platform tab icon (the restaurant's logo, or a neutral icon); no platform credit in branded emails; `og:site_name` = the restaurant's name. Legal, payment and security notices are unchanged. | In force. |
 | `support_branding` | Help widget and ticket form show the agency's support name, plus its support email and help URL when set. | In force (the contact is optional). |
 | `custom_domain` | The client's storefront on its own hostname — including its sign-in, account, order-tracking and support pages; customer order-tracking links in email point there. | A location's `DomainMapping` is verified (DNS TXT) and activated; the platform serves it now (`resolveCustomDomain`: restaurant active, plan includes `custom_domains`); `CUSTOM_DOMAIN_CNAME_TARGET` is configured; and a CNAME to that target is found. |
 | `branded_login` | Agency name, logo and color on the customer log in / create account / forgot / reset password pages. | A live custom domain as above. Branding is only ever applied when the storefront resolved the restaurant **through that verified domain** — never on `/r/:slug` or the shared platform host. |
@@ -100,8 +100,32 @@ served hostname (`DnsVerifier.resolveCname`). A hostname behind CNAME flattening
 returns A records will read as "DNS not pointing here yet" even if traffic works — a known
 limitation; the domain itself keeps being served.
 
-The agency's **own** verified domain (Agency settings) is ownership-only: it authorizes a custom
-email sender. It does not route any customer traffic — see `docs/agency-white-label-domain.md`.
+### Agency-owned domains as a namespace for client storefronts
+
+Once an agency has DNS-verified its own domain (Agency settings), that domain is its namespace
+(`agencyDomainNamespace.service.ts`):
+
+- A client location of **that** agency can add a hostname under it (e.g. `elrancho.agency.com`)
+  and it is verified immediately — the agency's own TXT proof covers it; audited as
+  `domain.verified` with `method: "agency_domain"`. No per-host TXT record is needed.
+- Any other tenant is refused a hostname under it (409), and a pre-existing mapping for another
+  tenant under it is not served (`resolveCustomDomain` reason `agency_namespace_conflict`), so the
+  TLS edge won't issue a certificate for it either.
+- Serving still follows the normal lifecycle: activate the hostname for its location, point DNS at
+  the edge, and Caddy issues the certificate on demand. The verified agency domain routes nothing
+  by itself, and the agency's apex/bare domain is not served unless a location claims it.
+
+DNS for this, on the agency's DNS (outside the repository): either one CNAME per client hostname,
+`elrancho.agency.com CNAME <CUSTOM_DOMAIN_CNAME_TARGET>`, or a wildcard
+`*.agency.com CNAME <CUSTOM_DOMAIN_CNAME_TARGET>`. Certificates are per hostname via on-demand
+TLS; no wildcard certificate is needed. The agency domain also carries an optional custom email
+sender (above).
+
+## Email content safety
+
+Every tenant-provided value in an email's HTML (restaurant, agency and inviter names, order
+numbers, brand name) is HTML-escaped, and email titles are escaped in the layout; the plain-text
+part is unchanged. Brand logos are https-only and colors strict hex.
 
 ## Public data
 
@@ -112,9 +136,12 @@ internal name, contact email, domain, verification token, sender settings, offer
 
 ## Not built (and shown as such)
 
-- Agency-domain routing — e.g. an agency portal or client subdomains on the agency's own domain.
-  Each client's storefront domain is configured per location instead.
-- A branded operator (restaurant staff / agency) sign-in. Only customer sign-in is branded.
+- An agency portal on the agency's own domain (the agency's dashboard under its brand). Client
+  storefronts under the agency domain are supported (above); the operator dashboard is not.
+- A branded operator (restaurant staff / agency) sign-in. Operators sign in at the platform's
+  admin origin; its auth cookies, CORS and redirects are bound to that origin, and serving it on
+  tenant hostnames would need its own origin, cookie and CORS design. Only customer sign-in is
+  branded.
 - Provider-API sender verification. If the production SMTP provider offers a domain API, it can
   replace the manual authorization step behind the same `emailSender.status` field.
 
@@ -124,5 +151,7 @@ internal name, contact email, domain, verification token, sender settings, offer
   ever become active (the Phase 86 Caddy setup already sets it).
 - `DNS_VERIFIER=node` in production, so domain ownership and CNAME checks are real.
 - Custom senders: provider-side domain setup as described above, per agency.
-- No migration is needed: every new field is optional, and existing agencies/businesses read as
+- Run `node dist/scripts/ensureIndexes.js` on deploy (as always) — it adds the new index on
+  `Agency.domain`.
+- No data migration is needed: every new field is optional, and existing agencies/businesses read as
   white-label off.
