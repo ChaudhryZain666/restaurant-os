@@ -1,5 +1,13 @@
 # Agency white-label domain (Phase 58, Section 12A)
 
+> **Update (white-label runtime):** a verified agency domain now authorizes a *custom email
+> sender* on it, after a platform admin confirms the SMTP relay can send for it — see
+> `docs/agency-white-label-rollout.md` ("Branded email and the custom sender"). Branded email
+> templates, a branded sender name, and branded customer sign-in on a client's verified storefront
+> domain now exist. A domain can be verified by only one agency. The agency domain still routes no
+> customer traffic, and security email (reset/verification) stays on the platform's address and
+> links. The sections below describe the original Phase 58 boundary and are kept for history.
+
 ## What exists after this phase
 
 An agency can record a candidate domain (e.g. `mediabymiller.com`) on its own `Agency` document and

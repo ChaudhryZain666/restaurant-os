@@ -1,77 +1,128 @@
-# Agency White-Label Rollout
+# Agency White-Label
 
-## Current scope: persisted agency brand settings
+An agency runs many client restaurants centrally. White-label lets it present its own brand to
+those clients' customers instead of GarnishTable's. It is opt-in at two levels, and every
+capability's real readiness is computed on the server — a selection alone never makes anything live.
 
-This phase adds the first configuration layer to the existing agency model:
+## How it's switched on
 
-- `brandName`: public-facing name, independent of the agency's internal name.
-- `brandPrimaryColor`: optional six-digit hex color.
-- `logo`: optional logo URL (existing Agency field, now editable in settings).
-- `whiteLabelEnabled`: explicit opt-in flag; defaults to `false` for existing and newly created agencies.
+1. **Agency settings** (agency owner, `agency.manage`): brand name, https logo, primary color,
+   optional support email and https help URL, the white-label mode switch, and which of the six
+   capabilities the agency offers (`whiteLabelOfferings`). Turning white-label off keeps the
+   offerings and every client's choices; they read as *suspended* until it's turned back on.
+2. **Client page** (`agency.businesses.manage`): which offered capabilities each client gets
+   (`Business.whiteLabelFeatures`). The API refuses a capability the agency doesn't offer, and
+   refuses any change to a business of another agency (it reads as not found).
 
-The agency owner can edit these values under Agency settings. The API validates the color and name and persists changes through the existing permission-protected `PATCH /agencies/:agencyId` route.
+Both changes are audited on the agency audit log (`agency.updated`, `agency.client_white_label_updated`).
 
-**Important:** saving these settings does not yet rebrand customer-facing pages. The toggle is configuration only until the later integration phases below are implemented. Do not market the platform as fully white-labelled based on this phase alone.
+## Capability states
 
-## Optional agency defaults and per-client choices
+`GET /agencies/:agencyId/businesses/:businessId/white-label` returns each capability's state,
+a one-line summary, and the exact blockers. The client page shows exactly this.
 
-White-labeling is deliberately opt-in. `whiteLabelEnabled` defaults to false, and `whiteLabelOfferings` defaults to an empty list. The agency owner chooses which capabilities it offers in Agency Settings.
+| State | Meaning |
+|---|---|
+| `not_offered` | The agency doesn't offer it (or white-label mode is off) and it isn't selected. |
+| `off` | Offered, not selected for this client. |
+| `pending_setup` | Selected; a prerequisite isn't met yet. `blockers` lists what's missing. |
+| `active` | Selected and every prerequisite is verified — customers see it. |
+| `failed` | Selected; a prerequisite that was met has since failed (e.g. the plan lapsed). |
+| `suspended` | Selected, but the agency stopped offering it, turned white-label off, or is suspended. |
 
-For each managed business, the agency can select a subset of those offered capabilities in the client's detail page. The API enforces all three boundaries:
+A capability is *in force* (affects customers) only when the agency is `active`, white-label mode
+is on, the capability is offered, and it's selected (`isFeatureInForce`,
+`apps/api/src/services/whiteLabelStatus.service.ts`). Every customer-facing surface checks this.
 
-- white-label mode must be enabled for the agency before any client features can be assigned;
-- a client can only be assigned capabilities included in the agency's offering list;
-- the endpoint is scoped to the agency/business pair and requires `agency.businesses.manage`, with audit logging.
+## The six capabilities
 
-This is a configuration and permission layer. A selected option does not imply its customer-facing integration is complete: storefront branding, email sender setup, branded login, and agency-level domain routing still require the relevant follow-up work below. If white-label is off, the normal GarnishTable experience remains the intended fallback.
+| Capability | What customers see when active | Prerequisites to be `active` |
+|---|---|---|
+| `storefront_branding` | Agency name and logo bar, agency color as the theme primary, `og:site_name` = agency brand. The restaurant keeps its own name, menu, prices and theme. | In force. |
+| `hide_platform_branding` | No "Powered by" line in any theme footer; no platform credit in branded emails; `og:site_name` = the restaurant's name. Legal, payment and security notices are unchanged. | In force. |
+| `support_branding` | Help widget and ticket form show the agency's support name, plus its support email and help URL when set. | In force (the contact is optional). |
+| `custom_domain` | The client's storefront on its own hostname — including its sign-in, account, order-tracking and support pages; customer order-tracking links in email point there. | A location's `DomainMapping` is verified (DNS TXT) and activated; the platform serves it now (`resolveCustomDomain`: restaurant active, plan includes `custom_domains`); `CUSTOM_DOMAIN_CNAME_TARGET` is configured; and a CNAME to that target is found. |
+| `branded_login` | Agency name, logo and color on the customer log in / create account / forgot / reset password pages. | A live custom domain as above. Branding is only ever applied when the storefront resolved the restaurant **through that verified domain** — never on `/r/:slug` or the shared platform host. |
+| `email_branding` | Order emails (new order, confirmation, cancelled, payment received/failed, refund) and owner/staff invitations carry the agency brand; the sender name is the agency brand. | In force. A custom sender address is a separate, optional step (below). |
 
-## Required follow-up phases
+### What deliberately stays platform-branded
 
-1. **Customer-facing storefront identity**
-   - Resolve the agency attached to a restaurant's Business and expose a minimal, public-safe brand projection only when white-label mode is enabled.
-   - Keep the restaurant's own identity, theme, menu, pricing, and location settings separate from the agency's platform identity.
-   - Apply agency branding consistently to storefront chrome, customer support identity, and customer-facing system copy without leaking internal agency data.
-2. **Agency custom-domain routing**
-   - Extend hostname resolution deliberately: today restaurant custom domains map to a single location, while an agency domain is only ownership-verified.
-   - Define whether an agency domain serves a branded agency portal, redirects to a location, or acts as a domain namespace for location subdomains before implementing routing.
-   - Preserve existing restaurant custom-domain behavior and certificate issuance safeguards.
-3. **Agency-branded authentication and onboarding**
-   - Decide the supported branded login/signup flow, tenant selection, invitation copy, password reset copy, cookie/CORS boundaries, and account recovery behavior.
-   - Never claim email is sent from an agency domain unless the sending provider has verified that domain and the actual sending identity is configured.
-4. **Transactional email**
-   - Add an explicit per-agency brand context to applicable templates.
-   - Keep sender identity controlled by a provider-backed verified configuration; do not set arbitrary `From` addresses from user input.
-5. **Isolation and regression coverage**
-   - Add tests proving one agency's settings cannot affect another agency or an unrelated restaurant.
-   - Cover unset/disabled settings, invalid colors, public response field allowlists, domain collisions, and fallback to existing GarnishTable behavior.
-   - Run API/admin/web builds and targeted E2E tests before merging or deploying.
+Password reset, email verification and email-change emails, platform billing emails, and the
+operator sign-in at the admin origin. Security email links always use the platform's own
+origins: a tenant controls its own domain's DNS, so putting a reset or verification token on a
+tenant hostname would let that tenant capture it.
 
-## Safety boundaries
+## Branded email and the custom sender
 
-- No production environment variables, DNS records, email provider configuration, database migrations, or deployment settings are changed by this phase.
-- Existing agency data remains valid because all new fields are optional and the toggle defaults off.
-- Keep this work on a feature branch until CI and a review of the full customer-facing integration are complete.
+Production email is SMTP (`EMAIL_PROVIDER=smtp` is required in production; see
+`apps/api/src/config/env.ts`). The repository does not record which SMTP provider is behind
+`SMTP_HOST`, and generic SMTP has no API for verifying a sending domain, so no automatic
+verification is claimed. Instead:
 
+- **Without a custom sender** (the default), branded emails are sent from the platform's own
+  `EMAIL_FROM` address with the agency brand as the display name. Deliverability is unchanged.
+- **With a custom sender**, the agency requests an address on its own domain
+  (`PUT /agencies/:agencyId/email-sender`). Its status moves:
+  `pending_domain` (agency domain not DNS-verified) → `pending_authorization` (verified; waiting
+  for the platform) → `verified` (a platform admin confirmed it in **Platform → Agencies**) or
+  `failed` (rejected, with a reason the agency sees).
+- The address is used as `From` **only** while `verified`, and that is re-checked at every send:
+  the address must still be on the agency's DNS-verified domain, and no other agency may have that
+  domain verified. A domain can be verified by only one agency, and changing the agency's domain
+  sends the sender back to `pending_domain`.
+- Reply-To is the agency's support email only when the sender is verified and the support email
+  is on the same verified domain.
+- The display name is the agency brand name, never free text, and the SMTP adapter strips CR/LF,
+  quotes and angle brackets from it before it reaches a header.
 
-## Runtime integration status (branch: feat/agency-white-label-runtime)
+### Before authorizing a sender (platform team, outside the repository)
 
-The runtime branch now adds a safe, public-only agency brand projection to the existing restaurant slug and restaurant custom-domain responses. It resolves the restaurant's Business and active Agency, then requires agency white-label mode plus the intersection of agency offerings and that client's selected features. It does not expose contact email, verification tokens, membership, or internal agency fields.
+At the SMTP provider behind production `SMTP_HOST`:
 
-Implemented in this branch:
-- Branded support identity when `support_branding` is both offered and selected.
-- Agency primary color when `storefront_branding` is both offered and selected.
-- Footer platform-credit suppression when `hide_platform_branding` is offered and selected.
-- Agency name/logo/color on the customer login screen when `branded_login` is offered and selected and the restaurant resolves on an active restaurant custom domain.
-- Client configuration UI labels pending capabilities and does not save `email_branding` or `custom_domain` as active client features.
+1. Add the agency's domain as a sending domain (or verify the sender address) with the provider.
+2. Have the agency publish the SPF include and DKIM records the provider gives, and a DMARC policy.
+3. Confirm the provider shows the domain as verified, and send one test message from it.
+4. Only then press **Authorize** in Platform → Agencies.
 
-Still not implemented / not active:
-- The shared storefront now shows the agency brand mark; theme-specific logo/name integration and SEO metadata remain incomplete.
-- Agency-owned domain routing. The existing agency domain flow proves DNS ownership only; it does not route customer traffic.
-- Per-agency transactional email templates and sender identities, provider-side sender/domain verification, and delivery/readiness status.
-- Global suppression audit across every customer-facing surface.
+If the provider can't send for arbitrary customer domains, reject the request with that reason —
+branded emails keep working from the platform address.
 
-### Transactional email provider inspection
+## Custom domains (restaurant storefronts)
 
-The repository supports `EMAIL_PROVIDER=console` (default) and `EMAIL_PROVIDER=smtp`. SMTP requires `SMTP_HOST`, `SMTP_PORT`, and `EMAIL_FROM`; optional credentials use `SMTP_USER` and `SMTP_PASSWORD`. The source default is console, which logs email rather than delivering it. The production process environment is not readable through the GitHub repository connector, so this branch does not assume SMTP is configured live and does not change deployment secrets. Generic SMTP does not provide a provider API for sender-domain verification; email branding stays pending until the live configured sender and a verifiable per-agency sender setup are established.
+This reuses the existing restaurant custom-domain system end to end (`DomainMapping`,
+`domain.controller.ts`, `customDomain.service.ts`, Caddy on-demand TLS — see
+`docs/custom-domains-operations.md`). Agency admins can already operate a client location's
+domain: the location domain routes use `requireTenantPermission("restaurant.settings.manage")`,
+which agency owners/admins hold for their clients' locations.
 
-No deployment, DNS, live sender configuration, or production secret was changed. Build/test verification is still required before merging.
+The white-label status adds one live check the domain system didn't do: a CNAME lookup for each
+served hostname (`DnsVerifier.resolveCname`). A hostname behind CNAME flattening or a proxy that
+returns A records will read as "DNS not pointing here yet" even if traffic works — a known
+limitation; the domain itself keeps being served.
+
+The agency's **own** verified domain (Agency settings) is ownership-only: it authorizes a custom
+email sender. It does not route any customer traffic — see `docs/agency-white-label-domain.md`.
+
+## Public data
+
+The storefront response (`GET /restaurants/by-slug/:slug`, `/by-domain/:hostname`) carries only
+`whiteLabelBrand` (brand name, https logo, hex color, three booleans) and `supportIdentity`
+(name, and the support email/URL only under `support_branding`). It never includes the agency's
+internal name, contact email, domain, verification token, sender settings, offerings or members.
+
+## Not built (and shown as such)
+
+- Agency-domain routing — e.g. an agency portal or client subdomains on the agency's own domain.
+  Each client's storefront domain is configured per location instead.
+- A branded operator (restaurant staff / agency) sign-in. Only customer sign-in is branded.
+- Provider-API sender verification. If the production SMTP provider offers a domain API, it can
+  replace the manual authorization step behind the same `emailSender.status` field.
+
+## Deployment checklist (none of this is done by the code)
+
+- `CUSTOM_DOMAIN_CNAME_TARGET` must be set in production for `custom_domain`/`branded_login` to
+  ever become active (the Phase 86 Caddy setup already sets it).
+- `DNS_VERIFIER=node` in production, so domain ownership and CNAME checks are real.
+- Custom senders: provider-side domain setup as described above, per agency.
+- No migration is needed: every new field is optional, and existing agencies/businesses read as
+  white-label off.
