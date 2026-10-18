@@ -36,11 +36,20 @@ import { isPlatformStorefrontHost } from "../lib/platformHost";
  */
 const LEGACY_DEFAULT_SLUG: string | undefined = import.meta.env.VITE_RESTAURANT_SLUG;
 
-export interface WhiteLabelBrand {\n  name: string;\n  logo?: string;\n  primaryColor?: string;\n  hidePlatformBranding: boolean;\n  brandedLogin: boolean;\n}\n\ninterface RestaurantContextValue {
+export interface WhiteLabelBrand {
+  name: string;
+  logo?: string;
+  primaryColor?: string;
+  hidePlatformBranding: boolean;
+  brandedLogin: boolean;
+}
+
+interface RestaurantContextValue {
   restaurant: Restaurant | null;
   availability: RestaurantAvailability | null;
   /** Customer-facing support identity ("Platform Support" today — see supportIdentity.service.ts). */
-  supportIdentity: SupportIdentity | null;\n  whiteLabelBrand: WhiteLabelBrand | null;
+  supportIdentity: SupportIdentity | null;
+  whiteLabelBrand: WhiteLabelBrand | null;
   loading: boolean;
   error: string | null;
   /** The slug this context resolved (or attempted to resolve) — null before any route match, and
@@ -66,7 +75,7 @@ export interface WhiteLabelBrand {\n  name: string;\n  logo?: string;\n  primary
 
 const RestaurantContext = createContext<RestaurantContextValue | undefined>(undefined);
 
-const BARE_STOREFRONT_PATHS = [/^\/$/, /^\/cart$/, /^\/loyalty$/, /^\/t\/[^/]+$/];
+const BARE_STOREFRONT_PATHS = [/^\/$/, /^\/cart$/, /^\/loyalty$/, /^\/t\/[^/]+$/, /^\/login$/, /^\/register$/, /^\/forgot-password$/, /^\/reset-password$/];
 
 export function RestaurantProvider({ children }: { children: ReactNode }) {
   const publicMatch = useMatch("/r/:restaurantSlug/*");
@@ -80,7 +89,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
-  const [supportIdentity, setSupportIdentity] = useState<SupportIdentity | null>(null);\n  const [whiteLabelBrand, setWhiteLabelBrand] = useState<WhiteLabelBrand | null>(null);
+  const [supportIdentity, setSupportIdentity] = useState<SupportIdentity | null>(null);
+  const [whiteLabelBrand, setWhiteLabelBrand] = useState<WhiteLabelBrand | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedVia, setResolvedVia] = useState<"slug" | "domain" | "none">("none");
@@ -125,7 +135,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setRestaurant(data.restaurant);
         setAvailability(data.availability);
-        setSupportIdentity(data.supportIdentity);\n        setWhiteLabelBrand(data.whiteLabelBrand ?? null);
+        setSupportIdentity(data.supportIdentity);
+        setWhiteLabelBrand(data.whiteLabelBrand ?? null);
         setResolvedVia(slug ? "slug" : "domain");
         setActiveCustomDomain(data.activeCustomDomain ?? null);
       })
