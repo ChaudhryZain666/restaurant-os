@@ -392,7 +392,7 @@ export async function getRestaurantByDomain(req: Request, res: Response) {
   sendSuccess(res, {
     restaurant: { ...toPublicRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
-    supportIdentity: getSupportIdentity(restaurant),
+    ...(await getCustomerWhiteLabelProjection(restaurant)),
   });
 }
 
