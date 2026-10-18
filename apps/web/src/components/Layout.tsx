@@ -30,7 +30,7 @@ function StoreOffIcon({ className }: { className?: string }) {
 export function Layout() {
   const { user, logout } = useAuth();
   const { lines } = useCart();
-  const { restaurant, loading: restaurantLoading, error: restaurantError, resolvedVia } = useRestaurant();
+  const { restaurant, whiteLabelBrand, loading: restaurantLoading, error: restaurantError, resolvedVia } = useRestaurant();
   const { definition } = useActiveTheme();
   const { Header, Footer } = definition.components;
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
@@ -102,7 +102,7 @@ export function Layout() {
         )}
       </main>
 
-      <Footer restaurant={restaurant} hideBranding={resolvedVia === "domain"} />
+      <Footer restaurant={restaurant} hideBranding={resolvedVia === "domain" || whiteLabelBrand?.hidePlatformBranding === true} />
 
       <HelpWidget />
     </div>
