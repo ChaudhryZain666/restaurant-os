@@ -164,7 +164,8 @@ should close soon after) · 🔵 External dependency.
   run `seed-demo-data.ts` against production. Expired demo-guest cleanup runs automatically every
   hour inside the API (Phase 87, BullMQ job `demo.cleanup_tick`); nothing to schedule.
 - 🟡 Menu import runs with `MENU_EXTRACTION_PROVIDER_MODE=live` (the mode is `live`, not `claude` as
-  the Phase 83 report said). Keep `ANTHROPIC_MODEL=claude-sonnet-4-5`: the extractor forces
+  the Phase 83 report said). Use `ANTHROPIC_MODEL=claude-sonnet-4-6` (`claude-sonnet-4-5` retires
+  2026-11-30; production switched on 2026-10-18). Don't move to a newer model yet: the extractor forces
   `tool_choice: {type: "tool"}`, which newer models (Opus 5.5 / Sonnet 5.5) reject, so changing the
   model needs a code change first.
 

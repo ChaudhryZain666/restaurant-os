@@ -120,6 +120,10 @@ export interface ProviderBillingWebhookEvent {
    *  app (e.g. in the provider's dashboard) is reflected locally. */
   providerPriceId?: string;
   billingNotice?: ProviderBillingNotice;
+  /** Phase 89 — true when the provider says this is a test notification from its webhook simulator
+   *  rather than something that happened to a real subscription. Set by the adapter only from the
+   *  signature-verified payload. Such events are acknowledged and recorded, never applied. */
+  simulated?: boolean;
   raw: unknown;
   /**
    * Phase 27 — present ONLY on a checkout-completion event (a brand-new subscription being

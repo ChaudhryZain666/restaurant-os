@@ -4,6 +4,8 @@ import { setStorageServiceForTests } from "../../storage/index.js";
 import type { StorageService, UploadResult } from "../../storage/StorageService.js";
 import { setMenuExtractionProviderForTests } from "../../menuExtraction/index.js";
 import type { MenuExtractionInput, MenuExtractionProvider, MenuExtractionResult } from "../../menuExtraction/MenuExtractionProvider.js";
+import { MenuExtractionError } from "../../menuExtraction/MenuExtractionProvider.js";
+import { UnrecoverableError } from "bullmq";
 import { closeTestConnections, createTestRestaurant, createTestUser } from "../../test-utils/fixtures.js";
 import { runMenuImportExtraction } from "./extractionPipeline.service.js";
 
@@ -128,5 +130,64 @@ describe("runMenuImportExtraction — retry safety", () => {
     expect(provider.calls).toBe(0); // never even called — the atomic claim found no "pending" job to take
     const reloaded = await MenuImportJob.findById(job._id);
     expect(reloaded!.status).toBe("ready_for_review");
+  });
+});
+
+// Phase 89 — permanent failures end the job at once (no repeated paid calls); temporary ones still
+// get BullMQ's retries; and the real final attempt (attemptsMade = maxAttempts - 1) is marked failed.
+class ErrorProvider implements MenuExtractionProvider {
+  readonly name = "error-test-provider";
+  calls = 0;
+  constructor(private readonly error: Error) {}
+  async extract(): Promise<MenuExtractionResult> {
+    this.calls++;
+    throw this.error;
+  }
+}
+
+describe("runMenuImportExtraction — permanent vs temporary failures", () => {
+  it.each([
+    ["invalid credentials", new MenuExtractionError("The extraction service rejected these credentials.", "invalid_credentials")],
+    ["a rejected request", new MenuExtractionError("The extraction service rejected this request (HTTP 400).", "rejected")],
+    ["a refusal", new MenuExtractionError("The extraction service declined to read this menu.", "refused")],
+    ["truncated output", new MenuExtractionError("This menu is too long to read in one pass.", "incomplete")],
+    ["a provider_error marked non-retryable (Claude HTTP 400)", new MenuExtractionError("Extraction service error (HTTP 400)", "provider_error", { retryable: false })],
+  ])("%s on the FIRST attempt fails the job immediately and tells BullMQ not to retry", async (_label, error) => {
+    const provider = new ErrorProvider(error);
+    setMenuExtractionProviderForTests(provider);
+    const job = await makePendingJob();
+
+    const thrown = await runMenuImportExtraction(job._id.toString(), { attemptsMade: 0, maxAttempts: 3 }).catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(UnrecoverableError);
+    expect((thrown as Error).message).toBe(error.message);
+    expect(provider.calls).toBe(1);
+    const reloaded = await MenuImportJob.findById(job._id);
+    expect(reloaded!.status).toBe("failed");
+    expect(reloaded!.error?.message).toBe(error.message);
+  });
+
+  it.each([
+    ["a rate limit", new MenuExtractionError("busy", "rate_limited")],
+    ["a timeout", new MenuExtractionError("timed out", "timeout")],
+    ["a provider outage", new MenuExtractionError("unavailable", "provider_unavailable")],
+    ["malformed output", new MenuExtractionError("malformed", "provider_error")],
+    ["an unexpected error", new Error("socket hang up")],
+  ])("%s on a non-final attempt is left for BullMQ's retry (job back to pending, original error rethrown)", async (_label, error) => {
+    setMenuExtractionProviderForTests(new ErrorProvider(error));
+    const job = await makePendingJob();
+
+    const thrown = await runMenuImportExtraction(job._id.toString(), { attemptsMade: 0, maxAttempts: 3 }).catch((e: unknown) => e);
+    expect(thrown).toBe(error);
+    expect(thrown).not.toBeInstanceOf(UnrecoverableError);
+    expect((await MenuImportJob.findById(job._id))!.status).toBe("pending");
+  });
+
+  it("the real final attempt (BullMQ attemptsMade = 2 of 3) marks the job failed instead of leaving it pending forever", async () => {
+    setMenuExtractionProviderForTests(new ErrorProvider(new MenuExtractionError("busy", "rate_limited")));
+    const job = await makePendingJob();
+    await expect(runMenuImportExtraction(job._id.toString(), { attemptsMade: 2, maxAttempts: 3 })).rejects.toThrow("busy");
+    const reloaded = await MenuImportJob.findById(job._id);
+    expect(reloaded!.status).toBe("failed");
+    expect(reloaded!.error?.message).toBe("busy");
   });
 });

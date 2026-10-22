@@ -4,6 +4,8 @@ import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restau
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
+import { earlyTrialCheckout, subscribeNowLabel, type CheckoutTarget } from "../lib/trialCheckout";
+import { planChangeBillingNote } from "../lib/planChangeDisclosure";
 import { useActiveBusinessId } from "../context/BusinessContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useCan } from "../hooks/useCan";
@@ -27,6 +29,7 @@ const STATUS_LABEL: Record<Subscription["status"], string> = {
 };
 
 const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
+  trial_started: "Free trial started",
   subscription_created: "Subscription started",
   plan_changed: "Plan changed",
   payment_succeeded: "Payment succeeded",
@@ -140,14 +143,19 @@ export function BillingPage() {
    *  Subscription via the webhook path. Phase 40.1 — the "overlay" branch now actually opens a real
    *  Paddle.js checkout using the real clientToken/providerPriceId/providerCustomerId the backend's
    *  checkout API response carries; on completion, reload() re-fetches so the real webhook-driven
-   *  state shows up once it lands (may take a moment — not instantaneous with the UI event). */
-  async function checkout() {
+   *  state shows up once it lands (may take a moment — not instantaneous with the UI event).
+   *  Phase 89 — the plan and interval are explicit: a trial's checkout passes the trial's own
+   *  (trialCheckoutTarget), only the no-subscription picker passes the picker's selection. */
+  async function checkout(target: CheckoutTarget) {
     setBusy(true);
     setError(null);
     try {
       const res = await apiClient.request<{
         checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string; environment?: string };
-      }>(`/businesses/${businessId}/subscription/checkout`, { method: "POST", body: { planCode: selectedPlanCode, billingInterval } });
+      }>(`/businesses/${businessId}/subscription/checkout`, {
+        method: "POST",
+        body: { planCode: target.planCode, billingInterval: target.billingInterval },
+      });
       if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
       } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
@@ -156,7 +164,7 @@ export function BillingPage() {
           { clientToken: res.checkout.clientToken, environment: res.checkout.environment },
           res.checkout.providerPriceId,
           res.checkout.providerCustomerId,
-          { ownerType: "business", ownerId: businessId, planCode: selectedPlanCode, billingInterval },
+          { ownerType: "business", ownerId: businessId, planCode: target.planCode, billingInterval: target.billingInterval },
           () => {
             void reload();
           }
@@ -266,6 +274,10 @@ export function BillingPage() {
   // second one.
   const needsPlanSelection = !subscription || !plan || subscription.status === "expired" || subscription.status === "cancelled";
   const isEndedNotNew = Boolean(subscription && (subscription.status === "expired" || subscription.status === "cancelled"));
+  // Phase 89 — a no-card trial's early checkout is for its own plan and interval, and is offered only
+  // when that interval's price is configured (otherwise the server refuses it: a dead action). The
+  // amount charged today is shown on the button before Paddle opens. See trialCheckout.ts.
+  const earlyCheckout = earlyTrialCheckout(subscription, plan);
 
   return (
     <div className="flex flex-col gap-6">
@@ -325,14 +337,14 @@ export function BillingPage() {
               signup ever takes) previously had NO checkout button anywhere while still trialing —
               createCheckoutSessionCore already allows it server-side ("a local-only trial is
               explicitly ALLOWED to proceed to checkout"), nothing here ever surfaced it. */}
-          {subscription.status === "trialing" && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
+          {earlyCheckout && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
             <Alert tone="warning" className="flex flex-wrap items-center justify-between gap-3">
               <span>
-                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()} — add a payment method now to
-                keep your restaurant's full features without interruption.
+                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()}. Subscribe to keep your
+                restaurant's full features — subscribing ends the trial and charges {earlyCheckout.amount} today.
               </span>
-              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy}>
-                Subscribe now
+              <Button size="sm" variant="secondary" onClick={() => void checkout(earlyCheckout.target)} disabled={busy}>
+                {subscribeNowLabel(earlyCheckout.amount)}
               </Button>
             </Alert>
           )}
@@ -364,6 +376,19 @@ export function BillingPage() {
                 <Button size="sm" onClick={reactivate} disabled={busy}>
                   Reactivate
                 </Button>
+              )}
+              {/* Phase 89 — a no-card trial can subscribe at any point, not only in the last 3 days
+                  (the banner above); the checkout is for the trial's own plan/interval and charges
+                  the plan price immediately, ending the free trial — said on the button itself. */}
+              {earlyCheckout && (
+                <span className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={() => void checkout(earlyCheckout.target)} disabled={busy}>
+                    {subscribeNowLabel(earlyCheckout.amount)}
+                  </Button>
+                  <span className="text-xs text-muted">
+                    Ends your free trial today; unused trial days aren't carried over.
+                  </span>
+                </span>
               )}
               {subscription.provider === "paddle" &&
                 subscription.providerSubscriptionId &&
@@ -497,7 +522,12 @@ export function BillingPage() {
               <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
                 {busy ? "Starting..." : "Start subscription"}
               </Button>
-              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void checkout({ planCode: selectedPlanCode, billingInterval })}
+                disabled={busy || !selectedPlanCode}
+              >
                 Subscribe now
               </Button>
             </div>
@@ -512,6 +542,13 @@ export function BillingPage() {
         if (!newPlan) return null;
         const newMaxLocations = newPlan.entitlements.find((e) => e.key === "max_locations")?.value;
         const conflict = typeof newMaxLocations === "number" && locations.length > newMaxLocations;
+        // Phase 89 — what this change costs and when, matching the API's proration mode (see planChangeDisclosure.ts).
+        const billingNote = planChangeBillingNote(
+          subscription,
+          newPlan.name,
+          formatPrice(newPlan.pricing, subscription.billingInterval),
+          new Date(subscription.currentPeriodEnd).toLocaleDateString()
+        );
         return (
           <ConfirmDialog
             open
@@ -541,6 +578,7 @@ export function BillingPage() {
                 </>
               )}
             </dl>
+            {billingNote && <p className="mt-3 text-sm text-foreground">{billingNote}</p>}
             <p className="mt-3 text-sm text-muted">
               This applies to your whole business — every location, not just the one you're currently viewing.
             </p>

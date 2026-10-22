@@ -1,4 +1,5 @@
 import mongoose, { type HydratedDocument } from "mongoose";
+import { MenuImportFileError, validateMenuImportFiles } from "./menuFileValidation.js";
 import type { UpdateMenuImportDraftRowInput } from "@restaurant/validation";
 import { MenuImportJob, type MenuImportJobDoc, type MenuImportSourceType } from "../../models/MenuImportJob.js";
 
@@ -66,6 +67,18 @@ export async function createMenuImportJob(params: CreateMenuImportJobParams): Pr
     throw ApiError.badRequest("At least one file is required for this import source.");
   }
 
+  // Phase 89 — check the files' real bytes (signature, PDF readability and page count) before
+  // anything is stored or queued for paid extraction; the stored type is the detected one.
+  let detectedTypes: string[] | undefined;
+  if (params.files && params.sourceType !== "url") {
+    try {
+      detectedTypes = await validateMenuImportFiles(params.sourceType, params.files);
+    } catch (err) {
+      if (err instanceof MenuImportFileError) throw ApiError.badRequest(err.message);
+      throw err;
+    }
+  }
+
   const scope = await resolveImportScope(params.restaurantId);
   const jobId = new mongoose.Types.ObjectId();
 
@@ -75,11 +88,12 @@ export async function createMenuImportJob(params: CreateMenuImportJobParams): Pr
     for (let i = 0; i < params.files.length; i++) {
       const file = params.files[i];
       const key = `restaurants/${params.restaurantId}/menu-imports/${jobId.toString()}/source/${i + 1}-${sanitizeFileName(file.originalFileName)}`;
-      await storage.upload(key, file.buffer, file.contentType);
+      const contentType = detectedTypes?.[i] ?? file.contentType;
+      await storage.upload(key, file.buffer, contentType);
       sourceFiles.push({
         storageKey: key,
         originalFileName: file.originalFileName,
-        contentType: file.contentType,
+        contentType,
         sizeBytes: file.buffer.length,
         order: i + 1,
       });

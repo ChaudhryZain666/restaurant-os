@@ -7,7 +7,7 @@ import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
 import { Plan } from "../models/Plan.js";
 import { Subscription } from "../models/Subscription.js";
-import { cancelSubscription, changeSubscriptionPlan, processBillingProviderEvent } from "./subscription.service.js";
+import { cancelSubscription, changeSubscriptionPlan, processBillingProviderEvent, SIMULATED_EVENT_IGNORED } from "./subscription.service.js";
 import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 import { closeTestConnections, createTestPlan, createTestSubscription } from "../test-utils/fixtures.js";
 
@@ -54,7 +54,7 @@ afterAll(async () => {
   await Promise.all([
     Subscription.deleteMany({ ownerId: { $in: ownerIds } }),
     BillingHistoryEvent.deleteMany({ ownerId: { $in: ownerIds } }),
-    BillingWebhookEvent.deleteMany({ eventId: /^evt_p89_/ }),
+    BillingWebhookEvent.deleteMany({ eventId: /^(evt|ntfsimevt)_p89_/ }),
     Plan.deleteMany({ _id: { $in: planIds } }),
   ]);
   await closeTestConnections();
@@ -328,5 +328,276 @@ describe("Refund/chargeback notices are recorded once, even under concurrent del
     await recordBillingHistoryEvent({ ...row, noticeKey: undefined, type: "plan_changed" });
     await recordBillingHistoryEvent({ ...row, noticeKey: undefined, type: "plan_changed" });
     expect(await BillingHistoryEvent.countDocuments({ ownerId, type: "plan_changed" })).toBe(2);
+  });
+});
+
+describe("Phase 89 — events for a subscription that isn't recorded yet (out-of-order delivery)", () => {
+  it("an activation arriving before the subscription is recorded is retryable, applies on retry, and a repeat is a no-op", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    ownerIds.push(ownerId);
+    const providerSubscriptionId = `sub_p89_race_${ownerId.toString()}`;
+    const activated = event(providerSubscriptionId, { eventType: "subscription.activated", status: "active", occurredAt: new Date() });
+
+    // 1. subscription.activated lands first: refused with a retryable 503, and NOT consumed.
+    await expect(processBillingProviderEvent("paddle", activated)).rejects.toMatchObject({ statusCode: 503 });
+    const pending = await BillingWebhookEvent.findOne({ provider: "paddle", eventId: activated.eventId }).lean();
+    expect(pending?.processedAt).toBeUndefined();
+    expect(pending?.processingStartedAt).toBeUndefined(); // claim released, so a redelivery can claim it
+    expect(pending?.processingError).toMatch(/not recorded yet/);
+
+    // 2. subscription.created has now linked the reference (still trialing): Paddle's retry applies.
+    await createTestSubscription("business", ownerId, starter._id, {
+      provider: "paddle",
+      providerSubscriptionId,
+      status: "trialing",
+      trialEnd: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+    });
+    await processBillingProviderEvent("paddle", activated);
+    const after = await Subscription.findOne({ providerSubscriptionId }).lean();
+    expect(after?.status).toBe("active");
+    expect(after?.trialEnd).toBeUndefined(); // an active subscription is no longer in a trial
+    const done = await BillingWebhookEvent.findOne({ provider: "paddle", eventId: activated.eventId }).lean();
+    expect(done?.processedAt).toBeInstanceOf(Date);
+    expect(done?.processingError).toBeUndefined();
+
+    // 3. Paddle delivers the same event again: no change, no second history row.
+    const historyBefore = await BillingHistoryEvent.countDocuments({ ownerId });
+    await processBillingProviderEvent("paddle", activated);
+    expect(await BillingHistoryEvent.countDocuments({ ownerId })).toBe(historyBefore);
+    expect((await Subscription.findOne({ providerSubscriptionId }).lean())?.updatedAt).toEqual(after?.updatedAt);
+  });
+
+  it("an old event for an unknown reference is still recorded and ignored, so a foreign subscription never retries for days", async () => {
+    const stale = event("sub_p89_foreign_old", { status: "active", occurredAt: new Date(Date.now() - 60 * 60 * 1000) });
+    await expect(processBillingProviderEvent("paddle", stale)).resolves.toBeUndefined();
+    expect((await BillingWebhookEvent.findOne({ provider: "paddle", eventId: stale.eventId }).lean())?.processedAt).toBeInstanceOf(Date);
+  });
+
+  it("a recent event with nothing to apply (a first-payment transaction.completed) is not retried", async () => {
+    const firstPayment = event("sub_p89_foreign_txn", { eventType: "transaction.completed", occurredAt: new Date() });
+    await expect(processBillingProviderEvent("paddle", firstPayment)).resolves.toBeUndefined();
+    expect((await BillingWebhookEvent.findOne({ provider: "paddle", eventId: firstPayment.eventId }).lean())?.processedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("Phase 89 — checkout completion of a no-card trial clears the trial end date", () => {
+  it("a trial converted by checkout to an active provider subscription has no trialEnd", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    ownerIds.push(ownerId);
+    await createTestSubscription("business", ownerId, starter._id, {
+      provider: "paddle",
+      status: "trialing",
+      trialStart: new Date(),
+      trialEnd: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000),
+    });
+    const providerSubscriptionId = `sub_p89_checkout_${ownerId.toString()}`;
+    const periodStart = new Date();
+    const periodEnd = new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+    jest
+      .spyOn(getBillingProvider(), "retrieveSubscription")
+      .mockResolvedValue({ providerSubscriptionId, status: "active", currentPeriodStart: periodStart, currentPeriodEnd: periodEnd });
+
+    await processBillingProviderEvent(
+      "paddle",
+      event(providerSubscriptionId, {
+        eventType: "subscription.created",
+        status: "active",
+        occurredAt: new Date(),
+        checkoutMetadata: { ownerType: "business", ownerId: ownerId.toString(), planCode: starter.code, billingInterval: "monthly", providerCustomerId: "ctm_p89_test" },
+      })
+    );
+
+    const converted = await Subscription.findOne({ ownerType: "business", ownerId }).lean();
+    expect(converted?.status).toBe("active");
+    expect(converted?.providerSubscriptionId).toBe(providerSubscriptionId);
+    expect(converted?.trialEnd).toBeUndefined();
+    expect(converted?.currentPeriodEnd?.getTime()).toBe(periodEnd.getTime());
+  });
+});
+
+describe("Phase 89 — a subscription event that doesn't change the status is a normal no-op", () => {
+  const eventRow = (eventId: string) => BillingWebhookEvent.findOne({ provider: "paddle", eventId }).lean();
+
+  it("active -> active: details are applied, the event is processed cleanly, nothing is recorded as an error", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    const renewal = event(providerSubscriptionId, {
+      eventType: "subscription.updated",
+      status: "active",
+      occurredAt: new Date("2026-11-01T00:00:05Z"),
+      currentPeriod: { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") },
+      scheduledCancelAt: null,
+    });
+    await processBillingProviderEvent("paddle", renewal);
+
+    const sub = await Subscription.findOne({ ownerId }).lean();
+    expect(sub!.status).toBe("active");
+    expect(sub!.currentPeriodEnd).toEqual(new Date("2026-12-01T00:00:00Z")); // details still applied
+    expect(sub!.lastProviderEventAt).toEqual(new Date("2026-11-01T00:00:05Z"));
+    const row = await eventRow(renewal.eventId);
+    expect(row?.processedAt).toBeInstanceOf(Date);
+    expect(row?.processingError).toBeUndefined(); // was "Ignored: active -> active"
+    expect(row?.processingStartedAt).toBeUndefined();
+    expect(await history(ownerId)).toHaveLength(0); // no status transition, so no history row
+  });
+
+  it("a plan/price change with an unchanged status still moves the plan (the T5 case)", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    const growthMonthly = growth.pricing.find((p) => p.interval === "monthly")!;
+    const update = event(providerSubscriptionId, { eventType: "subscription.updated", status: "active", occurredAt: new Date(), providerPriceId: growthMonthly.providerPriceId! });
+    await processBillingProviderEvent("paddle", update);
+
+    const sub = await Subscription.findOne({ ownerId }).lean();
+    expect(sub!.planId.toString()).toBe(growth._id.toString());
+    expect(sub!.billingInterval).toBe("monthly");
+    expect(sub!.status).toBe("active");
+    expect((await history(ownerId)).map((r) => r.type)).toEqual(["plan_changed"]);
+    expect((await eventRow(update.eventId))?.processingError).toBeUndefined();
+  });
+
+  it("a genuinely invalid transition is still refused and recorded (active -> trialing)", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    const backwards = event(providerSubscriptionId, { eventType: "subscription.updated", status: "trialing", occurredAt: new Date() });
+    await processBillingProviderEvent("paddle", backwards);
+
+    expect((await Subscription.findOne({ ownerId }).lean())!.status).toBe("active");
+    const row = await eventRow(backwards.eventId);
+    expect(row?.processedAt).toBeInstanceOf(Date);
+    expect(row?.processingError).toBe("Ignored: active -> trialing");
+  });
+
+  it("a repeated delivery of the same no-op event changes nothing", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    const same = event(providerSubscriptionId, { eventType: "subscription.updated", status: "active", occurredAt: new Date("2026-11-01T00:00:05Z") });
+    await processBillingProviderEvent("paddle", same);
+    const first = await Subscription.findOne({ ownerId }).lean();
+    const firstRow = await eventRow(same.eventId);
+
+    await processBillingProviderEvent("paddle", same);
+    expect((await Subscription.findOne({ ownerId }).lean())!.updatedAt).toEqual(first!.updatedAt);
+    expect((await eventRow(same.eventId))?.processedAt).toEqual(firstRow?.processedAt);
+    expect(await BillingWebhookEvent.countDocuments({ provider: "paddle", eventId: same.eventId })).toBe(1);
+  });
+
+  it("an older same-status event arriving late is still ignored as older (ordering protection unchanged)", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    const newer = { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") };
+    await processBillingProviderEvent("paddle", event(providerSubscriptionId, { status: "active", occurredAt: new Date("2026-11-01T00:00:05Z"), currentPeriod: newer }));
+    const late = event(providerSubscriptionId, {
+      status: "active",
+      occurredAt: new Date("2026-10-01T00:00:05Z"),
+      currentPeriod: { start: new Date("2026-10-01T00:00:00Z"), end: new Date("2026-11-01T00:00:00Z") },
+    });
+    await processBillingProviderEvent("paddle", late);
+
+    expect((await Subscription.findOne({ ownerId }).lean())!.currentPeriodEnd).toEqual(newer.end);
+    expect((await eventRow(late.eventId))?.processingError).toBe("Ignored: older than the subscription state already applied");
+  });
+});
+
+describe("Phase 89 — provider webhook-simulator events are recorded, never applied", () => {
+  const simulated = (providerSubscriptionId: string, fields: Partial<ProviderBillingWebhookEvent>) => {
+    const e = event(providerSubscriptionId, { ...fields, simulated: true });
+    return { ...e, eventId: e.eventId.replace(/^evt_/, "ntfsimevt_") };
+  };
+  const webhookRows = (eventId: string) => BillingWebhookEvent.find({ provider: "paddle", eventId }).lean();
+  const recurringPayment = (reference: string) => ({ type: "payment_succeeded" as const, amountCents: 5900, currency: "USD", reference });
+  const snapshot = async (ownerId: mongoose.Types.ObjectId) => {
+    const s = (await Subscription.findOne({ ownerId }).lean())!;
+    return { status: s.status, planId: String(s.planId), billingInterval: s.billingInterval, start: s.currentPeriodStart, end: s.currentPeriodEnd, lastProviderEventAt: s.lastProviderEventAt, cancelAt: s.cancelAt };
+  };
+  const applied = new Date("2026-10-15T00:00:00Z");
+
+  it("a simulated renewal payment records no payment row and changes nothing, even when delivered twice", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription({ lastProviderEventAt: applied });
+    const before = await snapshot(ownerId);
+    const sim = simulated(providerSubscriptionId, {
+      eventType: "transaction.completed",
+      occurredAt: new Date(),
+      billingNotice: recurringPayment(`txn_sim_${ownerId.toString()}`),
+    });
+
+    await processBillingProviderEvent("paddle", sim);
+    await processBillingProviderEvent("paddle", sim);
+
+    expect(await history(ownerId)).toHaveLength(0);
+    expect(await snapshot(ownerId)).toEqual(before);
+    const rows = await webhookRows(sim.eventId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].processedAt).toBeTruthy();
+    expect(rows[0].processingStartedAt).toBeUndefined();
+    expect(rows[0].processingError).toBe(SIMULATED_EVENT_IGNORED);
+  });
+
+  it("a simulated subscription update cannot advance the period, change plan or status, or move lastProviderEventAt", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription({ lastProviderEventAt: applied });
+    const before = await snapshot(ownerId);
+    const sim = simulated(providerSubscriptionId, {
+      eventType: "subscription.updated",
+      status: "past_due",
+      occurredAt: new Date(),
+      currentPeriod: { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") },
+      providerPriceId: growth.pricing.find((p) => p.interval === "monthly")!.providerPriceId!,
+      scheduledCancelAt: new Date("2026-12-01T00:00:00Z"),
+    });
+
+    await processBillingProviderEvent("paddle", sim);
+
+    expect(await snapshot(ownerId)).toEqual(before);
+    expect(await history(ownerId)).toHaveLength(0);
+    expect((await webhookRows(sim.eventId))[0].processingError).toBe(SIMULATED_EVENT_IGNORED);
+  });
+
+  it("a simulated checkout-creation event never creates a subscription", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    ownerIds.push(ownerId);
+    const sim = simulated(`sub_p89_sim_${ownerId.toString()}`, {
+      eventType: "subscription.created",
+      status: "active",
+      occurredAt: new Date(),
+      checkoutMetadata: { ownerType: "business", ownerId: ownerId.toString(), planCode: starter.code, billingInterval: "monthly", providerCustomerId: "ctm_p89_synthetic" },
+    });
+
+    await processBillingProviderEvent("paddle", sim);
+
+    expect(await Subscription.countDocuments({ ownerId })).toBe(0);
+    expect((await webhookRows(sim.eventId))[0].processingError).toBe(SIMULATED_EVENT_IGNORED);
+  });
+
+  it("a recent simulated event for an unknown subscription is acknowledged, not answered with a retry", async () => {
+    const sim = simulated(`sub_p89_unknown_${new mongoose.Types.ObjectId().toString()}`, { eventType: "subscription.updated", status: "active", occurredAt: new Date() });
+    await expect(processBillingProviderEvent("paddle", sim)).resolves.toBeUndefined();
+    expect((await webhookRows(sim.eventId))[0].processingError).toBe(SIMULATED_EVENT_IGNORED);
+  });
+
+  it("control: the same renewal as a genuine event records exactly one payment row, keeps status active, and a repeat adds nothing", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription({ lastProviderEventAt: applied });
+    const genuine = event(providerSubscriptionId, { eventType: "transaction.completed", occurredAt: new Date(), billingNotice: recurringPayment(`txn_real_${ownerId.toString()}`) });
+    expect(genuine.simulated).toBeUndefined();
+
+    await processBillingProviderEvent("paddle", genuine);
+    await processBillingProviderEvent("paddle", genuine);
+
+    const rows = await history(ownerId);
+    expect(rows.map((r) => r.type)).toEqual(["payment_succeeded"]);
+    expect(rows[0].amountCents).toBe(5900);
+    const after = await snapshot(ownerId);
+    expect(after.status).toBe("active");
+    expect(after.lastProviderEventAt).toEqual(applied); // transaction events never order subscription state
+    expect((await webhookRows(genuine.eventId))[0].processingError).toBeUndefined();
+  });
+
+  it("control: a genuine subscription update still advances the period and lastProviderEventAt", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription({ lastProviderEventAt: applied });
+    const next = { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") };
+    const occurredAt = new Date("2026-11-01T00:00:05Z");
+    const genuine = event(providerSubscriptionId, { eventType: "subscription.updated", status: "active", occurredAt, currentPeriod: next });
+
+    await processBillingProviderEvent("paddle", genuine);
+
+    const after = await snapshot(ownerId);
+    expect(after.start).toEqual(next.start);
+    expect(after.end).toEqual(next.end);
+    expect(after.lastProviderEventAt).toEqual(occurredAt);
+    expect(after.status).toBe("active");
   });
 });

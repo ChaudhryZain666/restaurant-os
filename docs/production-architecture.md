@@ -237,7 +237,8 @@ app never defaults to sandbox, and rejects a token from the other environment
 
 ## 6. Known constraints
 
-- **Anthropic model.** Keep `ANTHROPIC_MODEL=claude-sonnet-4-5` (active, working). The extractor
+- **Anthropic model.** Use `ANTHROPIC_MODEL=claude-sonnet-4-6` (production since 2026-10-18;
+  `claude-sonnet-4-5` retires 2026-11-30, and 4.6 is supported until at least 2027-02-17). The extractor
   forces `tool_choice: { type: "tool" }`; newer models such as Opus 5.5 and Sonnet 5.5 reject forced
   tool choice, so changing the model needs a code change in `ClaudeMenuExtractionProvider.ts` first.
 - **Scaling** past one API instance needs a Socket.IO Redis adapter and a separate worker process.

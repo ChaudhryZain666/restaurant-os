@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
+import { immediateChargeAmount, subscribeNowLabel, trialCheckoutTarget, type CheckoutTarget } from "../lib/trialCheckout";
 import { useAgencyPermission } from "../hooks/useAgencyPermission";
 import { MARKETING_CONTACT_URL } from "../lib/links";
 
@@ -27,6 +28,7 @@ const STATUS_LABEL: Record<Subscription["status"], string> = {
 };
 
 const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
+  trial_started: "Free trial started",
   subscription_created: "Subscription started",
   plan_changed: "Plan changed",
   payment_succeeded: "Payment succeeded",
@@ -158,13 +160,20 @@ export function AgencyBillingPage() {
     }
   }
 
-  async function checkout() {
+  /** Phase 89 — the plan and interval are explicit: a trial's checkout passes the trial's own
+   *  (trialCheckoutTarget), only the no-subscription picker passes the picker's selection. The
+   *  picker state is hidden while a trial exists and defaults to monthly, so using it for a trial
+   *  could request a different interval than the trial's (refused server-side) or show a wrong price. */
+  async function checkout(target: CheckoutTarget) {
     setBusy(true);
     setError(null);
     try {
       const res = await apiClient.request<{
         checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string; environment?: string };
-      }>(`/agencies/${activeAgencyId}/subscription/checkout`, { method: "POST", body: { planCode: selectedPlanCode, billingInterval } });
+      }>(`/agencies/${activeAgencyId}/subscription/checkout`, {
+        method: "POST",
+        body: { planCode: target.planCode, billingInterval: target.billingInterval },
+      });
       if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
       } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
@@ -173,7 +182,7 @@ export function AgencyBillingPage() {
           { clientToken: res.checkout.clientToken, environment: res.checkout.environment },
           res.checkout.providerPriceId,
           res.checkout.providerCustomerId,
-          { ownerType: "agency", ownerId: activeAgencyId!, planCode: selectedPlanCode, billingInterval },
+          { ownerType: "agency", ownerId: activeAgencyId!, planCode: target.planCode, billingInterval: target.billingInterval },
           () => {
             void reload();
           }
@@ -262,6 +271,10 @@ export function AgencyBillingPage() {
   // subscription used to show a dead-end status card with no action buttons and no way back in.
   const needsPlanSelection = !subscription || !plan || subscription.status === "expired" || subscription.status === "cancelled";
   const isEndedNotNew = Boolean(subscription && (subscription.status === "expired" || subscription.status === "cancelled"));
+  // Phase 89 — a trial's early checkout is for the trial's OWN plan and interval (never the hidden
+  // picker's monthly default), and its charge is shown from that same target before Paddle opens.
+  const trialTarget = trialCheckoutTarget(subscription, plan?.code);
+  const trialChargeToday = trialTarget && plan ? immediateChargeAmount(plan.pricing, trialTarget.billingInterval) : null;
   const atOrOverCapacity = Boolean(usage && usage.businessCount >= usage.maxBusinesses);
 
   return (
@@ -345,14 +358,17 @@ export function AgencyBillingPage() {
             </Alert>
           )}
 
-          {subscription.status === "trialing" && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
+          {/* Phase 89 — only offered when the trial's own plan/interval AND its price are known;
+              otherwise no early-checkout action is shown (the trial end date stays visible below). */}
+          {trialTarget && trialChargeToday && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
             <Alert tone="warning" className="flex flex-wrap items-center justify-between gap-3">
               <span>
-                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()} — add a payment method now to
-                keep your managed businesses' full features without interruption.
+                Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()}. Subscribing now charges{" "}
+                {trialChargeToday} today to keep your managed businesses' full features. Ends your free trial today;
+                unused trial days aren't carried over.
               </span>
-              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy}>
-                Subscribe now
+              <Button size="sm" variant="secondary" onClick={() => void checkout(trialTarget)} disabled={busy}>
+                {subscribeNowLabel(trialChargeToday)}
               </Button>
             </Alert>
           )}
@@ -467,7 +483,12 @@ export function AgencyBillingPage() {
               <Button size="sm" onClick={start} disabled={busy || !selectedPlanCode}>
                 {busy ? "Starting..." : "Start subscription"}
               </Button>
-              <Button size="sm" variant="secondary" onClick={checkout} disabled={busy || !selectedPlanCode}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void checkout({ planCode: selectedPlanCode, billingInterval })}
+                disabled={busy || !selectedPlanCode}
+              >
                 Subscribe now
               </Button>
             </div>

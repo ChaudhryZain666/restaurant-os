@@ -33,6 +33,19 @@ export function resolveTrialDays(plan: Pick<PlanDoc, "trialDays">): number | und
   return days > 0 ? days : undefined;
 }
 
+/**
+ * Lane A — a private plan (`isPubliclyListed: false`, e.g. a negotiated client price) is assigned by
+ * a platform admin, never picked self-serve: its code must not work for anyone who learns it. A
+ * self-serve request may use one only for the subscription that is already on it (e.g. converting
+ * an assigned trial through checkout). Same message as an unknown plan, so its existence isn't
+ * confirmed either.
+ */
+function assertSelfServePlan(plan: Pick<PlanDoc, "isPubliclyListed"> & { _id: unknown }, current?: { planId: unknown } | null) {
+  if (plan.isPubliclyListed !== false) return;
+  if (current && String(current.planId) === String(plan._id)) return;
+  throw ApiError.badRequest("Unknown or inactive plan");
+}
+
 /** The interval-matched price, if the plan has one configured — used both to stamp economic terms
  *  onto a BillingHistoryEvent and to resolve a real provider's price identifier for checkout. */
 function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: BillingInterval) {
@@ -60,7 +73,8 @@ async function createSubscriptionCore(
   ownerType: SubscriptionOwnerType,
   ownerId: string,
   planCode: string,
-  billingInterval: BillingInterval
+  billingInterval: BillingInterval,
+  { assignedByPlatform = false }: { assignedByPlatform?: boolean } = {}
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
@@ -73,6 +87,7 @@ async function createSubscriptionCore(
   if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
     throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
   }
+  if (!assignedByPlatform) assertSelfServePlan(plan);
 
   const trialDays = resolveTrialDays(plan);
   if (!trialDays) {
@@ -104,16 +119,15 @@ async function createSubscriptionCore(
     throw err;
   }
 
-  const pricing = resolvePricing(plan, billingInterval);
+  // Phase 89 — a no-card trial charges nothing, so its history row is "trial_started" with no
+  // amount (it used to be "subscription_created" carrying the plan price, which read as a payment).
   await recordBillingHistoryEvent({
     ownerType,
     ownerId,
     subscriptionId: subscription._id,
-    type: "subscription_created",
+    type: "trial_started",
     provider: subscription.provider,
-    amountCents: pricing?.amountCents,
-    currency: pricing?.currency,
-    metadata: { planCode: plan.code },
+    metadata: { planCode: plan.code, billingInterval, trialEnd: subscription.trialEnd },
   });
 
   return subscription;
@@ -154,6 +168,16 @@ async function createCheckoutSessionCore(
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
   if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
     throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
+  }
+
+  assertSelfServePlan(plan, existing);
+
+  // Phase 89 — a local-only trial converts on its OWN plan and interval. A client that sent a
+  // different one (e.g. a plan picker's default) would otherwise start a checkout — and, on
+  // completion, a paid subscription — for a plan the owner never chose. Refused before any
+  // provider call; "Change plan" is the way to move a trial to another plan first.
+  if (existing?.status === "trialing" && (String(existing.planId) !== String(plan._id) || existing.billingInterval !== billingInterval)) {
+    throw ApiError.conflict("Checkout must be for your trial's current plan and billing interval. Change plan first to switch.");
   }
 
   const pricing = resolvePricing(plan, billingInterval);
@@ -203,6 +227,24 @@ export async function createSubscriptionForAgency(
   billingInterval: BillingInterval
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   return createSubscriptionCore("agency", agencyId, planCode, billingInterval);
+}
+
+/** Lane A — platform-admin assignment (platformSubscription.controller.ts): the same lifecycle as a
+ *  self-serve trial, except that a private (unlisted) plan is allowed. */
+export async function assignPlanToBusiness(
+  businessId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("business", businessId, planCode, billingInterval, { assignedByPlatform: true });
+}
+
+export async function assignPlanToAgency(
+  agencyId: string,
+  planCode: string,
+  billingInterval: BillingInterval
+): Promise<HydratedDocument<SubscriptionDoc>> {
+  return createSubscriptionCore("agency", agencyId, planCode, billingInterval, { assignedByPlatform: true });
 }
 
 export async function getSubscriptionForBusiness(businessId: string): Promise<HydratedDocument<SubscriptionDoc> | null> {
@@ -358,6 +400,10 @@ async function changeSubscriptionPlanCore(
   }
   const plan = await Plan.findOne({ code: newPlanCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
+  if (plan.type !== EXPECTED_PLAN_TYPE[ownerType]) {
+    throw ApiError.badRequest(`This plan is not available for ${OWNER_LABEL[ownerType]} accounts`);
+  }
+  assertSelfServePlan(plan, subscription);
 
   const provider = getBillingProvider();
   const actedAt = new Date();
@@ -602,7 +648,9 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
     existingLocalTrial.billingInterval = meta.billingInterval;
     existingLocalTrial.currentPeriodStart = snapshot.currentPeriodStart;
     existingLocalTrial.currentPeriodEnd = snapshot.currentPeriodEnd;
-    existingLocalTrial.trialEnd = snapshot.trialEnd ?? existingLocalTrial.trialEnd;
+    // Phase 89 — a subscription the provider reports as active is no longer in a trial: clear the
+    // local trial's end date instead of carrying it over (it read as a live trial in admin views).
+    existingLocalTrial.trialEnd = status === "trialing" ? (snapshot.trialEnd ?? existingLocalTrial.trialEnd) : undefined;
     existingLocalTrial.provider = providerName as SubscriptionDoc["provider"];
     existingLocalTrial.providerCustomerId = meta.providerCustomerId;
     existingLocalTrial.providerSubscriptionId = event.providerSubscriptionId;
@@ -738,6 +786,21 @@ async function claimWebhookEventForProcessing(providerName: string, event: Provi
   return false;
 }
 
+/** Phase 89 — how long an event for a not-yet-recorded subscription keeps asking to be retried.
+ *  Covers Paddle's sandbox schedule (3 retries within 15 minutes) and the first live retries; the
+ *  out-of-order case it exists for resolves within seconds. */
+export const UNKNOWN_REFERENCE_RETRY_WINDOW_MS = 15 * 60 * 1000;
+
+/** Phase 89 — recorded on a provider-simulator event (see processBillingProviderEvent). */
+export const SIMULATED_EVENT_IGNORED = "Ignored: provider simulator event — not applied";
+
+function isRetryableUnknownReference(event: ProviderBillingWebhookEvent, now = Date.now()): boolean {
+  if (!event.providerSubscriptionId || !event.occurredAt) return false;
+  // Nothing to apply (e.g. a first-payment transaction.completed) — retrying would gain nothing.
+  if (!event.status && !event.billingNotice) return false;
+  return now - event.occurredAt.getTime() < UNKNOWN_REFERENCE_RETRY_WINDOW_MS;
+}
+
 /**
  * The single entry point every inbound billing webhook (real or mock-simulated) goes through, for
  * BOTH business and agency subscriptions — the lookup below is keyed by providerSubscriptionId
@@ -762,6 +825,23 @@ export async function processBillingProviderEvent(providerName: string, event: P
   if (!claimed) return;
 
   try {
+    // Phase 89 — a provider-simulator event is correctly signed and may carry a real subscription's
+    // data, but nothing happened: applying it could advance a period or record a payment that was
+    // never charged. It is acknowledged and recorded (a repeat stays a no-op through the claim
+    // above), never applied — before any branch below, including checkout completion.
+    if (event.simulated) {
+      logger.info("billing webhook simulator event recorded, not applied", {
+        provider: providerName,
+        eventType: event.eventType,
+        eventId: event.eventId,
+      });
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date(), processingError: SIMULATED_EVENT_IGNORED }, $unset: { processingStartedAt: "" } }
+      );
+      return;
+    }
+
     if (event.checkoutMetadata) {
       await handleCheckoutCompletionEvent(providerName, event);
       return;
@@ -777,6 +857,20 @@ export async function processBillingProviderEvent(providerName: string, event: P
       ? await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId })
       : null;
     if (!subscription) {
+      // Phase 89 — Paddle does not guarantee delivery order: subscription.activated can arrive
+      // while subscription.created (which links the reference) is still being processed. A recent
+      // event that would change something is therefore answered with a retryable error (the catch
+      // below clears the claim; the HTTP layer returns 503; Paddle retries) instead of being
+      // consumed. Older or no-op events for unknown references are still recorded and ignored, so
+      // a genuinely foreign reference never retries for days.
+      if (isRetryableUnknownReference(event)) {
+        logger.warn("billing webhook event for a subscription not recorded yet — asking the provider to retry", {
+          provider: providerName,
+          eventType: event.eventType,
+          providerSubscriptionId: event.providerSubscriptionId,
+        });
+        throw ApiError.serviceUnavailable("Subscription not recorded yet — retry later.");
+      }
       if (event.providerSubscriptionId) {
         logger.warn("billing webhook event for unknown subscription reference", {
           provider: providerName,
@@ -805,6 +899,14 @@ export async function processBillingProviderEvent(providerName: string, event: P
     }
 
     const targetStatus = resolveTransitionTarget(current.status, event.status, event.scheduledCancelAt);
+    // Phase 89 — most subscription.updated events (plan changes, renewals) don't change the status.
+    // Their details were applied just above; an unchanged status is a normal no-op, not an invalid
+    // transition (the shared state machine has no self-transitions because in-app actions must
+    // still refuse e.g. reactivating an already-active subscription).
+    if (targetStatus === current.status) {
+      await markProcessed();
+      return;
+    }
     if (!isValidSubscriptionTransition(current.status, targetStatus)) {
       logger.warn("ignored invalid subscription status transition from webhook", {
         subscriptionId: current.id,
@@ -825,8 +927,11 @@ export async function processBillingProviderEvent(providerName: string, event: P
       { _id: current._id, status: current.status, ...notOlderThanApplied(event.occurredAt) },
       {
         $set: { status: targetStatus, ...(targetStatus === "cancelled" ? { cancelledAt: new Date() } : {}) },
-        // Un-cancelled at the provider (cancelling -> active): the scheduled end date no longer applies.
-        ...(targetStatus === "active" && current.status === "cancelling" ? { $unset: { cancelAt: "" } } : {}),
+        // Un-cancelled at the provider (cancelling -> active): the scheduled end date no longer
+        // applies. Phase 89 — and an active subscription is no longer in a trial.
+        ...(targetStatus === "active"
+          ? { $unset: { trialEnd: "", ...(current.status === "cancelling" ? { cancelAt: "" } : {}) } }
+          : {}),
       },
       { new: true }
     );

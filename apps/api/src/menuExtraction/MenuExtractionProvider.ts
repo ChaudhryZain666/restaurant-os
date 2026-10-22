@@ -58,13 +58,46 @@ export interface MenuExtractionResult {
   modelUsed: string;
 }
 
+export type MenuExtractionErrorCode =
+  | "timeout"
+  | "invalid_credentials"
+  | "provider_unavailable"
+  | "not_configured"
+  | "provider_error"
+  // Phase 89 — finer outcomes, so the job runner can tell a temporary failure from a permanent one.
+  | "rate_limited"
+  | "quota_exceeded"
+  | "rejected"
+  | "refused"
+  | "incomplete"
+  | "invalid_source";
+
+/** Phase 89 — codes whose failure won't change by trying the exact same request again: retrying
+ *  would only repeat a paid call. Everything else (timeouts, provider outages, rate limits, a
+ *  garbled response) is worth BullMQ's retry with backoff. */
+const PERMANENT_CODES: ReadonlySet<MenuExtractionErrorCode> = new Set([
+  "invalid_credentials",
+  "not_configured",
+  "quota_exceeded",
+  "rejected",
+  "refused",
+  "incomplete",
+  "invalid_source",
+]);
+
 export class MenuExtractionError extends Error {
+  /** Whether trying the same extraction again could succeed. Defaults from the code; an adapter can
+   *  override it when the code alone doesn't say (e.g. a generic provider_error on an HTTP 400). */
+  readonly retryable: boolean;
+
   constructor(
     message: string,
-    public readonly code: "timeout" | "invalid_credentials" | "provider_unavailable" | "not_configured" | "provider_error"
+    public readonly code: MenuExtractionErrorCode,
+    options: { retryable?: boolean } = {}
   ) {
     super(message);
     this.name = "MenuExtractionError";
+    this.retryable = options.retryable ?? !PERMANENT_CODES.has(code);
   }
 }
 

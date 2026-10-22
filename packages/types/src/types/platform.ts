@@ -4,6 +4,8 @@ import type { RestaurantAnalytics } from "./analytics.js";
 import type { AuditLogEntry } from "./auditLog.js";
 import type { RestaurantPaymentAccount } from "./restaurantPaymentAccount.js";
 import type { RestaurantMarketplaceIntegration } from "./marketplace.js";
+import type { BillingInterval, PlanType } from "./plan.js";
+import type { SubscriptionProvider, SubscriptionStatus } from "./subscription.js";
 
 export interface PlatformRestaurantSummary {
   id: string;
@@ -61,6 +63,32 @@ export interface PlatformRestaurantDetail {
    *  strips it unconditionally) — everything else here was never a secret. */
   paymentAccount: RestaurantPaymentAccount | null;
   marketplaceIntegrations: RestaurantMarketplaceIntegration[];
+  /** Phase 24 — the business's most recent subscription (any status), provider ids stripped. */
+  subscription: PlatformSubscriptionSummary | null;
+}
+
+export interface PlatformSubscriptionSummary {
+  status: SubscriptionStatus;
+  billingInterval: BillingInterval;
+  currentPeriodEnd: string;
+  trialEnd: string | null;
+  cancelAt: string | null;
+  provider: SubscriptionProvider;
+  planCode: string | null;
+  planName: string | null;
+}
+
+/** GET /platform/plans — every ACTIVE plan, including private (isPubliclyListed:false) ones made
+ *  for a specific client. Provider price ids are reduced to a hasCheckoutPrice flag. */
+export interface PlatformPlanOption {
+  code: string;
+  name: string;
+  type: PlanType;
+  isPubliclyListed: boolean;
+  trialDays: number | null;
+  /** Only plans with a trial can be assigned by a platform admin — a no-trial plan needs checkout. */
+  assignable: boolean;
+  pricing: { interval: BillingInterval; amountCents?: number; currency?: string; hasCheckoutPrice: boolean }[];
 }
 
 export interface PlatformOverview {

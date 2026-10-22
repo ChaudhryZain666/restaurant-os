@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  createSubscriptionSchema,
   linkFoodpandaIntegrationSchema,
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
@@ -27,6 +28,11 @@ import {
   updateRestaurantStatus,
   updateUserStatus,
 } from "../controllers/platform.controller.js";
+import {
+  assignAgencyPlanHandler,
+  assignBusinessPlanHandler,
+  listPlatformPlans,
+} from "../controllers/platformSubscription.controller.js";
 
 /** Cross-tenant platform-admin views — not restaurant-scoped. Mounted at /platform. */
 export const platformRouter = Router();
@@ -67,6 +73,21 @@ platformRouter.get(
   requirePermission("platform.restaurants.manage"),
   validateQuery(paginationQuerySchema),
   asyncHandler(listPlatformSubscriptions)
+);
+// Lane A — assign an existing eligible plan (public or client-specific) as a no-card trial, through
+// the same lifecycle service owners use. See platformSubscription.controller.ts.
+platformRouter.get("/plans", requirePermission("platform.restaurants.manage"), asyncHandler(listPlatformPlans));
+platformRouter.post(
+  "/businesses/:businessId/subscription",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(assignBusinessPlanHandler)
+);
+platformRouter.post(
+  "/agencies/:agencyId/subscription",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(assignAgencyPlanHandler)
 );
 platformRouter.get(
   "/agencies",

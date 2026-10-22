@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import mongoose from "mongoose";
+import request from "supertest";
+import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
 import { Business } from "../models/Business.js";
 import { Category } from "../models/Category.js";
@@ -8,13 +10,20 @@ import { ModifierGroup } from "../models/ModifierGroup.js";
 import { Order } from "../models/Order.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
-import { closeTestConnections, createTestRestaurant } from "../test-utils/fixtures.js";
+import { closeTestConnections, createTestRestaurant, createTestUser, tokenFor } from "../test-utils/fixtures.js";
+import { getEmailService } from "../email/index.js";
 import {
   DEMO_CATEGORIES,
   DEMO_MENU_ITEMS,
   DEMO_MODIFIER_GROUPS,
 } from "../scripts/demo/wildwoodKitchenCatalog.js";
-import { DEMO_OWNER_EMAIL, DEMO_SLUG, DemoProvisioningConflictError, provisionProductionDemo } from "./productionDemo.service.js";
+import {
+  DEMO_OWNER_EMAIL,
+  DEMO_SLUG,
+  DemoProvisioningConflictError,
+  inviteDemoManager,
+  provisionProductionDemo,
+} from "./productionDemo.service.js";
 
 /**
  * Phase 85A — the production demo provisioner. Runs against unique slugs/owner emails: the test
@@ -28,6 +37,10 @@ const run = Date.now();
 const slug = `demo-provision-${run}`;
 const ownerEmail = `demo-owner-${run}@demo-restaurant.garnishtable.invalid`;
 const conflictSlug = `demo-conflict-${run}`;
+
+const managerEmail = `founder+demo-${run}@example.com`;
+const failedEmail = `founder+demo-fail-${run}@example.com`;
+const extraUserIds: string[] = [];
 
 let conflictRestaurantId: mongoose.Types.ObjectId;
 
@@ -44,7 +57,8 @@ afterAll(async () => {
     ModifierGroup.deleteMany({ restaurantId: { $in: ids } }),
     Restaurant.deleteMany({ _id: { $in: ids } }),
     Business.deleteMany({ slug: { $in: [slug, conflictSlug] } }),
-    User.deleteMany({ email: ownerEmail }),
+    User.deleteMany({ email: { $in: [ownerEmail, managerEmail, failedEmail] } }),
+    User.deleteMany({ _id: { $in: extraUserIds } }),
   ]);
   await closeTestConnections();
 });
@@ -114,5 +128,59 @@ describe("provisionProductionDemo", () => {
     expect(untouched!.ownerId.equals(real.ownerId)).toBe(true);
     expect(await Category.countDocuments({ restaurantId: conflictRestaurantId })).toBe(0);
     expect(await Business.countDocuments({ slug: conflictSlug })).toBe(0);
+  });
+});
+
+describe("inviteDemoManager (Lane A) — separate demo login, admin account untouched", () => {
+  const app = createApp();
+
+  it("invites a restaurant_manager scoped to the demo through the normal staff-invite flow", async () => {
+    const send = jest.spyOn(getEmailService(), "send");
+    const { restaurantId, userId } = await inviteDemoManager({ name: "Founder Demo", email: managerEmail.toUpperCase(), slug, ownerEmail });
+
+    const manager = await User.findById(userId);
+    expect(manager).toMatchObject({ email: managerEmail, role: "restaurant_manager", isActive: true });
+    expect(manager!.restaurantId!.toString()).toBe(restaurantId);
+    expect(manager!.inviteTokenHash).toBeTruthy();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: managerEmail }));
+  });
+
+  it("the manager can work in the demo only — not another restaurant, not the platform console", async () => {
+    const manager = await User.findOne({ email: managerEmail });
+    const demo = await Restaurant.findOne({ slug });
+    const other = await Restaurant.findById(conflictRestaurantId);
+    const token = tokenFor(manager!);
+
+    const own = await request(app).get(`/api/v1/restaurants/${demo!.id}/categories`).set("Authorization", `Bearer ${token}`);
+    expect(own.status).toBe(200);
+    const foreign = await request(app).get(`/api/v1/restaurants/${other!.id}/categories`).set("Authorization", `Bearer ${token}`);
+    expect(foreign.status).toBe(403);
+    const platform = await request(app).get("/api/v1/platform/restaurants").set("Authorization", `Bearer ${token}`);
+    expect(platform.status).toBe(403);
+  });
+
+  it("refuses an email that already has an account, leaving that account's role unchanged", async () => {
+    const admin = await createTestUser("platform_admin");
+    extraUserIds.push(admin.id);
+
+    await expect(inviteDemoManager({ name: "Founder", email: admin.email, slug, ownerEmail })).rejects.toBeInstanceOf(
+      DemoProvisioningConflictError
+    );
+    expect((await User.findById(admin.id))!.role).toBe("platform_admin");
+    const res = await request(app).get("/api/v1/platform/restaurants").set("Authorization", `Bearer ${tokenFor(admin)}`);
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a restaurant that isn't the demo tenant", async () => {
+    await expect(
+      inviteDemoManager({ name: "Founder", email: `nobody-${run}@example.com`, slug: conflictSlug, ownerEmail })
+    ).rejects.toBeInstanceOf(DemoProvisioningConflictError);
+    expect(await User.exists({ email: `nobody-${run}@example.com` })).toBeNull();
+  });
+
+  it("removes the new account again when the invite email can't be sent", async () => {
+    jest.spyOn(getEmailService(), "send").mockRejectedValueOnce(new Error("smtp down"));
+    await expect(inviteDemoManager({ name: "Founder", email: failedEmail, slug, ownerEmail })).rejects.toThrow(/could not be sent/);
+    expect(await User.exists({ email: failedEmail })).toBeNull();
   });
 });
