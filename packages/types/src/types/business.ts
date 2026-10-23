@@ -16,5 +16,7 @@ export interface Business {
    *  (unset) or be managed by an Agency (set) — see docs/multi-tenant-storefront-architecture.md's
    *  Phase 25 section. */
   agencyId?: string;
+  /** White-label features selected for this business by its managing agency. */
+  whiteLabelFeatures?: import("./agency.js").AgencyWhiteLabelFeature[];
   createdAt: string;
 }

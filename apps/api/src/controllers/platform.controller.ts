@@ -1,10 +1,12 @@
 import type { Request, Response } from "express";
+import mongoose from "mongoose";
 import type {
   LinkFoodpandaIntegrationInput,
   ListPlatformRestaurantsQueryInput,
   ListPlatformUsersQueryInput,
   UpdateRestaurantStatusInput,
   UpdateUserStatusInput,
+  ReviewAgencyEmailSenderInput,
 } from "@restaurant/validation";
 import type { PlatformRestaurantSummary, PlatformUserSummary } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
@@ -22,6 +24,7 @@ import { activateIntegration } from "./restaurantMarketplaceIntegration.controll
 import { Plan } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
 import { Agency } from "../models/Agency.js";
+import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
@@ -629,8 +632,64 @@ export async function listPlatformAgencies(req: Request, res: Response) {
     status: a.status,
     businessCount: businessCountByAgency.get((a._id as { toString(): string }).toString()) ?? 0,
     memberCount: memberCountByAgency.get((a._id as { toString(): string }).toString()) ?? 0,
+    // White-label branded email — what a platform admin needs to review a custom sender request.
+    domain: a.domain ?? null,
+    domainStatus: a.domainStatus ?? null,
+    emailSender: a.emailSender
+      ? { address: a.emailSender.address, status: a.emailSender.status, requestedAt: a.emailSender.requestedAt, failureReason: a.emailSender.failureReason ?? null }
+      : null,
     createdAt: (a as unknown as { createdAt: Date }).createdAt.toISOString(),
   }));
 
   sendSuccess(res, { ...result, items });
+}
+
+/**
+ * POST /platform/agencies/:agencyId/email-sender/review — White-label branded email. The platform's
+ * transport is generic SMTP, which has no API to verify a sending domain, so authorizing a custom
+ * sender is a platform-admin attestation: "the SMTP provider account is set up to send for this
+ * domain (SPF/DKIM published, sender/domain approved at the provider)". Only allowed while the
+ * request is pending_authorization on the agency's own DNS-verified domain, unclaimed by any other
+ * agency. Rejecting records a reason the agency sees. Audited on the agency's own audit log.
+ */
+export async function reviewAgencyEmailSender(req: Request, res: Response) {
+  const { agencyId } = req.params;
+  const { decision, reason } = req.body as ReviewAgencyEmailSenderInput;
+  const agency = await Agency.findById(agencyId);
+  if (!agency) throw ApiError.notFound("Agency not found");
+  const sender = agency.emailSender;
+  if (!sender) throw ApiError.badRequest("This agency hasn't requested a custom sender");
+  const previousStatus = sender.status;
+
+  if (decision === "verified") {
+    if (sender.status !== "pending_authorization") {
+      throw ApiError.badRequest(`Only a sender waiting for authorization can be confirmed (this one is "${sender.status}")`);
+    }
+    if (agency.domainStatus !== "verified" || sender.address.split("@")[1] !== agency.domain) {
+      throw ApiError.badRequest("The sender's domain is no longer this agency's verified domain");
+    }
+    if (await Agency.exists({ _id: { $ne: agency._id }, domain: agency.domain, domainStatus: "verified" })) {
+      throw ApiError.conflict("Another agency has also verified this domain — resolve that before authorizing a sender");
+    }
+    sender.status = "verified";
+    sender.verifiedAt = new Date();
+    sender.verifiedByUserId = new mongoose.Types.ObjectId(req.user!.id);
+    sender.failureReason = undefined;
+  } else {
+    sender.status = "failed";
+    sender.verifiedAt = undefined;
+    sender.failureReason = reason;
+  }
+  await agency.save();
+  await recordAgencyAuditEvent({
+    agencyId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+    action: decision === "verified" ? "agency.email_sender_verified" : "agency.email_sender_rejected",
+    targetType: "agency",
+    targetId: agency._id,
+    // previousStatus "verified" on a rejection = a revocation of a sender that was in use.
+    metadata: { address: sender.address, previousStatus, ...(reason ? { reason } : {}) },
+  });
+  sendSuccess(res, { emailSender: { address: sender.address, status: sender.status, failureReason: sender.failureReason ?? null } });
 }

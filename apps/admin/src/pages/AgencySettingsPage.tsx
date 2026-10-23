@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Agency } from "@restaurant/types";
+import { AGENCY_WHITE_LABEL_FEATURES, type Agency, type AgencyWhiteLabelFeature } from "@restaurant/types";
+import { EMAIL_SENDER_STATUS_COPY, WHITE_LABEL_FEATURE_COPY } from "../lib/whiteLabelCopy";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
@@ -35,6 +36,15 @@ export function AgencySettingsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [brandName, setBrandName] = useState("");
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState("#6B2130");
+  const [logo, setLogo] = useState("");
+  const [whiteLabelEnabled, setWhiteLabelEnabled] = useState(false);
+  const [whiteLabelOfferings, setWhiteLabelOfferings] = useState<AgencyWhiteLabelFeature[]>([]);
+  const [supportEmail, setSupportEmail] = useState("");
+  const [supportUrl, setSupportUrl] = useState("");
+  const [senderDraft, setSenderDraft] = useState("");
+  const [savingSender, setSavingSender] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
@@ -50,7 +60,46 @@ export function AgencySettingsPage() {
     setName(data.name);
     setDescription(data.description ?? "");
     setContactEmail(data.contactEmail);
+    setBrandName(data.brandName ?? data.name);
+    setBrandPrimaryColor(data.brandPrimaryColor ?? "#6B2130");
+    setLogo(data.logo ?? "");
+    setWhiteLabelEnabled(Boolean(data.whiteLabelEnabled));
+    setWhiteLabelOfferings(data.whiteLabelOfferings ?? []);
+    setSupportEmail(data.supportEmail ?? "");
+    setSupportUrl(data.supportUrl ?? "");
+    setSenderDraft(data.emailSender?.address ?? "");
     setDomainDraft(data.domain ?? "");
+  }
+
+  async function handleSaveSender(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSavingSender(true);
+    try {
+      const res = await apiClient.request<{ agency: Agency }>(`/agencies/${activeAgencyId}/email-sender`, {
+        method: "PUT",
+        body: { address: senderDraft },
+      });
+      setAgency(res.agency);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingSender(false);
+    }
+  }
+
+  async function handleRemoveSender() {
+    setError(null);
+    setSavingSender(true);
+    try {
+      const res = await apiClient.request<{ agency: Agency }>(`/agencies/${activeAgencyId}/email-sender`, { method: "DELETE" });
+      setAgency(res.agency);
+      setSenderDraft("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingSender(false);
+    }
   }
 
   useEffect(() => {
@@ -69,7 +118,19 @@ export function AgencySettingsPage() {
     try {
       await apiClient.request(`/agencies/${activeAgencyId}`, {
         method: "PATCH",
-        body: { name, description: description || undefined, contactEmail },
+        body: {
+          name,
+          description: description || undefined,
+          contactEmail,
+          brandName: brandName.trim() || name,
+          brandPrimaryColor,
+          // "" clears these on the server; offerings are kept even while white-label mode is off.
+          logo: logo.trim(),
+          supportEmail: supportEmail.trim(),
+          supportUrl: supportUrl.trim(),
+          whiteLabelEnabled,
+          whiteLabelOfferings,
+        },
       });
       await Promise.all([reload(), refetchAgencies()]);
       setProfileSaved(true);
@@ -145,6 +206,63 @@ export function AgencySettingsPage() {
             Contact email
             <input required type="email" disabled={!canManage} value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className={inputClass} />
           </label>
+          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            Customer-facing brand name
+            <input disabled={!canManage} value={brandName} onChange={(e) => setBrandName(e.target.value)} maxLength={120} className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+            Logo image URL (optional)
+            <input disabled={!canManage} type="url" value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://your-domain.com/logo.png" className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Brand primary color
+            <input disabled={!canManage} type="color" value={brandPrimaryColor} onChange={(e) => setBrandPrimaryColor(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background p-1" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Support email (optional)
+            <input disabled={!canManage} type="email" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="help@youragency.com" className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Support / help URL (optional)
+            <input disabled={!canManage} type="url" value={supportUrl} onChange={(e) => setSupportUrl(e.target.value)} placeholder="https://help.youragency.com" className={inputClass} />
+          </label>
+          <p className="text-xs text-muted sm:col-span-2">
+            Logo and help URL must be https. The support contact is shown to customers only for clients with Branded support on.
+          </p>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" disabled={!canManage} checked={whiteLabelEnabled} onChange={(e) => setWhiteLabelEnabled(e.target.checked)} />
+            Enable white-label mode
+          </label>
+          <p className="text-xs text-muted sm:col-span-2">
+            White-label is optional. With it off, every client uses GarnishTable's standard experience; client choices are kept and
+            show as suspended until you turn it back on. Each capability shows its real status per client on the client's page.
+          </p>
+          {whiteLabelEnabled && (
+            <fieldset className="sm:col-span-2 rounded-xl border border-border p-3">
+              <legend className="px-1 text-sm font-medium text-foreground">Capabilities available to client restaurants</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {AGENCY_WHITE_LABEL_FEATURES.map((feature) => (
+                  <label key={feature} className="flex items-start gap-2 text-sm">
+                    <input
+                      className="mt-1"
+                      type="checkbox"
+                      disabled={!canManage}
+                      checked={whiteLabelOfferings.includes(feature)}
+                      onChange={(e) =>
+                        setWhiteLabelOfferings((current) =>
+                          e.target.checked ? [...new Set([...current, feature])] : current.filter((item) => item !== feature)
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="font-medium text-foreground">{WHITE_LABEL_FEATURE_COPY[feature].label}</span>
+                      <span className="block text-xs text-muted">{WHITE_LABEL_FEATURE_COPY[feature].description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           {canManage && (
             <Button type="submit" size="sm" disabled={savingProfile} className="self-end">
               {savingProfile ? "Saving..." : "Save profile"}
@@ -165,10 +283,12 @@ export function AgencySettingsPage() {
 
         <Alert tone="neutral">
           <p className="text-sm">
-            <strong>What this does today:</strong> verifies domain ownership only. <strong>What it does not do yet:</strong> send
-            invitation emails, password resets, or any other platform email from this domain, or replace the platform's own login
-            pages with a branded experience. Every email this platform sends still comes from one shared address today — that's a
-            separate, larger piece of infrastructure this verification is a real first step toward, not a substitute for.
+            <strong>What verifying this domain does:</strong> it proves you own it. Your clients' locations can then use hostnames
+            under it (e.g. <span className="font-mono">client.yourdomain.com</span>, added in the location's Settings → Custom
+            domain) without a separate DNS proof, no other agency can claim them, and you can request a sender address on it for
+            branded emails (below, after platform authorization). <strong>What it doesn't do:</strong> route customers by itself —
+            each hostname still needs activating and a DNS record pointing to the platform. Password-reset and verification
+            emails always stay on the platform's own address and links.
           </p>
         </Alert>
 
@@ -218,6 +338,54 @@ export function AgencySettingsPage() {
               </Button>
             )}
           </div>
+        )}
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <div>
+          <h2 className="font-heading text-lg font-medium text-foreground">Branded email sender</h2>
+          <p className="text-sm text-muted">
+            Optional. Without one, branded emails go out from the platform's address with your brand name as the sender name.
+            A custom address must be on your verified domain and authorized by the platform team before it's ever used.
+          </p>
+        </div>
+        {agency?.emailSender && (
+          <div className="flex flex-col gap-1 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-foreground">{agency.emailSender.address}</span>
+              <Badge tone={EMAIL_SENDER_STATUS_COPY[agency.emailSender.status].tone}>
+                {EMAIL_SENDER_STATUS_COPY[agency.emailSender.status].label}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted">
+              {EMAIL_SENDER_STATUS_COPY[agency.emailSender.status].help}
+              {agency.emailSender.failureReason ? ` Reason: ${agency.emailSender.failureReason}` : ""}
+            </p>
+          </div>
+        )}
+        {canManage && (
+          <form onSubmit={handleSaveSender} className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-sm">
+              Sender address
+              <input
+                required
+                type="email"
+                value={senderDraft}
+                onChange={(e) => setSenderDraft(e.target.value.toLowerCase())}
+                placeholder={agency?.domain ? `orders@${agency.domain}` : "Add your domain first"}
+                disabled={!agency?.domain}
+                className={inputClass}
+              />
+            </label>
+            <Button type="submit" size="sm" variant="secondary" disabled={savingSender || !agency?.domain}>
+              {savingSender ? "Saving..." : agency?.emailSender ? "Request this address" : "Request sender"}
+            </Button>
+            {agency?.emailSender && (
+              <Button type="button" size="sm" variant="ghost" onClick={handleRemoveSender} disabled={savingSender}>
+                Stop using a custom sender
+              </Button>
+            )}
+          </form>
         )}
       </Card>
     </div>

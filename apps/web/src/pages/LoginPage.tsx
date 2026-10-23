@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
-import { Alert, Button, Card } from "@restaurant/ui";
+import { Alert, Button } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { AuthCard } from "../components/AuthCard";
 
 export function LoginPage() {
   useNoIndex();
@@ -34,8 +35,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
-      <Card className="animate-scale-in flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold text-foreground">Log in</h1>
+      <AuthCard title="Log in">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <label htmlFor="login-email" className="flex flex-col gap-1 text-sm font-medium text-foreground">
             Email
@@ -75,7 +75,7 @@ export function LoginPage() {
             {submitting ? "Logging in..." : "Log in"}
           </Button>
         </form>
-      </Card>
+      </AuthCard>
       <p className="text-center text-sm text-muted">
         New here?{" "}
         <Link to="/register" className="font-medium text-primary hover:opacity-80">

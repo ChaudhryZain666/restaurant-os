@@ -7,6 +7,8 @@ import {
   setAgencyDomainSchema,
   setClientCommercialTermsSchema,
   updateAgencySchema,
+  updateBusinessWhiteLabelSchema,
+  setAgencyEmailSenderSchema,
 } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -28,6 +30,10 @@ import {
   setAgencyDomain,
   setClientCommercialTerms,
   updateAgency,
+  updateBusinessWhiteLabel,
+  getBusinessWhiteLabel,
+  setAgencyEmailSender,
+  removeAgencyEmailSender,
   verifyAgencyDomain,
 } from "../controllers/agency.controller.js";
 
@@ -53,6 +59,21 @@ agencyRouter.post(
   validateBody(setAgencyDomainSchema),
   asyncHandler(setAgencyDomain)
 );
+// White-label branded email — a custom sender on the agency's own verified domain. Used only after
+// a platform admin confirms it (POST /platform/agencies/:agencyId/email-sender/review).
+agencyRouter.put(
+  "/:agencyId/email-sender",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.manage"),
+  validateBody(setAgencyEmailSenderSchema),
+  asyncHandler(setAgencyEmailSender)
+);
+agencyRouter.delete(
+  "/:agencyId/email-sender",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.manage"),
+  asyncHandler(removeAgencyEmailSender)
+);
 agencyRouter.post(
   "/:agencyId/domain/verify",
   requireAgencyMatch(),
@@ -74,6 +95,14 @@ agencyRouter.post(
   asyncHandler(createAgencyBusiness)
 );
 agencyRouter.get("/:agencyId/businesses/:businessId", requireAgencyMatch(), asyncHandler(getAgencyBusiness));
+agencyRouter.get("/:agencyId/businesses/:businessId/white-label", requireAgencyMatch(), asyncHandler(getBusinessWhiteLabel));
+agencyRouter.put(
+  "/:agencyId/businesses/:businessId/white-label",
+  requireAgencyMatch(),
+  requireAgencyPermission("agency.businesses.manage"),
+  validateBody(updateBusinessWhiteLabelSchema),
+  asyncHandler(updateBusinessWhiteLabel)
+);
 agencyRouter.put(
   "/:agencyId/businesses/:businessId/commercial-terms",
   requireAgencyMatch(),

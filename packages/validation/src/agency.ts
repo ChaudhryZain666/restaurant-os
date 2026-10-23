@@ -3,6 +3,22 @@ import { paginationQueryShape, sortableQueryShape } from "./pagination.js";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export const AGENCY_WHITE_LABEL_FEATURES = ["storefront_branding", "custom_domain", "hide_platform_branding", "support_branding", "email_branding", "branded_login"] as const;
+
+/** An absolute https URL, at most 500 characters. Anything else (http:, javascript:, data:) is refused. */
+const httpsUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .url()
+  .refine((value) => {
+    try {
+      return new URL(value).protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, "Use an https:// URL");
+
 export const createAgencySchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
@@ -92,11 +108,24 @@ export const updateAgencySchema = z
   .object({
     name: z.string().min(2).max(120).optional(),
     description: z.string().max(500).optional(),
-    logo: z.string().max(500).optional(),
+    // https only: the logo is rendered on public storefronts and in emails. "" clears it.
+    logo: z.union([httpsUrl, z.literal("")]).optional(),
+    brandName: z.string().trim().min(2).max(120).optional(),
+    brandPrimaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color, e.g. #6B2130").optional(),
+    whiteLabelEnabled: z.boolean().optional(),
+    whiteLabelOfferings: z.array(z.enum(AGENCY_WHITE_LABEL_FEATURES)).max(AGENCY_WHITE_LABEL_FEATURES.length).optional(),
+    // Customer-facing support contact (support_branding). "" clears it.
+    supportEmail: z.union([z.string().trim().toLowerCase().email().max(254), z.literal("")]).optional(),
+    supportUrl: z.union([httpsUrl, z.literal("")]).optional(),
     contactEmail: z.string().email().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update" });
 export type UpdateAgencyInput = z.infer<typeof updateAgencySchema>;
+
+export const updateBusinessWhiteLabelSchema = z.object({
+  enabledFeatures: z.array(z.enum(AGENCY_WHITE_LABEL_FEATURES)).max(AGENCY_WHITE_LABEL_FEATURES.length),
+});
+export type UpdateBusinessWhiteLabelInput = z.infer<typeof updateBusinessWhiteLabelSchema>;
 
 /**
  * Phase 58, Section 12A — sets the CANDIDATE white-label domain an agency wants to eventually
@@ -139,3 +168,23 @@ export const setClientCommercialTermsSchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field" });
 export type SetClientCommercialTermsInput = z.infer<typeof setClientCommercialTermsSchema>;
+
+/**
+ * A custom "From" address for branded email. Only the address is accepted — the display name is
+ * always the agency's brand name, never free text in a header. Its domain must be the agency's own
+ * DNS-verified domain; the server checks that, and a platform admin must still confirm the SMTP
+ * relay is authorized to send for it before it is ever used.
+ */
+export const setAgencyEmailSenderSchema = z.object({
+  address: z.string().trim().toLowerCase().email().max(254),
+});
+export type SetAgencyEmailSenderInput = z.infer<typeof setAgencyEmailSenderSchema>;
+
+/** Platform admin's outcome for a pending sender. `reason` is required when rejecting. */
+export const reviewAgencyEmailSenderSchema = z
+  .object({
+    decision: z.enum(["verified", "failed"]),
+    reason: z.string().trim().min(3).max(300).optional(),
+  })
+  .refine((v) => v.decision === "verified" || Boolean(v.reason), { message: "Give a reason when rejecting", path: ["reason"] });
+export type ReviewAgencyEmailSenderInput = z.infer<typeof reviewAgencyEmailSenderSchema>;

@@ -21,4 +21,9 @@ export const AGENCY_AUDIT_ACTION_LABELS: Record<AgencyAuditAction, string> = {
   "agency.domain_set": "White-label domain added",
   "agency.domain_verified": "White-label domain verified",
   "agency.client_commercial_terms_updated": "Client commercial terms updated",
+  "agency.client_white_label_updated": "Client white-label capabilities changed",
+  "agency.email_sender_requested": "Custom email sender requested",
+  "agency.email_sender_removed": "Custom email sender removed",
+  "agency.email_sender_verified": "Custom email sender authorized by the platform",
+  "agency.email_sender_rejected": "Custom email sender rejected by the platform",
 };

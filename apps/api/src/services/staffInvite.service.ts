@@ -10,6 +10,7 @@ import { env } from "../config/env.js";
 import { getEmailService } from "../email/index.js";
 import { staffInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "./secureToken.service.js";
+import { resolveEmailBrandForBusiness } from "./emailBranding.service.js";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -75,11 +76,13 @@ export async function createStaffInvite(
   let emailSent = true;
   try {
     await getEmailService().send(
-      staffInviteEmail(email, acceptUrl, {
-        restaurantName: restaurant.name,
-        inviterName,
-        roleLabel: ROLE_LABELS[role] ?? role,
-      })
+      staffInviteEmail(
+        email,
+        acceptUrl,
+        { restaurantName: restaurant.name, inviterName, roleLabel: ROLE_LABELS[role] ?? role },
+        // White-label email_branding for an agency-managed client; undefined = platform-branded.
+        (await resolveEmailBrandForBusiness(restaurant.businessId)) ?? undefined
+      )
     );
   } catch (err) {
     emailSent = false;

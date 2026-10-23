@@ -13,6 +13,19 @@ import {
 } from "../services/domainVerification.service.js";
 import { env } from "../config/env.js";
 import { platformHostnames } from "../config/origins.js";
+import { Business } from "../models/Business.js";
+import { findVerifiedAgencyForHostname } from "../services/agencyDomainNamespace.service.js";
+
+/**
+ * White-label agency-owned domains — is `hostname` inside an agency's DNS-verified domain, and is
+ * this business one of that agency's clients? "foreign" means another agency owns the namespace.
+ */
+async function agencyNamespaceFor(hostname: string, businessId: unknown): Promise<"none" | "own" | "foreign"> {
+  const agency = await findVerifiedAgencyForHostname(hostname);
+  if (!agency) return "none";
+  const business = await Business.findById(businessId).select("agencyId");
+  return business?.agencyId && String(business.agencyId) === String(agency._id) ? "own" : "foreign";
+}
 
 /**
  * Phase 22 — owner-facing domain management. `getRestaurantByDomain` (the public storefront-
@@ -56,14 +69,23 @@ export async function addDomain(req: Request, res: Response) {
   const existing = await DomainMapping.findOne({ hostname });
   if (existing) throw ApiError.conflict("This domain is already claimed on this platform");
 
+  // A hostname under an agency's verified domain belongs to that agency's clients only. For one of
+  // them, the agency's own DNS proof already establishes ownership, so no per-host TXT is needed.
+  const namespace = await agencyNamespaceFor(hostname, restaurant.businessId);
+  if (namespace === "foreign") {
+    throw ApiError.conflict("This hostname is under another agency's verified domain");
+  }
+  const verifiedByAgency = namespace === "own";
+
   let mapping;
   try {
     mapping = await DomainMapping.create({
       hostname,
       businessId: restaurant.businessId,
       locationId: restaurant._id,
-      status: "pending_verification",
+      status: verifiedByAgency ? "verified" : "pending_verification",
       verificationToken: generateVerificationToken(),
+      ...(verifiedByAgency ? { verifiedAt: new Date() } : {}),
     });
   } catch (err) {
     // Same pre-check + unique-index-backstop pattern as Restaurant.slug/Business.slug — the
@@ -85,6 +107,17 @@ export async function addDomain(req: Request, res: Response) {
     targetId: mapping._id,
     metadata: { hostname },
   });
+  if (verifiedByAgency) {
+    await recordAuditEvent({
+      restaurantId: restaurant._id,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "domain.verified",
+      targetType: "domain",
+      targetId: mapping._id,
+      metadata: { hostname, method: "agency_domain" },
+    });
+  }
 
   sendSuccess(res, { domain: toDomainMappingDto(mapping) }, 201);
 }
@@ -98,7 +131,10 @@ async function findOwnedMapping(restaurantId: string, mappingId: string) {
 export async function checkDomainVerificationStatus(req: Request, res: Response) {
   const mapping = await findOwnedMapping(req.params.restaurantId, req.params.id);
 
-  const verified = await checkDomainVerification(mapping.hostname, mapping.verificationToken);
+  // A mapping created before its agency verified the parent domain verifies through it now.
+  const namespace = await agencyNamespaceFor(mapping.hostname, mapping.businessId);
+  if (namespace === "foreign") throw ApiError.conflict("This hostname is under another agency's verified domain");
+  const verified = namespace === "own" || (await checkDomainVerification(mapping.hostname, mapping.verificationToken));
   mapping.verificationCheckedAt = new Date();
   if (verified && mapping.status === "pending_verification") {
     mapping.status = "verified";
@@ -111,7 +147,7 @@ export async function checkDomainVerificationStatus(req: Request, res: Response)
       action: "domain.verified",
       targetType: "domain",
       targetId: mapping._id,
-      metadata: { hostname: mapping.hostname },
+      metadata: { hostname: mapping.hostname, method: namespace === "own" ? "agency_domain" : "dns_txt" },
     });
   } else {
     await mapping.save();

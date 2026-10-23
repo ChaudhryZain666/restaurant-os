@@ -12,12 +12,56 @@ export type AgencyStatus = "pending" | "active" | "suspended";
 
 export type AgencyDomainStatus = "pending_verification" | "verified";
 
+/**
+ * A custom sender address on the agency's own domain. The platform's email transport is generic
+ * SMTP, which has no API for verifying a sending domain, so this is a truthful manual workflow:
+ *  - pending_domain: the address's domain isn't the agency's DNS-verified domain (yet);
+ *  - pending_authorization: domain ownership is verified; waiting for a platform admin to confirm
+ *    the SMTP relay is authorized to send for it (SPF/DKIM set up at the provider);
+ *  - verified: confirmed — the only state in which the address is ever used as "From";
+ *  - failed: a platform admin rejected it (see failureReason).
+ */
+export const AGENCY_EMAIL_SENDER_STATUSES = ["pending_domain", "pending_authorization", "verified", "failed"] as const;
+export type AgencyEmailSenderStatus = (typeof AGENCY_EMAIL_SENDER_STATUSES)[number];
+
+export interface AgencyEmailSender {
+  address: string;
+  status: AgencyEmailSenderStatus;
+  requestedAt: string;
+  verifiedAt?: string;
+  failureReason?: string;
+}
+
+export const AGENCY_WHITE_LABEL_FEATURES = [
+  "storefront_branding",
+  "custom_domain",
+  "hide_platform_branding",
+  "support_branding",
+  "email_branding",
+  "branded_login",
+] as const;
+export type AgencyWhiteLabelFeature = (typeof AGENCY_WHITE_LABEL_FEATURES)[number];
+
 export interface Agency {
   id: string;
   name: string;
   slug: string;
   description?: string;
   logo?: string;
+  /** Public-facing brand name; falls back to `name` when unset. */
+  brandName?: string;
+  /** Strict six-digit hex color used by agency-branded customer-facing surfaces. */
+  brandPrimaryColor?: string;
+  /** False by default so existing agencies retain the current GarnishTable experience. */
+  whiteLabelEnabled?: boolean;
+  /** Capabilities this agency chooses to offer to its client restaurants. */
+  whiteLabelOfferings?: AgencyWhiteLabelFeature[];
+  /** Customer-facing support contact, shown only when `support_branding` is active for a client. */
+  supportEmail?: string;
+  /** https-only customer-facing help URL, shown only when `support_branding` is active. */
+  supportUrl?: string;
+  /** Optional custom "From" address for branded email. Never used until `status` is "verified". */
+  emailSender?: AgencyEmailSender;
   contactEmail: string;
   status: AgencyStatus;
   /** Maintained counter, incremented atomically on business creation — the entitlement guard for

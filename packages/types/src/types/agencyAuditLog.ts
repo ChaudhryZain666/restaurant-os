@@ -36,6 +36,13 @@ export const AGENCY_AUDIT_ACTIONS = [
   // Phase 59 — the agency set/changed what it charges its OWN client for its services. Distinct
   // from every "agency.subscription_*" action above, which is the agency's OWN platform billing.
   "agency.client_commercial_terms_updated",
+  // White-label runtime: which capabilities a client gets, the agency's custom email sender and
+  // its verification outcome (the outcome is recorded by a platform admin — see whiteLabelSender).
+  "agency.client_white_label_updated",
+  "agency.email_sender_requested",
+  "agency.email_sender_removed",
+  "agency.email_sender_verified",
+  "agency.email_sender_rejected",
 ] as const;
 
 export const AGENCY_AUDIT_TARGET_TYPES = ["agency", "agency_membership", "business", "subscription"] as const;

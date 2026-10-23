@@ -24,6 +24,8 @@ const businessSchema = new Schema(
     // when unset, or is agency-managed when set. Absence is the default, valid state for every
     // business that existed before this phase; no migration/backfill needed.
     agencyId: { type: Schema.Types.ObjectId, ref: "Agency", index: true },
+    // Agency-selected subset of the agency's white-label offerings for this client. Enforced by the API.
+    whiteLabelFeatures: { type: [String], enum: ["storefront_branding", "custom_domain", "hide_platform_branding", "support_branding", "email_branding", "branded_login"], default: [] },
     // Phase 27 — maintained counter, incremented ATOMICALLY on location creation (see
     // entitlementLimit.service.ts's reserveLocationSlot), mirroring Agency.businessCount exactly.
     // Never computed by counting Restaurant documents on read, so the entitlement guard is a single

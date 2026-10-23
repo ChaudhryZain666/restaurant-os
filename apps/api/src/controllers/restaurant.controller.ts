@@ -15,6 +15,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { computeAvailability } from "../services/restaurantAvailability.service.js";
 import { computeReadiness, computeSetupChecklist } from "../services/restaurantReadiness.service.js";
+import { getCustomerWhiteLabelProjection } from "../services/customerWhiteLabel.service.js";
 import { getSupportIdentity } from "../services/supportIdentity.service.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
@@ -351,7 +352,7 @@ export async function getRestaurantBySlug(req: Request, res: Response) {
   sendSuccess(res, {
     restaurant: { ...toPublicRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
-    supportIdentity: getSupportIdentity(restaurant),
+    ...(await getCustomerWhiteLabelProjection(restaurant)),
     activeCustomDomain: activeDomain?.hostname ?? null,
   });
 }
@@ -410,7 +411,7 @@ export async function getRestaurantByDomain(req: Request, res: Response) {
   sendSuccess(res, {
     restaurant: { ...toPublicRestaurant(restaurant), courierPhoneRequired: await thirdPartyCourierWillDispatch(restaurant) },
     availability: computeAvailability(restaurant.settings),
-    supportIdentity: getSupportIdentity(restaurant),
+    ...(await getCustomerWhiteLabelProjection(restaurant, "domain")),
   });
 }
 

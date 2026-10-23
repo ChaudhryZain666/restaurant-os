@@ -11,6 +11,7 @@ import { getEmailService } from "../email/index.js";
 import { staffInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { INVITE_TTL_MS, ROLE_LABELS, createStaffInvite } from "../services/staffInvite.service.js";
+import { resolveEmailBrandForBusiness } from "../services/emailBranding.service.js";
 
 export async function listStaff(req: Request, res: Response) {
   const { restaurantId } = req.params;
@@ -102,11 +103,16 @@ export async function resendStaffInvite(req: Request, res: Response) {
   const acceptUrl = `${env.ADMIN_ORIGIN}/accept-invite?token=${raw}`;
   try {
     await getEmailService().send(
-      staffInviteEmail(staff.email, acceptUrl, {
-        restaurantName: restaurant?.name ?? "Your restaurant",
-        inviterName: inviter?.name ?? "Your restaurant",
-        roleLabel: ROLE_LABELS[staff.role] ?? staff.role,
-      })
+      staffInviteEmail(
+        staff.email,
+        acceptUrl,
+        {
+          restaurantName: restaurant?.name ?? "Your restaurant",
+          inviterName: inviter?.name ?? "Your restaurant",
+          roleLabel: ROLE_LABELS[staff.role] ?? staff.role,
+        },
+        (await resolveEmailBrandForBusiness(restaurant?.businessId)) ?? undefined
+      )
     );
   } catch (err) {
     logger.error("failed to send staff-invite resend email", { error: (err as Error).message });
