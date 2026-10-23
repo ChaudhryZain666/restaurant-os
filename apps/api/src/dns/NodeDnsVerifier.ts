@@ -26,4 +26,17 @@ export class NodeDnsVerifier implements DnsVerifier {
       return [];
     }
   }
+
+  async resolveCname(hostname: string): Promise<string[]> {
+    try {
+      const records = await Promise.race([
+        dns.resolveCname(hostname),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("DNS lookup timed out")), LOOKUP_TIMEOUT_MS)),
+      ]);
+      return records.map((value) => value.toLowerCase().replace(/\.$/, ""));
+    } catch {
+      // No CNAME (an A/AAAA or flattened record, NXDOMAIN, timeout) — "not detected", never thrown.
+      return [];
+    }
+  }
 }

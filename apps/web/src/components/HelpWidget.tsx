@@ -130,6 +130,17 @@ export function HelpWidget() {
             >
               Contact {supportIdentity?.name ?? "support"}
             </Button>
+            {/* White-label support_branding — only present when the agency configured a contact. */}
+            {supportIdentity?.email && (
+              <a href={`mailto:${supportIdentity.email}`} className="text-sm font-medium text-primary hover:opacity-80">
+                Email {supportIdentity.email}
+              </a>
+            )}
+            {supportIdentity?.url && (
+              <a href={supportIdentity.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:opacity-80">
+                {supportIdentity.name} help site
+              </a>
+            )}
             {user && (
               <Link
                 to="/support/tickets"

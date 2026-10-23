@@ -16,6 +16,8 @@ export const AUDIT_ACTIONS = [
   "restaurant.published",
   "restaurant.unpublished",
   "restaurant.owner_invite_resent",
+  // Demo ownership moved between the placeholder and a platform admin (transferDemoOwnership).
+  "restaurant.owner_transferred",
   "domain.added",
   "domain.verified",
   "domain.activated",

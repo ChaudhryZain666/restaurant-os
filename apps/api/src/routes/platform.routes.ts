@@ -1,9 +1,11 @@
 import { Router } from "express";
 import {
+  createSubscriptionSchema,
   linkFoodpandaIntegrationSchema,
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
   paginationQuerySchema,
+  reviewAgencyEmailSenderSchema,
   updateRestaurantStatusSchema,
   updateUserStatusSchema,
 } from "@restaurant/validation";
@@ -24,9 +26,15 @@ import {
   listPlatformSubscriptions,
   listPlatformUsers,
   resendOwnerInvite,
+  reviewAgencyEmailSender,
   updateRestaurantStatus,
   updateUserStatus,
 } from "../controllers/platform.controller.js";
+import {
+  assignAgencyPlanHandler,
+  assignBusinessPlanHandler,
+  listPlatformPlans,
+} from "../controllers/platformSubscription.controller.js";
 
 /** Cross-tenant platform-admin views — not restaurant-scoped. Mounted at /platform. */
 export const platformRouter = Router();
@@ -68,11 +76,32 @@ platformRouter.get(
   validateQuery(paginationQuerySchema),
   asyncHandler(listPlatformSubscriptions)
 );
+// Lane A — assign an existing eligible plan (public or client-specific) as a no-card trial, through
+// the same lifecycle service owners use. See platformSubscription.controller.ts.
+platformRouter.get("/plans", requirePermission("platform.restaurants.manage"), asyncHandler(listPlatformPlans));
+platformRouter.post(
+  "/businesses/:businessId/subscription",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(assignBusinessPlanHandler)
+);
+platformRouter.post(
+  "/agencies/:agencyId/subscription",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(createSubscriptionSchema),
+  asyncHandler(assignAgencyPlanHandler)
+);
 platformRouter.get(
   "/agencies",
   requirePermission("platform.restaurants.manage"),
   validateQuery(paginationQuerySchema),
   asyncHandler(listPlatformAgencies)
+);
+platformRouter.post(
+  "/agencies/:agencyId/email-sender/review",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(reviewAgencyEmailSenderSchema),
+  asyncHandler(reviewAgencyEmailSender)
 );
 platformRouter.get("/revenue", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformRevenue));
 platformRouter.get("/analytics", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformAnalytics));

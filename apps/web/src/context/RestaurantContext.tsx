@@ -36,11 +36,22 @@ import { isPlatformStorefrontHost } from "../lib/platformHost";
  */
 const LEGACY_DEFAULT_SLUG: string | undefined = import.meta.env.VITE_RESTAURANT_SLUG;
 
+export interface WhiteLabelBrand {
+  name: string;
+  logo?: string;
+  primaryColor?: string;
+  hidePlatformBranding: boolean;
+  /** True only when the restaurant was resolved through its own verified custom domain. */
+  brandedLogin: boolean;
+  storefrontBranding: boolean;
+}
+
 interface RestaurantContextValue {
   restaurant: Restaurant | null;
   availability: RestaurantAvailability | null;
   /** Customer-facing support identity ("Platform Support" today — see supportIdentity.service.ts). */
   supportIdentity: SupportIdentity | null;
+  whiteLabelBrand: WhiteLabelBrand | null;
   loading: boolean;
   error: string | null;
   /** The slug this context resolved (or attempted to resolve) — null before any route match, and
@@ -66,7 +77,24 @@ interface RestaurantContextValue {
 
 const RestaurantContext = createContext<RestaurantContextValue | undefined>(undefined);
 
-const BARE_STOREFRONT_PATHS = [/^\/$/, /^\/cart$/, /^\/loyalty$/, /^\/t\/[^/]+$/];
+// Bare (non-/r/:slug) paths that resolve the restaurant from the hostname. On a restaurant's own
+// verified custom domain that brings its branding to the account, order-tracking (linked from
+// branded emails) and support pages too; on the shared platform host the lookup is skipped below.
+const BARE_STOREFRONT_PATHS = [
+  /^\/$/,
+  /^\/cart$/,
+  /^\/loyalty$/,
+  /^\/t\/[^/]+$/,
+  /^\/login$/,
+  /^\/register$/,
+  /^\/forgot-password$/,
+  /^\/reset-password$/,
+  /^\/verify-email$/,
+  /^\/confirm-email-change$/,
+  /^\/orders(\/[^/]+)?$/,
+  /^\/account$/,
+  /^\/support(\/.*)?$/,
+];
 
 export function RestaurantProvider({ children }: { children: ReactNode }) {
   const publicMatch = useMatch("/r/:restaurantSlug/*");
@@ -81,6 +109,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [availability, setAvailability] = useState<RestaurantAvailability | null>(null);
   const [supportIdentity, setSupportIdentity] = useState<SupportIdentity | null>(null);
+  const [whiteLabelBrand, setWhiteLabelBrand] = useState<WhiteLabelBrand | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedVia, setResolvedVia] = useState<"slug" | "domain" | "none">("none");
@@ -88,14 +117,25 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!slug && !isBareStorefrontPath) {
-      // Not on a /r/:restaurantSlug/* route or a bare storefront-shaped route (e.g. /login,
-      // /orders, /support) — nothing to resolve.
+      // Not on a restaurant-scoped or bare storefront-shaped route — clear tenant branding so
+      // a previous restaurant's identity can never leak into unrelated platform pages.
+      setRestaurant(null);
+      setAvailability(null);
+      setSupportIdentity(null);
+      setWhiteLabelBrand(null);
+      setActiveCustomDomain(null);
+      setResolvedVia("none");
       setLoading(false);
       return;
     }
     if (!slug && isPlatformStorefrontHost(window.location.hostname, import.meta.env.VITE_SITE_URL)) {
       // Phase 88 — a bare path on the platform's own storefront host: never a custom domain (see
       // lib/platformHost.ts), so skip the guaranteed-404 lookup; LegacyRedirect decides as before.
+      setRestaurant(null);
+      setAvailability(null);
+      setSupportIdentity(null);
+      setWhiteLabelBrand(null);
+      setActiveCustomDomain(null);
       setResolvedVia("none");
       setLoading(false);
       return;
@@ -117,7 +157,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const skipRefresh = !(slug && isPreview);
 
     apiClient
-      .request<{ restaurant: Restaurant; availability: RestaurantAvailability; supportIdentity: SupportIdentity; activeCustomDomain?: string | null }>(
+      .request<{ restaurant: Restaurant; availability: RestaurantAvailability; supportIdentity: SupportIdentity; whiteLabelBrand?: WhiteLabelBrand | null; activeCustomDomain?: string | null }>(
         path,
         { skipRefresh }
       )
@@ -126,6 +166,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         setRestaurant(data.restaurant);
         setAvailability(data.availability);
         setSupportIdentity(data.supportIdentity);
+        setWhiteLabelBrand(data.whiteLabelBrand ?? null);
         setResolvedVia(slug ? "slug" : "domain");
         setActiveCustomDomain(data.activeCustomDomain ?? null);
       })
@@ -150,7 +191,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
   return (
     <RestaurantContext.Provider
-      value={{ restaurant, availability, supportIdentity, loading, error, slug, isPreview, resolvedVia, activeCustomDomain }}
+      value={{ restaurant, availability, supportIdentity, whiteLabelBrand, loading, error, slug, isPreview, resolvedVia, activeCustomDomain }}
     >
       {children}
     </RestaurantContext.Provider>

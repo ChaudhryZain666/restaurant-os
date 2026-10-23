@@ -23,6 +23,7 @@ import {
 import { resolveOwnerIdentity } from "../services/ownerIdentity.service.js";
 import { reconcileStalePayments } from "../services/payment.service.js";
 import { runTrialExpirationSweep } from "../services/subscription.service.js";
+import { resolveEmailBrandForRestaurant, storefrontOriginForRestaurant } from "../services/emailBranding.service.js";
 import type { OrderEventPayload, OrderEventType } from "../events/orderEvents.js";
 import type { TicketEventPayload, TicketEventType } from "../events/ticketEvents.js";
 
@@ -161,7 +162,14 @@ export async function dispatchOrderNotification(name: DispatchableOrderEvent, pa
   if (order.isDemo) return;
 
   const total = formatOrderTotal(order.total, order.currency);
-  const trackingUrl = `${env.CLIENT_ORIGIN}/orders/${order.id}`;
+  // White-label: the agency brand/sender (email_branding) and, while it's live, the client's own
+  // domain for the tracking link (custom_domain). Both resolve to the platform defaults otherwise.
+  const [brandOrNull, storefrontOrigin] = await Promise.all([
+    resolveEmailBrandForRestaurant(restaurant._id),
+    storefrontOriginForRestaurant(restaurant._id, env.CLIENT_ORIGIN),
+  ]);
+  const brand = brandOrNull ?? undefined;
+  const trackingUrl = `${storefrontOrigin}/orders/${order.id}`;
   const emailService = getEmailService();
 
   if (name === "order.created") {
@@ -173,7 +181,7 @@ export async function dispatchOrderNotification(name: DispatchableOrderEvent, pa
           total,
           orderType: order.orderType,
           ordersUrl: `${env.ADMIN_ORIGIN}/orders`,
-        })
+        }, brand)
       );
     }
     if (customer?.email) {
@@ -184,23 +192,23 @@ export async function dispatchOrderNotification(name: DispatchableOrderEvent, pa
           total,
           orderType: order.orderType,
           trackingUrl,
-        })
+        }, brand)
       );
     }
   } else if (name === "order.cancelled") {
     if (customer?.email) {
       await emailService.send(
-        orderCancelledEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, trackingUrl })
+        orderCancelledEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, trackingUrl }, brand)
       );
     }
   } else if (name === "order.payment_updated" && customer?.email) {
     if (payload.paymentOutcome === "paid") {
       await emailService.send(
-        paymentReceiptEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, total, trackingUrl })
+        paymentReceiptEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, total, trackingUrl }, brand)
       );
     } else if (payload.paymentOutcome === "failed") {
       await emailService.send(
-        paymentFailedEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, trackingUrl })
+        paymentFailedEmail(customer.email, { restaurantName: restaurant.name, orderNumber: order.orderNumber, trackingUrl }, brand)
       );
     } else if (payload.paymentOutcome === "refunded") {
       await emailService.send(
@@ -209,7 +217,7 @@ export async function dispatchOrderNotification(name: DispatchableOrderEvent, pa
           orderNumber: order.orderNumber,
           amount: formatOrderTotal(payload.amount ?? order.total, order.currency),
           trackingUrl,
-        })
+        }, brand)
       );
     }
     // "requires_action"/"authorized"/"cancelled" intentionally send nothing — none of those is a

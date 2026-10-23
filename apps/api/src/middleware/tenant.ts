@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { agencyRoleGrantsPermission, roleHasPermission, type AgencyMembershipRole, type Permission } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
+import { OWNER_OF_RECORD_ROLE, platformAdminOwnsBusiness } from "../services/ownerOfRecord.service.js";
 import { agencyGrantsBusinessAccess } from "./businessLocation.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -23,6 +24,8 @@ interface TenantAccessResult {
   // Set only when access was granted via agency membership (not a direct owner/manager/staff
   // fast path) — mirrors requireBusinessMatch's req.agencyRole, consumed by requireTenantPermission.
   agencyRole?: AgencyMembershipRole;
+  // A platform_admin who is the recorded owner of the target restaurant's business.
+  ownerOfRecord?: boolean;
 }
 
 /**
@@ -63,6 +66,9 @@ export async function resolveTenantAccess(user: TenantUser, targetRestaurantId: 
 
   // Owner/manager: implicit access to every location under their own business.
   if (user.businessId && targetBusinessId === user.businessId) return { allowed: true };
+
+  // Platform admin who owns this business of record (ownerOfRecord.service.ts) — DB-checked.
+  if (await platformAdminOwnsBusiness(user, targetBusinessId)) return { allowed: true, ownerOfRecord: true };
 
   // Agency: only reached once the real restaurant-role fast paths above have failed.
   const memberships = user.agencyMemberships ?? [];
@@ -117,7 +123,11 @@ export async function canAccessRestaurant(user: TenantUser, targetRestaurantId: 
 export function requireTenantMatch(paramName = "restaurantId") {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(ApiError.unauthorized());
-    if (req.user.role === "platform_admin") return next();
+    if (req.user.role === "platform_admin") {
+      // Unchanged platform-wide access, plus owner permissions on a restaurant the admin owns.
+      if ((await resolveTenantAccess(req.user, req.params[paramName])).ownerOfRecord) req.ownerOfRecord = true;
+      return next();
+    }
 
     const result = await resolveTenantAccess(req.user, req.params[paramName]);
     if (!result.allowed) return next(ApiError.forbidden("You do not have access to this restaurant"));
@@ -139,7 +149,10 @@ export function requireTenantPermission(...permissions: Permission[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(ApiError.unauthorized());
     const hasAll = permissions.every(
-      (p) => roleHasPermission(req.user!.role, p) || (req.agencyRole !== undefined && agencyRoleGrantsPermission(req.agencyRole, p))
+      (p) =>
+        roleHasPermission(req.user!.role, p) ||
+        (req.agencyRole !== undefined && agencyRoleGrantsPermission(req.agencyRole, p)) ||
+        (req.ownerOfRecord === true && roleHasPermission(OWNER_OF_RECORD_ROLE, p))
     );
     if (!hasAll) return next(ApiError.forbidden());
     next();

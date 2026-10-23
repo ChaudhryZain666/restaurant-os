@@ -13,6 +13,8 @@ import type {
   ProviderSubscriptionStatus,
 } from "./BillingProvider.js";
 
+/** Phase 89 — prefix of the event ids Paddle's webhook simulator sends (see verifyWebhookSignature). */
+export const SIMULATED_EVENT_ID_PREFIX = "ntfsimevt_";
 const SANDBOX_BASE_URL = "https://sandbox-api.paddle.com";
 const PRODUCTION_BASE_URL = "https://api.paddle.com";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -379,7 +381,18 @@ export class PaddleBillingProvider implements BillingProvider {
     if (!eventId || !eventType) return null;
     const data = parsed.data;
     const occurredAt = parsed.occurred_at ? new Date(parsed.occurred_at) : undefined;
-    const base = { eventId, eventType, raw: parsed, occurredAt: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : undefined };
+    const base = {
+      eventId,
+      eventType,
+      raw: parsed,
+      occurredAt: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : undefined,
+      // Phase 89 — Paddle's webhook simulator signs its events with the destination's real secret
+      // and fills them with real entity data, so they pass verification like genuine events. Its
+      // event ids are "ntfsimevt_…" (genuine ones are "evt_…"); the id is part of the signed body,
+      // so only Paddle can set it. Observed on this account's own simulation runs and documented
+      // on Paddle's webhook-simulator page.
+      simulated: eventId.startsWith(SIMULATED_EVENT_ID_PREFIX),
+    };
 
     // Phase 89 — only subscription.* events carry a SUBSCRIPTION status. A transaction's or an
     // adjustment's own status ("completed", "approved"…) is a different vocabulary; reading it as a

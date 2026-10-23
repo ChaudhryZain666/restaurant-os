@@ -27,7 +27,7 @@ import {
  * entry per Restaurant under the business, mirroring businessPromotion.controller.ts's
  * auditAcrossLocations exactly.
  */
-async function auditAcrossBusiness(
+export async function auditAcrossBusiness(
   businessId: string,
   req: Request,
   action:

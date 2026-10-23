@@ -920,11 +920,106 @@ describe("PATCH /agencies/:agencyId — profile settings (Phase 58)", () => {
     expect(asOwner.body.data.agency.description).toBe("Updated description");
   });
 
+  it("agency owner can save white-label brand settings, while unrelated agencies remain isolated", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        brandName: "Northstar Restaurant Group",
+        brandPrimaryColor: "#6B2130",
+        whiteLabelEnabled: true,
+        logo: "https://example.test/northstar-logo.png",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.agency).toMatchObject({
+      brandName: "Northstar Restaurant Group",
+      brandPrimaryColor: "#6B2130",
+      whiteLabelEnabled: true,
+      logo: "https://example.test/northstar-logo.png",
+    });
+
+    const other = await Agency.findById(otherAgency.id).lean();
+    expect(other?.brandName).toBeUndefined();
+    expect(other?.whiteLabelEnabled).not.toBe(true);
+  });
+
+  it("rejects invalid agency brand colors", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ brandPrimaryColor: "red; background:url(javascript:alert(1))" });
+
+    expect(res.status).toBe(400);
+  });
+
   it("a member of a different agency cannot update this agency's profile", async () => {
     const res = await request(app)
       .patch(`/api/v1/agencies/${agency.id}`)
       .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
       .send({ description: "Hijacked" });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("PUT /agencies/:agencyId/businesses/:businessId/white-label", () => {
+  it("lets an agency owner assign only features the agency has opted to offer", async () => {
+    const setup = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        whiteLabelEnabled: true,
+        whiteLabelOfferings: ["storefront_branding", "support_branding"],
+      });
+    expect(setup.status).toBe(200);
+
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["storefront_branding"] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.whiteLabelFeatures).toEqual(["storefront_branding"]);
+  });
+
+  it("saves custom domain and branded sign-in as requests that stay pending until a live domain exists", async () => {
+    const setup = await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ whiteLabelEnabled: true, whiteLabelOfferings: ["email_branding", "custom_domain", "branded_login"] });
+    expect(setup.status).toBe(200);
+
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["custom_domain", "branded_login"] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.business.whiteLabelFeatures).toEqual(["custom_domain", "branded_login"]);
+    const states = Object.fromEntries(
+      (res.body.data.status.capabilities as { feature: string; state: string }[]).map((c) => [c.feature, c.state])
+    );
+    expect(states.custom_domain).toBe("pending_setup");
+    expect(states.branded_login).toBe("pending_setup");
+    expect(states.email_branding).toBe("off");
+    expect(states.storefront_branding).toBe("not_offered");
+  });
+
+  it("rejects a client feature the agency has not offered", async () => {
+    await request(app)
+      .patch(`/api/v1/agencies/${agency.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ whiteLabelEnabled: true, whiteLabelOfferings: ["storefront_branding"] });
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ enabledFeatures: ["branded_login"] });
+    expect(res.status).toBe(400);
+  });
+
+  it("does not allow another agency to change this client's white-label options", async () => {
+    const res = await request(app)
+      .put(`/api/v1/agencies/${agency.id}/businesses/${managedBusiness.id}/white-label`)
+      .set("Authorization", `Bearer ${otherAgencyOwnerToken}`)
+      .send({ enabledFeatures: [] });
     expect(res.status).toBe(403);
   });
 });

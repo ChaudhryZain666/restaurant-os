@@ -60,12 +60,12 @@ const planSchema = new Schema(
     // volume pricing" strategy) exist as a REAL, fully-functional Plan document — selectable for a
     // subscription, its entitlements resolved through the exact same resolver as any other plan —
     // without ever appearing on the public marketing pricing page or the self-serve signup wizard's
-    // plan picker (both read GET /public/plans, which now filters on this). Deliberately NOT wired
-    // into self-serve subscription creation's own `isActive` check — that stays unchanged; treat an
-    // unlisted plan's `code` as not-for-casual-sharing until/unless a future phase decides that gap
-    // needs closing too. No pricing tiers, ranges, or assignment flow were invented here — only the
-    // one flag needed so such a plan CAN exist safely later, per this phase's own explicit scope
-    // boundary against building a full enterprise pricing engine now.
+    // plan picker (both read GET /public/plans, which now filters on this). Lane A closed the
+    // remaining gap: an unlisted plan is assigned by a platform admin (POST /platform/businesses|
+    // agencies/:id/subscription) and is refused on every self-serve path — trial, checkout, change
+    // plan — except checkout for the subscription already on it; GET /plans hides it from everyone
+    // but platform admins (see subscription.service.ts's assertSelfServePlan). Still no pricing
+    // tiers or ranges: a negotiated price is simply its own Plan document with its own pricing.
     isPubliclyListed: { type: Boolean, default: true },
   },
   { timestamps: true, toJSON: idTransform }

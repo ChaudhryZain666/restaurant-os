@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
-import { agencyRoleGrantsPermission, agencyRoleHasPermission, type AgencyMembershipRole, type ClientCommercialTerms } from "@restaurant/types";
+import { agencyRoleGrantsPermission, agencyRoleHasPermission, type AgencyMembershipRole, type AgencyWhiteLabelFeature, type ClientCommercialTerms } from "@restaurant/types";
+import { ClientWhiteLabelCard } from "../components/ClientWhiteLabelCard";
 import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
@@ -17,6 +18,7 @@ interface BusinessDetail {
   name: string;
   slug: string;
   status: string;
+  whiteLabelFeatures?: AgencyWhiteLabelFeature[];
 }
 
 interface OwnerDetail {
@@ -99,7 +101,6 @@ export function AgencyBusinessDetailPage() {
   const [editingCommercial, setEditingCommercial] = useState(false);
   const [commercialDraft, setCommercialDraft] = useState({ planLabel: "", priceDollars: "", currency: "USD", billingCycle: "monthly" as "monthly" | "yearly", status: "active" as "trial" | "active" | "cancelled" });
   const [savingCommercial, setSavingCommercial] = useState(false);
-
   const currentAgency = agencies.find((a) => a.id === activeAgencyId);
   const myRole: AgencyMembershipRole | undefined = currentAgency?.myRole;
 
@@ -387,6 +388,14 @@ export function AgencyBusinessDetailPage() {
               <p className="text-sm text-muted">Not configured yet.</p>
             )}
           </Card>
+
+          {activeAgencyId && businessId && (
+            <ClientWhiteLabelCard
+              agencyId={activeAgencyId}
+              businessId={businessId}
+              canManage={myRole ? agencyRoleHasPermission(myRole, "agency.businesses.manage") : false}
+            />
+          )}
 
           <Card>
             <h2 className="mb-2 font-heading text-lg font-medium text-foreground">Locations</h2>

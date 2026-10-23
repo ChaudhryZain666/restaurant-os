@@ -77,6 +77,12 @@ provider, billing/subscriptions, commissions/payouts, multi-location, full white
 domain implementation. The storefront's component structure is kept reusable and
 configuration-driven specifically so the future theme system doesn't require a rewrite.
 
+**Agency white-label is now partly built** — six status-tracked capabilities (storefront
+branding, custom domain, hidden platform branding, branded support, branded email, branded
+customer sign-in); see `docs/agency-white-label-rollout.md`. Still out of scope there:
+an agency portal on the agency's own domain (client storefronts under it are supported), branded
+operator sign-in, and provider-API email-sender verification.
+
 **SEO is no longer fully in this list** — see `docs/multi-tenant-storefront-architecture.md`'s SEO
 section: sitemap, robots.txt, canonical URLs, Twitter Cards, and Restaurant/Menu JSON-LD
 structured data now exist (Phase 10/12). What remains genuinely out of scope: true SSR/
@@ -123,7 +129,8 @@ URL).
 - **Retire `demo-owner@demo-restaurant.garnishtable.invalid`** only after the demo's ownership references and any dependent access have been safely transferred and verified. Do not delete the placeholder first.
 - Ensure the existing administrator can actually manage the demo's menu, orders, and settings through an explicitly authorized, tenant-scoped access path; changing `ownerId` alone is not sufficient because platform-admin permissions differ from restaurant-owner permissions.
 - Update production demo provisioning so repeat runs recognize the transferred demo safely and remain idempotent, without weakening the protection against taking over an unrelated tenant with the same slug.
-- Add targeted tests and a documented, reversible production transfer procedure. Verify the live demo and its menu after the change. **Status: planned; production data has not been changed.**
+- Add targeted tests and a documented, reversible production transfer procedure. Verify the live demo and its menu after the change.
+- **Status (release/launch-candidate): implemented and tested; production data has not been changed.** A platform admin who is a business's recorded owner gets owner permissions for that business only, re-checked against the database on every request (`ownerOfRecord.service.ts`); the admin app's Platform → Restaurants → "Manage this restaurant" opens it. `scripts/transferDemoOwnership.js --admin-email … [--revert]` moves the demo idempotently with an audit entry; provisioning accepts a demo owned by the placeholder or a platform admin. The production run is a manual step — see `docs/production-launch-checklist.md`.
 
 ## Suggested next phase
 

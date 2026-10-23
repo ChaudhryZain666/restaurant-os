@@ -50,6 +50,7 @@ import { PrintOrderPage } from "./pages/PrintOrderPage";
 import { PrintPreviewPage } from "./pages/PrintPreviewPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
+import { PlatformAgenciesPage } from "./pages/PlatformAgenciesPage";
 import { PlatformAnalyticsPage } from "./pages/PlatformAnalyticsPage";
 import { SystemConfigPage } from "./pages/SystemConfigPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -516,6 +517,14 @@ export function App() {
             element={
               <RequireAuth permission="platform.users.manage">
                 <PlatformUsersPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/agencies"
+            element={
+              <RequireAuth roles={["platform_admin"]}>
+                <PlatformAgenciesPage />
               </RequireAuth>
             }
           />

@@ -155,3 +155,31 @@ describe("ClaudeMenuExtractionProvider", () => {
     });
   });
 });
+
+// Phase 89 — retry classification only; Claude's error codes and messages are unchanged.
+describe("ClaudeMenuExtractionProvider retry classification", () => {
+  const provider = new ClaudeMenuExtractionProvider("test-api-key", "claude-sonnet-4-5");
+  const input = { kind: "pdf" as const, buffer: Buffer.from("%PDF-1.4"), fileName: "menu.pdf" };
+
+  it.each([
+    [400, false],
+    [404, false],
+    [413, false],
+    [422, false],
+    [429, true],
+    [500, true],
+    [529, true],
+  ])("HTTP %i → provider_error, retryable %s", async (status, retryable) => {
+    mockFetchOnce({ ok: false, status, json: async () => ({ type: "error", error: { type: "x", message: "detail" } }) });
+    const error = (await provider.extract(input).catch((e: unknown) => e)) as MenuExtractionError;
+    expect(error.code).toBe("provider_error");
+    expect(error.retryable).toBe(retryable);
+  });
+
+  it("invalid credentials are never retried", async () => {
+    mockFetchOnce({ ok: false, status: 401 });
+    const error = (await provider.extract(input).catch((e: unknown) => e)) as MenuExtractionError;
+    expect(error.code).toBe("invalid_credentials");
+    expect(error.retryable).toBe(false);
+  });
+});

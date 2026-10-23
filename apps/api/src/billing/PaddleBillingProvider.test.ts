@@ -409,6 +409,18 @@ describe("PaddleBillingProvider Phase 89", () => {
     expect(verify({ ...base, event_id: "evt_s4" })!.scheduledCancelAt).toBeUndefined();
   });
 
+  it("flags webhook-simulator events (ntfsimevt_ ids) as simulated, and genuine evt_ events as not", () => {
+    const renewal = { event_type: "transaction.completed", data: { id: "txn_sim", subscription_id: "sub_123", status: "completed", origin: "subscription_recurring", currency_code: "USD", details: { totals: { total: "5900" } } } };
+    expect(verify({ ...renewal, event_id: "ntfsimevt_01synthetic0000000000000001" })!.simulated).toBe(true);
+    expect(verify({ ...renewal, event_id: "evt_01synthetic0000000000000001" })!.simulated).toBe(false);
+    const update = { event_type: "subscription.updated", data: { id: "sub_123", status: "active" } };
+    expect(verify({ ...update, event_id: "ntfsimevt_01synthetic0000000000000002" })!.simulated).toBe(true);
+    expect(verify({ ...update, event_id: "evt_01synthetic0000000000000002" })!.simulated).toBe(false);
+    // The flag only ever comes from a verified body: a simulator id under a bad signature is rejected outright.
+    const forged = sign({ ...renewal, event_id: "ntfsimevt_01synthetic0000000000000003" }, "wrong-secret");
+    expect(provider().verifyWebhookSignature(forged.rawBody, forged.signatureHeader)).toBeNull();
+  });
+
   it("retrievePrice returns the price, and null for an id this environment doesn't have", async () => {
     mockFetchOnce(200, { data: { id: "pri_1", status: "active" } });
     expect(await provider().retrievePrice("pri_1")).toEqual({ id: "pri_1", status: "active" });

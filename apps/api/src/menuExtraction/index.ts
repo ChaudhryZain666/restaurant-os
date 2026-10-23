@@ -3,14 +3,33 @@ import { logger } from "../common/logger.js";
 import type { MenuExtractionProvider } from "./MenuExtractionProvider.js";
 import { MockMenuExtractionProvider } from "./MockMenuExtractionProvider.js";
 import { ClaudeMenuExtractionProvider } from "./ClaudeMenuExtractionProvider.js";
+import { OpenAIMenuExtractionProvider } from "./OpenAIMenuExtractionProvider.js";
 
 let instance: MenuExtractionProvider | null = null;
 
-function buildLiveProvider(): MenuExtractionProvider {
-  if (!env.ANTHROPIC_API_KEY) {
+export interface LiveProviderConfig {
+  provider: "claude" | "openai";
+  anthropicApiKey?: string;
+  anthropicModel: string;
+  openaiApiKey?: string;
+  openaiModel: string;
+}
+
+/**
+ * Phase 89 — the live provider named by MENU_EXTRACTION_PROVIDER ("claude" by default, or "openai").
+ * Pure (takes its config as an argument) so the choice is unit-testable without the env singleton.
+ * A missing key for the chosen provider throws a clear error; it never falls back to the other
+ * provider or to the mock.
+ */
+export function buildLiveProvider(config: LiveProviderConfig): MenuExtractionProvider {
+  if (config.provider === "openai") {
+    if (!config.openaiApiKey) throw new Error('Provider "openai" requires OPENAI_API_KEY to be set.');
+    return new OpenAIMenuExtractionProvider(config.openaiApiKey, config.openaiModel);
+  }
+  if (!config.anthropicApiKey) {
     throw new Error('Provider "claude" requires ANTHROPIC_API_KEY to be set.');
   }
-  return new ClaudeMenuExtractionProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_MODEL);
+  return new ClaudeMenuExtractionProvider(config.anthropicApiKey, config.anthropicModel);
 }
 
 /** Extracted as pure logic (no dependency on the `env` singleton) specifically so this decision is
@@ -40,10 +59,19 @@ export function getMenuExtractionProvider(): MenuExtractionProvider {
   if (instance) return instance;
   if (shouldWarnAboutMockInProduction(env.NODE_ENV, env.MENU_EXTRACTION_PROVIDER_MODE)) {
     logger.warn(
-      "[menuExtraction] Running the MOCK menu-extraction provider in production — every PDF/photo import will produce fake placeholder items, not real extracted menu data. Set MENU_EXTRACTION_PROVIDER_MODE=live and ANTHROPIC_API_KEY to use real extraction."
+      "[menuExtraction] Running the MOCK menu-extraction provider in production — every PDF/photo import will produce fake placeholder items, not real extracted menu data. Set MENU_EXTRACTION_PROVIDER_MODE=live and the chosen provider's API key (ANTHROPIC_API_KEY, or OPENAI_API_KEY with MENU_EXTRACTION_PROVIDER=openai) to use real extraction."
     );
   }
-  instance = env.MENU_EXTRACTION_PROVIDER_MODE === "mock" ? new MockMenuExtractionProvider() : buildLiveProvider();
+  instance =
+    env.MENU_EXTRACTION_PROVIDER_MODE === "mock"
+      ? new MockMenuExtractionProvider()
+      : buildLiveProvider({
+          provider: env.MENU_EXTRACTION_PROVIDER,
+          anthropicApiKey: env.ANTHROPIC_API_KEY,
+          anthropicModel: env.ANTHROPIC_MODEL,
+          openaiApiKey: env.OPENAI_API_KEY,
+          openaiModel: env.OPENAI_MODEL,
+        });
   return instance;
 }
 

@@ -5,9 +5,12 @@ import { useAuth } from "./AuthContext";
 interface EnteredBusiness {
   businessId: string;
   businessName: string;
-  agencyId: string;
-  agencyName: string;
-  agencyRole: AgencyMembershipRole;
+  /** "agency" (an agency member managing a client) or "platform_owner" (a platform admin running a
+   *  restaurant it is the recorded owner of — e.g. the demo; see the API's ownerOfRecord.service). */
+  mode?: "agency" | "platform_owner";
+  agencyId?: string;
+  agencyName?: string;
+  agencyRole?: AgencyMembershipRole;
 }
 
 interface BusinessContextValue {
@@ -29,6 +32,11 @@ interface BusinessContextValue {
   activeBusinessName: string | null;
   activeAgencyName: string | null;
   enterBusiness: (business: { id: string; name: string }, agency: { id: string; name: string }, agencyRole: AgencyMembershipRole) => void;
+  /** A platform admin enters a business it owns of record. The server re-checks ownership on every
+   *  request; this only switches the admin UI into that restaurant's screens. */
+  enterOwnedBusiness: (business: { id: string; name: string }) => void;
+  /** True while a platform admin is running a restaurant it owns (enterOwnedBusiness). */
+  isActingAsPlatformOwner: boolean;
   exitBusiness: () => void;
 }
 
@@ -59,7 +67,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [entered, setEntered] = useState<EnteredBusiness | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== "agency_member") {
+    if (!user || (user.role !== "agency_member" && user.role !== "platform_admin")) {
       setEntered(null);
       return;
     }
@@ -77,10 +85,21 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       const next: EnteredBusiness = {
         businessId: business.id,
         businessName: business.name,
+        mode: "agency",
         agencyId: agency.id,
         agencyName: agency.name,
         agencyRole,
       };
+      localStorage.setItem(storageKey(user.id), JSON.stringify(next));
+      setEntered(next);
+    },
+    [user]
+  );
+
+  const enterOwnedBusiness = useCallback(
+    (business: { id: string; name: string }) => {
+      if (!user || user.role !== "platform_admin") return;
+      const next: EnteredBusiness = { businessId: business.id, businessName: business.name, mode: "platform_owner" };
       localStorage.setItem(storageKey(user.id), JSON.stringify(next));
       setEntered(next);
     },
@@ -94,20 +113,30 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const isAgencyAccount = user?.role === "agency_member";
-  const activeBusinessId = isAgencyAccount ? (entered?.businessId ?? null) : (user?.businessId ?? null);
+  const isPlatformOwner = user?.role === "platform_admin" && entered?.mode === "platform_owner";
+  const enteredAsAgency = isAgencyAccount && entered !== null && entered.mode !== "platform_owner" ? entered : null;
+  const activeBusinessId = isAgencyAccount
+    ? (enteredAsAgency?.businessId ?? null)
+    : isPlatformOwner
+      ? (entered?.businessId ?? null)
+      : user?.role === "platform_admin"
+        ? null
+        : (user?.businessId ?? null);
 
   const value = useMemo<BusinessContextValue>(
     () => ({
       activeBusinessId,
-      isActingAsAgency: isAgencyAccount && Boolean(entered),
-      agencyRoleForActiveBusiness: isAgencyAccount ? (entered?.agencyRole ?? null) : null,
-      agencyIdForActiveBusiness: isAgencyAccount ? (entered?.agencyId ?? null) : null,
-      activeBusinessName: isAgencyAccount ? (entered?.businessName ?? null) : null,
-      activeAgencyName: isAgencyAccount ? (entered?.agencyName ?? null) : null,
+      isActingAsAgency: Boolean(enteredAsAgency),
+      agencyRoleForActiveBusiness: enteredAsAgency?.agencyRole ?? null,
+      agencyIdForActiveBusiness: enteredAsAgency?.agencyId ?? null,
+      activeBusinessName: enteredAsAgency || isPlatformOwner ? (entered?.businessName ?? null) : null,
+      activeAgencyName: enteredAsAgency?.agencyName ?? null,
       enterBusiness,
+      enterOwnedBusiness,
+      isActingAsPlatformOwner: isPlatformOwner,
       exitBusiness,
     }),
-    [activeBusinessId, isAgencyAccount, entered, enterBusiness, exitBusiness]
+    [activeBusinessId, enteredAsAgency, isPlatformOwner, entered, enterBusiness, enterOwnedBusiness, exitBusiness]
   );
 
   return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;

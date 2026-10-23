@@ -7,4 +7,6 @@
  */
 export interface DnsVerifier {
   resolveTxt(hostname: string): Promise<string[]>;
+  /** CNAME targets for `hostname` (lowercase, no trailing dot); [] on any lookup failure. */
+  resolveCname(hostname: string): Promise<string[]>;
 }

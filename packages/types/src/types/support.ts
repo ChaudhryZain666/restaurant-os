@@ -94,4 +94,8 @@ export interface SupportMessage {
 export interface SupportIdentity {
   name: string;
   isWhiteLabel: boolean;
+  /** Only present for an active `support_branding` agency that configured a support contact. */
+  email?: string;
+  /** https-only; same condition as `email`. */
+  url?: string;
 }
