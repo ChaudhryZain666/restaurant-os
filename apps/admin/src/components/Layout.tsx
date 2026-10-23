@@ -387,8 +387,11 @@ function LayoutContent() {
   const { user, logout } = useAuth();
   const { activeLocationId, locations } = useActiveLocation();
   const { activeAgencyId, agencies, switchAgency } = useAgency();
-  const { activeBusinessId, isActingAsAgency, agencyRoleForActiveBusiness, activeBusinessName, activeAgencyName, exitBusiness } = useBusiness();
-  const isPlatformAdmin = user?.role === "platform_admin";
+  const { activeBusinessId, isActingAsAgency, isActingAsPlatformOwner, agencyRoleForActiveBusiness, activeBusinessName, activeAgencyName, exitBusiness } =
+    useBusiness();
+  // A platform admin running a restaurant it owns of record sees that restaurant's screens (as its
+  // owner) instead of the platform console, until it goes back.
+  const isPlatformAdmin = user?.role === "platform_admin" && !isActingAsPlatformOwner;
   const isKitchenStaff = user?.role === "kitchen_staff" && !isActingAsAgency;
   // Phase 26 — an agency_member who has entered a managed business is restaurant-scoped for nav
   // purposes (sees RESTAURANT_GROUPS, filtered by their agency role's grants), not agency-scoped —
@@ -397,6 +400,7 @@ function LayoutContent() {
   // a real restaurant-role account is always their own user.businessId — zero behavior change there.
   const isAgencyScoped = (user?.role === "agency_member" || user?.role === "customer") && !isActingAsAgency;
   const isRestaurantScoped = Boolean(user) && !isPlatformAdmin && Boolean(activeBusinessId);
+  const navRole: UserRole | undefined = isActingAsPlatformOwner ? "restaurant_owner" : user?.role;
   // Phase 28 — only fetched when actually restaurant-scoped (the hook itself no-ops without a
   // resolved activeLocationId, but there's no reason to even attempt it for a platform_admin or an
   // agency member who hasn't entered a business yet).
@@ -542,6 +546,21 @@ function LayoutContent() {
             </select>
           </label>
         )}
+        {isActingAsPlatformOwner && !effectiveCollapsed && (
+          <div className="mb-4 rounded-lg border border-sidebar-border bg-white/[0.05] px-3 py-2.5 text-xs">
+            <p className="font-medium text-sidebar-foreground">Managing {activeBusinessName}</p>
+            <p className="text-sidebar-muted">as its owner (platform admin)</p>
+            <button
+              onClick={() => {
+                exitBusiness();
+                navigate("/platform/restaurants");
+              }}
+              className="mt-1.5 font-medium text-sidebar-foreground underline decoration-sidebar-border underline-offset-2 transition-colors duration-fast hover:decoration-sidebar-foreground"
+            >
+              ← Back to Platform
+            </button>
+          </div>
+        )}
         {isActingAsAgency && !effectiveCollapsed && (
           <div className="mb-4 rounded-lg border border-sidebar-border bg-white/[0.05] px-3 py-2.5 text-xs">
             <p className="font-medium text-sidebar-foreground">Managing {activeBusinessName}</p>
@@ -560,7 +579,7 @@ function LayoutContent() {
         {isRestaurantScoped && user && (
           <NavGroupList
             groups={isKitchenStaff ? KITCHEN_GROUPS : RESTAURANT_GROUPS}
-            role={user.role}
+            role={navRole ?? user.role}
             isMultiLocation={locations.length > 1}
             agencyRole={agencyRoleForActiveBusiness}
             restaurantSettings={activeRestaurant?.settings}

@@ -32,6 +32,10 @@ declare global {
       // requireBusinessPermission knows which agency role to check. Absent otherwise — never
       // confused with req.user.role, which stays the person's own flat site role throughout.
       agencyRole?: AgencyMembershipRole;
+      // Set by requireTenantMatch/requireBusinessMatch ONLY for a platform_admin who is the
+      // database-recorded owner of the target business (services/ownerOfRecord.service.ts); the
+      // permission middlewares then evaluate restaurant_owner permissions for this request.
+      ownerOfRecord?: boolean;
     }
   }
 }

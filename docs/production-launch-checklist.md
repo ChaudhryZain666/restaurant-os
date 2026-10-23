@@ -163,6 +163,20 @@ should close soon after) · 🔵 External dependency.
   creates only the `demo-restaurant` storefront and refuses if a real tenant owns the slug). Never
   run `seed-demo-data.ts` against production. Expired demo-guest cleanup runs automatically every
   hour inside the API (Phase 87, BullMQ job `demo.cleanup_tick`); nothing to schedule.
+- 🟡 Demo ownership → platform admin (roadmap "demo ownership and admin access"). After deploying a
+  release that contains `scripts/transferDemoOwnership.js`, on the server (inside the api container,
+  from `apps/api`):
+  1. Take a backup first (`infrastructure/production/scripts/backup.sh`).
+  2. `node dist/scripts/transferDemoOwnership.js --admin-email <the platform admin's email>` — moves
+     the demo Business and its locations to that existing platform-admin account. The account keeps
+     its `platform_admin` role; nothing is created, merged or deleted (the placeholder
+     `demo-owner@demo-restaurant.garnishtable.invalid` stays). Refuses unless the target is an
+     active platform admin and the demo is owned by the placeholder; safe to rerun.
+  3. Verify: sign in as that admin → Platform → Restaurants → Wildwood Kitchen → **Manage this
+     restaurant** → edit a menu item; `https://order.garnishtable.com/r/demo-restaurant` still loads.
+  4. Undo at any time: the same command with `--revert`. Access follows the recorded owner on every
+     request (`ownerOfRecord.service.ts`), so reverting removes it immediately.
+  Retiring the placeholder account is a separate, later decision — nothing requires it.
 - 🟡 Menu import runs with `MENU_EXTRACTION_PROVIDER_MODE=live` (the mode is `live`, not `claude` as
   the Phase 83 report said). Use `ANTHROPIC_MODEL=claude-sonnet-4-6` (`claude-sonnet-4-5` retires
   2026-11-30; production switched on 2026-10-18). Don't move to a newer model yet: the extractor forces

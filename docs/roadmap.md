@@ -129,7 +129,8 @@ URL).
 - **Retire `demo-owner@demo-restaurant.garnishtable.invalid`** only after the demo's ownership references and any dependent access have been safely transferred and verified. Do not delete the placeholder first.
 - Ensure the existing administrator can actually manage the demo's menu, orders, and settings through an explicitly authorized, tenant-scoped access path; changing `ownerId` alone is not sufficient because platform-admin permissions differ from restaurant-owner permissions.
 - Update production demo provisioning so repeat runs recognize the transferred demo safely and remain idempotent, without weakening the protection against taking over an unrelated tenant with the same slug.
-- Add targeted tests and a documented, reversible production transfer procedure. Verify the live demo and its menu after the change. **Status: planned; production data has not been changed.**
+- Add targeted tests and a documented, reversible production transfer procedure. Verify the live demo and its menu after the change.
+- **Status (release/launch-candidate): implemented and tested; production data has not been changed.** A platform admin who is a business's recorded owner gets owner permissions for that business only, re-checked against the database on every request (`ownerOfRecord.service.ts`); the admin app's Platform → Restaurants → "Manage this restaurant" opens it. `scripts/transferDemoOwnership.js --admin-email … [--revert]` moves the demo idempotently with an audit entry; provisioning accepts a demo owned by the placeholder or a platform admin. The production run is a manual step — see `docs/production-launch-checklist.md`.
 
 ## Suggested next phase
 

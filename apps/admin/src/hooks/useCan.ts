@@ -13,10 +13,12 @@ import { useBusiness } from "../context/BusinessContext";
  */
 export function useCan(permission: Permission): boolean {
   const { user } = useAuth();
-  const { activeBusinessId, agencyRoleForActiveBusiness } = useBusiness();
+  const { activeBusinessId, agencyRoleForActiveBusiness, isActingAsPlatformOwner } = useBusiness();
   if (!user) return false;
   return (
     roleHasPermission(user.role, permission) ||
-    (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission))
+    (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission)) ||
+    // A platform admin running a restaurant it owns of record (server re-checks ownership).
+    (isActingAsPlatformOwner && Boolean(activeBusinessId) && roleHasPermission("restaurant_owner", permission))
   );
 }

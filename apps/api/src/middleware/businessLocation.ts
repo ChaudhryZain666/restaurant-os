@@ -1,3 +1,4 @@
+import { OWNER_OF_RECORD_ROLE, platformAdminOwnsBusiness } from "../services/ownerOfRecord.service.js";
 import type { NextFunction, Request, Response } from "express";
 import { agencyRoleGrantsPermission, roleHasPermission, type Permission } from "@restaurant/types";
 import { Business } from "../models/Business.js";
@@ -38,9 +39,13 @@ import { ApiError } from "../utils/ApiError.js";
 export function requireBusinessMatch(paramName = "businessId") {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(ApiError.unauthorized());
-    if (req.user.role === "platform_admin") return next();
-
     const targetBusinessId = req.params[paramName];
+    if (req.user.role === "platform_admin") {
+      // Unchanged platform-wide access, plus owner permissions on a business the admin owns.
+      if (await platformAdminOwnsBusiness(req.user, targetBusinessId)) req.ownerOfRecord = true;
+      return next();
+    }
+
     if (req.user.businessId && req.user.businessId === targetBusinessId) return next();
 
     const memberships = req.user.agencyMemberships ?? [];
@@ -99,7 +104,10 @@ export function requireBusinessPermission(...permissions: Permission[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(ApiError.unauthorized());
     const hasAll = permissions.every(
-      (p) => roleHasPermission(req.user!.role, p) || (req.agencyRole !== undefined && agencyRoleGrantsPermission(req.agencyRole, p))
+      (p) =>
+        roleHasPermission(req.user!.role, p) ||
+        (req.agencyRole !== undefined && agencyRoleGrantsPermission(req.agencyRole, p)) ||
+        (req.ownerOfRecord === true && roleHasPermission(OWNER_OF_RECORD_ROLE, p))
     );
     if (!hasAll) return next(ApiError.forbidden());
     next();

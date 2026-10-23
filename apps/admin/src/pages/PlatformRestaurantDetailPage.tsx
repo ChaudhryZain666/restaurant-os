@@ -5,6 +5,8 @@ import { Alert, Badge, Button, Card } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { PlatformPlanCard } from "../components/PlatformPlanCard";
+import { useAuth } from "../context/AuthContext";
+import { useBusiness } from "../context/BusinessContext";
 
 const STATUS_TONE: Record<string, "success" | "neutral" | "danger"> = {
   active: "success",
@@ -33,6 +35,8 @@ const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 
 export function PlatformRestaurantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { enterOwnedBusiness } = useBusiness();
   const [detail, setDetail] = useState<PlatformRestaurantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +149,19 @@ export function PlatformRestaurantDetailPage() {
           <p className="text-sm text-muted">/{restaurant.slug}</p>
         </div>
         <div className="flex gap-2">
+          {/* Only for a restaurant this admin is the recorded owner of (e.g. the demo); the API
+              re-checks that ownership on every request (ownerOfRecord.service.ts). */}
+          {owner && user && owner.id === user.id && restaurant.businessId && (
+            <Button
+              size="sm"
+              onClick={() => {
+                enterOwnedBusiness({ id: restaurant.businessId!, name: restaurant.name });
+                navigate("/");
+              }}
+            >
+              Manage this restaurant
+            </Button>
+          )}
           {owner?.invitePending && (
             <Button size="sm" variant="ghost" onClick={resendInvite} disabled={busy}>
               Resend owner invite

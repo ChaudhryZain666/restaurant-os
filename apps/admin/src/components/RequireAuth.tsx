@@ -37,7 +37,7 @@ interface RequireAuthProps {
 
 export function RequireAuth({ permission, roles, allowPlatformAdmin, children }: RequireAuthProps) {
   const { user, loading } = useAuth();
-  const { activeBusinessId, agencyRoleForActiveBusiness } = useBusiness();
+  const { activeBusinessId, agencyRoleForActiveBusiness, isActingAsPlatformOwner } = useBusiness();
   const location = useLocation();
   const { showToast } = useToast();
 
@@ -46,7 +46,9 @@ export function RequireAuth({ permission, roles, allowPlatformAdmin, children }:
       ((allowPlatformAdmin && user.role === "platform_admin") ||
         (permission
           ? roleHasPermission(user.role, permission) ||
-            (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission))
+            (Boolean(activeBusinessId) && agencyRoleForActiveBusiness !== null && agencyRoleGrantsPermission(agencyRoleForActiveBusiness, permission)) ||
+            // A platform admin running a restaurant it owns of record (the API re-checks ownership).
+            (isActingAsPlatformOwner && Boolean(activeBusinessId) && roleHasPermission("restaurant_owner", permission))
           : roles
             ? roles.includes(user.role)
             : true))
