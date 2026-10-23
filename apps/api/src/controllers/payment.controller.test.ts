@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import mongoose from "mongoose";
 import { createApp } from "../app.js";
@@ -455,18 +455,91 @@ describe("refunds", () => {
         .send({ idempotencyKey: `refund-race-b-${payment.id}`, amount: 30 }),
     ]);
 
-    // Both requested 30 against a 40 total (60 combined) — only one can actually be reserved.
-    // The loser gets a clean conflict, never a second successful refund that overshoots the
-    // payment amount. See services/payment.service.ts's refundPayment doc comment.
-    const statuses = [a.status, b.status].sort();
-    expect(statuses).toEqual([201, 409]);
+    // Both requested 30 against a 40 total (60 combined) — only one can actually be reserved. The
+    // loser is refused either way, never a second successful refund; WHICH refusal depends on timing
+    // (see services/payment.service.ts's refundPayment doc comment): 409 if it read the payment
+    // before the winner reserved and then lost the atomic reservation, 400 if it read the payment
+    // after the winner had already reserved (the amount is then plainly more than what's left).
+    // CI run #12 hit the 400 path. Only these two refusals are part of the contract.
+    const [winner, loser] = a.status === 201 ? [a, b] : [b, a];
+    expect(winner.status).toBe(201);
+    expect([400, 409]).toContain(loser.status);
+    expect(loser.body.success).toBe(false);
 
+    // The financial invariants — the actual point of this test.
     const stored = await Payment.findById(payment._id);
     expect(stored!.totalRefunded).toBe(30);
     expect(stored!.status).toBe("partially_refunded");
+    expect(await Refund.countDocuments({ paymentId: payment._id, status: "succeeded" })).toBe(1);
+    // The loser left nothing behind: no pending claim, no extra refund record.
+    expect(await Refund.countDocuments({ paymentId: payment._id })).toBe(1);
+  });
 
-    const succeededCount = await Refund.countDocuments({ paymentId: payment._id, status: "succeeded" });
-    expect(succeededCount).toBe(1);
+  it("under true concurrency, two requests with the SAME idempotency key refund once and call the provider once", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund");
+    try {
+      const key = `refund-same-key-${payment.id}`;
+      const send = () =>
+        request(app)
+          .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+          .set("Authorization", `Bearer ${ownerAToken}`)
+          .send({ idempotencyKey: key, amount: 10 });
+      const [a, b] = await Promise.all([send(), send()]);
+
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.data.refund.id).toBe(b.body.data.refund.id);
+      expect(refundSpy).toHaveBeenCalledTimes(1);
+      const stored = await Payment.findById(payment._id);
+      expect(stored!.totalRefunded).toBe(10); // reserved once, not twice
+      expect(await Refund.countDocuments({ paymentId: payment._id })).toBe(1);
+    } finally {
+      refundSpy.mockRestore();
+    }
+  });
+
+  it("a provider failure releases the reservation and the key, so the same key can be retried", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const key = `refund-provider-fail-${payment.id}`;
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund").mockRejectedValueOnce(new Error("provider unavailable"));
+    try {
+      const failed = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ idempotencyKey: key, amount: 15 });
+      expect(failed.status).toBeGreaterThanOrEqual(500);
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(0);
+      expect(await Refund.countDocuments({ paymentId: payment._id })).toBe(0);
+
+      const retried = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ idempotencyKey: key, amount: 15 });
+      expect(retried.status).toBe(201);
+      expect(retried.body.data.refund.status).toBe("succeeded");
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(15);
+    } finally {
+      refundSpy.mockRestore();
+    }
+  });
+
+  it("a non-succeeded provider result releases the reservation but keeps the refund record for the key", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund").mockResolvedValueOnce({ refundRef: `rf_failed_${payment.id}`, status: "failed" });
+    try {
+      const res = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ idempotencyKey: `refund-provider-declined-${payment.id}`, amount: 15 });
+      expect(res.status).toBe(201);
+      expect(res.body.data.refund.status).toBe("failed");
+      const stored = await Payment.findById(payment._id);
+      expect(stored!.totalRefunded).toBe(0);
+      expect(stored!.status).toBe("paid");
+    } finally {
+      refundSpy.mockRestore();
+    }
   });
 
   it("cancelling a paid order does NOT auto-refund it (Phase 17 product decision — refund stays an explicit staff action)", async () => {

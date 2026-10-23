@@ -385,6 +385,19 @@ function roundCurrency(amount: number): number {
  * balance at write time (the actual guard), reserving the amount BEFORE the external call. If the
  * provider call throws, or the provider reports anything other than "succeeded", the reservation
  * is released again — only a genuinely succeeded refund permanently consumes it.
+ *
+ * Idempotency is claimed FIRST (CI run #12 investigation): the refund document is created as
+ * "pending" before any money moves, so the unique {restaurantId, idempotencyKey} index admits exactly
+ * one request per key. A concurrent duplicate with the same key gets the winner's refund back and
+ * never reserves or calls the provider — previously both could pass the read-only key check, both
+ * reserve, and both call the provider (two real refunds; the unique index only stopped the second
+ * record afterwards). A claim whose reservation is refused or whose provider call throws is removed
+ * again, so a failed attempt leaves nothing behind (the admin sends a fresh key per click).
+ *
+ * Status contract (pinned by payment.controller.test.ts): 400 when the amount exceeds what is known
+ * to be left when the request reads the payment (including a refund that completed or reserved just
+ * before); 409 when this request passed that check but lost the atomic reservation to a concurrent
+ * refund. Either way at most one of them moves money.
  */
 export async function refundPayment(input: RefundInput): Promise<HydratedDocument<RefundDoc>> {
   const { restaurantId, paymentId, reason, initiatedByUserId, idempotencyKey } = input;
@@ -404,57 +417,30 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     throw ApiError.badRequest(`Refund amount must be between 0 and ${remaining} (already refunded: ${payment.totalRefunded})`);
   }
 
-  const reserved = await Payment.findOneAndUpdate(
-    {
-      _id: payment._id,
-      status: { $in: ["paid", "partially_refunded"] },
-      $expr: { $lte: [{ $add: ["$totalRefunded", amount] }, "$amount"] },
-    },
-    { $inc: { totalRefunded: amount } },
-    { new: true }
-  );
-  if (!reserved) {
-    throw ApiError.conflict(
-      "Refund amount exceeds what's left to refund — another refund may have just been processed. Please retry."
-    );
-  }
-
   // A refund must go through the SAME credentials the original charge used — never whatever the
   // pooled default currently resolves to, and never a "currently active" BYOC account that might
   // differ from the one this payment actually ran on. `restaurantPaymentAccountId` is looked up
   // regardless of its current status (even `disconnected`, which is a soft transition precisely so
   // a historical payment's refund path stays resolvable — see RestaurantPaymentAccount.ts).
+  // Resolved before anything is claimed or reserved, so a missing account changes nothing.
   let provider = getPaymentProvider();
   if (payment.restaurantPaymentAccountId) {
     const account = await RestaurantPaymentAccount.findById(payment.restaurantPaymentAccountId);
     if (!account) throw new Error(`This payment's restaurant payment account (${payment.restaurantPaymentAccountId}) no longer exists.`);
     provider = buildProviderFromAccount(account);
   }
-  let result;
-  try {
-    result = await provider.refund(payment.providerRef!, amount, reason);
-  } catch (err) {
-    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
-    throw err;
-  }
-  if (result.status !== "succeeded") {
-    // Provider accepted the request but it didn't (yet) actually move money — release the
-    // reservation. A "pending" provider refund later succeeding via a webhook is out of scope
-    // today (refunds have no webhook confirmation path yet — see payment-provider-decision.md).
-    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
-  }
 
-  let refund: HydratedDocument<RefundDoc>;
+  // Claim the idempotency key before anything else (see the doc comment above).
+  let claim: HydratedDocument<RefundDoc>;
   try {
-    refund = await Refund.create({
+    claim = await Refund.create({
       restaurantId,
       paymentId: payment._id,
       orderId: payment.orderId,
       provider: provider.name,
-      providerRefundRef: result.refundRef,
       amount,
       reason,
-      status: result.status,
+      status: "pending",
       idempotencyKey,
       initiatedByUserId,
     });
@@ -465,6 +451,42 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     }
     throw err;
   }
+
+  const reserved = await Payment.findOneAndUpdate(
+    {
+      _id: payment._id,
+      status: { $in: ["paid", "partially_refunded"] },
+      $expr: { $lte: [{ $add: ["$totalRefunded", amount] }, "$amount"] },
+    },
+    { $inc: { totalRefunded: amount } },
+    { new: true }
+  );
+  if (!reserved) {
+    await Refund.deleteOne({ _id: claim._id, status: "pending" });
+    throw ApiError.conflict(
+      "Refund amount exceeds what's left to refund — another refund may have just been processed. Please retry."
+    );
+  }
+
+  let result;
+  try {
+    result = await provider.refund(payment.providerRef!, amount, reason);
+  } catch (err) {
+    // Nothing (known to have) moved: release the reservation and the key claim.
+    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
+    await Refund.deleteOne({ _id: claim._id, status: "pending" });
+    throw err;
+  }
+  if (result.status !== "succeeded") {
+    // Provider accepted the request but it didn't (yet) actually move money — release the
+    // reservation. A "pending" provider refund later succeeding via a webhook is out of scope
+    // today (refunds have no webhook confirmation path yet — see payment-provider-decision.md).
+    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
+  }
+
+  // Record the provider's outcome on the claimed refund.
+  claim.set({ providerRefundRef: result.refundRef, status: result.status });
+  const refund = await claim.save();
 
   if (result.status === "succeeded") {
     const nextStatus = reserved.totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
