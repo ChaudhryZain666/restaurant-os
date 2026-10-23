@@ -42,6 +42,29 @@ export interface ProviderRefundResult {
 }
 
 /**
+ * A provider call that failed, with what we can honestly say about whether it took effect:
+ *  - "rejected": the provider definitively refused, or the request was never sent — nothing moved;
+ *  - "unknown": it may have been processed (timeout, connection dropped, provider 5xx).
+ * refundPayment releases a reservation only for "rejected"; for "unknown" it holds the refund so it
+ * can't be issued twice (services/payment.service.ts). Any other thrown error is treated as unknown.
+ */
+export class ProviderRequestError extends Error {
+  constructor(
+    message: string,
+    readonly outcome: "rejected" | "unknown"
+  ) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
+
+/** Classifies an HTTP status from a provider: 5xx (and 408) may have been processed; other 4xx
+ *  were refused. */
+export function outcomeForHttpStatus(status: number): "rejected" | "unknown" {
+  return status >= 500 || status === 408 ? "unknown" : "rejected";
+}
+
+/**
  * Provider-agnostic capability surface. PaymentService and every controller talk only to this
  * interface, never to a concrete provider SDK — provider-specific code stays isolated inside one
  * adapter file. See docs/payment-provider-decision.md for which real provider this platform's
@@ -59,7 +82,12 @@ export interface PaymentProvider {
   retrieve(providerRef: string): Promise<ProviderPaymentSnapshot>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderWebhookEvent | null;
-  refund(providerRef: string, amount: number, reason?: string): Promise<ProviderRefundResult>;
+  /** `idempotencyKey` is stable across retries of the same logical refund. Providers that support
+   *  it (supportsRefundIdempotency) must use it so a retry can never create a second refund. */
+  refund(providerRef: string, amount: number, reason: string | undefined, options: { idempotencyKey: string }): Promise<ProviderRefundResult>;
+  /** True only when the provider's API is documented to de-duplicate refunds by idempotency key —
+   *  then a refund whose outcome was unknown can be safely retried with the same key. */
+  readonly supportsRefundIdempotency: boolean;
   /** Restaurant-owned accounts (BYOC — see restaurantProvider.ts) only: a cheap, read-only,
    *  zero-side-effect call proving these credentials actually authenticate against this provider,
    *  made synchronously when a restaurant connects its own account, before it's ever marked

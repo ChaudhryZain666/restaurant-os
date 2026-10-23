@@ -44,6 +44,9 @@ export interface Refund {
   amount: number;
   reason?: string;
   status: RefundStatus;
+  /** True while a "pending" refund is held because the provider's outcome was unknown — its amount
+   *  stays reserved so it can't be issued twice (see refundPayment). */
+  providerOutcomeUnknown?: boolean;
   initiatedByUserId: string;
   createdAt: string;
   updatedAt: string;

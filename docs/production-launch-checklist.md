@@ -71,6 +71,15 @@ should close soon after) · 🔵 External dependency.
 - 🔴 For real online payments, set `PAYMENT_PROVIDER` to `stripe` or `safepay`. Neither adapter has
   been exercised against a live account.
 - 🔴 Set the real provider's API keys/webhook secrets for whichever of `stripe`/`safepay` is chosen.
+- 🟡 Refund safety before real card refunds (`services/payment.service.ts` `refundPayment`): every
+  refund claims its idempotency key before any money moves, and passes a stable provider key
+  (`gt_refund_<sha256>`) to the provider. Stripe de-duplicates by it (`Idempotency-Key`); Safepay has
+  no documented refund idempotency, so `supportsRefundIdempotency` is false there. A refund whose
+  provider outcome is unknown (timeout, dropped connection, 5xx) is **held**: it stays `pending` with
+  `providerOutcomeUnknown: true` and its amount reserved, so it can't be refunded twice. On Stripe a
+  retry with the same key (the admin reuses it) resumes it safely; on Safepay it waits for a person
+  to check the provider dashboard and reconcile it — there is no automatic reconciliation job yet.
+  Watch the API log for `refund outcome unknown — held for reconciliation`.
 - 🔵 **EXTERNAL INPUT REQUIRED**: confirm the payment provider account itself is out of test/sandbox
   mode and approved for real transactions — this is an account-level setting on the provider's own
   dashboard, not something this codebase can verify.

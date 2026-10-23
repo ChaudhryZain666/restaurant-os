@@ -8,6 +8,7 @@ import type {
   ProviderRefundResult,
   ProviderWebhookEvent,
 } from "./PaymentProvider.js";
+import { ProviderRequestError } from "./PaymentProvider.js";
 
 interface MockRecord {
   status: ProviderPaymentStatus;
@@ -85,11 +86,20 @@ export class MockPaymentProvider implements PaymentProvider {
     }
   }
 
-  async refund(providerRef: string, _amount: number, _reason?: string): Promise<ProviderRefundResult> {
+  // Behaves like a provider with documented refund idempotency (Stripe): the same key returns the
+  // same refund, so the reconciliation path is exercisable in tests.
+  readonly supportsRefundIdempotency = true;
+  private readonly refundsByKey = new Map<string, ProviderRefundResult>();
+
+  async refund(providerRef: string, _amount: number, _reason: string | undefined, options: { idempotencyKey: string }): Promise<ProviderRefundResult> {
     const record = this.records.get(providerRef);
-    if (!record) throw new Error(`Unknown mock payment reference: ${providerRef}`);
+    if (!record) throw new ProviderRequestError(`Unknown mock payment reference: ${providerRef}`, "rejected");
+    const existing = this.refundsByKey.get(options.idempotencyKey);
+    if (existing) return existing;
     // A mock, deterministic "succeeded" — no money moves. See the class doc-comment.
-    return { refundRef: `mock_re_${randomBytes(12).toString("hex")}`, status: "succeeded" };
+    const result: ProviderRefundResult = { refundRef: `mock_re_${randomBytes(12).toString("hex")}`, status: "succeeded" };
+    this.refundsByKey.set(options.idempotencyKey, result);
+    return result;
   }
 
   // "mock" is excluded from the BYOC provider enum entirely (RestaurantPaymentAccount.ts) — nothing

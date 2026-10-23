@@ -176,7 +176,7 @@ describe("StripeProvider.refund", () => {
       .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_123", payment_intent: "pi_123" }) } as unknown as Response)
       .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "re_1", status: "succeeded" }) } as unknown as Response);
 
-    const result = await provider().refund("cs_123", 5.5);
+    const result = await provider().refund("cs_123", 5.5, undefined, { idempotencyKey: "gt_refund_abc" });
 
     expect(result).toEqual({ refundRef: "re_1", status: "succeeded" });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -185,11 +185,44 @@ describe("StripeProvider.refund", () => {
     const params = new URLSearchParams(refundInit.body as string);
     expect(params.get("payment_intent")).toBe("pi_123");
     expect(params.get("amount")).toBe("550");
+    // Stripe's documented idempotency: a retry with this key returns the original refund.
+    expect((refundInit.headers as Record<string, string>)["Idempotency-Key"]).toBe("gt_refund_abc");
+  });
+
+  it("classifies failures: session lookup failure = rejected, provider 5xx/timeout = unknown, 4xx = rejected", async () => {
+    mockFetchOnce(500, { error: { message: "boom" } });
+    await expect(provider().refund("cs_1", 5, undefined, { idempotencyKey: "k1" })).rejects.toMatchObject({ outcome: "rejected" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_2", payment_intent: "pi_2" }) } as unknown as Response)
+      .mockResolvedValueOnce({ status: 502, ok: false, json: async () => ({ error: { message: "bad gateway" } }) } as unknown as Response);
+    await expect(provider().refund("cs_2", 5, undefined, { idempotencyKey: "k2" })).rejects.toMatchObject({ outcome: "unknown" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_3", payment_intent: "pi_3" }) } as unknown as Response)
+      .mockResolvedValueOnce({ status: 400, ok: false, json: async () => ({ error: { message: "amount too large" } }) } as unknown as Response);
+    await expect(provider().refund("cs_3", 5, undefined, { idempotencyKey: "k3" })).rejects.toMatchObject({ outcome: "rejected" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_4", payment_intent: "pi_4" }) } as unknown as Response)
+      .mockImplementationOnce(() => {
+        const err = new Error("aborted");
+        err.name = "AbortError";
+        return Promise.reject(err);
+      });
+    await expect(provider().refund("cs_4", 5, undefined, { idempotencyKey: "k4" })).rejects.toMatchObject({ outcome: "unknown" });
+  });
+
+  it("declares documented refund idempotency", () => {
+    expect(provider().supportsRefundIdempotency).toBe(true);
   });
 
   it("throws when the session has no payment_intent to refund", async () => {
     mockFetchOnce(200, { id: "cs_123" });
-    await expect(provider().refund("cs_123", 5)).rejects.toThrow("no associated payment_intent");
+    await expect(provider().refund("cs_123", 5, undefined, { idempotencyKey: "k" })).rejects.toThrow("no associated payment_intent");
   });
 });
 

@@ -8,6 +8,7 @@ import type {
   ProviderRefundResult,
   ProviderWebhookEvent,
 } from "./PaymentProvider.js";
+import { ProviderRequestError, outcomeForHttpStatus } from "./PaymentProvider.js";
 
 const SANDBOX_BASE_URL = "https://sandbox.api.getsafepay.com";
 const PRODUCTION_BASE_URL = "https://api.getsafepay.com";
@@ -128,9 +129,9 @@ export class SafepayProvider implements PaymentProvider {
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        throw new Error("Safepay request timed out");
+        throw new ProviderRequestError("Safepay request timed out", "unknown");
       }
-      throw new Error(`Could not reach Safepay: ${(err as Error).message}`);
+      throw new ProviderRequestError(`Could not reach Safepay: ${(err as Error).message}`, "unknown");
     } finally {
       clearTimeout(timer);
     }
@@ -139,7 +140,10 @@ export class SafepayProvider implements PaymentProvider {
     try {
       json = await res.json();
     } catch {
-      throw new Error(`Safepay returned an unreadable response (HTTP ${res.status})`);
+      throw new ProviderRequestError(
+        `Safepay returned an unreadable response (HTTP ${res.status})`,
+        res.ok ? "unknown" : outcomeForHttpStatus(res.status)
+      );
     }
 
     if (!res.ok) {
@@ -221,7 +225,17 @@ export class SafepayProvider implements PaymentProvider {
     return { eventId, eventType, providerRef, status: mapSafepayStatus(rawStatus), raw: parsed };
   }
 
-  async refund(providerRef: string, amount: number, reason?: string): Promise<ProviderRefundResult> {
+  // Safepay's refund endpoint itself is an unverified assumption (docs/development-setup.md), and no
+  // refund idempotency mechanism is documented — so never claim one. A refund whose outcome is
+  // unknown is held by refundPayment for reconciliation instead of being retried.
+  readonly supportsRefundIdempotency = false;
+
+  async refund(
+    providerRef: string,
+    amount: number,
+    reason: string | undefined,
+    _options: { idempotencyKey: string }
+  ): Promise<ProviderRefundResult> {
     const response = await this.request<{ data?: { refund_id?: string; id?: string; state?: string; status?: string } }>(
       "POST",
       "/order/v1/refunds",

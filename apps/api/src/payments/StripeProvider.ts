@@ -8,6 +8,7 @@ import type {
   ProviderRefundResult,
   ProviderWebhookEvent,
 } from "./PaymentProvider.js";
+import { ProviderRequestError, outcomeForHttpStatus } from "./PaymentProvider.js";
 
 const BASE_URL = "https://api.stripe.com";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -82,7 +83,16 @@ export class StripeProvider implements PaymentProvider {
     private readonly connectedAccountId?: string
   ) {}
 
-  private async request<T>(method: "GET" | "POST", path: string, form?: Record<string, unknown>): Promise<T> {
+  // Stripe documents the Idempotency-Key header: a repeated POST with the same key returns the
+  // original result instead of performing the operation again (keys are kept for 24 hours).
+  readonly supportsRefundIdempotency = true;
+
+  private async request<T>(
+    method: "GET" | "POST",
+    path: string,
+    form?: Record<string, unknown>,
+    extraHeaders: Record<string, string> = {}
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -94,13 +104,15 @@ export class StripeProvider implements PaymentProvider {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: `Bearer ${this.secretKey}`,
           ...(this.connectedAccountId ? { "Stripe-Account": this.connectedAccountId } : {}),
+          ...extraHeaders,
         },
         body: form ? encodeForm(form) : undefined,
         signal: controller.signal,
       });
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw new Error("Stripe request timed out");
-      throw new Error(`Could not reach Stripe: ${(err as Error).message}`);
+      // The request may have reached Stripe before the connection failed — the outcome is unknown.
+      if (err instanceof Error && err.name === "AbortError") throw new ProviderRequestError("Stripe request timed out", "unknown");
+      throw new ProviderRequestError(`Could not reach Stripe: ${(err as Error).message}`, "unknown");
     } finally {
       clearTimeout(timer);
     }
@@ -109,12 +121,15 @@ export class StripeProvider implements PaymentProvider {
     try {
       json = await res.json();
     } catch {
-      throw new Error(`Stripe returned an unreadable response (HTTP ${res.status})`);
+      throw new ProviderRequestError(
+        `Stripe returned an unreadable response (HTTP ${res.status})`,
+        res.ok ? "unknown" : outcomeForHttpStatus(res.status)
+      );
     }
 
     if (!res.ok) {
       const message = (json as { error?: { message?: string } })?.error?.message;
-      throw new Error(`Stripe returned HTTP ${res.status}${message ? `: ${message}` : ""}`);
+      throw new ProviderRequestError(`Stripe returned HTTP ${res.status}${message ? `: ${message}` : ""}`, outcomeForHttpStatus(res.status));
     }
 
     return json as T;
@@ -157,16 +172,29 @@ export class StripeProvider implements PaymentProvider {
     return verifyStripeSignature(rawBody, signatureHeader, this.webhookSecret);
   }
 
-  async refund(providerRef: string, amount: number, _reason?: string): Promise<ProviderRefundResult> {
+  async refund(
+    providerRef: string,
+    amount: number,
+    _reason: string | undefined,
+    options: { idempotencyKey: string }
+  ): Promise<ProviderRefundResult> {
     // providerRef is the Checkout Session id (see createIntent) — a refund is against the
-    // underlying PaymentIntent, so resolve it first. See this file's top comment.
-    const session = await this.request<StripeCheckoutSession>("GET", `/v1/checkout/sessions/${providerRef}`);
-    if (!session.payment_intent) throw new Error("Stripe checkout session has no associated payment_intent to refund");
+    // underlying PaymentIntent, so resolve it first. See this file's top comment. Nothing has been
+    // refunded if this lookup fails, so any failure here is "rejected".
+    let session: StripeCheckoutSession;
+    try {
+      session = await this.request<StripeCheckoutSession>("GET", `/v1/checkout/sessions/${providerRef}`);
+    } catch (err) {
+      throw new ProviderRequestError((err as Error).message, "rejected");
+    }
+    if (!session.payment_intent) throw new ProviderRequestError("Stripe checkout session has no associated payment_intent to refund", "rejected");
 
-    const response = await this.request<StripeRefund>("POST", "/v1/refunds", {
-      payment_intent: session.payment_intent,
-      amount: Math.round(amount * 100),
-    });
+    const response = await this.request<StripeRefund>(
+      "POST",
+      "/v1/refunds",
+      { payment_intent: session.payment_intent, amount: Math.round(amount * 100) },
+      { "Idempotency-Key": options.idempotencyKey }
+    );
     if (!response.id) throw new Error("Stripe did not return a refund id");
 
     const status: ProviderRefundResult["status"] =

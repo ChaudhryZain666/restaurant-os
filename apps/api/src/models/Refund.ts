@@ -22,6 +22,10 @@ const refundSchema = new Schema(
     reason: { type: String, maxlength: 500 },
     status: { type: String, enum: REFUND_STATUSES, default: "pending", index: true },
     idempotencyKey: { type: String },
+    // Set when the provider call's outcome is unknown (timeout, dropped connection, provider 5xx):
+    // the refund stays "pending" with its amount reserved so it can't be issued twice, until a
+    // same-key retry resumes it (idempotent providers only) or it is reconciled. See refundPayment.
+    providerOutcomeUnknown: { type: Boolean },
     initiatedByUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true, toJSON: idTransform }

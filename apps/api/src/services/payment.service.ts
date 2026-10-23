@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import mongoose, { type HydratedDocument } from "mongoose";
 import { Order, type OrderDoc } from "../models/Order.js";
 import { Payment, type PaymentDoc } from "../models/Payment.js";
@@ -10,7 +11,8 @@ import { getPaymentProvider, type PaymentProviderName } from "../payments/index.
 import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
 import { buildProviderFromAccount, canProcessOnlinePayments, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
-import type { ProviderWebhookEvent } from "../payments/PaymentProvider.js";
+import type { PaymentProvider, ProviderRefundResult, ProviderWebhookEvent } from "../payments/PaymentProvider.js";
+import { ProviderRequestError } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
 import { reverseLoyaltyForOrderIfNeeded } from "./loyalty.service.js";
@@ -403,7 +405,12 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   const { restaurantId, paymentId, reason, initiatedByUserId, idempotencyKey } = input;
 
   const existingByKey = await Refund.findOne({ restaurantId, idempotencyKey });
-  if (existingByKey) return existingByKey;
+  if (existingByKey) {
+    // A refund held because its provider outcome was unknown is resumed with the SAME provider
+    // idempotency key — only for providers that de-duplicate by it, so this can never refund twice.
+    if (existingByKey.status === "pending" && existingByKey.providerOutcomeUnknown) return resumeHeldRefund(existingByKey);
+    return existingByKey;
+  }
 
   const payment = await Payment.findOne({ _id: paymentId, restaurantId });
   if (!payment) throw ApiError.notFound("Payment not found");
@@ -417,18 +424,8 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     throw ApiError.badRequest(`Refund amount must be between 0 and ${remaining} (already refunded: ${payment.totalRefunded})`);
   }
 
-  // A refund must go through the SAME credentials the original charge used — never whatever the
-  // pooled default currently resolves to, and never a "currently active" BYOC account that might
-  // differ from the one this payment actually ran on. `restaurantPaymentAccountId` is looked up
-  // regardless of its current status (even `disconnected`, which is a soft transition precisely so
-  // a historical payment's refund path stays resolvable — see RestaurantPaymentAccount.ts).
   // Resolved before anything is claimed or reserved, so a missing account changes nothing.
-  let provider = getPaymentProvider();
-  if (payment.restaurantPaymentAccountId) {
-    const account = await RestaurantPaymentAccount.findById(payment.restaurantPaymentAccountId);
-    if (!account) throw new Error(`This payment's restaurant payment account (${payment.restaurantPaymentAccountId}) no longer exists.`);
-    provider = buildProviderFromAccount(account);
-  }
+  const provider = await refundProviderFor(payment);
 
   // Claim the idempotency key before anything else (see the doc comment above).
   let claim: HydratedDocument<RefundDoc>;
@@ -468,15 +465,68 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
     );
   }
 
-  let result;
+  return callProviderAndFinish(claim, payment, provider);
+}
+
+/** The provider this payment's refunds must go through — the SAME credentials the original charge
+ *  used, never whatever the pooled default currently resolves to, and never a "currently active"
+ *  BYOC account that might differ from the one this payment actually ran on.
+ *  `restaurantPaymentAccountId` is looked up regardless of its current status (even `disconnected`,
+ *  which is a soft transition precisely so a historical payment's refund path stays resolvable — see
+ *  RestaurantPaymentAccount.ts). */
+async function refundProviderFor(payment: HydratedDocument<PaymentDoc>): Promise<PaymentProvider> {
+  if (!payment.restaurantPaymentAccountId) return getPaymentProvider();
+  const account = await RestaurantPaymentAccount.findById(payment.restaurantPaymentAccountId);
+  if (!account) throw new Error(`This payment's restaurant payment account (${payment.restaurantPaymentAccountId}) no longer exists.`);
+  return buildProviderFromAccount(account);
+}
+
+/** Stable across every retry of one logical refund (the client's idempotency key, scoped to the
+ *  restaurant), so a provider that honors idempotency keys can never create a second refund. */
+export function providerRefundIdempotencyKey(restaurantId: string, idempotencyKey: string): string {
+  return `gt_refund_${createHash("sha256").update(`${restaurantId}:${idempotencyKey}`).digest("hex")}`;
+}
+
+const REFUND_ON_HOLD_MESSAGE =
+  "The payment provider didn't confirm this refund, so it may or may not have gone through. It's on hold — the amount stays reserved so it can't be refunded twice. Check the provider dashboard before issuing it again.";
+
+/**
+ * Calls the provider for a claimed refund whose amount is already reserved, then records the result.
+ *  - provider definitively refused ("rejected"): release the reservation and the claim, rethrow;
+ *  - outcome unknown (timeout, dropped connection, 5xx, anything unclassified): money may have moved,
+ *    so KEEP the reservation and mark the refund on hold (providerOutcomeUnknown) — it can never be
+ *    issued twice. A retry with the same key resumes it via the provider's idempotency
+ *    (resumeHeldRefund) where that is supported; otherwise it waits for reconciliation;
+ *  - a result other than "succeeded": release the reservation, keep the record.
+ */
+async function callProviderAndFinish(
+  claim: HydratedDocument<RefundDoc>,
+  payment: HydratedDocument<PaymentDoc>,
+  provider: PaymentProvider
+): Promise<HydratedDocument<RefundDoc>> {
+  const amount = claim.amount;
+  let result: ProviderRefundResult;
   try {
-    result = await provider.refund(payment.providerRef!, amount, reason);
+    result = await provider.refund(payment.providerRef!, amount, claim.reason ?? undefined, {
+      idempotencyKey: providerRefundIdempotencyKey(claim.restaurantId.toString(), claim.idempotencyKey!),
+    });
   } catch (err) {
-    // Nothing (known to have) moved: release the reservation and the key claim.
-    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
-    await Refund.deleteOne({ _id: claim._id, status: "pending" });
-    throw err;
+    if (err instanceof ProviderRequestError && err.outcome === "rejected") {
+      await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
+      await Refund.deleteOne({ _id: claim._id, status: "pending" });
+      throw err;
+    }
+    claim.providerOutcomeUnknown = true;
+    await claim.save();
+    logger.error("refund outcome unknown — held for reconciliation", {
+      refundId: claim.id,
+      paymentId: payment.id,
+      provider: provider.name,
+      error: (err as Error).message,
+    });
+    throw ApiError.serviceUnavailable(REFUND_ON_HOLD_MESSAGE);
   }
+
   if (result.status !== "succeeded") {
     // Provider accepted the request but it didn't (yet) actually move money — release the
     // reservation. A "pending" provider refund later succeeding via a webhook is out of scope
@@ -485,11 +535,12 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   }
 
   // Record the provider's outcome on the claimed refund.
-  claim.set({ providerRefundRef: result.refundRef, status: result.status });
+  claim.set({ providerRefundRef: result.refundRef, status: result.status, providerOutcomeUnknown: undefined });
   const refund = await claim.save();
 
   if (result.status === "succeeded") {
-    const nextStatus = reserved.totalRefunded >= payment.amount ? "refunded" : "partially_refunded";
+    const current = await Payment.findById(payment._id).select("amount totalRefunded");
+    const nextStatus = current && current.totalRefunded >= current.amount ? "refunded" : "partially_refunded";
     await Payment.updateOne({ _id: payment._id }, { $set: { status: nextStatus } });
 
     const order = await Order.findById(payment.orderId);
@@ -516,4 +567,18 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   }
 
   return refund;
+}
+
+/**
+ * A retry (same client idempotency key) of a refund held with an unknown provider outcome. Its amount
+ * is still reserved. Only for a provider that de-duplicates refunds by idempotency key is it safe to
+ * ask again: the provider then returns the original refund if the first attempt went through, or
+ * performs it once if it didn't. Otherwise the held record is returned unchanged for reconciliation.
+ */
+async function resumeHeldRefund(held: HydratedDocument<RefundDoc>): Promise<HydratedDocument<RefundDoc>> {
+  const payment = await Payment.findById(held.paymentId);
+  if (!payment) return held;
+  const provider = await refundProviderFor(payment);
+  if (!provider.supportsRefundIdempotency) return held;
+  return callProviderAndFinish(held, payment, provider);
 }
