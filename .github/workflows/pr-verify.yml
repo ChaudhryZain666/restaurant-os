@@ -1,0 +1,111 @@
+# Pull-request verification: the same checks as the `verify` job in production-images.yml, run on
+# every pull request to main — and nothing else. No images, no registry, no deployment, no secrets:
+#
+#   - `pull_request` (never `pull_request_target`): a PR from a fork runs with a read-only token and
+#     no access to repository secrets;
+#   - `permissions: contents: read` for the whole workflow, and checkout doesn't keep the token;
+#   - the API test configuration is throwaway values generated on the runner, as in production-images.
+#
+# Why a copy, not a reusable workflow: sharing the job would mean editing production-images.yml, which
+# builds and publishes the production images, and that workflow is kept unchanged. Instead the first
+# job below FAILS if this workflow's verify steps ever differ from production-images.yml's (checkout
+# aside), so the two can't drift apart silently. Change both files together.
+name: PR verify
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  aligned:
+    name: Steps match production-images verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare verify steps (yq is preinstalled on GitHub's Ubuntu runners)
+        run: |
+          steps() { yq -o=json 'del(.jobs.verify.steps[0]) | .jobs.verify.steps' "$1"; }
+          if ! diff -u <(steps .github/workflows/production-images.yml) <(steps .github/workflows/pr-verify.yml); then
+            echo "::error title=PR verify drifted::.github/workflows/pr-verify.yml's verify steps differ from production-images.yml — update both together."
+            exit 1
+          fi
+
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: |
+          npm run build -w apps/api
+          for app in web admin marketing; do (cd apps/$app && npx tsc -b); done
+      - name: Shell scripts (shellcheck, errors fail the build)
+        run: shellcheck -S error infrastructure/production/scripts/*.sh infrastructure/production/test/*.sh infrastructure/docker/*.sh
+      - name: Alert delivery (lib.sh alert, local capture server only)
+        run: bash infrastructure/production/test/alert-test.sh
+      - name: Legal pages configuration (all five values or none; "being finalized" build)
+        run: |
+          npm test -w apps/marketing
+          bash infrastructure/production/test/check-build-env-test.sh
+          bash infrastructure/production/test/marketing-legal-build-test.sh
+      - name: Test databases (MongoDB 7 replica set, Redis 7) on localhost
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all > /dev/null
+          docker run -d --name redis -p 127.0.0.1:6379:6379 redis:7-alpine > /dev/null
+          for i in $(seq 1 60); do docker exec mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' > /dev/null 2>&1 && break; sleep 1; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]}).ok'
+          for i in $(seq 1 60); do [ "$(docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && break; sleep 1; done
+      - name: API test configuration (throwaway values)
+        run: |
+          a=$(openssl rand -hex 32); b=$(openssl rand -hex 32); k=$(openssl rand -base64 32); w=$(openssl rand -hex 24)
+          echo "::add-mask::$a"; echo "::add-mask::$b"; echo "::add-mask::$k"; echo "::add-mask::$w"
+          umask 077
+          cat > apps/api/.env <<EOF
+          MONGO_URI=mongodb://localhost:27017/restaurant_platform_test
+          REDIS_URL=redis://localhost:6379/1
+          JWT_ACCESS_SECRET=$a
+          JWT_REFRESH_SECRET=$b
+          CREDENTIAL_ENCRYPTION_KEY=$k
+          STRIPE_CONNECT_WEBHOOK_SECRET=whsec_$w
+          # Format-valid placeholder: the Stripe Connect tests stub every Stripe HTTP call.
+          STRIPE_SECRET_KEY=sk_test_ci_$w
+          # Test-only limits, as in a developer .env (env.ts): the suite logs in far more than 30 times.
+          AUTH_RATE_LIMIT_MAX=10000
+          GLOBAL_RATE_LIMIT_MAX=50000
+          GEOCODING_PROVIDER=test
+          POS_TERMINAL_PROVIDER=mock
+          PADDLE_ENV=sandbox
+          EOF
+      - name: API tests
+        run: npm test -w apps/api -- --ci 2>&1 | tee "$RUNNER_TEMP/api-tests.log"; exit ${PIPESTATUS[0]}
+      - name: Web, admin and utils tests
+        run: |
+          npm test -w apps/web -- --ci
+          npm test -w apps/admin -- --ci
+          npm test -w packages/utils -- --ci
+      - name: Report
+        if: always()
+        run: |
+          s=$(grep -E '^(Tests|Test Suites):' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | tr '\n' ' ')
+          echo "::notice title=API tests::${s:-no summary (see log)}"
+          grep -E '^\s+● ' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | sort -u | head -20 | while read -r l; do echo "::error title=API test failure::$l"; done
