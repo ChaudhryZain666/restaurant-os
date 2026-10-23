@@ -12,6 +12,7 @@ import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js"
 import { User } from "../models/User.js";
 import { Payment } from "../models/Payment.js";
 import { PaymentWebhookEvent } from "../models/PaymentWebhookEvent.js";
+import { Refund } from "../models/Refund.js";
 import { closeTestConnections, createTestBusiness, createTestOrder, createTestPayment, createTestRestaurant, createTestUser } from "../test-utils/fixtures.js";
 
 const app = createApp();
@@ -41,10 +42,13 @@ const webhookEventIds = [
   "evt_sticky_1",
   "evt_dup_1",
   "evt_payment_1",
+  "evt_refund_1",
+  "evt_refund_foreign_1",
 ];
 
 afterAll(async () => {
   await PaymentWebhookEvent.deleteMany({ provider: "stripe", eventId: { $in: webhookEventIds } });
+  await Refund.deleteMany({ restaurantId: { $in: restaurantIds } });
   await Payment.deleteMany({ restaurantId: { $in: restaurantIds } });
   await RestaurantPaymentAccount.deleteMany({ _id: { $in: accountIds } });
   await Restaurant.deleteMany({ _id: { $in: restaurantIds } });
@@ -213,5 +217,47 @@ describe("POST /webhooks/payments/stripe-connect", () => {
     expect(storedPayment!.status).toBe("paid");
     const storedAccount = await RestaurantPaymentAccount.findById(account._id);
     expect(storedAccount!.firstWebhookReceivedAt).toBeTruthy();
+  });
+
+  it("refund.updated settles a held refund on that account's payment (found by our refund key), exactly once", async () => {
+    const { account, restaurant, owner } = await connectedAccount("acct_connect_refund_1", { status: "active", chargesEnabled: true });
+    await connectedAccount("acct_connect_refund_other", { status: "active", chargesEnabled: true });
+    const order = await createTestOrder(restaurant._id, owner._id, { total: 30, subtotal: 30 });
+    const payment = await createTestPayment(restaurant._id, order._id, owner._id, {
+      provider: "stripe",
+      providerRef: "cs_connect_refund_1",
+      restaurantPaymentAccountId: account._id,
+      amount: 30,
+      status: "paid",
+      totalRefunded: 30,
+    });
+    const refund = await Refund.create({
+      restaurantId: restaurant._id,
+      paymentId: payment._id,
+      orderId: order._id,
+      provider: "stripe",
+      amount: 30,
+      status: "pending",
+      idempotencyKey: "connect-refund-1",
+      providerRefundKey: "gt_refund_connect_1",
+      providerOutcomeUnknown: true,
+      amountReserved: true,
+      initiatedByUserId: owner._id,
+    });
+    const refundObject = { id: "re_connect_1", object: "refund", status: "succeeded", metadata: { gt_refund_key: "gt_refund_connect_1" } };
+
+    // The same refund reported through a DIFFERENT connected account is ignored.
+    const foreign = await post({ id: "evt_refund_foreign_1", type: "refund.updated", account: "acct_connect_refund_other", data: { object: refundObject } });
+    expect(foreign.status).toBe(200);
+    expect((await Refund.findById(refund._id))!.status).toBe("pending");
+
+    const event = { id: "evt_refund_1", type: "refund.updated", account: "acct_connect_refund_1", data: { object: refundObject } };
+    expect((await post(event)).status).toBe(200);
+    expect((await post(event)).status).toBe(200); // duplicate delivery
+    const stored = (await Refund.findById(refund._id))!;
+    expect(stored).toMatchObject({ status: "succeeded", providerRefundRef: "re_connect_1", resolution: { method: "webhook" } });
+    const storedPayment = (await Payment.findById(payment._id))!;
+    expect(storedPayment.totalRefunded).toBe(30);
+    expect(storedPayment.status).toBe("refunded");
   });
 });

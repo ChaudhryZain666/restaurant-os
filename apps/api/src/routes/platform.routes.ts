@@ -26,6 +26,8 @@ import {
   listPlatformSubscriptions,
   listPlatformUsers,
   resendOwnerInvite,
+  listWaitingRefundsHandler,
+  checkWaitingRefundHandler,
   reviewAgencyEmailSender,
   updateRestaurantStatus,
   updateUserStatus,
@@ -103,6 +105,8 @@ platformRouter.post(
   validateBody(reviewAgencyEmailSenderSchema),
   asyncHandler(reviewAgencyEmailSender)
 );
+platformRouter.get("/refunds/waiting", requirePermission("platform.restaurants.manage"), asyncHandler(listWaitingRefundsHandler));
+platformRouter.post("/refunds/:refundId/check", requirePermission("platform.restaurants.manage"), asyncHandler(checkWaitingRefundHandler));
 platformRouter.get("/revenue", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformRevenue));
 platformRouter.get("/analytics", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformAnalytics));
 platformRouter.get("/config", requirePermission("platform.restaurants.manage"), asyncHandler(getPlatformConfig));

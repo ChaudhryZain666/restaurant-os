@@ -207,4 +207,11 @@ describe("SafepayProvider refund idempotency", () => {
   it("does not claim refund idempotency (none is documented for Safepay)", () => {
     expect(provider().supportsRefundIdempotency).toBe(false);
   });
+
+  it("does not claim a refund lookup either, and an attempted lookup is inconclusive — never 'not found'", async () => {
+    expect(provider().supportsRefundLookup).toBe(false);
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    await expect(provider().lookupRefund()).rejects.toMatchObject({ outcome: "unknown" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

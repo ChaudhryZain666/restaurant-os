@@ -5,6 +5,7 @@ import { Alert, Badge, Button } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { PaymentRefunds } from "./PaymentRefunds";
 
 const STATUS_TONE: Record<Payment["status"], "neutral" | "info" | "warning" | "success" | "danger"> = {
   pending: "neutral",
@@ -49,9 +50,13 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
   const refundKeyRef = useRef<string | null>(null);
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
+  // Bumped after every refund attempt (including a failed or held one) so the refunds list reloads.
+  const [refundsVersion, setRefundsVersion] = useState(0);
 
-  async function load() {
-    setLoading(true);
+  // Without the spinner when refreshing after a refund action, so the refunds list (and its
+  // messages) stay mounted.
+  async function load(showSpinner = true) {
+    if (showSpinner) setLoading(true);
     try {
       const { payments } = await apiClient.request<{ payments: Payment[] }>(
         `/restaurants/${order.restaurantId}/orders/${order.id}/payments`
@@ -92,6 +97,7 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
       setError((err as Error).message);
     } finally {
       setRefunding(false);
+      setRefundsVersion((v) => v + 1);
     }
   }
 
@@ -123,6 +129,15 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
         <span className="text-muted">{formatCurrency(payment.amount, payment.currency)}</span>
         {payment.providerRef && <span className="text-muted">Ref: {payment.providerRef}</span>}
       </div>
+
+      {canRefund && (
+        <PaymentRefunds
+          basePath={`/restaurants/${order.restaurantId}/orders/${order.id}/payments/${payment.id}`}
+          currency={payment.currency}
+          reloadKey={refundsVersion}
+          onChanged={() => load(false)}
+        />
+      )}
 
       {canRefund && (payment.status === "paid" || payment.status === "partially_refunded") && (
         <div>

@@ -10,6 +10,10 @@ export const AUDIT_ACTIONS = [
   "order.cancelled",
   "order.note_updated",
   "payment.refunded",
+  // A refund whose provider outcome was unknown, held with its amount reserved (refundPayment).
+  "payment.refund_held",
+  // A waiting refund settled by a provider lookup, a webhook or a person (with evidence).
+  "payment.refund_reconciled",
   "restaurant.status_changed",
   "user.status_changed",
   "restaurant.created",

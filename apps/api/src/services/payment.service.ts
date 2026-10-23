@@ -11,12 +11,13 @@ import { getPaymentProvider, type PaymentProviderName } from "../payments/index.
 import { resolveEligiblePaymentProvider } from "../payments/eligibility.js";
 import { buildProviderFromAccount, canProcessOnlinePayments, resolveRestaurantPaymentProvider } from "../payments/restaurantProvider.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
-import type { PaymentProvider, ProviderRefundResult, ProviderWebhookEvent } from "../payments/PaymentProvider.js";
+import type { LocalRefundStatus, PaymentProvider, ProviderRefundResult, ProviderRefundUpdate, ProviderWebhookEvent } from "../payments/PaymentProvider.js";
 import { ProviderRequestError } from "../payments/PaymentProvider.js";
 import { isValidPaymentTransition } from "./paymentStateMachine.js";
 import { emitOrderEvent } from "../events/orderEvents.js";
 import { reverseLoyaltyForOrderIfNeeded } from "./loyalty.service.js";
 import { env } from "../config/env.js";
+import { recordAuditEvent } from "./audit.service.js";
 
 interface CreatePaymentInput {
   restaurantId: string;
@@ -185,6 +186,13 @@ export async function processProviderEvent(
       return;
     }
     throw err;
+  }
+
+  // A refund event goes to the refund state machine, never the payment one.
+  if (event.refund) {
+    await applyProviderRefundUpdate(providerName, event.refund, restaurantPaymentAccountId);
+    await PaymentWebhookEvent.updateOne({ provider: providerName, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+    return;
   }
 
   const payment = await Payment.findOne({
@@ -384,31 +392,41 @@ function roundCurrency(amount: number): number {
  * in transactions, and `session.withTransaction` retries its whole callback on a write conflict —
  * retrying a call to a REAL payment provider would risk double-refunding real money. Instead,
  * `Payment.totalRefunded` is atomically incremented with a filter that re-checks the remaining
- * balance at write time (the actual guard), reserving the amount BEFORE the external call. If the
- * provider call throws, or the provider reports anything other than "succeeded", the reservation
- * is released again — only a genuinely succeeded refund permanently consumes it.
+ * balance at write time (the actual guard), reserving the amount BEFORE the external call. The
+ * reservation is released ONLY when the refund is known not to have happened: the provider
+ * definitively refused the request, or reported/confirmed it failed or canceled. A refund that is
+ * pending at the provider (incl. Stripe requires_action) or whose outcome is unknown keeps it, so the
+ * system can under-refund while a refund waits, but never over-refund.
  *
  * Idempotency is claimed FIRST (CI run #12 investigation): the refund document is created as
  * "pending" before any money moves, so the unique {restaurantId, idempotencyKey} index admits exactly
  * one request per key. A concurrent duplicate with the same key gets the winner's refund back and
  * never reserves or calls the provider — previously both could pass the read-only key check, both
  * reserve, and both call the provider (two real refunds; the unique index only stopped the second
- * record afterwards). A claim whose reservation is refused or whose provider call throws is removed
- * again, so a failed attempt leaves nothing behind (the admin sends a fresh key per click).
+ * record afterwards). A claim whose reservation is refused, or whose provider call is definitively
+ * refused, is removed again so the same key can retry.
+ *
+ * Unknown outcomes (timeout, dropped connection, provider 5xx, or the API dying mid-call) HOLD the
+ * refund — see reconcileRefund (provider lookup; re-issue with the same provider key only when the
+ * provider definitively has no such refund and still honors the key) and resolveHeldRefund (a person,
+ * with evidence). A held or provider-pending refund blocks further refunds on that payment (409).
  *
  * Status contract (pinned by payment.controller.test.ts): 400 when the amount exceeds what is known
  * to be left when the request reads the payment (including a refund that completed or reserved just
  * before); 409 when this request passed that check but lost the atomic reservation to a concurrent
- * refund. Either way at most one of them moves money.
+ * refund, or while another refund on the payment is waiting/held. Either way at most one of them
+ * moves money.
  */
 export async function refundPayment(input: RefundInput): Promise<HydratedDocument<RefundDoc>> {
   const { restaurantId, paymentId, reason, initiatedByUserId, idempotencyKey } = input;
 
   const existingByKey = await Refund.findOne({ restaurantId, idempotencyKey });
   if (existingByKey) {
-    // A refund held because its provider outcome was unknown is resumed with the SAME provider
-    // idempotency key — only for providers that de-duplicate by it, so this can never refund twice.
-    if (existingByKey.status === "pending" && existingByKey.providerOutcomeUnknown) return resumeHeldRefund(existingByKey);
+    // A same-key retry of a held refund reconciles it against the provider's records FIRST — it is
+    // only ever re-issued when the provider definitively has no such refund and still honors the key.
+    if (isHeld(existingByKey)) {
+      return (await reconcileRefund(existingByKey, { actorUserId: initiatedByUserId, actorRole: "staff", allowReissue: true })).refund;
+    }
     return existingByKey;
   }
 
@@ -416,6 +434,17 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   if (!payment) throw ApiError.notFound("Payment not found");
   if (payment.status !== "paid" && payment.status !== "partially_refunded") {
     throw ApiError.badRequest(`Cannot refund a payment with status "${payment.status}"`);
+  }
+
+  // A refund on this payment that is still waiting (held, or pending at the provider) blocks new
+  // ones with a message that says so — not a confusing "amount must be between…" from the reservation.
+  const waiting = await Refund.findOne({ paymentId: payment._id, status: "pending" }).sort({ createdAt: 1 });
+  if (waiting) {
+    throw ApiError.conflict(
+      isHeld(waiting) || waiting.providerRefundRef
+        ? `A refund of ${waiting.amount} on this payment is waiting to be confirmed by ${waiting.provider}. Resolve it first (order → Payment → Refunds).`
+        : "Another refund for this payment is being processed right now. Try again in a moment."
+    );
   }
 
   const remaining = roundCurrency(payment.amount - payment.totalRefunded);
@@ -439,6 +468,7 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
       reason,
       status: "pending",
       idempotencyKey,
+      providerRefundKey: providerRefundIdempotencyKey(restaurantId, idempotencyKey),
       initiatedByUserId,
     });
   } catch (err) {
@@ -464,8 +494,12 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
       "Refund amount exceeds what's left to refund — another refund may have just been processed. Please retry."
     );
   }
+  // Guarded on "pending": if something already settled the claim, its reservation is left alone
+  // (stays reserved — the safe direction).
+  await Refund.updateOne({ _id: claim._id, status: "pending" }, { $set: { amountReserved: true } });
+  claim.amountReserved = true;
 
-  return callProviderAndFinish(claim, payment, provider);
+  return callProviderAndRecord(claim, payment, provider, { onRejected: "delete", actorUserId: initiatedByUserId, actorRole: "staff" });
 }
 
 /** The provider this payment's refunds must go through — the SAME credentials the original charge
@@ -482,42 +516,84 @@ async function refundProviderFor(payment: HydratedDocument<PaymentDoc>): Promise
 }
 
 /** Stable across every retry of one logical refund (the client's idempotency key, scoped to the
- *  restaurant), so a provider that honors idempotency keys can never create a second refund. */
+ *  restaurant), so a provider that honors idempotency keys can never create a second refund. Also
+ *  attached to the provider's refund (Stripe metadata) so it can be found again by lookup. */
 export function providerRefundIdempotencyKey(restaurantId: string, idempotencyKey: string): string {
   return `gt_refund_${createHash("sha256").update(`${restaurantId}:${idempotencyKey}`).digest("hex")}`;
 }
 
 const REFUND_ON_HOLD_MESSAGE =
-  "The payment provider didn't confirm this refund, so it may or may not have gone through. It's on hold — the amount stays reserved so it can't be refunded twice. Check the provider dashboard before issuing it again.";
+  "The payment provider didn't confirm this refund, so it may or may not have gone through. It's on hold — the amount stays reserved so it can't be refunded twice. Open the order's payment panel to check it with the provider or resolve it.";
+
+/** Stripe keeps an idempotency key for at least 24 hours (docs.stripe.com/api/idempotent_requests),
+ *  then may prune it — a same-key request after that can create a NEW refund. Re-issuing a held
+ *  refund is therefore only ever done inside this window (with a safety margin), after a lookup. */
+export const PROVIDER_IDEMPOTENCY_WINDOW_MS = 23 * 60 * 60 * 1000;
+/** Staff may only confirm "not refunded" after a refund has been held this long (gives the provider
+ *  time to finish anything still in flight)… */
+export const MANUAL_NOT_REFUNDED_MIN_HOLD_MS = 30 * 60 * 1000;
+/** …and, for a provider with lookup, only on a "not found" lookup at most this old. */
+export const LOOKUP_EVIDENCE_MAX_AGE_MS = 15 * 60 * 1000;
+
+/** A claim with no provider reference and no recorded outcome older than this was interrupted mid-call
+ *  (e.g. the API restarted): the provider may or may not have refunded, so it is treated as held.
+ *  Far longer than a provider call can take (two requests × REQUEST_TIMEOUT_MS). */
+export const STALE_REFUND_CLAIM_MS = 5 * 60 * 1000;
+
+/** Held = still pending, and nobody knows whether the provider refunded: the call's outcome was
+ *  unknown, or the request was interrupted before recording any answer. */
+export function isHeld(refund: Pick<RefundDoc, "status" | "providerOutcomeUnknown" | "providerRefundRef"> & { createdAt: Date }): boolean {
+  if (refund.status !== "pending") return false;
+  if (refund.providerOutcomeUnknown) return true;
+  return !refund.providerRefundRef && Date.now() - refund.createdAt.getTime() > STALE_REFUND_CLAIM_MS;
+}
+
+type ActorContext = { actorUserId: string; actorRole: string };
 
 /**
  * Calls the provider for a claimed refund whose amount is already reserved, then records the result.
- *  - provider definitively refused ("rejected"): release the reservation and the claim, rethrow;
+ *  - provider definitively refused ("rejected"): a fresh claim releases its reservation and is
+ *    deleted (same key can retry); a held refund being re-issued stays held (see below);
  *  - outcome unknown (timeout, dropped connection, 5xx, anything unclassified): money may have moved,
- *    so KEEP the reservation and mark the refund on hold (providerOutcomeUnknown) — it can never be
- *    issued twice. A retry with the same key resumes it via the provider's idempotency
- *    (resumeHeldRefund) where that is supported; otherwise it waits for reconciliation;
- *  - a result other than "succeeded": release the reservation, keep the record.
+ *    so KEEP the reservation and hold the refund (providerOutcomeUnknown) — it can never be issued
+ *    twice — and answer 503;
+ *  - a result: applied through applyRefundOutcome — pending/requires_action keep the reservation,
+ *    failed releases it, succeeded completes it.
  */
-async function callProviderAndFinish(
+async function callProviderAndRecord(
   claim: HydratedDocument<RefundDoc>,
   payment: HydratedDocument<PaymentDoc>,
-  provider: PaymentProvider
+  provider: PaymentProvider,
+  ctx: ActorContext & { onRejected: "delete" | "hold" }
 ): Promise<HydratedDocument<RefundDoc>> {
-  const amount = claim.amount;
   let result: ProviderRefundResult;
   try {
-    result = await provider.refund(payment.providerRef!, amount, claim.reason ?? undefined, {
-      idempotencyKey: providerRefundIdempotencyKey(claim.restaurantId.toString(), claim.idempotencyKey!),
+    result = await provider.refund(payment.providerRef!, claim.amount, claim.reason ?? undefined, {
+      idempotencyKey: claim.providerRefundKey ?? providerRefundIdempotencyKey(claim.restaurantId.toString(), claim.idempotencyKey!),
     });
   } catch (err) {
     if (err instanceof ProviderRequestError && err.outcome === "rejected") {
-      await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
-      await Refund.deleteOne({ _id: claim._id, status: "pending" });
+      if (ctx.onRejected === "delete") {
+        await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -claim.amount } });
+        await Refund.deleteOne({ _id: claim._id, status: "pending" });
+        throw err;
+      }
+      // Re-issuing a held refund: a refusal of the SAME key doesn't prove there's no refund (Stripe
+      // answers a concurrent same-key request, or a key it remembers with different parameters, with
+      // a 4xx) — so the refund stays held, its amount reserved.
+      logger.warn("re-issue of a held refund refused — refund stays held", { refundId: claim.id, error: err.message });
       throw err;
     }
-    claim.providerOutcomeUnknown = true;
-    await claim.save();
+    await Refund.updateOne({ _id: claim._id, status: "pending" }, { $set: { providerOutcomeUnknown: true } });
+    await recordAuditEvent({
+      restaurantId: claim.restaurantId,
+      actorUserId: ctx.actorUserId,
+      actorRole: ctx.actorRole,
+      action: "payment.refund_held",
+      targetType: "payment",
+      targetId: payment._id,
+      metadata: { refundId: claim.id, amount: claim.amount, provider: provider.name, error: (err as Error).message },
+    });
     logger.error("refund outcome unknown — held for reconciliation", {
       refundId: claim.id,
       paymentId: payment.id,
@@ -527,29 +603,113 @@ async function callProviderAndFinish(
     throw ApiError.serviceUnavailable(REFUND_ON_HOLD_MESSAGE);
   }
 
-  if (result.status !== "succeeded") {
-    // Provider accepted the request but it didn't (yet) actually move money — release the
-    // reservation. A "pending" provider refund later succeeding via a webhook is out of scope
-    // today (refunds have no webhook confirmation path yet — see payment-provider-decision.md).
-    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: -amount } });
+  return applyRefundOutcome(claim, result, { ...ctx, method: "provider_response" });
+}
+
+const REFUND_TRANSITIONS: Record<string, string[]> = {
+  pending: ["succeeded", "failed"],
+  // A provider can report a refund that had succeeded as failed later (Stripe "failed refunds").
+  succeeded: ["failed"],
+  failed: [],
+};
+
+/**
+ * The ONE place a refund changes status, from any source (provider response, lookup, webhook, a
+ * person). Duplicate, out-of-order and concurrent updates are safe: the status change is a single
+ * conditional update guarded by the current status, so each transition — and its effect on the
+ * reservation — happens exactly once, and a stale "pending" can never override a final status.
+ *  - entering "failed" releases the reserved amount (the ONLY way a reservation is released here);
+ *  - entering "succeeded" applies the payment's refunded status, loyalty reversal and notification;
+ *  - "pending" (incl. provider requires_action) only records the provider's reference and status.
+ */
+async function applyRefundOutcome(
+  refund: HydratedDocument<RefundDoc>,
+  update: { status: LocalRefundStatus; refundRef?: string; providerStatus?: string },
+  ctx: ActorContext & { method: "provider_response" | "provider_lookup" | "webhook" | "manual"; evidence?: string }
+): Promise<HydratedDocument<RefundDoc>> {
+  const current = await Refund.findById(refund._id);
+  if (!current) return refund;
+  const from = current.status;
+  const to = update.status;
+  const details: Record<string, unknown> = {
+    ...(update.refundRef && !current.providerRefundRef ? { providerRefundRef: update.refundRef } : {}),
+    ...(update.providerStatus ? { providerStatus: update.providerStatus } : {}),
+  };
+
+  if (from === to) {
+    // No status change — but a definitive provider answer means the outcome is no longer unknown.
+    await Refund.updateOne({ _id: current._id }, { $set: details, ...(ctx.method !== "manual" ? { $unset: { providerOutcomeUnknown: "" } } : {}) });
+    return (await Refund.findById(current._id))!;
+  }
+  if (!REFUND_TRANSITIONS[from]?.includes(to)) {
+    logger.warn("ignored refund status change", { refundId: current.id, from, to, method: ctx.method });
+    return current;
   }
 
-  // Record the provider's outcome on the claimed refund.
-  claim.set({ providerRefundRef: result.refundRef, status: result.status, providerOutcomeUnknown: undefined });
-  const refund = await claim.save();
+  const resolution =
+    ctx.method === "provider_response"
+      ? undefined
+      : {
+          method: ctx.method,
+          outcome: to === "succeeded" ? "refunded" : "not_refunded",
+          providerRefundRef: update.refundRef ?? current.providerRefundRef,
+          evidence: ctx.evidence,
+          resolvedByUserId: ctx.actorRole === "system" ? undefined : ctx.actorUserId,
+          resolvedAt: new Date(),
+        };
+  // The returned document is the one BEFORE this update, so the reservation decision below uses
+  // the reservation state this transition actually replaced.
+  const before = await Refund.findOneAndUpdate(
+    { _id: current._id, status: from },
+    {
+      $set: { ...details, status: to, amountReserved: to !== "failed", ...(resolution ? { resolution } : {}) },
+      $unset: { providerOutcomeUnknown: "" },
+    },
+    { new: false }
+  );
+  if (!before) return (await Refund.findById(current._id))!; // another update won the race
+  const updated = (await Refund.findById(current._id))!;
 
-  if (result.status === "succeeded") {
-    const current = await Payment.findById(payment._id).select("amount totalRefunded");
-    const nextStatus = current && current.totalRefunded >= current.amount ? "refunded" : "partially_refunded";
-    await Payment.updateOne({ _id: payment._id }, { $set: { status: nextStatus } });
+  // An amount counted against the payment (a reservation, or a refund that had succeeded) is given
+  // back only on entering "failed"; a refund that succeeds without a recorded reservation (a claim
+  // interrupted before it reserved) is counted now — so totalRefunded always covers every success.
+  const counted = Boolean(before.amountReserved) || before.status === "succeeded";
+  if (to === "failed" && counted) {
+    await Payment.updateOne({ _id: updated.paymentId }, { $inc: { totalRefunded: -updated.amount } });
+  } else if (to === "succeeded" && !counted) {
+    await Payment.updateOne({ _id: updated.paymentId }, { $inc: { totalRefunded: updated.amount } });
+  }
+  const paymentStatus = await syncPaymentRefundStatus(updated.paymentId);
 
-    const order = await Order.findById(payment.orderId);
+  if (ctx.method !== "provider_response" || to === "failed") {
+    await recordAuditEvent({
+      restaurantId: updated.restaurantId,
+      actorUserId: ctx.actorUserId,
+      actorRole: ctx.actorRole,
+      action: "payment.refund_reconciled",
+      targetType: "payment",
+      targetId: updated.paymentId,
+      metadata: {
+        refundId: updated.id,
+        from,
+        to,
+        method: ctx.method,
+        amount: updated.amount,
+        providerStatus: update.providerStatus,
+        providerRefundRef: updated.providerRefundRef,
+        ...(ctx.evidence ? { evidence: ctx.evidence } : {}),
+      },
+    });
+  }
+
+  if (to === "succeeded") {
+    const order = await Order.findById(updated.orderId);
     if (order) {
       // A FULL refund reverses this order's loyalty impact — a partial refund does not, since we
       // can't know which portion of a part-refunded order the earned/redeemed points corresponded
       // to without a much finer-grained accounting than this system has. See loyalty.service.ts's
       // reverseLoyaltyForOrderIfNeeded doc comment for the cancellation case this shares logic with.
-      if (nextStatus === "refunded") await reverseLoyaltyForOrderIfNeeded(order);
+      if (paymentStatus === "refunded") await reverseLoyaltyForOrderIfNeeded(order);
 
       // Refund confirmation reuses the same order-event/notification pipeline as a payment
       // succeeding/failing (see processProviderEvent above) rather than a bespoke one — fires for
@@ -561,24 +721,230 @@ async function callProviderAndFinish(
         customerId: order.customerId.toString(),
         status: order.status,
         paymentOutcome: "refunded",
-        amount,
+        amount: updated.amount,
       });
     }
   }
+  return updated;
+}
 
-  return refund;
+/** A payment's refunded status from its SUCCEEDED refunds (reserved-but-unconfirmed amounts don't
+ *  count as refunded). Only touches payments already in a refundable/refunded state. */
+async function syncPaymentRefundStatus(paymentId: unknown): Promise<string | null> {
+  const payment = await Payment.findById(paymentId).select("amount status");
+  if (!payment || !["paid", "partially_refunded", "refunded"].includes(payment.status)) return payment?.status ?? null;
+  const [agg] = await Refund.aggregate<{ total: number }>([
+    { $match: { paymentId: payment._id, status: "succeeded" } },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
+  ]);
+  const succeeded = roundCurrency(agg?.total ?? 0);
+  const next = succeeded >= payment.amount ? "refunded" : succeeded > 0 ? "partially_refunded" : "paid";
+  if (next !== payment.status) await Payment.updateOne({ _id: payment._id }, { $set: { status: next } });
+  return next;
+}
+
+export type RefundReconcileOutcome =
+  | "already_final"
+  | "in_progress"
+  | "found"
+  | "reissued"
+  | "not_found"
+  | "inconclusive"
+  | "manual_required";
+
+/**
+ * Checks a waiting refund against the provider's own records (never trusting silence):
+ *  - provider without lookup (Safepay): nothing automatic — "manual_required";
+ *  - lookup failed / inconclusive: stays held — "inconclusive" (never read as "not found");
+ *  - found: its real status is applied (succeeded / failed / still pending);
+ *  - definitively not found: recorded as evidence for staff; with `allowReissue`, inside the
+ *    provider's idempotency window, for an idempotent provider, it is re-issued with the SAME key.
+ */
+export async function reconcileRefund(
+  refund: HydratedDocument<RefundDoc>,
+  opts: ActorContext & { allowReissue?: boolean }
+): Promise<{ refund: HydratedDocument<RefundDoc>; outcome: RefundReconcileOutcome }> {
+  if (refund.status !== "pending") return { refund, outcome: "already_final" };
+  // A request is still waiting on the provider for this refund — never race it.
+  if (!isHeld(refund) && !refund.providerRefundRef) return { refund, outcome: "in_progress" };
+  const payment = await Payment.findById(refund.paymentId);
+  if (!payment) return { refund, outcome: "manual_required" };
+  const provider = await refundProviderFor(payment);
+  if (!provider.supportsRefundLookup) return { refund, outcome: "manual_required" };
+
+  const refundKey = refund.providerRefundKey ?? providerRefundIdempotencyKey(refund.restaurantId.toString(), refund.idempotencyKey!);
+  let result;
+  try {
+    result = await provider.lookupRefund({ providerRef: payment.providerRef!, refundKey, refundRef: refund.providerRefundRef ?? undefined });
+  } catch (err) {
+    await Refund.updateOne({ _id: refund._id }, { $set: { lastLookupAt: new Date(), lastLookupResult: "inconclusive" } });
+    logger.warn("refund lookup inconclusive — refund stays held", { refundId: refund.id, error: (err as Error).message });
+    return { refund: (await Refund.findById(refund._id))!, outcome: "inconclusive" };
+  }
+
+  if (result.found) {
+    await Refund.updateOne({ _id: refund._id }, { $set: { lastLookupAt: new Date(), lastLookupResult: "found" } });
+    const applied = await applyRefundOutcome(
+      refund,
+      { status: result.status, refundRef: result.refundRef, providerStatus: result.providerStatus },
+      { ...opts, method: "provider_lookup" }
+    );
+    return { refund: applied, outcome: "found" };
+  }
+
+  await Refund.updateOne({ _id: refund._id }, { $set: { lastLookupAt: new Date(), lastLookupResult: "not_found" } });
+  const fresh = (await Refund.findById(refund._id))!;
+  const withinWindow = Date.now() - fresh.createdAt.getTime() < PROVIDER_IDEMPOTENCY_WINDOW_MS;
+  if (opts.allowReissue && provider.supportsRefundIdempotency && !fresh.providerRefundRef && fresh.amountReserved && withinWindow) {
+    // One re-issue at a time: two concurrent retries must never both call the provider.
+    const leased = await Refund.findOneAndUpdate(
+      { _id: fresh._id, status: "pending", $or: [{ reissueLeaseUntil: null }, { reissueLeaseUntil: { $lt: new Date() } }] },
+      { $set: { reissueLeaseUntil: new Date(Date.now() + STALE_REFUND_CLAIM_MS) } },
+      { new: true }
+    );
+    if (!leased) return { refund: fresh, outcome: "in_progress" };
+    try {
+      // The amount is still reserved for this held refund; the same key can't create a second refund.
+      const reissued = await callProviderAndRecord(leased, payment, provider, { ...opts, onRejected: "hold" });
+      return { refund: reissued, outcome: "reissued" };
+    } catch (err) {
+      logger.warn("held refund re-issue did not get a definitive answer — stays held", { refundId: fresh.id, error: (err as Error).message });
+      return { refund: (await Refund.findById(fresh._id))!, outcome: "inconclusive" };
+    } finally {
+      await Refund.updateOne({ _id: fresh._id }, { $unset: { reissueLeaseUntil: "" } });
+    }
+  }
+  return { refund: fresh, outcome: "not_found" };
 }
 
 /**
- * A retry (same client idempotency key) of a refund held with an unknown provider outcome. Its amount
- * is still reserved. Only for a provider that de-duplicates refunds by idempotency key is it safe to
- * ask again: the provider then returns the original refund if the first attempt went through, or
- * performs it once if it didn't. Otherwise the held record is returned unchanged for reconciliation.
+ * A person settles a held refund, with evidence. Requires restaurant.payments.manage (route) and:
+ *  - "refunded": the provider's refund reference and a written explanation;
+ *  - "not_refunded" (releases the reserved amount): an explicit confirmation, a written explanation,
+ *    the refund held for at least MANUAL_NOT_REFUNDED_MIN_HOLD_MS, and — for a provider that supports
+ *    lookup — a "not found" lookup no older than LOOKUP_EVIDENCE_MAX_AGE_MS. A button alone never
+ *    releases money. Recorded on the refund (resolution) and as an audit event.
  */
-async function resumeHeldRefund(held: HydratedDocument<RefundDoc>): Promise<HydratedDocument<RefundDoc>> {
-  const payment = await Payment.findById(held.paymentId);
-  if (!payment) return held;
-  const provider = await refundProviderFor(payment);
-  if (!provider.supportsRefundIdempotency) return held;
-  return callProviderAndFinish(held, payment, provider);
+export async function resolveHeldRefund(
+  refund: HydratedDocument<RefundDoc>,
+  input: { outcome: "refunded" | "not_refunded"; providerRefundRef?: string; evidence: string; confirmChecked: boolean },
+  actor: ActorContext
+): Promise<HydratedDocument<RefundDoc>> {
+  if (refund.status !== "pending") throw ApiError.conflict("This refund is already settled.");
+  if (!isHeld(refund) && !refund.providerRefundRef) {
+    throw ApiError.conflict("This refund is still being processed. Try again in a moment.");
+  }
+  const evidence = input.evidence.trim();
+  if (input.outcome === "refunded") {
+    const ref = input.providerRefundRef?.trim();
+    if (!ref) throw ApiError.badRequest("Enter the provider's refund reference from its dashboard.");
+    return applyRefundOutcome(refund, { status: "succeeded", refundRef: ref, providerStatus: "confirmed_manually" }, { ...actor, method: "manual", evidence });
+  }
+
+  if (!input.confirmChecked) throw ApiError.badRequest("Confirm that you checked the provider's dashboard and this refund doesn't exist there.");
+  const heldFor = Date.now() - refund.createdAt.getTime();
+  if (heldFor < MANUAL_NOT_REFUNDED_MIN_HOLD_MS) {
+    const minutes = Math.ceil((MANUAL_NOT_REFUNDED_MIN_HOLD_MS - heldFor) / 60000);
+    throw ApiError.conflict(`Give the provider time to finish first — you can confirm this in ${minutes} minute(s).`);
+  }
+  const payment = await Payment.findById(refund.paymentId);
+  const provider = payment ? await refundProviderFor(payment) : null;
+  if (provider?.supportsRefundLookup) {
+    const fresh =
+      refund.lastLookupResult === "not_found" && refund.lastLookupAt && Date.now() - refund.lastLookupAt.getTime() <= LOOKUP_EVIDENCE_MAX_AGE_MS;
+    if (!fresh) {
+      throw ApiError.conflict(`Check with ${provider.name} first — it must report no such refund (within the last 15 minutes) before this can be confirmed.`);
+    }
+  }
+  return applyRefundOutcome(refund, { status: "failed", providerStatus: "confirmed_not_refunded" }, { ...actor, method: "manual", evidence });
+}
+
+/**
+ * A refund status update from a provider webhook (e.g. Stripe refund.updated). The event itself is
+ * de-duplicated by processProviderEvent (PaymentWebhookEvent); the change goes through
+ * applyRefundOutcome, so duplicates and out-of-order deliveries can't double-apply or regress.
+ * Finds the refund by the provider's refund id, or by our refund key echoed back in its metadata.
+ */
+export async function applyProviderRefundUpdate(
+  providerName: string,
+  update: ProviderRefundUpdate,
+  restaurantPaymentAccountId?: string
+): Promise<void> {
+  const refund =
+    (await Refund.findOne({ provider: providerName, providerRefundRef: update.refundRef })) ??
+    (update.refundKey ? await Refund.findOne({ provider: providerName, providerRefundKey: update.refundKey }) : null);
+  if (!refund) {
+    logger.warn("refund webhook for an unknown refund", { provider: providerName, refundRef: update.refundRef });
+    return;
+  }
+  // Only the account the original payment ran on (or the pooled platform account, for a payment
+  // without one) can update its refund.
+  const payment = await Payment.findById(refund.paymentId).select("restaurantPaymentAccountId");
+  if (String(payment?.restaurantPaymentAccountId ?? "") !== String(restaurantPaymentAccountId ?? "")) {
+    logger.warn("refund webhook from a different payment account ignored", { provider: providerName, refundId: refund.id });
+    return;
+  }
+  await applyRefundOutcome(
+    refund,
+    { status: update.status, refundRef: update.refundRef, providerStatus: update.providerStatus },
+    { actorUserId: refund.initiatedByUserId.toString(), actorRole: "system", method: "webhook" }
+  );
+}
+
+/** Refunds that need attention: held with an unknown outcome, or pending at the provider. */
+export async function listWaitingRefunds(filter: { restaurantId?: string; paymentId?: string } = {}) {
+  return Refund.find({ status: "pending", ...filter }).sort({ createdAt: 1 });
+}
+
+export interface RefundStaffView {
+  /** Held because the provider never confirmed the outcome (amount reserved). */
+  held: boolean;
+  /** Accepted by the provider but not final yet (amount reserved). */
+  waitingOnProvider: boolean;
+  canCheckWithProvider: boolean;
+  /** Only for a held refund at an idempotent provider, inside its idempotency window. */
+  canRetry: boolean;
+  /** When "confirm not refunded" becomes possible (also needs a fresh "not found" lookup where supported). */
+  manualNotRefundedAvailableAt: string | null;
+  nextAction: string | null;
+}
+
+/** What staff need to see and do about a refund — computed server-side from the real provider. */
+export async function describeRefundForStaff(refund: HydratedDocument<RefundDoc>, providerCache = new Map<string, PaymentProvider | null>()): Promise<RefundStaffView> {
+  const base: RefundStaffView = { held: false, waitingOnProvider: false, canCheckWithProvider: false, canRetry: false, manualNotRefundedAvailableAt: null, nextAction: null };
+  if (refund.status !== "pending") return base;
+  const key = refund.paymentId.toString();
+  if (!providerCache.has(key)) {
+    const payment = await Payment.findById(refund.paymentId);
+    providerCache.set(key, payment ? await refundProviderFor(payment).catch(() => null) : null);
+  }
+  const provider = providerCache.get(key) ?? null;
+  const lookup = Boolean(provider?.supportsRefundLookup);
+  const name = refund.provider;
+  const held = isHeld(refund);
+  if (!held && !refund.providerRefundRef) {
+    return { ...base, nextAction: "Being processed — refresh in a moment." };
+  }
+  const availableAt = new Date(refund.createdAt.getTime() + MANUAL_NOT_REFUNDED_MIN_HOLD_MS).toISOString();
+  if (!held) {
+    return {
+      ...base,
+      waitingOnProvider: true,
+      canCheckWithProvider: lookup,
+      nextAction: lookup
+        ? `Waiting for ${name} to finish this refund. Use “Check with ${name}” to update it.`
+        : `Waiting for ${name} to finish this refund. Confirm the result in the ${name} dashboard, then record it here.`,
+    };
+  }
+  const withinWindow = Date.now() - refund.createdAt.getTime() < PROVIDER_IDEMPOTENCY_WINDOW_MS;
+  return {
+    ...base,
+    held: true,
+    canCheckWithProvider: lookup,
+    canRetry: lookup && Boolean(provider?.supportsRefundIdempotency) && Boolean(refund.amountReserved) && !refund.providerRefundRef && withinWindow,
+    manualNotRefundedAvailableAt: availableAt,
+    nextAction: lookup
+      ? `On hold: ${name} didn't confirm this refund. Use “Check with ${name}” — it finds the refund if it was made, or confirms it wasn't.`
+      : `On hold: ${name} didn't confirm this refund and it can't be checked automatically. Look for it in the ${name} dashboard, then record what you find (refund reference if it exists).`,
+  };
 }

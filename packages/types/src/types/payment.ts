@@ -47,6 +47,19 @@ export interface Refund {
   /** True while a "pending" refund is held because the provider's outcome was unknown — its amount
    *  stays reserved so it can't be issued twice (see refundPayment). */
   providerOutcomeUnknown?: boolean;
+  /** The provider's own status string (e.g. Stripe "requires_action"). */
+  providerStatus?: string;
+  lastLookupAt?: string;
+  lastLookupResult?: "found" | "not_found" | "inconclusive";
+  /** How a held refund was settled (set once; mirrored in the audit log). */
+  resolution?: {
+    method: "provider_response" | "provider_lookup" | "webhook" | "manual";
+    outcome: "refunded" | "not_refunded";
+    providerRefundRef?: string;
+    evidence?: string;
+    resolvedByUserId?: string;
+    resolvedAt: string;
+  };
   initiatedByUserId: string;
   createdAt: string;
   updatedAt: string;

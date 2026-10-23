@@ -24,6 +24,18 @@ const auditLogSchema = new Schema(
   { timestamps: true, toJSON: idTransform }
 );
 
+// Append-only: an audit entry (e.g. who settled a held refund, and on what evidence) can be
+// created, never edited. Every update path through the model is refused.
+function refuseAuditLogUpdate(): never {
+  throw new Error("Audit log entries are immutable");
+}
+for (const op of ["updateOne", "updateMany", "findOneAndUpdate", "replaceOne", "findOneAndReplace"] as const) {
+  auditLogSchema.pre(op, refuseAuditLogUpdate);
+}
+auditLogSchema.pre("save", function (this: { isNew: boolean }) {
+  if (!this.isNew) refuseAuditLogUpdate();
+});
+
 auditLogSchema.index({ restaurantId: 1, createdAt: -1 });
 auditLogSchema.index({ restaurantId: 1, targetType: 1, targetId: 1, createdAt: -1 });
 

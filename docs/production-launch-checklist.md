@@ -71,15 +71,44 @@ should close soon after) · 🔵 External dependency.
 - 🔴 For real online payments, set `PAYMENT_PROVIDER` to `stripe` or `safepay`. Neither adapter has
   been exercised against a live account.
 - 🔴 Set the real provider's API keys/webhook secrets for whichever of `stripe`/`safepay` is chosen.
-- 🟡 Refund safety before real card refunds (`services/payment.service.ts` `refundPayment`): every
-  refund claims its idempotency key before any money moves, and passes a stable provider key
-  (`gt_refund_<sha256>`) to the provider. Stripe de-duplicates by it (`Idempotency-Key`); Safepay has
-  no documented refund idempotency, so `supportsRefundIdempotency` is false there. A refund whose
-  provider outcome is unknown (timeout, dropped connection, 5xx) is **held**: it stays `pending` with
-  `providerOutcomeUnknown: true` and its amount reserved, so it can't be refunded twice. On Stripe a
-  retry with the same key (the admin reuses it) resumes it safely; on Safepay it waits for a person
-  to check the provider dashboard and reconcile it — there is no automatic reconciliation job yet.
-  Watch the API log for `refund outcome unknown — held for reconciliation`.
+- 🟡 Refund safety before real card refunds (`services/payment.service.ts` `refundPayment`,
+  `reconcileRefund`, `resolveHeldRefund`):
+  - **Duplicate protection.** Every refund claims its idempotency key before any money moves and
+    sends a stable provider key (`gt_refund_<sha256>`). Stripe gets it as `Idempotency-Key` **and**
+    as refund metadata `gt_refund_key`, so the refund can be found again later. Safepay documents no
+    refund idempotency and no refund lookup (checked 2026-10-24), so both are declared unsupported.
+  - **Reservation accounting.** The amount is reserved in `Payment.totalRefunded` before the provider
+    call and is released **only** when the refund is known not to have happened: the provider refused
+    the request, reported/confirmed `failed` or `canceled`, or a person confirmed it (below). Pending,
+    `requires_action` and unknown-outcome refunds keep it, so the system may under-refund while a
+    refund waits but never over-refunds. The payment's refunded status counts succeeded refunds only.
+    While any refund on a payment is waiting, new refunds on it get a 409 saying so.
+  - **Held refunds.** Timeout, dropped connection, provider 5xx, or the API stopping mid-call
+    (a claim with no answer after 5 minutes) → the refund is **on hold** (`payment.refund_held` audit
+    event; API log `refund outcome unknown — held for reconciliation`).
+  - **Status updates.** Stripe `refund.created` / `refund.updated` / `refund.failed` /
+    `charge.refund.updated` webhooks update refunds (de-duplicated by event id, out-of-order safe, and
+    only from the payment account that ran the payment). Notifications aren't relied on: **Check with
+    provider** does a fresh lookup at any time. **Register the refund events** on the Stripe webhook
+    endpoints (platform, Connect, and each BYOC account) before launch.
+  - **Reconciliation procedure** (order → Payment → Refunds; platform admins: *Waiting refunds*):
+    1. **Stripe — Check with Stripe.** Found → its real status is applied (succeeded is counted once;
+       failed/canceled releases the reservation). An error or timeout is *inconclusive* — never
+       "not found" — and the refund stays held.
+    2. **Stripe — Check, then retry if missing.** Only when Stripe definitively has no such refund,
+       only within **23 hours** of the original request (Stripe may prune idempotency keys after 24h),
+       and only with the same key; one retry at a time. A same-key error during the retry keeps it held.
+    3. **Safepay (or Stripe after 23h): a person decides.** Look for the refund in the provider
+       dashboard. Found → *It was refunded…* with the provider's refund reference and what you checked.
+       Not there → *It wasn't refunded…* — requires the confirmation box, a written explanation, the
+       refund held for at least 30 minutes, and for Stripe a "not found" check from the last 15
+       minutes. Both are recorded on the refund (`resolution`) and as an immutable
+       `payment.refund_reconciled` audit entry. Requires `restaurant.payments.manage`; platform admins
+       can check but not settle by hand.
+  - **Limitations.** No scheduled reconciliation job — someone has to look at *Waiting refunds*
+    (check it daily). Stripe replays a saved 5xx for the same key, so a retry can't resolve those —
+    they stay held for a check or a person. Safepay refunds are manual-only and Safepay has never run
+    against a real account; its refund endpoint itself is unverified.
 - 🔵 **EXTERNAL INPUT REQUIRED**: confirm the payment provider account itself is out of test/sandbox
   mode and approved for real transactions — this is an account-level setting on the provider's own
   dashboard, not something this codebase can verify.

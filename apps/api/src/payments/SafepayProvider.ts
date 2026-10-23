@@ -7,6 +7,7 @@ import type {
   ProviderPaymentStatus,
   ProviderRefundResult,
   ProviderWebhookEvent,
+  RefundLookupResult,
 } from "./PaymentProvider.js";
 import { ProviderRequestError, outcomeForHttpStatus } from "./PaymentProvider.js";
 
@@ -229,6 +230,14 @@ export class SafepayProvider implements PaymentProvider {
   // refund idempotency mechanism is documented — so never claim one. A refund whose outcome is
   // unknown is held by refundPayment for reconciliation instead of being retried.
   readonly supportsRefundIdempotency = false;
+  // No refund lookup (by id or otherwise) is documented for Safepay either: its public docs don't
+  // describe refunds, and its API reference couldn't be read (checked 2026-10-24). A held Safepay
+  // refund is therefore resolved by a person, against the Safepay dashboard (refundPayment docs).
+  readonly supportsRefundLookup = false;
+
+  async lookupRefund(): Promise<RefundLookupResult> {
+    throw new ProviderRequestError("Safepay has no documented refund lookup — check the Safepay dashboard instead.", "unknown");
+  }
 
   async refund(
     providerRef: string,

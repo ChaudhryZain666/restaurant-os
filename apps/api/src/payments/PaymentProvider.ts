@@ -34,12 +34,34 @@ export interface ProviderWebhookEvent {
   providerRef: string;
   status: ProviderPaymentStatus;
   raw: unknown;
+  /** Set for a REFUND event (e.g. Stripe refund.updated) instead of a payment event — routed to
+   *  applyProviderRefundUpdate, never to the payment state machine. */
+  refund?: ProviderRefundUpdate;
 }
+
+/** Our three local refund states. Provider-specific states map onto them (mapStripeRefundStatus):
+ *  anything not yet final — pending, requires_action, unknown — is "pending" and keeps its reserved
+ *  amount; only a confirmed failure or cancellation is "failed" and releases it. */
+export type LocalRefundStatus = "pending" | "succeeded" | "failed";
 
 export interface ProviderRefundResult {
   refundRef: string;
-  status: "pending" | "succeeded" | "failed";
+  status: LocalRefundStatus;
+  /** The provider's own status string (e.g. Stripe "requires_action"), kept for staff display. */
+  providerStatus?: string;
 }
+
+export interface ProviderRefundUpdate {
+  refundRef: string;
+  status: LocalRefundStatus;
+  providerStatus?: string;
+  /** Our refund key, when the provider echoes it back (Stripe metadata.gt_refund_key). */
+  refundKey?: string;
+}
+
+/** A definitive answer from the provider's own records. An inconclusive lookup (timeout, error,
+ *  too many results to search) THROWS a ProviderRequestError instead — never "not found". */
+export type RefundLookupResult = ({ found: true } & ProviderRefundResult) | { found: false };
 
 /**
  * A provider call that failed, with what we can honestly say about whether it took effect:
@@ -88,6 +110,13 @@ export interface PaymentProvider {
   /** True only when the provider's API is documented to de-duplicate refunds by idempotency key —
    *  then a refund whose outcome was unknown can be safely retried with the same key. */
   readonly supportsRefundIdempotency: boolean;
+  /** True only when the provider's API documents a way to find OUR refund in its records (by its id,
+   *  or by the refund key we attached). Without it, a held refund can only be resolved by a person. */
+  readonly supportsRefundLookup: boolean;
+  /** Finds this refund in the provider's records: by `refundRef` when we have it, otherwise by
+   *  `refundKey` among the original payment's refunds. Throws ProviderRequestError when the answer is
+   *  inconclusive. Only called when supportsRefundLookup is true. */
+  lookupRefund(input: { providerRef: string; refundKey: string; refundRef?: string }): Promise<RefundLookupResult>;
   /** Restaurant-owned accounts (BYOC — see restaurantProvider.ts) only: a cheap, read-only,
    *  zero-side-effect call proving these credentials actually authenticate against this provider,
    *  made synchronously when a restaurant connects its own account, before it's ever marked

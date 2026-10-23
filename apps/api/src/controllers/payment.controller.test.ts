@@ -536,15 +536,18 @@ describe("refunds", () => {
       const held = await Refund.findOne({ paymentId: payment._id });
       expect(held).toMatchObject({ status: "pending", providerOutcomeUnknown: true });
 
-      // A different refund can only use what's genuinely left (10), never re-spend the held 30.
-      const other = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: `${key}-other`, amount: 30 });
-      expect(other.status).toBe(400);
+      // While it's held, no other refund can go ahead on this payment — and the message says why
+      // (never a confusing "amount must be between…").
+      const other = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: `${key}-other`, amount: 5 });
+      expect(other.status).toBe(409);
+      expect(other.body.error.message).toMatch(/waiting to be confirmed/);
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(30);
     } finally {
       refundSpy.mockRestore();
     }
   });
 
-  it("a same-key retry resumes a held refund via the provider's idempotency — even if the first attempt had actually gone through, it refunds once", async () => {
+  it("a same-key retry of a held refund that HAD gone through finds it at the provider first — no second provider call, counted once", async () => {
     const { order, payment } = await paidOrderWithPayment(40);
     const key = `refund-resume-${payment.id}`;
     const mock = getMockPaymentProvider();
@@ -562,10 +565,10 @@ describe("refunds", () => {
       expect(retry.status).toBe(201);
       expect(retry.body.data.refund.status).toBe("succeeded");
 
-      // Both provider calls carried the same provider idempotency key...
+      // The retry looked the refund up by its key and found the original — it never called refund again.
       const expectedKey = providerRefundIdempotencyKey(restaurantA.id, key);
-      expect(refundSpy.mock.calls.map((c) => (c[3] as { idempotencyKey: string }).idempotencyKey)).toEqual([expectedKey, expectedKey]);
-      // ...so the provider returned the ORIGINAL refund, and our books count it once.
+      expect(refundSpy.mock.calls.map((c) => (c[3] as { idempotencyKey: string }).idempotencyKey)).toEqual([expectedKey]);
+      expect((await Refund.findOne({ paymentId: payment._id }))!.resolution).toMatchObject({ method: "provider_lookup", outcome: "refunded" });
       const refundRefs = new Set(await Refund.find({ paymentId: payment._id }).distinct("providerRefundRef"));
       expect(refundRefs.size).toBe(1);
       const stored = await Payment.findById(payment._id);

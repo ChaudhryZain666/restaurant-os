@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { getPaymentProvider, KNOWN_PAYMENT_PROVIDER_NAMES, type PaymentProviderName } from "../payments/index.js";
 import { buildProviderFromAccount } from "../payments/restaurantProvider.js";
 import { RestaurantPaymentAccount } from "../models/RestaurantPaymentAccount.js";
-import { verifyStripeSignatureRaw, mapCheckoutSessionStatus } from "../payments/StripeProvider.js";
+import { verifyStripeSignatureRaw, mapCheckoutSessionStatus, parseStripeRefundEvent } from "../payments/StripeProvider.js";
 import { parseAccountEventObject, resolveConnectAccountStatus } from "../payments/stripeConnect.js";
 import { processProviderEvent } from "../services/payment.service.js";
 import { PaymentWebhookEvent } from "../models/PaymentWebhookEvent.js";
@@ -189,6 +189,18 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
         account._id.toString()
       );
     }
+    res.status(200).json({ received: true });
+    return;
+  }
+
+  // Refund status updates for a connected account's refunds → the refund state machine.
+  const refundUpdate = parseStripeRefundEvent(parsed as Parameters<typeof parseStripeRefundEvent>[0]);
+  if (refundUpdate) {
+    await processProviderEvent(
+      "stripe",
+      { eventId, eventType, providerRef: refundUpdate.refundRef, status: "pending", raw: parsed, refund: refundUpdate },
+      account._id.toString()
+    );
     res.status(200).json({ received: true });
     return;
   }
