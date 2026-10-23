@@ -5,6 +5,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "order.cancelled": "Order cancelled",
   "order.note_updated": "Internal note updated",
   "payment.refunded": "Refund issued",
+  "payment.refund_held": "Refund on hold (provider didn't confirm)",
+  "payment.refund_reconciled": "Refund reconciled",
   "restaurant.status_changed": "Restaurant status changed",
   "user.status_changed": "User status changed",
   "restaurant.created": "Restaurant created",

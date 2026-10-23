@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Order, Payment } from "@restaurant/types";
 import { roleHasPermission } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { PaymentRefunds } from "./PaymentRefunds";
 
 const STATUS_TONE: Record<Payment["status"], "neutral" | "info" | "warning" | "success" | "danger"> = {
   pending: "neutral",
@@ -43,11 +44,19 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
   const [error, setError] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
+  // One idempotency key per refund attempt, reused when retrying after an error: a refund the
+  // provider didn't confirm is held server-side, and only a retry with the SAME key can safely
+  // resume it (never a second refund). Reset after success or when the amount changes.
+  const refundKeyRef = useRef<string | null>(null);
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
+  // Bumped after every refund attempt (including a failed or held one) so the refunds list reloads.
+  const [refundsVersion, setRefundsVersion] = useState(0);
 
-  async function load() {
-    setLoading(true);
+  // Without the spinner when refreshing after a refund action, so the refunds list (and its
+  // messages) stay mounted.
+  async function load(showSpinner = true) {
+    if (showSpinner) setLoading(true);
     try {
       const { payments } = await apiClient.request<{ payments: Payment[] }>(
         `/restaurants/${order.restaurantId}/orders/${order.id}/payments`
@@ -74,11 +83,12 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
       await apiClient.request(`/restaurants/${order.restaurantId}/orders/${order.id}/payments/${payment.id}/refund`, {
         method: "POST",
         body: {
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: (refundKeyRef.current ??= crypto.randomUUID()),
           amount: refundAmount ? Number(refundAmount) : undefined,
           reason: refundReason || undefined,
         },
       });
+      refundKeyRef.current = null;
       setRefundOpen(false);
       setRefundAmount("");
       setRefundReason("");
@@ -87,6 +97,7 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
       setError((err as Error).message);
     } finally {
       setRefunding(false);
+      setRefundsVersion((v) => v + 1);
     }
   }
 
@@ -119,6 +130,15 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
         {payment.providerRef && <span className="text-muted">Ref: {payment.providerRef}</span>}
       </div>
 
+      {canRefund && (
+        <PaymentRefunds
+          basePath={`/restaurants/${order.restaurantId}/orders/${order.id}/payments/${payment.id}`}
+          currency={payment.currency}
+          reloadKey={refundsVersion}
+          onChanged={() => load(false)}
+        />
+      )}
+
       {canRefund && (payment.status === "paid" || payment.status === "partially_refunded") && (
         <div>
           {!refundOpen ? (
@@ -132,7 +152,10 @@ export function OrderPaymentAdmin({ order }: { order: Order }) {
                 min="0"
                 step="0.01"
                 value={refundAmount}
-                onChange={(e) => setRefundAmount(e.target.value)}
+                onChange={(e) => {
+                refundKeyRef.current = null;
+                setRefundAmount(e.target.value);
+              }}
                 placeholder={`Full refund (${formatCurrency(payment.amount, payment.currency)}) if left blank`}
                 className="rounded-md border border-border bg-background px-2 py-1"
               />

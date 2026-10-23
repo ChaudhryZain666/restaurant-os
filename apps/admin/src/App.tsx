@@ -50,6 +50,7 @@ import { PrintOrderPage } from "./pages/PrintOrderPage";
 import { PrintPreviewPage } from "./pages/PrintPreviewPage";
 import { BillingPage } from "./pages/BillingPage";
 import { PlatformSubscriptionsPage } from "./pages/PlatformSubscriptionsPage";
+import { PlatformRefundsPage } from "./pages/PlatformRefundsPage";
 import { PlatformAgenciesPage } from "./pages/PlatformAgenciesPage";
 import { PlatformAnalyticsPage } from "./pages/PlatformAnalyticsPage";
 import { SystemConfigPage } from "./pages/SystemConfigPage";
@@ -533,6 +534,14 @@ export function App() {
             element={
               <RequireAuth roles={["platform_admin"]}>
                 <PlatformSubscriptionsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/platform/refunds"
+            element={
+              <RequireAuth permission="platform.restaurants.manage">
+                <PlatformRefundsPage />
               </RequireAuth>
             }
           />

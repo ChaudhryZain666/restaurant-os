@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { createHmac } from "node:crypto";
-import { StripeProvider } from "./StripeProvider.js";
+import { StripeProvider, mapStripeRefundStatus, parseStripeRefundEvent } from "./StripeProvider.js";
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -176,20 +176,63 @@ describe("StripeProvider.refund", () => {
       .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_123", payment_intent: "pi_123" }) } as unknown as Response)
       .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "re_1", status: "succeeded" }) } as unknown as Response);
 
-    const result = await provider().refund("cs_123", 5.5);
+    const result = await provider().refund("cs_123", 5.5, undefined, { idempotencyKey: "gt_refund_abc" });
 
-    expect(result).toEqual({ refundRef: "re_1", status: "succeeded" });
+    expect(result).toEqual({ refundRef: "re_1", status: "succeeded", providerStatus: "succeeded" });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     const [refundUrl, refundInit] = fetchSpy.mock.calls[1] as [string, RequestInit];
     expect(refundUrl).toBe("https://api.stripe.com/v1/refunds");
     const params = new URLSearchParams(refundInit.body as string);
     expect(params.get("payment_intent")).toBe("pi_123");
     expect(params.get("amount")).toBe("550");
+    // Stripe's documented idempotency: a retry with this key returns the original refund.
+    expect((refundInit.headers as Record<string, string>)["Idempotency-Key"]).toBe("gt_refund_abc");
+    // ...and the same key rides along as metadata, so the refund can be found again by lookup.
+    expect(params.get("metadata[gt_refund_key]")).toBe("gt_refund_abc");
+  });
+
+  it("maps requires_action and unknown statuses to pending (amount stays reserved)", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_9", payment_intent: "pi_9" }) } as unknown as Response)
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "re_9", status: "requires_action" }) } as unknown as Response);
+    expect(await provider().refund("cs_9", 5, undefined, { idempotencyKey: "k9" })).toEqual({ refundRef: "re_9", status: "pending", providerStatus: "requires_action" });
+  });
+
+  it("classifies failures: session lookup failure = rejected, provider 5xx/timeout = unknown, 4xx = rejected", async () => {
+    mockFetchOnce(500, { error: { message: "boom" } });
+    await expect(provider().refund("cs_1", 5, undefined, { idempotencyKey: "k1" })).rejects.toMatchObject({ outcome: "rejected" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_2", payment_intent: "pi_2" }) } as unknown as Response)
+      .mockResolvedValueOnce({ status: 502, ok: false, json: async () => ({ error: { message: "bad gateway" } }) } as unknown as Response);
+    await expect(provider().refund("cs_2", 5, undefined, { idempotencyKey: "k2" })).rejects.toMatchObject({ outcome: "unknown" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_3", payment_intent: "pi_3" }) } as unknown as Response)
+      .mockResolvedValueOnce({ status: 400, ok: false, json: async () => ({ error: { message: "amount too large" } }) } as unknown as Response);
+    await expect(provider().refund("cs_3", 5, undefined, { idempotencyKey: "k3" })).rejects.toMatchObject({ outcome: "rejected" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ id: "cs_4", payment_intent: "pi_4" }) } as unknown as Response)
+      .mockImplementationOnce(() => {
+        const err = new Error("aborted");
+        err.name = "AbortError";
+        return Promise.reject(err);
+      });
+    await expect(provider().refund("cs_4", 5, undefined, { idempotencyKey: "k4" })).rejects.toMatchObject({ outcome: "unknown" });
+  });
+
+  it("declares documented refund idempotency", () => {
+    expect(provider().supportsRefundIdempotency).toBe(true);
   });
 
   it("throws when the session has no payment_intent to refund", async () => {
     mockFetchOnce(200, { id: "cs_123" });
-    await expect(provider().refund("cs_123", 5)).rejects.toThrow("no associated payment_intent");
+    await expect(provider().refund("cs_123", 5, undefined, { idempotencyKey: "k" })).rejects.toThrow("no associated payment_intent");
   });
 });
 
@@ -205,5 +248,113 @@ describe("StripeProvider.verifyCredentials", () => {
   it("resolves false, never throws, when the key is rejected", async () => {
     mockFetchOnce(401, { error: { message: "Invalid API Key provided" } }, false);
     await expect(provider().verifyCredentials()).resolves.toBe(false);
+  });
+});
+
+describe("Stripe refund status mapping", () => {
+  it("releases only on failed or canceled; everything not final stays pending", () => {
+    expect(mapStripeRefundStatus("succeeded")).toBe("succeeded");
+    expect(mapStripeRefundStatus("failed")).toBe("failed");
+    expect(mapStripeRefundStatus("canceled")).toBe("failed");
+    expect(mapStripeRefundStatus("pending")).toBe("pending");
+    expect(mapStripeRefundStatus("requires_action")).toBe("pending");
+    expect(mapStripeRefundStatus("something_new")).toBe("pending");
+    expect(mapStripeRefundStatus(undefined)).toBe("pending");
+  });
+});
+
+describe("Stripe refund events", () => {
+  const refundEvent = (type: string, object: Record<string, unknown>) => ({ id: "evt_r1", type, data: { object } });
+
+  it("parses refund.created / refund.updated / refund.failed / charge.refund.updated, carrying our refund key", () => {
+    for (const type of ["refund.created", "refund.updated", "refund.failed", "charge.refund.updated"]) {
+      expect(parseStripeRefundEvent(refundEvent(type, { id: "re_1", object: "refund", status: "failed", metadata: { gt_refund_key: "gt_refund_k" } }))).toEqual({
+        refundRef: "re_1",
+        status: "failed",
+        providerStatus: "failed",
+        refundKey: "gt_refund_k",
+      });
+    }
+  });
+
+  it("ignores non-refund events and malformed refund objects", () => {
+    expect(parseStripeRefundEvent(refundEvent("checkout.session.completed", { id: "cs_1", object: "checkout.session" }))).toBeNull();
+    expect(parseStripeRefundEvent(refundEvent("refund.updated", { id: "re_1", object: "charge" }))).toBeNull();
+    expect(parseStripeRefundEvent(refundEvent("refund.updated", { object: "refund", status: "succeeded" }))).toBeNull();
+  });
+
+  it("a signed refund event is routed as a refund event, never as a payment status", () => {
+    const payload = refundEvent("refund.updated", { id: "re_2", object: "refund", status: "succeeded" });
+    const t = Math.floor(Date.now() / 1000);
+    const rawBody = Buffer.from(JSON.stringify(payload), "utf-8");
+    const v1 = createHmac("sha256", "whsec_test_secret").update(`${t}.${rawBody.toString("utf-8")}`).digest("hex");
+    const event = provider().verifyWebhookSignature(rawBody, `t=${t},v1=${v1}`);
+    expect(event).toMatchObject({ eventId: "evt_r1", providerRef: "re_2", status: "pending", refund: { refundRef: "re_2", status: "succeeded" } });
+  });
+});
+
+describe("StripeProvider.lookupRefund", () => {
+  const ok = (body: unknown) => ({ status: 200, ok: true, json: async () => body }) as unknown as Response;
+
+  it("by refund id: GET /v1/refunds/{id}", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce(ok({ id: "re_1", status: "pending" }));
+    expect(await provider().lookupRefund({ providerRef: "cs_1", refundKey: "k", refundRef: "re_1" })).toEqual({
+      found: true,
+      refundRef: "re_1",
+      status: "pending",
+      providerStatus: "pending",
+    });
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.stripe.com/v1/refunds/re_1");
+    expect(init.method).toBe("GET");
+  });
+
+  it("by our key: lists the payment intent's refunds, following pages, matching metadata", async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ id: "cs_1", payment_intent: "pi_1" }))
+      .mockResolvedValueOnce(ok({ data: [{ id: "re_a", status: "succeeded", metadata: { gt_refund_key: "other" } }], has_more: true }))
+      .mockResolvedValueOnce(ok({ data: [{ id: "re_b", status: "succeeded", metadata: { gt_refund_key: "k" } }], has_more: false }));
+    expect(await provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).toEqual({
+      found: true,
+      refundRef: "re_b",
+      status: "succeeded",
+      providerStatus: "succeeded",
+    });
+    const second = new URL((fetchSpy.mock.calls[2] as [string])[0]);
+    expect(second.pathname).toBe("/v1/refunds");
+    expect(second.searchParams.get("payment_intent")).toBe("pi_1");
+    expect(second.searchParams.get("starting_after")).toBe("re_a");
+  });
+
+  it("definitively not found only when every page was read", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ id: "cs_1", payment_intent: "pi_1" }))
+      .mockResolvedValueOnce(ok({ data: [], has_more: false }));
+    expect(await provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).toEqual({ found: false });
+  });
+
+  it("is inconclusive (throws 'unknown') on any error — including 4xx, timeouts and unreadable lists — never 'not found'", async () => {
+    mockFetchOnce(404, { error: { message: "No such refund" } });
+    await expect(provider().lookupRefund({ providerRef: "cs_1", refundKey: "k", refundRef: "re_x" })).rejects.toMatchObject({ outcome: "unknown" });
+
+    mockFetchOnce(500, { error: { message: "boom" } });
+    await expect(provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).rejects.toMatchObject({ outcome: "unknown" });
+
+    jest.spyOn(globalThis, "fetch").mockRejectedValueOnce(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    await expect(provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).rejects.toMatchObject({ outcome: "unknown" });
+
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ id: "cs_1", payment_intent: "pi_1" }))
+      .mockResolvedValueOnce(ok({ unexpected: true }));
+    await expect(provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).rejects.toMatchObject({ outcome: "unknown" });
+  });
+
+  it("is inconclusive when there are more refunds than it pages through", async () => {
+    const spy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce(ok({ id: "cs_1", payment_intent: "pi_1" }));
+    for (let i = 0; i < 10; i++) spy.mockResolvedValueOnce(ok({ data: [{ id: `re_${i}`, status: "succeeded", metadata: {} }], has_more: true }));
+    await expect(provider().lookupRefund({ providerRef: "cs_1", refundKey: "k" })).rejects.toMatchObject({ outcome: "unknown" });
   });
 });

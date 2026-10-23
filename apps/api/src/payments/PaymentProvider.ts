@@ -34,11 +34,56 @@ export interface ProviderWebhookEvent {
   providerRef: string;
   status: ProviderPaymentStatus;
   raw: unknown;
+  /** Set for a REFUND event (e.g. Stripe refund.updated) instead of a payment event — routed to
+   *  applyProviderRefundUpdate, never to the payment state machine. */
+  refund?: ProviderRefundUpdate;
 }
+
+/** Our three local refund states. Provider-specific states map onto them (mapStripeRefundStatus):
+ *  anything not yet final — pending, requires_action, unknown — is "pending" and keeps its reserved
+ *  amount; only a confirmed failure or cancellation is "failed" and releases it. */
+export type LocalRefundStatus = "pending" | "succeeded" | "failed";
 
 export interface ProviderRefundResult {
   refundRef: string;
-  status: "pending" | "succeeded" | "failed";
+  status: LocalRefundStatus;
+  /** The provider's own status string (e.g. Stripe "requires_action"), kept for staff display. */
+  providerStatus?: string;
+}
+
+export interface ProviderRefundUpdate {
+  refundRef: string;
+  status: LocalRefundStatus;
+  providerStatus?: string;
+  /** Our refund key, when the provider echoes it back (Stripe metadata.gt_refund_key). */
+  refundKey?: string;
+}
+
+/** A definitive answer from the provider's own records. An inconclusive lookup (timeout, error,
+ *  too many results to search) THROWS a ProviderRequestError instead — never "not found". */
+export type RefundLookupResult = ({ found: true } & ProviderRefundResult) | { found: false };
+
+/**
+ * A provider call that failed, with what we can honestly say about whether it took effect:
+ *  - "rejected": the provider definitively refused, or the request was never sent — nothing moved;
+ *  - "unknown": it may have been processed (timeout, connection dropped, provider 5xx).
+ * refundPayment releases a reservation only for "rejected"; for "unknown" it holds the refund so it
+ * can't be issued twice (services/payment.service.ts). Any other thrown error is treated as unknown.
+ */
+export class ProviderRequestError extends Error {
+  constructor(
+    message: string,
+    readonly outcome: "rejected" | "unknown"
+  ) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
+
+/** Classifies an HTTP status from a provider: 5xx (and 408) may have been processed; other 4xx
+ *  were refused. */
+export function outcomeForHttpStatus(status: number): "rejected" | "unknown" {
+  return status >= 500 || status === 408 ? "unknown" : "rejected";
 }
 
 /**
@@ -59,7 +104,19 @@ export interface PaymentProvider {
   retrieve(providerRef: string): Promise<ProviderPaymentSnapshot>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderWebhookEvent | null;
-  refund(providerRef: string, amount: number, reason?: string): Promise<ProviderRefundResult>;
+  /** `idempotencyKey` is stable across retries of the same logical refund. Providers that support
+   *  it (supportsRefundIdempotency) must use it so a retry can never create a second refund. */
+  refund(providerRef: string, amount: number, reason: string | undefined, options: { idempotencyKey: string }): Promise<ProviderRefundResult>;
+  /** True only when the provider's API is documented to de-duplicate refunds by idempotency key —
+   *  then a refund whose outcome was unknown can be safely retried with the same key. */
+  readonly supportsRefundIdempotency: boolean;
+  /** True only when the provider's API documents a way to find OUR refund in its records (by its id,
+   *  or by the refund key we attached). Without it, a held refund can only be resolved by a person. */
+  readonly supportsRefundLookup: boolean;
+  /** Finds this refund in the provider's records: by `refundRef` when we have it, otherwise by
+   *  `refundKey` among the original payment's refunds. Throws ProviderRequestError when the answer is
+   *  inconclusive. Only called when supportsRefundLookup is true. */
+  lookupRefund(input: { providerRef: string; refundKey: string; refundRef?: string }): Promise<RefundLookupResult>;
   /** Restaurant-owned accounts (BYOC — see restaurantProvider.ts) only: a cheap, read-only,
    *  zero-side-effect call proving these credentials actually authenticate against this provider,
    *  made synchronously when a restaurant connects its own account, before it's ever marked

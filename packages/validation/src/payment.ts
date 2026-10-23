@@ -19,6 +19,16 @@ export const refundPaymentSchema = z.object({
 });
 export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
 
+/** A person settling a held refund (refundPayment's reconciliation). Evidence is always required;
+ *  the server adds the rest of the safeguards (hold time, fresh lookup, permission, audit). */
+export const resolveRefundSchema = z.object({
+  outcome: z.enum(["refunded", "not_refunded"]),
+  providerRefundRef: z.string().trim().min(3).max(200).optional(),
+  evidence: z.string().trim().min(10, "Explain what you checked (at least 10 characters)").max(1000),
+  confirmChecked: z.boolean().default(false),
+});
+export type ResolveRefundInput = z.infer<typeof resolveRefundSchema>;
+
 export const mockCompletePaymentSchema = z.object({
   outcome: z.enum(["paid", "failed"]),
 });

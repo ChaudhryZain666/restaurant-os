@@ -6,8 +6,12 @@ import type {
   ProviderPaymentSnapshot,
   ProviderPaymentStatus,
   ProviderRefundResult,
+  ProviderRefundUpdate,
   ProviderWebhookEvent,
+  LocalRefundStatus,
+  RefundLookupResult,
 } from "./PaymentProvider.js";
+import { ProviderRequestError, outcomeForHttpStatus } from "./PaymentProvider.js";
 
 const BASE_URL = "https://api.stripe.com";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -82,7 +86,19 @@ export class StripeProvider implements PaymentProvider {
     private readonly connectedAccountId?: string
   ) {}
 
-  private async request<T>(method: "GET" | "POST", path: string, form?: Record<string, unknown>): Promise<T> {
+  // Stripe documents the Idempotency-Key header: a repeated POST with the same key returns the
+  // original result instead of performing the operation again (keys are kept for 24 hours).
+  readonly supportsRefundIdempotency = true;
+  // Stripe documents GET /v1/refunds/{id} and GET /v1/refunds?payment_intent=…, and refunds carry
+  // metadata — so our refund can be found by id or by the key we attach.
+  readonly supportsRefundLookup = true;
+
+  private async request<T>(
+    method: "GET" | "POST",
+    path: string,
+    form?: Record<string, unknown>,
+    extraHeaders: Record<string, string> = {}
+  ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -94,13 +110,15 @@ export class StripeProvider implements PaymentProvider {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: `Bearer ${this.secretKey}`,
           ...(this.connectedAccountId ? { "Stripe-Account": this.connectedAccountId } : {}),
+          ...extraHeaders,
         },
         body: form ? encodeForm(form) : undefined,
         signal: controller.signal,
       });
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") throw new Error("Stripe request timed out");
-      throw new Error(`Could not reach Stripe: ${(err as Error).message}`);
+      // The request may have reached Stripe before the connection failed — the outcome is unknown.
+      if (err instanceof Error && err.name === "AbortError") throw new ProviderRequestError("Stripe request timed out", "unknown");
+      throw new ProviderRequestError(`Could not reach Stripe: ${(err as Error).message}`, "unknown");
     } finally {
       clearTimeout(timer);
     }
@@ -109,12 +127,15 @@ export class StripeProvider implements PaymentProvider {
     try {
       json = await res.json();
     } catch {
-      throw new Error(`Stripe returned an unreadable response (HTTP ${res.status})`);
+      throw new ProviderRequestError(
+        `Stripe returned an unreadable response (HTTP ${res.status})`,
+        res.ok ? "unknown" : outcomeForHttpStatus(res.status)
+      );
     }
 
     if (!res.ok) {
       const message = (json as { error?: { message?: string } })?.error?.message;
-      throw new Error(`Stripe returned HTTP ${res.status}${message ? `: ${message}` : ""}`);
+      throw new ProviderRequestError(`Stripe returned HTTP ${res.status}${message ? `: ${message}` : ""}`, outcomeForHttpStatus(res.status));
     }
 
     return json as T;
@@ -157,21 +178,66 @@ export class StripeProvider implements PaymentProvider {
     return verifyStripeSignature(rawBody, signatureHeader, this.webhookSecret);
   }
 
-  async refund(providerRef: string, amount: number, _reason?: string): Promise<ProviderRefundResult> {
+  async refund(
+    providerRef: string,
+    amount: number,
+    _reason: string | undefined,
+    options: { idempotencyKey: string }
+  ): Promise<ProviderRefundResult> {
     // providerRef is the Checkout Session id (see createIntent) — a refund is against the
-    // underlying PaymentIntent, so resolve it first. See this file's top comment.
-    const session = await this.request<StripeCheckoutSession>("GET", `/v1/checkout/sessions/${providerRef}`);
-    if (!session.payment_intent) throw new Error("Stripe checkout session has no associated payment_intent to refund");
+    // underlying PaymentIntent, so resolve it first. See this file's top comment. Nothing has been
+    // refunded if this lookup fails, so any failure here is "rejected".
+    let session: StripeCheckoutSession;
+    try {
+      session = await this.request<StripeCheckoutSession>("GET", `/v1/checkout/sessions/${providerRef}`);
+    } catch (err) {
+      throw new ProviderRequestError((err as Error).message, "rejected");
+    }
+    if (!session.payment_intent) throw new ProviderRequestError("Stripe checkout session has no associated payment_intent to refund", "rejected");
 
-    const response = await this.request<StripeRefund>("POST", "/v1/refunds", {
-      payment_intent: session.payment_intent,
-      amount: Math.round(amount * 100),
-    });
+    const response = await this.request<StripeRefund>(
+      "POST",
+      "/v1/refunds",
+      {
+        payment_intent: session.payment_intent,
+        amount: Math.round(amount * 100),
+        metadata: { [STRIPE_REFUND_KEY_METADATA]: options.idempotencyKey },
+      },
+      { "Idempotency-Key": options.idempotencyKey }
+    );
     if (!response.id) throw new Error("Stripe did not return a refund id");
 
-    const status: ProviderRefundResult["status"] =
-      response.status === "succeeded" ? "succeeded" : response.status === "failed" ? "failed" : "pending";
-    return { refundRef: response.id, status };
+    return { refundRef: response.id, status: mapStripeRefundStatus(response.status), providerStatus: response.status };
+  }
+
+  /** Conservative by construction: every failure — including one Stripe would call a 4xx — is an
+   *  inconclusive ("unknown") lookup, and a payment with more refunds than we page through is too. */
+  async lookupRefund(input: { providerRef: string; refundKey: string; refundRef?: string }): Promise<RefundLookupResult> {
+    const inconclusive = (err: unknown) => new ProviderRequestError(`Couldn't confirm the refund with Stripe: ${(err as Error).message}`, "unknown");
+    try {
+      if (input.refundRef) {
+        const refund = await this.request<StripeRefund>("GET", `/v1/refunds/${encodeURIComponent(input.refundRef)}`);
+        if (!refund.id) throw new Error("Stripe returned a refund without an id");
+        return { found: true, refundRef: refund.id, status: mapStripeRefundStatus(refund.status), providerStatus: refund.status };
+      }
+      const session = await this.request<StripeCheckoutSession>("GET", `/v1/checkout/sessions/${encodeURIComponent(input.providerRef)}`);
+      if (!session.payment_intent) throw new Error("the checkout session has no payment_intent");
+      let startingAfter: string | undefined;
+      for (let page = 0; page < STRIPE_REFUND_LIST_MAX_PAGES; page++) {
+        const query = new URLSearchParams({ payment_intent: session.payment_intent, limit: String(STRIPE_REFUND_LIST_PAGE_LIMIT) });
+        if (startingAfter) query.set("starting_after", startingAfter);
+        const list = await this.request<{ data?: StripeRefund[]; has_more?: boolean }>("GET", `/v1/refunds?${query.toString()}`);
+        if (!Array.isArray(list.data)) throw new Error("Stripe returned an unreadable refund list");
+        const match = list.data.find((r) => r.metadata?.[STRIPE_REFUND_KEY_METADATA] === input.refundKey);
+        if (match?.id) return { found: true, refundRef: match.id, status: mapStripeRefundStatus(match.status), providerStatus: match.status };
+        if (!list.has_more) return { found: false };
+        startingAfter = list.data[list.data.length - 1]?.id;
+        if (!startingAfter) throw new Error("Stripe returned an empty page with has_more");
+      }
+      throw new Error("too many refunds on this payment to search");
+    } catch (err) {
+      throw inconclusive(err);
+    }
   }
 
   // BYOC connect-time check (restaurantProvider.ts) — GET /v1/balance is Stripe's own documented
@@ -199,14 +265,45 @@ interface StripeCheckoutSession {
 
 interface StripeRefund {
   id?: string;
+  object?: string;
   status?: string;
+  metadata?: Record<string, string>;
 }
 
 interface StripeWebhookPayload {
   id?: string;
   type?: string;
-  data?: { object?: StripeCheckoutSession };
+  data?: { object?: StripeCheckoutSession & StripeRefund };
 }
+
+/** Stripe metadata key carrying our refund key, so the refund can be found in Stripe's records. */
+export const STRIPE_REFUND_KEY_METADATA = "gt_refund_key";
+
+/** Stripe refund status → our local status. pending / requires_action / anything unrecognized stay
+ *  "pending" (amount kept reserved); only failed or canceled release it. Stripe documents the
+ *  statuses as pending, requires_action, succeeded, failed, canceled. */
+export function mapStripeRefundStatus(status: string | undefined): LocalRefundStatus {
+  if (status === "succeeded") return "succeeded";
+  if (status === "failed" || status === "canceled") return "failed";
+  return "pending";
+}
+
+const STRIPE_REFUND_EVENT_TYPES = new Set(["refund.created", "refund.updated", "refund.failed", "charge.refund.updated"]);
+
+/** The refund half of a Stripe event, or null when the event isn't about a refund. */
+export function parseStripeRefundEvent(parsed: StripeWebhookPayload | null | undefined): ProviderRefundUpdate | null {
+  const obj = parsed?.data?.object;
+  if (!parsed?.type || !STRIPE_REFUND_EVENT_TYPES.has(parsed.type) || obj?.object !== "refund" || !obj.id) return null;
+  return {
+    refundRef: obj.id,
+    status: mapStripeRefundStatus(obj.status),
+    providerStatus: obj.status,
+    refundKey: obj.metadata?.[STRIPE_REFUND_KEY_METADATA],
+  };
+}
+
+const STRIPE_REFUND_LIST_PAGE_LIMIT = 100;
+const STRIPE_REFUND_LIST_MAX_PAGES = 10;
 
 /**
  * Phase 37 — the pure cryptographic half of verifyWebhookSignature, extracted so
@@ -270,6 +367,10 @@ export function verifyStripeSignature(
   const eventType = parsed.type;
   const session = parsed.data?.object;
   if (!eventId || !eventType || !session?.id) return null;
+
+  // A refund event: routed to the refund state machine, never the payment one.
+  const refund = parseStripeRefundEvent(parsed);
+  if (refund) return { eventId, eventType, providerRef: refund.refundRef, status: "pending", raw: parsed, refund };
 
   return {
     eventId,

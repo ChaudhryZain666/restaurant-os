@@ -160,20 +160,20 @@ describe("SafepayProvider.verifyWebhookSignature", () => {
 describe("SafepayProvider.refund", () => {
   it("maps a succeeded refund response", async () => {
     mockFetchOnce(200, { data: { refund_id: "re_1", state: "succeeded" } });
-    const result = await provider().refund("tok_123", 5, "customer request");
+    const result = await provider().refund("tok_123", 5, "customer request", { idempotencyKey: "k" });
     expect(result).toEqual({ refundRef: "re_1", status: "succeeded" });
   });
 
   it("sends the refund amount in the minor currency unit", async () => {
     const fetchSpy = mockFetchOnce(200, { data: { refund_id: "re_1", state: "pending" } });
-    await provider().refund("tok_123", 5.5);
+    await provider().refund("tok_123", 5.5, undefined, { idempotencyKey: "k" });
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string).amount).toBe(550);
   });
 
   it("throws when Safepay's response has no refund reference", async () => {
     mockFetchOnce(200, { data: {} });
-    await expect(provider().refund("tok_123", 5)).rejects.toThrow("did not return a refund reference");
+    await expect(provider().refund("tok_123", 5, undefined, { idempotencyKey: "k" })).rejects.toThrow("did not return a refund reference");
   });
 });
 
@@ -200,5 +200,18 @@ describe("SafepayProvider.verifyCredentials", () => {
   it("resolves false if the response is 2xx but carries no token", async () => {
     mockFetchOnce(200, { data: {} });
     await expect(provider().verifyCredentials()).resolves.toBe(false);
+  });
+});
+
+describe("SafepayProvider refund idempotency", () => {
+  it("does not claim refund idempotency (none is documented for Safepay)", () => {
+    expect(provider().supportsRefundIdempotency).toBe(false);
+  });
+
+  it("does not claim a refund lookup either, and an attempted lookup is inconclusive — never 'not found'", async () => {
+    expect(provider().supportsRefundLookup).toBe(false);
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    await expect(provider().lookupRefund()).rejects.toMatchObject({ outcome: "unknown" });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

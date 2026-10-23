@@ -194,6 +194,7 @@ const PLATFORM_GROUPS: NavGroup[] = [
       { to: "/platform/users", label: "Users", icon: IconUsers, permission: "platform.users.manage" },
       { to: "/platform/agencies", label: "Agencies", icon: IconUsers, roles: ["platform_admin"] },
       { to: "/platform/subscriptions", label: "Subscriptions", icon: IconWallet, roles: ["platform_admin"] },
+      { to: "/platform/refunds", label: "Waiting refunds", icon: IconWallet, permission: "platform.restaurants.manage" },
       { to: "/platform/analytics", label: "Platform analytics", icon: IconChart, roles: ["platform_admin"] },
     ],
   },

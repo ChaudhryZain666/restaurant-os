@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createPaymentSchema, mockCompletePaymentSchema, refundPaymentSchema } from "@restaurant/validation";
+import { createPaymentSchema, mockCompletePaymentSchema, refundPaymentSchema, resolveRefundSchema } from "@restaurant/validation";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
@@ -7,7 +7,16 @@ import { requireTenantMatch } from "../middleware/tenant.js";
 import { validateBody } from "../middleware/validate.js";
 import { env } from "../config/env.js";
 import { mockDriversAllowed } from "../config/mockDrivers.js";
-import { createPayment, getPayment, listPayments, refund } from "../controllers/payment.controller.js";
+import {
+  checkPaymentRefund,
+  createPayment,
+  getPayment,
+  listPaymentRefunds,
+  listPayments,
+  refund,
+  resolvePaymentRefund,
+  retryPaymentRefund,
+} from "../controllers/payment.controller.js";
 import { mockCompletePayment } from "../controllers/paymentMockDriver.controller.js";
 
 /**
@@ -31,6 +40,17 @@ paymentRouter.post(
   requirePermission("restaurant.payments.manage"),
   validateBody(refundPaymentSchema),
   asyncHandler(refund)
+);
+// Refund reconciliation — the same permission as issuing a refund.
+const refundStaff = [requireTenantMatch(), requirePermission("restaurant.payments.manage")];
+paymentRouter.get("/:paymentId/refunds", ...refundStaff, asyncHandler(listPaymentRefunds));
+paymentRouter.post("/:paymentId/refunds/:refundId/check", ...refundStaff, asyncHandler(checkPaymentRefund));
+paymentRouter.post("/:paymentId/refunds/:refundId/retry", ...refundStaff, asyncHandler(retryPaymentRefund));
+paymentRouter.post(
+  "/:paymentId/refunds/:refundId/resolve",
+  ...refundStaff,
+  validateBody(resolveRefundSchema),
+  asyncHandler(resolvePaymentRefund)
 );
 
 // Only exists at all when the mock provider is active — a deployment configured for a real

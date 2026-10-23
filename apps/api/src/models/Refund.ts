@@ -22,6 +22,41 @@ const refundSchema = new Schema(
     reason: { type: String, maxlength: 500 },
     status: { type: String, enum: REFUND_STATUSES, default: "pending", index: true },
     idempotencyKey: { type: String },
+    // Set when the provider call's outcome is unknown (timeout, dropped connection, provider 5xx):
+    // the refund stays "pending" with its amount reserved so it can't be issued twice, until a
+    // same-key retry resumes it (idempotent providers only) or it is reconciled. See refundPayment.
+    providerOutcomeUnknown: { type: Boolean },
+    // Set once this refund's amount is reserved in Payment.totalRefunded (right after the atomic
+    // reservation). Releasing a refund only gives back an amount this proves was reserved, so a crash
+    // between the claim and the reservation can never release someone else's reservation.
+    amountReserved: { type: Boolean },
+    // A short lease held while a held refund is being re-issued, so two retries can never re-issue
+    // it at the same time (reconcileRefund).
+    reissueLeaseUntil: { type: Date },
+    // The key sent to the provider (providerRefundIdempotencyKey) — also attached to the provider's
+    // refund (Stripe metadata) so lookups and webhooks can find this refund.
+    providerRefundKey: { type: String, index: true },
+    // The provider's own status string (e.g. Stripe "requires_action"), for staff display.
+    providerStatus: { type: String },
+    // The last reconciliation lookup against the provider's records. A recent "not_found" is the
+    // required evidence before staff can confirm a lookup-capable provider never made the refund.
+    lastLookupAt: { type: Date },
+    lastLookupResult: { type: String, enum: ["found", "not_found", "inconclusive"] },
+    // How a held refund was finally settled — set once, never edited (the audit log has the same).
+    resolution: {
+      type: new Schema(
+        {
+          method: { type: String, enum: ["provider_response", "provider_lookup", "webhook", "manual"], required: true },
+          outcome: { type: String, enum: ["refunded", "not_refunded"], required: true },
+          providerRefundRef: { type: String },
+          evidence: { type: String, maxlength: 1000 },
+          resolvedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+          resolvedAt: { type: Date, required: true },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     initiatedByUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true, toJSON: idTransform }

@@ -9,6 +9,8 @@ import { Refund } from "../models/Refund.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
 import { getMockPaymentProvider } from "../payments/index.js";
+import { ProviderRequestError } from "../payments/PaymentProvider.js";
+import { providerRefundIdempotencyKey } from "../services/payment.service.js";
 import {
   closeTestConnections,
   createTestOrder,
@@ -499,27 +501,99 @@ describe("refunds", () => {
     }
   });
 
-  it("a provider failure releases the reservation and the key, so the same key can be retried", async () => {
+  const refundUrl = (orderId: string, paymentId: string) =>
+    `/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payments/${paymentId}/refund`;
+
+  it("a provider that definitively refuses releases the reservation and the key, so the same key can be retried", async () => {
     const { order, payment } = await paidOrderWithPayment(40);
-    const key = `refund-provider-fail-${payment.id}`;
-    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund").mockRejectedValueOnce(new Error("provider unavailable"));
+    const key = `refund-provider-refused-${payment.id}`;
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund").mockRejectedValueOnce(new ProviderRequestError("declined", "rejected"));
     try {
-      const failed = await request(app)
-        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
-        .set("Authorization", `Bearer ${ownerAToken}`)
-        .send({ idempotencyKey: key, amount: 15 });
+      const failed = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 15 });
       expect(failed.status).toBeGreaterThanOrEqual(500);
       expect((await Payment.findById(payment._id))!.totalRefunded).toBe(0);
       expect(await Refund.countDocuments({ paymentId: payment._id })).toBe(0);
 
-      const retried = await request(app)
-        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
-        .set("Authorization", `Bearer ${ownerAToken}`)
-        .send({ idempotencyKey: key, amount: 15 });
+      const retried = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 15 });
       expect(retried.status).toBe(201);
       expect(retried.body.data.refund.status).toBe("succeeded");
       expect((await Payment.findById(payment._id))!.totalRefunded).toBe(15);
     } finally {
+      refundSpy.mockRestore();
+    }
+  });
+
+  it("an UNKNOWN provider outcome holds the refund: the amount stays reserved and nothing can refund it twice", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const key = `refund-unknown-${payment.id}`;
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund").mockRejectedValueOnce(new ProviderRequestError("Stripe request timed out", "unknown"));
+    try {
+      const res = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 30 });
+      expect(res.status).toBe(503);
+      expect(res.body.error.message).toMatch(/on hold/);
+      const stored = await Payment.findById(payment._id);
+      expect(stored!.totalRefunded).toBe(30); // still reserved — money may have moved
+      const held = await Refund.findOne({ paymentId: payment._id });
+      expect(held).toMatchObject({ status: "pending", providerOutcomeUnknown: true });
+
+      // While it's held, no other refund can go ahead on this payment — and the message says why
+      // (never a confusing "amount must be between…").
+      const other = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: `${key}-other`, amount: 5 });
+      expect(other.status).toBe(409);
+      expect(other.body.error.message).toMatch(/waiting to be confirmed/);
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(30);
+    } finally {
+      refundSpy.mockRestore();
+    }
+  });
+
+  it("a same-key retry of a held refund that HAD gone through finds it at the provider first — no second provider call, counted once", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const key = `refund-resume-${payment.id}`;
+    const mock = getMockPaymentProvider();
+    const original = mock.refund.bind(mock);
+    // First attempt: the provider processes the refund, then the connection drops before we hear back.
+    const refundSpy = jest.spyOn(mock, "refund").mockImplementationOnce(async (...args) => {
+      await original(...args);
+      throw new ProviderRequestError("Could not reach Stripe: socket hang up", "unknown");
+    });
+    try {
+      const first = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 25 });
+      expect(first.status).toBe(503);
+
+      const retry = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 25 });
+      expect(retry.status).toBe(201);
+      expect(retry.body.data.refund.status).toBe("succeeded");
+
+      // The retry looked the refund up by its key and found the original — it never called refund again.
+      const expectedKey = providerRefundIdempotencyKey(restaurantA.id, key);
+      expect(refundSpy.mock.calls.map((c) => (c[3] as { idempotencyKey: string }).idempotencyKey)).toEqual([expectedKey]);
+      expect((await Refund.findOne({ paymentId: payment._id }))!.resolution).toMatchObject({ method: "provider_lookup", outcome: "refunded" });
+      const refundRefs = new Set(await Refund.find({ paymentId: payment._id }).distinct("providerRefundRef"));
+      expect(refundRefs.size).toBe(1);
+      const stored = await Payment.findById(payment._id);
+      expect(stored!.totalRefunded).toBe(25);
+      expect(stored!.status).toBe("partially_refunded");
+    } finally {
+      refundSpy.mockRestore();
+    }
+  });
+
+  it("for a provider WITHOUT documented refund idempotency, a same-key retry leaves the held refund alone (no second provider call)", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const key = `refund-held-no-idem-${payment.id}`;
+    const mock = getMockPaymentProvider();
+    const refundSpy = jest.spyOn(mock, "refund").mockRejectedValueOnce(new ProviderRequestError("Safepay request timed out", "unknown"));
+    Object.defineProperty(mock, "supportsRefundIdempotency", { value: false, configurable: true });
+    try {
+      await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 20 });
+      const retry = await request(app).post(refundUrl(order.id, payment.id)).set("Authorization", `Bearer ${ownerAToken}`).send({ idempotencyKey: key, amount: 20 });
+      expect(retry.status).toBe(201);
+      expect(retry.body.data.refund).toMatchObject({ status: "pending", providerOutcomeUnknown: true });
+      expect(refundSpy).toHaveBeenCalledTimes(1);
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(20);
+    } finally {
+      Object.defineProperty(mock, "supportsRefundIdempotency", { value: true, configurable: true });
       refundSpy.mockRestore();
     }
   });

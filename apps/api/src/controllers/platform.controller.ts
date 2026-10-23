@@ -10,6 +10,9 @@ import type {
 } from "@restaurant/validation";
 import type { PlatformRestaurantSummary, PlatformUserSummary } from "@restaurant/types";
 import { Restaurant } from "../models/Restaurant.js";
+import { Refund } from "../models/Refund.js";
+import { Payment } from "../models/Payment.js";
+import { describeRefundForStaff, listWaitingRefunds, reconcileRefund } from "../services/payment.service.js";
 import { User } from "../models/User.js";
 import { Order } from "../models/Order.js";
 import { Delivery } from "../models/Delivery.js";
@@ -692,4 +695,43 @@ export async function reviewAgencyEmailSender(req: Request, res: Response) {
     metadata: { address: sender.address, previousStatus, ...(reason ? { reason } : {}) },
   });
   sendSuccess(res, { emailSender: { address: sender.address, status: sender.status, failureReason: sender.failureReason ?? null } });
+}
+
+/**
+ * GET /platform/refunds/waiting — every refund waiting on a provider or held for reconciliation,
+ * across restaurants, with what needs doing. Platform admins can check a refund with the provider;
+ * settling one by hand stays with the restaurant's own staff (restaurant.payments.manage).
+ */
+export async function listWaitingRefundsHandler(_req: Request, res: Response) {
+  const refunds = await listWaitingRefunds();
+  const restaurantIds = [...new Set(refunds.map((r) => r.restaurantId.toString()))];
+  const orderIds = [...new Set(refunds.map((r) => r.orderId.toString()))];
+  const paymentIds = [...new Set(refunds.map((r) => r.paymentId.toString()))];
+  const [restaurants, orders, payments] = await Promise.all([
+    Restaurant.find({ _id: { $in: restaurantIds } }).select("name slug"),
+    Order.find({ _id: { $in: orderIds } }).select("orderNumber"),
+    Payment.find({ _id: { $in: paymentIds } }).select("currency"),
+  ]);
+  const restaurantById = new Map(restaurants.map((r) => [r.id as string, r]));
+  const orderById = new Map(orders.map((o) => [o.id as string, o]));
+  const paymentById = new Map(payments.map((p) => [p.id as string, p]));
+  const cache = new Map();
+  const items = await Promise.all(
+    refunds.map(async (r) => ({
+      ...r.toJSON(),
+      restaurantName: restaurantById.get(r.restaurantId.toString())?.name ?? null,
+      orderNumber: orderById.get(r.orderId.toString())?.orderNumber ?? null,
+      currency: paymentById.get(r.paymentId.toString())?.currency ?? null,
+      reconciliation: await describeRefundForStaff(r, cache),
+    }))
+  );
+  sendSuccess(res, { refunds: items });
+}
+
+/** POST /platform/refunds/:refundId/check — lookup only (never creates or settles by hand). */
+export async function checkWaitingRefundHandler(req: Request, res: Response) {
+  const refundDoc = await Refund.findById(req.params.refundId);
+  if (!refundDoc) throw ApiError.notFound("Refund not found");
+  const { refund: updated, outcome } = await reconcileRefund(refundDoc, { actorUserId: req.user!.id, actorRole: req.user!.role });
+  sendSuccess(res, { refund: updated.toJSON(), outcome, reconciliation: await describeRefundForStaff(updated) });
 }

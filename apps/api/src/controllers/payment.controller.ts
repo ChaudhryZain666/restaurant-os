@@ -1,10 +1,19 @@
 import type { Request, Response } from "express";
 import { roleHasPermission } from "@restaurant/types";
-import type { CreatePaymentInput, RefundPaymentInput } from "@restaurant/validation";
+import type { CreatePaymentInput, RefundPaymentInput, ResolveRefundInput } from "@restaurant/validation";
 import { Order } from "../models/Order.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
-import { createPaymentForOrder, getPaymentById, listPaymentsForOrder, refundPayment } from "../services/payment.service.js";
+import {
+  createPaymentForOrder,
+  describeRefundForStaff,
+  getPaymentById,
+  listPaymentsForOrder,
+  reconcileRefund,
+  refundPayment,
+  resolveHeldRefund,
+} from "../services/payment.service.js";
+import { Refund } from "../models/Refund.js";
 import { recordAuditEvent } from "../services/audit.service.js";
 import { resolveTenantAccess } from "../middleware/tenant.js";
 
@@ -65,15 +74,60 @@ export async function refund(req: Request, res: Response) {
     idempotencyKey,
   });
 
-  await recordAuditEvent({
-    restaurantId,
-    actorUserId: req.user!.id,
-    actorRole: req.user!.role,
-    action: "payment.refunded",
-    targetType: "payment",
-    targetId: paymentId,
-    metadata: { amount: refundDoc.amount, refundId: refundDoc.id },
-  });
+  // Only a refund that actually went through is audited as "refunded" — a pending or held one is
+  // audited when it is held/reconciled (payment.service.ts).
+  if (refundDoc.status === "succeeded") {
+    await recordAuditEvent({
+      restaurantId,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "payment.refunded",
+      targetType: "payment",
+      targetId: paymentId,
+      metadata: { amount: refundDoc.amount, refundId: refundDoc.id },
+    });
+  }
 
-  sendSuccess(res, { refund: refundDoc.toJSON() }, 201);
+  sendSuccess(res, { refund: refundDoc.toJSON(), reconciliation: await describeRefundForStaff(refundDoc) }, 201);
+}
+
+async function findPaymentRefund(req: Request) {
+  const { restaurantId, orderId, paymentId, refundId } = req.params;
+  const refundDoc = await Refund.findOne({ _id: refundId, restaurantId, paymentId, orderId });
+  if (!refundDoc) throw ApiError.notFound("Refund not found");
+  return refundDoc;
+}
+
+/** GET …/payments/:paymentId/refunds — every refund on the payment, with what staff should do next. */
+export async function listPaymentRefunds(req: Request, res: Response) {
+  const { restaurantId, orderId, paymentId } = req.params;
+  const refunds = await Refund.find({ restaurantId, orderId, paymentId }).sort({ createdAt: -1 });
+  const cache = new Map();
+  const items = await Promise.all(
+    refunds.map(async (r) => ({ ...r.toJSON(), reconciliation: await describeRefundForStaff(r, cache) }))
+  );
+  sendSuccess(res, { refunds: items });
+}
+
+/** POST …/refunds/:refundId/check — look the refund up in the provider's records. Never creates a
+ *  refund; an inconclusive lookup leaves it held. */
+export async function checkPaymentRefund(req: Request, res: Response) {
+  const refundDoc = await findPaymentRefund(req);
+  const { refund: updated, outcome } = await reconcileRefund(refundDoc, { actorUserId: req.user!.id, actorRole: req.user!.role });
+  sendSuccess(res, { refund: updated.toJSON(), outcome, reconciliation: await describeRefundForStaff(updated) });
+}
+
+/** POST …/refunds/:refundId/retry — lookup first; only re-issues (same key) when the provider
+ *  definitively has no such refund and still honors the key. */
+export async function retryPaymentRefund(req: Request, res: Response) {
+  const refundDoc = await findPaymentRefund(req);
+  const { refund: updated, outcome } = await reconcileRefund(refundDoc, { actorUserId: req.user!.id, actorRole: req.user!.role, allowReissue: true });
+  sendSuccess(res, { refund: updated.toJSON(), outcome, reconciliation: await describeRefundForStaff(updated) });
+}
+
+/** POST …/refunds/:refundId/resolve — a person settles a held refund with evidence. */
+export async function resolvePaymentRefund(req: Request, res: Response) {
+  const refundDoc = await findPaymentRefund(req);
+  const updated = await resolveHeldRefund(refundDoc, req.body as ResolveRefundInput, { actorUserId: req.user!.id, actorRole: req.user!.role });
+  sendSuccess(res, { refund: updated.toJSON(), reconciliation: await describeRefundForStaff(updated) });
 }
