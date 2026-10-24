@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkLegalConfig, LEGAL_VARIABLES, sitemapWithoutLegalPages } from "./legalConfig.mjs";
+import { checkLegalConfig, LEGAL_VARIABLES, LEGAL_REVIEW_APPROVAL_VARIABLE, sitemapWithoutLegalPages } from "./legalConfig.mjs";
 
 const VALID = {
   VITE_LEGAL_ENTITY_NAME: "Test Entity Ltd",
@@ -19,8 +19,22 @@ test("none provided: allowed, not configured, no problems (pages show 'being fin
   assert.deepEqual(checkLegalConfig(Object.fromEntries(LEGAL_VARIABLES.map((n) => [n, "   "]))), { configured: false, problems: [] });
 });
 
-test("all five valid: configured", () => {
-  assert.deepEqual(checkLegalConfig(VALID), { configured: true, problems: [] });
+test("all five valid without explicit approval: pages stay pending", () => {
+  assert.deepEqual(checkLegalConfig(VALID), { configured: false, problems: [] });
+});
+
+test("all five valid plus explicit approval: configured", () => {
+  assert.deepEqual(checkLegalConfig({ ...VALID, [LEGAL_REVIEW_APPROVAL_VARIABLE]: "true" }), { configured: true, problems: [] });
+});
+
+test("explicit false keeps pages pending", () => {
+  assert.deepEqual(checkLegalConfig({ ...VALID, [LEGAL_REVIEW_APPROVAL_VARIABLE]: "false" }), { configured: false, problems: [] });
+});
+
+test("approval without legal facts fails closed", () => {
+  const result = checkLegalConfig({ [LEGAL_REVIEW_APPROVAL_VARIABLE]: "true" });
+  assert.equal(result.configured, false);
+  assert.ok(result.problems.length > 0);
 });
 
 test("a partial set fails — all five or none", () => {
