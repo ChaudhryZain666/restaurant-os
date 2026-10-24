@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from "@jest/globals";
+import { clearUberDirectTokenCache } from "../deliveryProviders/uberDirectTokenCache.js";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { connectDB } from "../config/db.js";
@@ -49,6 +50,8 @@ beforeAll(async () => {
 
 afterEach(() => {
   jest.restoreAllMocks();
+  // Phase 89 — Uber tokens are cached process-wide; each test starts from an empty cache.
+  clearUberDirectTokenCache();
 });
 
 afterAll(async () => {

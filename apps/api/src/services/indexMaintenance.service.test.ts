@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
 import mongoose from "mongoose";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { connectDB } from "../config/db.js";
 import { closeTestConnections, createTestRestaurant, createTestUser } from "../test-utils/fixtures.js";
 import { LoyaltyAccount } from "../models/LoyaltyAccount.js";
@@ -12,6 +14,21 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeTestConnections();
 }, 20_000);
+
+describe("index maintenance covers every model", () => {
+  // Production builds indexes only through ensureAllIndexes (autoIndex is off there), which only
+  // sees models this service imports. Seven newer models were missing until 24 Oct 2026, so their
+  // indexes — including idempotency/uniqueness ones — were never built in production.
+  it("imports every model file in src/models", () => {
+    const servicesDir = dirname(require.resolve("./indexMaintenance.service.ts"));
+    const modelsDir = join(servicesDir, "..", "models");
+    const source = readFileSync(join(servicesDir, "indexMaintenance.service.ts"), "utf-8");
+    const models = readdirSync(modelsDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts"));
+    expect(models.length).toBeGreaterThan(40);
+    const missing = models.filter((f) => !source.includes(`"../models/${f.replace(/\.ts$/, ".js")}"`));
+    expect(missing).toEqual([]);
+  });
+});
 
 describe("ensureAllIndexes (Phase 49)", () => {
   it("is idempotent — running it twice in a row never throws", async () => {

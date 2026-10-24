@@ -1,14 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { DeliveryProviderError, type CreateDeliveryInput, type DeliveryContact, type DeliveryProvider, type DeliveryQuoteInput, type DeliveryQuoteResult, type ProviderDeliveryResult, type ProviderDeliverySnapshot, type ProviderDeliveryWebhookEvent } from "./DeliveryProvider.js";
 import type { DeliveryStatus } from "@restaurant/types";
+import { evictUberDirectToken, getUberDirectToken, type UberDirectTokenRequest } from "./uberDirectTokenCache.js";
 
 const AUTH_URL = "https://auth.uber.com/oauth/v2/token";
 const API_BASE_URL = "https://api.uber.com/v1";
 const REQUEST_TIMEOUT_MS = 10_000;
-// Uber issues a token valid for 30 days (2,592,000s per their docs); refreshing a full day early
-// is cheap insurance against clock skew/edge-of-expiry races, never a meaningful extra cost against
-// a token this long-lived.
-const TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000;
+// Uber issues a token valid for 30 days (2,592,000s per their docs). Phase 89 — tokens are cached
+// across adapter instances, per account and credentials, in uberDirectTokenCache.ts (which also
+// owns the refresh margin), instead of on each short-lived instance.
+const DEFAULT_TOKEN_LIFETIME_SECONDS = 2_592_000;
 
 /**
  * The first real third-party courier provider selected for this phase — chosen per the mission's
@@ -65,8 +66,6 @@ export class UberDirectProvider implements DeliveryProvider {
   readonly name = "uber_direct";
   readonly signatureHeaderName = "x-uber-signature";
 
-  private cachedToken: { value: string; expiresAt: number } | null = null;
-
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
@@ -75,13 +74,24 @@ export class UberDirectProvider implements DeliveryProvider {
     /** Phase 89 — TEST MODE ONLY (scripts/uberDirectSandboxCheck.ts): ask Uber for its simulated
      *  "robo courier" (test_specifications), so a test-mode delivery runs its full lifecycle with no
      *  real courier. Never set by restaurantDeliveryProvider.ts — production deliveries never send it. */
-    private readonly options: { testRoboCourier?: boolean } = {}
+    private readonly options: {
+      testRoboCourier?: boolean;
+      /** Phase 89 — token-cache isolation scope: the delivery-provider account id (set by
+       *  restaurantDeliveryProvider.ts). Tokens are only ever shared between instances with the
+       *  same scope AND the same client id/secret. */
+      tokenScope?: string;
+    } = {}
   ) {}
 
-  private async getAccessToken(): Promise<string> {
-    if (this.cachedToken && this.cachedToken.expiresAt - TOKEN_REFRESH_MARGIN_MS > Date.now()) {
-      return this.cachedToken.value;
-    }
+  private get tokenRequest(): UberDirectTokenRequest {
+    return { scope: this.options.tokenScope ?? "unscoped", clientId: this.clientId, clientSecret: this.clientSecret };
+  }
+
+  private getAccessToken(): Promise<string> {
+    return getUberDirectToken(this.tokenRequest, () => this.requestNewToken());
+  }
+
+  private async requestNewToken(): Promise<{ value: string; expiresInSeconds: number }> {
     const body = new URLSearchParams({
       client_id: this.clientId,
       client_secret: this.clientSecret,
@@ -92,11 +102,10 @@ export class UberDirectProvider implements DeliveryProvider {
       fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal })
     );
     const json = await this.parseJson<{ access_token?: string; expires_in?: number }>(res, "authenticate");
-    if (!res.ok || !json.access_token) {
+    if (!res.ok || typeof json.access_token !== "string" || !json.access_token) {
       throw new DeliveryProviderError(`Uber Direct authentication failed (HTTP ${res.status})`, "invalid_credentials");
     }
-    this.cachedToken = { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 2_592_000) * 1000 };
-    return json.access_token;
+    return { value: json.access_token, expiresInSeconds: json.expires_in ?? DEFAULT_TOKEN_LIFETIME_SECONDS };
   }
 
   private async withTimeout(run: (signal: AbortSignal) => Promise<Response>): Promise<Response> {
@@ -132,6 +141,9 @@ export class UberDirectProvider implements DeliveryProvider {
         signal,
       })
     );
+    // A token Uber no longer accepts (revoked, rotated credentials) must not stay cached for the
+    // rest of its 30 days; the next call fetches a new one.
+    if (res.status === 401) evictUberDirectToken(this.tokenRequest, token);
     const json = await this.parseJson<T & { code?: string; message?: string }>(res, path);
     if (!res.ok) throw uberError(res.status, json as { code?: string; message?: string });
     return json;
