@@ -279,6 +279,32 @@ infrastructure/production/scripts/smoke-test.sh --expect <commit>
 - **Replace production** (destructive, incident runbook §4):
   `GT_RESTORE_CONFIRM='replace <db>' restore.sh <archive> --replace-production`.
 - Hostinger VPS snapshots cover the server itself (config, certificates, local Redis).
+- **Verify a backup without writing to Atlas** (what the 24 Oct 2026 audit did): start a throwaway
+  `mongo:7` container on an `--internal` Docker network, `mongorestore --archive --gzip
+  --nsInclude='restaurant_platform.*'` the archive into it (read it with `sudo cat`, the files are
+  root-only), compare per-collection counts with production, then remove the container and network.
+
+### Off-site backups
+
+`backup.sh` runs `GT_BACKUP_OFFSITE_CMD` with the dump's path appended, so it must point at
+`scripts/offsite-copy.sh <remote>` — a bare `rclone copy …` would read the file as the destination.
+`offsite-copy.sh` runs rclone from its official image (nothing installed on the host) and only ever
+copies one file; retention on the remote side is the bucket's lifecycle rule.
+
+1. Create a bucket at the chosen provider (separate from DigitalOcean, so one compromised account
+   can't delete both the server and its backups), an access key limited to that bucket, and a
+   lifecycle rule (e.g. delete after 90 days; object lock/versioning if offered).
+2. Write `/opt/garnishtable/config/rclone.conf` (mode 600): an S3-type remote for the bucket, and a
+   `crypt` remote named `offsite` on top of it, so the provider stores only encrypted dumps. Keep the
+   crypt passwords in your password manager too — without them the copies can't be decrypted.
+3. In `edge.env`: `GT_BACKUP_OFFSITE_CMD=/opt/garnishtable/repo/infrastructure/production/scripts/offsite-copy.sh offsite:`
+4. Run `backup.sh` once by hand; expect `off-site copy OK` in its output, then list the remote.
+5. Test a restore from the off-site copy (download, decrypt with rclone, restore into a throwaway
+   container as above).
+
+The systemd units run scripts from `/opt/garnishtable/repo`, which deploys don't move: update that
+checkout (`git -C /opt/garnishtable/repo fetch && git -C /opt/garnishtable/repo checkout <commit>`)
+to pick up script changes such as this one.
 
 ## 8. Monitoring
 

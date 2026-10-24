@@ -420,19 +420,28 @@ function roundCurrency(amount: number): number {
 export async function refundPayment(input: RefundInput): Promise<HydratedDocument<RefundDoc>> {
   const { restaurantId, paymentId, reason, initiatedByUserId, idempotencyKey } = input;
 
-  const existingByKey = await Refund.findOne({ restaurantId, idempotencyKey });
-  if (existingByKey) {
+  // Another request with this key may have claimed it at any point after our first look, so every
+  // refusal below re-checks the key first: a same-key duplicate always gets that request's refund
+  // (the idempotency contract), never an error caused by the refund it duplicates.
+  const sameKeyRefund = async (): Promise<HydratedDocument<RefundDoc> | null> => {
+    const existing = await Refund.findOne({ restaurantId, idempotencyKey });
+    if (!existing) return null;
     // A same-key retry of a held refund reconciles it against the provider's records FIRST — it is
     // only ever re-issued when the provider definitively has no such refund and still honors the key.
-    if (isHeld(existingByKey)) {
-      return (await reconcileRefund(existingByKey, { actorUserId: initiatedByUserId, actorRole: "staff", allowReissue: true })).refund;
+    if (isHeld(existing)) {
+      return (await reconcileRefund(existing, { actorUserId: initiatedByUserId, actorRole: "staff", allowReissue: true })).refund;
     }
-    return existingByKey;
-  }
+    return existing;
+  };
+
+  const existingByKey = await sameKeyRefund();
+  if (existingByKey) return existingByKey;
 
   const payment = await Payment.findOne({ _id: paymentId, restaurantId });
   if (!payment) throw ApiError.notFound("Payment not found");
   if (payment.status !== "paid" && payment.status !== "partially_refunded") {
+    const duplicate = await sameKeyRefund(); // e.g. the same-key request just refunded it in full
+    if (duplicate) return duplicate;
     throw ApiError.badRequest(`Cannot refund a payment with status "${payment.status}"`);
   }
 
@@ -440,6 +449,11 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   // ones with a message that says so — not a confusing "amount must be between…" from the reservation.
   const waiting = await Refund.findOne({ paymentId: payment._id, status: "pending" }).sort({ createdAt: 1 });
   if (waiting) {
+    // The waiting refund may be the same-key request's own claim, created after our first look —
+    // that request's refund is this one's answer, not a conflict (CI flake on PR #10).
+    if (waiting.idempotencyKey === idempotencyKey) return (await sameKeyRefund()) ?? waiting;
+    const duplicate = await sameKeyRefund();
+    if (duplicate) return duplicate;
     throw ApiError.conflict(
       isHeld(waiting) || waiting.providerRefundRef
         ? `A refund of ${waiting.amount} on this payment is waiting to be confirmed by ${waiting.provider}. Resolve it first (order → Payment → Refunds).`
@@ -450,6 +464,8 @@ export async function refundPayment(input: RefundInput): Promise<HydratedDocumen
   const remaining = roundCurrency(payment.amount - payment.totalRefunded);
   const amount = input.amount ?? remaining;
   if (amount <= 0 || amount > remaining) {
+    const duplicate = await sameKeyRefund(); // its amount may be what's now used up
+    if (duplicate) return duplicate;
     throw ApiError.badRequest(`Refund amount must be between 0 and ${remaining} (already refunded: ${payment.totalRefunded})`);
   }
 
