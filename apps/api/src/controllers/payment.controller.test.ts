@@ -501,6 +501,48 @@ describe("refunds", () => {
     }
   });
 
+  it("a same-key duplicate whose first key lookup missed the other request's fresh claim still gets that refund, not a 409 (deterministic version of the race)", async () => {
+    const { order, payment } = await paidOrderWithPayment(40);
+    const key = `refund-same-key-window-${payment.id}`;
+    // The other request's claim, created just after this request looked its key up.
+    const claim = await Refund.create({
+      restaurantId: restaurantA._id,
+      paymentId: payment._id,
+      orderId: payment.orderId,
+      provider: "mock",
+      amount: 10,
+      status: "pending",
+      idempotencyKey: key,
+      providerRefundKey: providerRefundIdempotencyKey(restaurantA.id, key),
+      initiatedByUserId: payment.customerId,
+      amountReserved: true,
+    });
+    await Payment.updateOne({ _id: payment._id }, { $inc: { totalRefunded: 10 } });
+    const findOne = jest.spyOn(Refund, "findOne").mockImplementationOnce((() => Promise.resolve(null)) as never);
+    const refundSpy = jest.spyOn(getMockPaymentProvider(), "refund");
+    try {
+      const res = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ idempotencyKey: key, amount: 10 });
+      expect(res.status).toBe(201);
+      expect(res.body.data.refund.id).toBe(claim.id);
+      expect(refundSpy).not.toHaveBeenCalled();
+      expect((await Payment.findById(payment._id))!.totalRefunded).toBe(10);
+      expect(await Refund.countDocuments({ paymentId: payment._id })).toBe(1);
+
+      // A DIFFERENT key is still refused while that refund is in flight.
+      const other = await request(app)
+        .post(`/api/v1/restaurants/${restaurantA.id}/orders/${order.id}/payments/${payment.id}/refund`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ idempotencyKey: `${key}-other`, amount: 5 });
+      expect(other.status).toBe(409);
+    } finally {
+      findOne.mockRestore();
+      refundSpy.mockRestore();
+    }
+  });
+
   const refundUrl = (orderId: string, paymentId: string) =>
     `/api/v1/restaurants/${restaurantA.id}/orders/${orderId}/payments/${paymentId}/refund`;
 
