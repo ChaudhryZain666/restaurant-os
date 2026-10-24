@@ -50,13 +50,14 @@ ARG VITE_LEGAL_JURISDICTION
 ARG VITE_LEGAL_CONTACT_EMAIL
 ARG VITE_PRIVACY_CONTACT_EMAIL
 ARG VITE_BILLING_CONTACT_EMAIL
+ARG VITE_LEGAL_REVIEW_APPROVED
 RUN sh /usr/local/bin/check-build-env.sh "${APP}" \
  && npm run build:packages \
  && npm run build -w "apps/${APP}" \
  && sh /usr/local/bin/check-build-output.sh "apps/${APP}/dist" \
  && if [ "${APP}" = marketing ]; then \
       # Phase 89 — all five legal values or none get past check-build-env.sh, so one says which.
-      if [ -n "${VITE_LEGAL_ENTITY_NAME}" ]; then echo true; else echo false; fi > "apps/${APP}/dist/.legal-configured"; \
+      if [ "${VITE_LEGAL_REVIEW_APPROVED}" = true ] && [ -n "${VITE_LEGAL_ENTITY_NAME}" ]; then echo true; else echo false; fi > "apps/${APP}/dist/.legal-configured"; \
     fi
 
 FROM nginx:1.27-alpine AS runtime
