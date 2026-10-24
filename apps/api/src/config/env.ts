@@ -282,6 +282,15 @@ const baseEnvSchema = z.object({
   // previously and incorrectly returned the per-customer providerCustomerId in this field's place, a
   // real bug this phase's live verification found and fixed.
   PADDLE_CLIENT_TOKEN: z.string().optional(),
+  // Pre-launch — the "stop selling" switch for a billing rollback (docs/paddle-live-runbook.md):
+  // "false" refuses NEW paid checkouts while webhooks, renewals, cancellations, plan changes and
+  // payment-method updates for existing subscriptions keep working. Switching BILLING_PROVIDER
+  // back to mock is not a rollback once real Paddle subscriptions exist — their webhooks would be
+  // rejected and their cancellations would never reach Paddle.
+  BILLING_CHECKOUT_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
   // No final trial-length commercial decision has been made — this stays configuration, never a
   // hardcoded literal in application code. 14 here is a working default for local development/
   // testing only, not a commercial decision (see docs/commercial-decisions.md). A Plan's own

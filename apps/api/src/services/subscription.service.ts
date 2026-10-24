@@ -153,6 +153,10 @@ async function createCheckoutSessionCore(
   if (getBillingProvider().name === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
     throw ApiError.serviceUnavailable("Paid plan checkout isn't available yet. Your free trial stays active in the meantime.");
   }
+  // Pre-launch — the rollback switch (see env.ts BILLING_CHECKOUT_ENABLED): no new paid checkouts.
+  if (!env.BILLING_CHECKOUT_ENABLED) {
+    throw ApiError.serviceUnavailable("Paid plan checkout is paused right now. Your current plan and trial are unaffected.");
+  }
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
@@ -186,6 +190,17 @@ async function createCheckoutSessionCore(
   }
 
   const provider = getBillingProvider();
+  // Pre-launch — the seed fills every plan with mock_price_* placeholders until
+  // scripts/setPaddlePriceIds.ts loads the real ids. Under Paddle, anything but a real Paddle price
+  // id means the catalog isn't configured: refuse before creating a Paddle customer or opening a
+  // checkout Paddle would reject.
+  if (provider.name === "paddle" && !/^pri_[a-z0-9]+$/.test(pricing.providerPriceId)) {
+    logger.error("paddle checkout refused — the plan's price id is not a Paddle price id (run setPaddlePriceIds)", {
+      planCode: plan.code,
+      billingInterval,
+    });
+    throw ApiError.serviceUnavailable("Paid plan checkout isn't available yet. Your free trial stays active in the meantime.");
+  }
   const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
 
   return provider.createCheckoutSession({
