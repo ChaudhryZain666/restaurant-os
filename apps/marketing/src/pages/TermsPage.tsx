@@ -5,7 +5,7 @@ import { LegalReviewNote } from "../components/LegalReviewNote";
 import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
 import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "October 24, 2026";
 
 export function TermsPage() {
   usePageMeta({
@@ -19,6 +19,11 @@ export function TermsPage() {
         These Terms of Service ("Terms") govern access to and use of GarnishTable (the "Service"), operated by{" "}
         <strong>{LEGAL.entityName}</strong> ("GarnishTable," "we," "us," or "our"). By creating an account, starting a
         trial, or otherwise using the Service, you agree to these Terms. If you do not agree, do not use the Service.
+        <LegalReviewNote>
+          The founder supplied "GarnishTable" as the legal name. Confirm this is the individual's legally recognized
+          name or an appropriately disclosed trading name before publication; do not represent an unregistered company
+          as the operator.
+        </LegalReviewNote>
       </p>
 
       <h2>1. Acceptance of these Terms</h2>
@@ -161,11 +166,11 @@ export function TermsPage() {
 
       <h2>17. Governing law</h2>
       <p>
-        These Terms are governed by the laws of <strong>{LEGAL.jurisdiction}</strong>, without regard to its
-        conflict-of-laws principles.
+        These Terms are intended to be governed by the laws of <strong>{LEGAL.jurisdiction}</strong>, subject to
+        mandatory rules that apply to a particular user or transaction.
         <LegalReviewNote>
-          final governing jurisdiction and dispute-resolution mechanism (courts vs. arbitration) should be confirmed
-          with counsel before launch.
+          Have Pakistan-qualified counsel confirm the governing-law clause, consumer-law implications, enforceability,
+          and appropriate dispute-resolution wording before publication. No court or arbitration venue has been selected.
         </LegalReviewNote>
       </p>
 
