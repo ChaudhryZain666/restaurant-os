@@ -34,11 +34,11 @@ export const LEGAL_CONFIGURED = Boolean(
     import.meta.env.VITE_LEGAL_JURISDICTION?.trim() &&
     import.meta.env.VITE_LEGAL_CONTACT_EMAIL?.trim() &&
     import.meta.env.VITE_PRIVACY_CONTACT_EMAIL?.trim() &&
-    import.meta.env.VITE_BILLING_CONTACT_EMAIL?.trim()
+    import.meta.env.VITE_BILLING_CONTACT_EMAIL?.trim() &&
+    import.meta.env.VITE_LEGAL_REVIEW_APPROVED?.trim().toLowerCase() === "true"
 );
 
-/** The production case where a legal page must show the "being finalized" notice instead. Local
- *  development keeps rendering the full draft with its bracketed markers. */
+/** Production stays pending until legal facts and explicit review approval are present. */
 export const SHOW_LEGAL_PENDING_NOTICE = !LEGAL_CONFIGURED && !import.meta.env.DEV;
 
 function configured(value: string | undefined, devMarker: string): string {
