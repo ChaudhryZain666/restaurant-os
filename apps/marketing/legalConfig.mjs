@@ -13,16 +13,17 @@ export const LEGAL_VARIABLES = [
   "VITE_PRIVACY_CONTACT_EMAIL",
   "VITE_BILLING_CONTACT_EMAIL",
 ];
+export const LEGAL_REVIEW_APPROVAL_VARIABLE = "VITE_LEGAL_REVIEW_APPROVED";
 
 const PLACEHOLDER_VALUE = /\[|\]|localhost|127\.0\.0\.1|\.local\b|example\.(com|org|net)|changeme|todo|tbd/i;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i;
 
 export const LEGAL_NOT_CONFIGURED_WARNING = [
   "",
-  "  ⚠  LEGAL PAGES NOT CONFIGURED — production-readiness blocker",
-  "     None of the five VITE_LEGAL_* values were provided, so /terms, /privacy and /refund-policy",
-  '     will say "Legal documents are being finalized" (noindexed). Provide all five values before',
-  "     launching paid plans. See apps/marketing/src/lib/legal.ts.",
+  "  ⚠  LEGAL PAGES NOT PUBLISHED — production-readiness blocker",
+  "     /terms, /privacy and /refund-policy remain pending/noindexed until all five legal facts are valid",
+  "     AND VITE_LEGAL_REVIEW_APPROVED=true after the review checklist is complete.",
+  "     Never set approval merely to remove this notice. See docs/legal-readiness-review.md.",
   "",
 ].join("\n");
 
@@ -49,7 +50,9 @@ export function sitemapWithoutLegalPages(xml) {
  */
 export function checkLegalConfig(env) {
   const values = LEGAL_VARIABLES.map((name) => [name, (env[name] ?? "").trim()]);
-  if (values.every(([, value]) => !value)) return { configured: false, problems: [] };
+  const approval = (env[LEGAL_REVIEW_APPROVAL_VARIABLE] ?? "").trim().toLowerCase();
+  const allEmpty = values.every(([, value]) => !value);
+  if (allEmpty && approval !== "true") return { configured: false, problems: [] };
 
   const problems = [];
   for (const [name, value] of values) {
@@ -57,5 +60,7 @@ export function checkLegalConfig(env) {
     else if (PLACEHOLDER_VALUE.test(value)) problems.push(`${name} looks like a placeholder`);
     else if (name.endsWith("_EMAIL") && !EMAIL.test(value)) problems.push(`${name} is not an email address`);
   }
-  return { configured: problems.length === 0, problems };
+  if (approval !== "" && approval !== "true" && approval !== "false") problems.push(`${LEGAL_REVIEW_APPROVAL_VARIABLE} must be "true" or "false" when set`);
+  if (approval === "true" && allEmpty) problems.push(`${LEGAL_REVIEW_APPROVAL_VARIABLE}=true requires all five legal facts`);
+  return { configured: problems.length === 0 && approval === "true", problems };
 }
