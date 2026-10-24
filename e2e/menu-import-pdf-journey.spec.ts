@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import mongoose from "mongoose";
+import { PDFDocument } from "pdf-lib";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -60,11 +61,15 @@ test.describe.serial("menu import — PDF journey", () => {
     await expect(page).toHaveURL(/\/menu\/import$/);
     await expect(page.getByRole("heading", { name: "Bring your menu to GarnishTable" })).toBeVisible();
 
+    // A genuine one-page PDF: uploads are parsed (pdf-lib) before a job is created, so a file that is
+    // only a "%PDF-" header is rightly refused as damaged. The mock extractor supplies the menu items.
+    const pdf = await PDFDocument.create();
+    pdf.addPage([612, 792]).drawText("E2E menu", { x: 72, y: 720, size: 24 });
     const pdfInput = page.locator('input[type="file"][accept="application/pdf"]');
     await pdfInput.setInputFiles({
       name: "menu.pdf",
       mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4 a real (if fake-content) PDF for the async import pipeline", "utf-8"),
+      buffer: Buffer.from(await pdf.save()),
     });
 
     // --- Processing: real, honest stage-based progress (never a fake percentage). ---
