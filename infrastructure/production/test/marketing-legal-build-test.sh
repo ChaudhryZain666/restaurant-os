@@ -26,7 +26,7 @@ LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
 
 # 1. No legal values: builds, warns, ships the notice and no placeholders.
 if build "$LOG"; then
-  grep -q "LEGAL PAGES NOT CONFIGURED" "$LOG" && pass "unconfigured: build warns it is a production-readiness blocker" || fail "unconfigured: no warning in the build log"
+  grep -q "LEGAL PAGES NOT PUBLISHED" "$LOG" && pass "unconfigured: build warns it is a production-readiness blocker" || fail "unconfigured: no warning in the build log"
   load_chunks
   [ "${#CHUNKS[@]}" -ge 4 ] || fail "unconfigured: legal page chunks not found"
   if grep -q "$NOTICE" "${CHUNKS[@]}"; then pass "unconfigured: the 'being finalized' notice is in the bundle"; else fail "unconfigured: notice text missing"; fi
@@ -44,7 +44,7 @@ fi
 
 # 3. All five (test) values: the document is built with them.
 if build "$LOG" VITE_LEGAL_ENTITY_NAME="Phase89 Test Entity Ltd" VITE_LEGAL_JURISDICTION=Testland \
-  VITE_LEGAL_CONTACT_EMAIL=legal@garnishtable.com VITE_PRIVACY_CONTACT_EMAIL=privacy@garnishtable.com VITE_BILLING_CONTACT_EMAIL=billing@garnishtable.com; then
+  VITE_LEGAL_CONTACT_EMAIL=legal@garnishtable.com VITE_PRIVACY_CONTACT_EMAIL=privacy@garnishtable.com VITE_BILLING_CONTACT_EMAIL=billing@garnishtable.com VITE_LEGAL_REVIEW_APPROVED=true; then
   grep -q "LEGAL PAGES NOT CONFIGURED" "$LOG" && fail "configured: still warned as unconfigured" || pass "configured: no unconfigured warning"
   load_chunks
   grep -q "Phase89 Test Entity Ltd" "${CHUNKS[@]}" && pass "configured: entity name is in the bundle" || fail "configured: entity name missing"
