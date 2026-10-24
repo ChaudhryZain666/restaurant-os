@@ -5,7 +5,7 @@ import { LegalReviewNote } from "../components/LegalReviewNote";
 import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
 import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "October 24, 2026";
 
 export function PrivacyPage() {
   usePageMeta({
@@ -20,6 +20,10 @@ export function PrivacyPage() {
         <strong>{LEGAL.entityName}</strong>) collects through the Service, how it is used, and the choices available
         to you. It applies to restaurant owners, agencies, invited staff, and the customers who order through a
         restaurant's storefront.
+        <LegalReviewNote>
+          Confirm that "GarnishTable" accurately identifies the individual proprietor or is clearly disclosed as a
+          trading name before publication; it must not imply an unregistered company.
+        </LegalReviewNote>
       </p>
 
       <h2>1. Information we collect</h2>
@@ -74,30 +78,40 @@ export function PrivacyPage() {
       </p>
 
       <h2>4. Service providers</h2>
-      <p>We share information with the following categories of service providers, only as needed to operate the Service:</p>
+      <p>
+        Depending on the features enabled and providers configured for the deployment, information may be processed
+        by service providers in these categories:
+      </p>
       <ul>
-        <li>Payment processors, to process subscription billing and customer order payments.</li>
-        <li>Email delivery providers, to send account and order-related emails.</li>
-        <li>Cloud infrastructure and file-storage providers, to host the application and store uploaded images.</li>
-        <li>Geocoding/mapping providers, where a restaurant has delivery enabled, to validate and route delivery addresses.</li>
+        <li>Database and application infrastructure providers, including MongoDB Atlas and Redis services where configured.</li>
+        <li>S3-compatible object storage providers for uploaded menu and branding images.</li>
+        <li>SMTP email providers for verification, password-reset, invitation, order, and account-related messages.</li>
+        <li>Payment providers configured for restaurant order payments, including Stripe or Safepay where enabled, and Paddle for GarnishTable subscription billing if enabled.</li>
+        <li>LocationIQ for address autocomplete/geocoding when delivery-address lookup is enabled.</li>
+        <li>Anthropic or OpenAI for AI-assisted menu extraction only if that provider is configured and the feature is used.</li>
       </ul>
       <p>
-        These providers are only permitted to use the information we share with them to perform services for us,
-        not for their own independent purposes.
+        Information sent to a provider depends on the feature: for example, address text is sent for geocoding,
+        uploaded menu content may be sent for menu extraction, and billing identifiers/statuses are exchanged with
+        payment providers. Provider processing is subject to their applicable terms and privacy documentation.
         <LegalReviewNote>
-          a complete, named subprocessor list should be published here once the production provider set (payment,
-          email, hosting) is finalized.
+          This is a code-derived list of possible integrations, not a verified list of active subprocessors. Confirm
+          production values, named vendors, data categories, contractual roles, and provider privacy terms; publish
+          only providers actually used. Do not imply every listed integration is active.
         </LegalReviewNote>
       </p>
 
       <h2>5. Data retention</h2>
       <p>
-        We retain account and order information for as long as an account remains active and for a reasonable period
-        afterward to meet legal, accounting, and dispute-resolution obligations. A customer may request deletion of
-        their account (see Section 7); where we retain order records after deletion, it is to preserve the accuracy
-        of a restaurant's own order and financial history, with personal identifiers removed or minimized where
-        possible.
-        <LegalReviewNote>specific retention periods per data category should be finalized and stated here.</LegalReviewNote>
+        We retain personal information for as long as reasonably necessary to provide the Service, maintain account
+        and transaction records, address security incidents and disputes, and meet applicable legal obligations.
+        When information is no longer required, it should be deleted or de-identified where feasible, subject to
+        backups, technical constraints, and lawful retention requirements.
+        <LegalReviewNote>
+          The implementation does not establish a complete, approved retention schedule. Confirm periods for account
+          data, orders, logs, uploaded files, billing records, support requests, backups, and deletion propagation
+          before publication. Do not promise a fixed deletion deadline until verified.
+        </LegalReviewNote>
       </p>
 
       <h2>6. Security</h2>
@@ -118,10 +132,12 @@ export function PrivacyPage() {
 
       <h2>8. International data considerations</h2>
       <p>
-        The Service may be accessed from, and information may be processed in, locations other than your own.{" "}
+        Because the Service relies on third-party infrastructure and integrations, personal information may be
+        processed in countries outside Pakistan, depending on providers and their configured regions.
         <LegalReviewNote>
-          the specific hosting region(s) and any cross-border transfer mechanism (e.g. standard contractual clauses)
-          should be documented here once production infrastructure is finalized.
+          The repository does not establish every live region or transfer safeguard. Verify actual production regions,
+          international recipients, applicable transfer terms, and safeguards before publication; do not claim a
+          specific mechanism without evidence.
         </LegalReviewNote>
       </p>
 
