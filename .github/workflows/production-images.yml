@@ -121,6 +121,7 @@ jobs:
       LEGAL_CONTACT_EMAIL: ${{ vars.GT_LEGAL_CONTACT_EMAIL }}
       PRIVACY_CONTACT_EMAIL: ${{ vars.GT_PRIVACY_CONTACT_EMAIL }}
       BILLING_CONTACT_EMAIL: ${{ vars.GT_BILLING_CONTACT_EMAIL }}
+      LEGAL_REVIEW_APPROVED: ${{ vars.GT_LEGAL_REVIEW_APPROVED }}
     strategy:
       fail-fast: true
       matrix:
@@ -154,7 +155,8 @@ jobs:
           VITE_LEGAL_JURISDICTION=$LEGAL_JURISDICTION
           VITE_LEGAL_CONTACT_EMAIL=$LEGAL_CONTACT_EMAIL
           VITE_PRIVACY_CONTACT_EMAIL=$PRIVACY_CONTACT_EMAIL
-          VITE_BILLING_CONTACT_EMAIL=$BILLING_CONTACT_EMAIL"
+          VITE_BILLING_CONTACT_EMAIL=$BILLING_CONTACT_EMAIL
+          VITE_LEGAL_REVIEW_APPROVED=$LEGAL_REVIEW_APPROVED"
                 if [ -z "$LEGAL_ENTITY_NAME$LEGAL_JURISDICTION$LEGAL_CONTACT_EMAIL$PRIVACY_CONTACT_EMAIL$BILLING_CONTACT_EMAIL" ]; then
                   echo "::warning title=Legal pages not configured::No GT_LEGAL_* repository variables are set — the marketing legal pages will say 'Legal documents are being finalized'. Production-readiness blocker."
                 fi ;;

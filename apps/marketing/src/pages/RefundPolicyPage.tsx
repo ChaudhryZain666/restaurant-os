@@ -5,7 +5,7 @@ import { LegalReviewNote } from "../components/LegalReviewNote";
 import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
 import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "October 24, 2026";
 
 export function RefundPolicyPage() {
   usePageMeta({
@@ -23,10 +23,11 @@ export function RefundPolicyPage() {
 
       <h2>1. Free trials</h2>
       <p>
-        Where a plan includes a free trial, no payment method is required to start it, and no charge occurs during
-        the trial. You may cancel at any time during the trial with immediate effect and no charge. If a trial is not
-        cancelled before it ends, your subscription proceeds as described in Section 2 (if you've chosen a plan) or
-        simply expires with no charge (if no payment has been set up).
+        Where a plan includes a free trial, no payment method is required to start it, and nothing is charged during
+        the trial. You may cancel at any time during the trial with immediate effect and no charge. A trial does not
+        turn into a paid subscription on its own: if you haven't started a paid subscription by the time it ends, it
+        simply expires with no charge. If you choose to start a paid subscription before the trial ends, the trial
+        ends at that point and your first billing period — and its charge — starts immediately.
       </p>
 
       <h2>2. Cancelling a paid subscription</h2>
@@ -58,10 +59,15 @@ export function RefundPolicyPage() {
 
       <h2>5. Refunds</h2>
       <p>
-        <LegalReviewNote>refund policy not yet finalized.</LegalReviewNote> A specific refund window
-        (for example, a number of days after a charge within which a refund may be requested) has not yet been
-        approved and must not be assumed from this page. Until a specific policy is published here, refund requests
-        are reviewed individually — contact us as described in Section 8.
+        Refund requests are reviewed individually based on the circumstances, billing records, service provided,
+        payment-provider rules, and applicable law. Contact us using the billing address in Section 8 and include
+        the account email, transaction reference (if available), and a description of the issue. Do not send full
+        card details by email.
+        <LegalReviewNote>
+          The founder selected case-by-case review and has not approved a fixed discretionary refund window. Have
+          Pakistan-qualified counsel review this policy against applicable law and Paddle's merchant-of-record
+          requirements before publication.
+        </LegalReviewNote>
       </p>
       <p>The following principles do apply regardless of the final policy above:</p>
       <ul>
@@ -73,6 +79,11 @@ export function RefundPolicyPage() {
           <strong>Failed payments.</strong> A failed subscription payment does not immediately cancel your
           subscription. Access continues while the payment is retried; if it cannot be recovered, the subscription
           is cancelled and you are not charged further.
+          <LegalReviewNote>
+            Unverified: GarnishTable keeps access during past_due but does not itself cancel after a fixed period
+            (PAST_DUE_GRACE_PERIOD_DAYS is display-only); the final cancellation comes from Paddle's retry/dunning
+            settings, which are not configured in Paddle Live yet. Confirm that setting, then this sentence.
+          </LegalReviewNote>
         </li>
         <li>
           We do not automatically refund the unused portion of a billing period when you cancel partway through it,
@@ -98,8 +109,7 @@ export function RefundPolicyPage() {
 
       <h2>8. Policy changes and contact</h2>
       <p>
-        We may update this policy from time to time, including once the refund window referenced in Section 5 is
-        finalized. For a billing question, a refund request, or anything else covered by this page, contact us
+        We may update this policy from time to time. For a billing question, a refund request, or anything else covered by this page, contact us
         through our <Link to="/contact">contact page</Link>, or by email to <strong><a href={`mailto:${LEGAL.billingEmail}`}>{LEGAL.billingEmail}</a></strong>.
       </p>
     </LegalPageLayout>

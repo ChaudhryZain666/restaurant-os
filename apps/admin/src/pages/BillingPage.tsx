@@ -5,7 +5,7 @@ import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 import { earlyTrialCheckout, subscribeNowLabel, type CheckoutTarget } from "../lib/trialCheckout";
-import { planChangeBillingNote } from "../lib/planChangeDisclosure";
+import { planChangeBillingNote, planChangeDirection } from "../lib/planChangeDisclosure";
 import { useActiveBusinessId } from "../context/BusinessContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
 import { useCan } from "../hooks/useCan";
@@ -547,7 +547,11 @@ export function BillingPage() {
           subscription,
           newPlan.name,
           formatPrice(newPlan.pricing, subscription.billingInterval),
-          new Date(subscription.currentPeriodEnd).toLocaleDateString()
+          new Date(subscription.currentPeriodEnd).toLocaleDateString(),
+          planChangeDirection(
+            plan.pricing.find((p) => p.interval === subscription.billingInterval)?.amountCents,
+            newPlan.pricing.find((p) => p.interval === subscription.billingInterval)?.amountCents
+          )
         );
         return (
           <ConfirmDialog

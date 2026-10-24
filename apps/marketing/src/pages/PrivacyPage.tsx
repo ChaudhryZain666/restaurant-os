@@ -5,7 +5,7 @@ import { LegalReviewNote } from "../components/LegalReviewNote";
 import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
 import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "October 24, 2026";
 
 export function PrivacyPage() {
   usePageMeta({
@@ -20,6 +20,10 @@ export function PrivacyPage() {
         <strong>{LEGAL.entityName}</strong>) collects through the Service, how it is used, and the choices available
         to you. It applies to restaurant owners, agencies, invited staff, and the customers who order through a
         restaurant's storefront.
+        <LegalReviewNote>
+          Confirm that "GarnishTable" accurately identifies the individual proprietor or is clearly disclosed as a
+          trading name before publication; it must not imply an unregistered company.
+        </LegalReviewNote>
       </p>
 
       <h2>1. Information we collect</h2>
@@ -74,30 +78,45 @@ export function PrivacyPage() {
       </p>
 
       <h2>4. Service providers</h2>
-      <p>We share information with the following categories of service providers, only as needed to operate the Service:</p>
+      <p>The Service currently uses these service providers to process information on our behalf:</p>
       <ul>
-        <li>Payment processors, to process subscription billing and customer order payments.</li>
-        <li>Email delivery providers, to send account and order-related emails.</li>
-        <li>Cloud infrastructure and file-storage providers, to host the application and store uploaded images.</li>
-        <li>Geocoding/mapping providers, where a restaurant has delivery enabled, to validate and route delivery addresses.</li>
+        <li><strong>DigitalOcean</strong> — hosts the servers that run the Service, including its cache, server logs and database backups.</li>
+        <li><strong>MongoDB Atlas</strong> (MongoDB, Inc.) — hosts the database that stores accounts, restaurants, menus and orders.</li>
+        <li><strong>Brevo</strong> — sends account and order emails (verification, password reset, invitations, order updates).</li>
+        <li><strong>Hostinger</strong> — provides our domain name service and the mailboxes that receive email sent to our contact addresses.</li>
+        <li><strong>Anthropic</strong> — reads menu files a restaurant uploads for AI-assisted menu import, only when that feature is used.</li>
       </ul>
       <p>
-        These providers are only permitted to use the information we share with them to perform services for us,
-        not for their own independent purposes.
+        Some pages also load resources directly from third parties, which receive your browser's IP address and
+        standard request information when the page loads: web fonts from <strong>Google Fonts</strong> (our website and
+        the restaurant/agency dashboard), the <strong>Paddle</strong> checkout script (the restaurant/agency dashboard)
+        and map tiles from <strong>OpenStreetMap</strong> (address maps in the dashboard).
+      </p>
+      <p>
+        Paid subscription billing will be processed by <strong>Paddle</strong>, as merchant of record, once paid plans are
+        offered; card payments for restaurant orders by a restaurant's own connected payment provider once online
+        payment is offered. We will update this list before adding a new provider.
         <LegalReviewNote>
-          a complete, named subprocessor list should be published here once the production provider set (payment,
-          email, hosting) is finalized.
+          Verified against production on 24 October 2026 (read-only): the providers above are the ones configured;
+          not configured: Paddle billing, Stripe, Safepay, LocationIQ, OpenAI, object storage, analytics. Still
+          unresolved: each provider's contracting entity, data-processing terms and processing locations (other than
+          those in Section 8), and whether Paddle.js should load before billing is live.
         </LegalReviewNote>
       </p>
-
       <h2>5. Data retention</h2>
       <p>
-        We retain account and order information for as long as an account remains active and for a reasonable period
-        afterward to meet legal, accounting, and dispute-resolution obligations. A customer may request deletion of
-        their account (see Section 7); where we retain order records after deletion, it is to preserve the accuracy
-        of a restaurant's own order and financial history, with personal identifiers removed or minimized where
-        possible.
-        <LegalReviewNote>specific retention periods per data category should be finalized and stated here.</LegalReviewNote>
+        We retain personal information for as long as reasonably necessary to provide the Service, maintain account
+        and transaction records, address security incidents and disputes, and meet applicable legal obligations.
+        When information is no longer required, it should be deleted or de-identified where feasible, subject to
+        backups, technical constraints, and lawful retention requirements. Database backups are taken daily and kept
+        for about 30 days, so deleted information can remain in a backup for up to that long before the backup is
+        removed. Server logs are rotated automatically by size.
+        <LegalReviewNote>
+          Verified (production, read-only): daily backups kept 30 days (GT_BACKUP_KEEP_DAYS=30), stored only on the
+          production server (no off-site copy configured); container logs rotate at 10 MB × 3 files. Still
+          unresolved: an approved retention schedule for accounts, orders, billing records, support requests and
+          uploads; there is no automatic deletion of these today. Do not promise a fixed deletion deadline.
+        </LegalReviewNote>
       </p>
 
       <h2>6. Security</h2>
@@ -112,16 +131,25 @@ export function PrivacyPage() {
       <p>
         Depending on your location, you may have rights to access, correct, or request deletion of your personal
         information, or to object to certain processing. A customer can update their profile and delete their own
-        account directly from their account settings. For any other request, or if you are a restaurant owner,
-        agency, or staff member, contact us as described in Section 10.
+        account directly from their account settings: this removes the name, email address, phone number and saved
+        addresses from the account and disables sign-in. The contact and delivery details given with past orders
+        stay with those orders, as part of the restaurant's order records. For any other request, or if you are a
+        restaurant owner, agency, or staff member (these accounts can't be deleted from the settings page), contact
+        us as described in Section 11.
       </p>
 
       <h2>8. International data considerations</h2>
       <p>
-        The Service may be accessed from, and information may be processed in, locations other than your own.{" "}
+        Because the Service relies on third-party infrastructure and integrations, personal information is
+        processed in countries outside Pakistan. The servers that run the Service, including their cache, logs and
+        backups, are in Frankfurt, Germany. The database is hosted by MongoDB Atlas on Amazon Web Services in
+        Mumbai, India. Other providers listed in Section 4 process information in the locations they operate
+        from.
         <LegalReviewNote>
-          the specific hosting region(s) and any cross-border transfer mechanism (e.g. standard contractual clauses)
-          should be documented here once production infrastructure is finalized.
+          Verified: DigitalOcean droplet region fra1 (Frankfurt) from the server's own metadata; MongoDB Atlas
+          region AWS AP_SOUTH_1 (Mumbai, India) from Atlas's own replica-set member tags (25 Oct 2026). Unresolved: Brevo,
+          Anthropic, Hostinger, Google Fonts, Paddle and OpenStreetMap processing locations, and any transfer
+          safeguards. Do not claim a mechanism without evidence.
         </LegalReviewNote>
       </p>
 

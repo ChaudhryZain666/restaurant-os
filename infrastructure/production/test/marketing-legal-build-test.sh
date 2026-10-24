@@ -18,7 +18,7 @@ load_chunks() { CHUNKS=(); local f; for f in "$DIST"/assets/TermsPage-*.js "$DIS
 build() {  # build <log> [VAR=value …]
   local log="$1"; shift
   (cd "$ROOT" && env -u VITE_LEGAL_ENTITY_NAME -u VITE_LEGAL_JURISDICTION -u VITE_LEGAL_CONTACT_EMAIL \
-    -u VITE_PRIVACY_CONTACT_EMAIL -u VITE_BILLING_CONTACT_EMAIL \
+    -u VITE_PRIVACY_CONTACT_EMAIL -u VITE_BILLING_CONTACT_EMAIL -u VITE_LEGAL_REVIEW_APPROVED \
     VITE_SITE_URL=https://garnishtable.com VITE_STOREFRONT_URL=https://order.garnishtable.com VITE_ADMIN_URL=https://app.garnishtable.com \
     "$@" npm run build -w apps/marketing > "$log" 2>&1)
 }
@@ -26,7 +26,7 @@ LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
 
 # 1. No legal values: builds, warns, ships the notice and no placeholders.
 if build "$LOG"; then
-  grep -q "LEGAL PAGES NOT CONFIGURED" "$LOG" && pass "unconfigured: build warns it is a production-readiness blocker" || fail "unconfigured: no warning in the build log"
+  grep -q "LEGAL PAGES NOT PUBLISHED" "$LOG" && pass "unconfigured: build warns it is a production-readiness blocker" || fail "unconfigured: no warning in the build log"
   load_chunks
   [ "${#CHUNKS[@]}" -ge 4 ] || fail "unconfigured: legal page chunks not found"
   if grep -q "$NOTICE" "${CHUNKS[@]}"; then pass "unconfigured: the 'being finalized' notice is in the bundle"; else fail "unconfigured: notice text missing"; fi
@@ -44,8 +44,8 @@ fi
 
 # 3. All five (test) values: the document is built with them.
 if build "$LOG" VITE_LEGAL_ENTITY_NAME="Phase89 Test Entity Ltd" VITE_LEGAL_JURISDICTION=Testland \
-  VITE_LEGAL_CONTACT_EMAIL=legal@garnishtable.com VITE_PRIVACY_CONTACT_EMAIL=privacy@garnishtable.com VITE_BILLING_CONTACT_EMAIL=billing@garnishtable.com; then
-  grep -q "LEGAL PAGES NOT CONFIGURED" "$LOG" && fail "configured: still warned as unconfigured" || pass "configured: no unconfigured warning"
+  VITE_LEGAL_CONTACT_EMAIL=legal@garnishtable.com VITE_PRIVACY_CONTACT_EMAIL=privacy@garnishtable.com VITE_BILLING_CONTACT_EMAIL=billing@garnishtable.com VITE_LEGAL_REVIEW_APPROVED=true; then
+  grep -q "LEGAL PAGES NOT PUBLISHED" "$LOG" && fail "configured: still warned as unconfigured" || pass "configured: no unconfigured warning"
   load_chunks
   grep -q "Phase89 Test Entity Ltd" "${CHUNKS[@]}" && pass "configured: entity name is in the bundle" || fail "configured: entity name missing"
   [ "$(grep -cE "/(terms|privacy|refund-policy)</loc>" "$DIST/sitemap.xml")" -eq 3 ] && pass "configured: all three legal pages are in sitemap.xml" || fail "configured: legal pages missing from sitemap.xml"

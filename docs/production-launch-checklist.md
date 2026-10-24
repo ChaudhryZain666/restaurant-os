@@ -126,9 +126,11 @@ should close soon after) · 🔵 External dependency.
   and every mock billing route and webhook is refused.
 - 🔴 Create the Paddle production products/prices and write their IDs into the production `Plan`
   documents (`pricing[].providerPriceId` / `providerProductId`) — the seed writes `mock_price_*`
-  placeholders and no tooling sets real IDs. Register the webhook at
-  `https://api.garnishtable.com/api/v1/webhooks/billing/paddle`, and get the checkout domains
-  (`app.` and `agency.`) approved in Paddle.
+  placeholders, which Paddle checkout now refuses. Tooling: `scripts/createPaddleCatalog.ts` then
+  `scripts/setPaddlePriceIds.ts` (both dry runs by default). Register the webhook at
+  `https://api.garnishtable.com/api/v1/webhooks/billing/paddle`, and get the checkout domain approved
+  in Paddle. Full procedure, verified account state (onboarding pending as of 2026-10-24) and
+  rollback: **[paddle-live-runbook.md](paddle-live-runbook.md)**.
 - 🔵 **EXTERNAL INPUT REQUIRED**: confirm the Paddle account is live (not sandbox) — per existing
   project history, Owner + Agency Growth checkout/entitlements were verified live in *sandbox* only;
   production webhook delivery has not yet been proven end-to-end against a real Paddle production
