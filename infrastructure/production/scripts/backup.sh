@@ -51,6 +51,17 @@ if docker volume inspect "${GT_PROJECT}_caddy_data" > /dev/null 2>&1; then
   rm -f "$caddy_out.err"
 fi
 
+# Uploads (STORAGE_DRIVER=disk): logos, menu photos, menu-import files. Kept on this server with the
+# same retention; the off-site copy below stays database-only (images can be large, and a lost logo
+# can be re-uploaded — lost orders can't).
+uploads_out="$BACKUPS/uploads-$stamp.tar.gz"
+if docker volume inspect "${GT_PROJECT}_uploads" > /dev/null 2>&1; then
+  docker run --rm -v "${GT_PROJECT}_uploads:/uploads-data:ro" "$MONGO_IMAGE" tar -czf - -C /uploads-data . > "$uploads_out" 2> "$uploads_out.err" \
+    && log "Uploads OK ($(du -h "$uploads_out" | cut -f1))" \
+    || { rm -f "$uploads_out"; alert "uploads backup FAILED"; log "WARNING: uploads backup failed: $(head -c 300 "$uploads_out.err")"; }
+  rm -f "$uploads_out.err"
+fi
+
 offsite="$(env_value "$GT_EDGE_ENV" GT_BACKUP_OFFSITE_CMD)"
 if [ -n "$offsite" ]; then
   # shellcheck disable=SC2086 # the configured command is deliberately word-split
@@ -59,6 +70,6 @@ else
   log "NOTE: no GT_BACKUP_OFFSITE_CMD configured — this dump exists only on this server"
 fi
 
-find "$BACKUPS" -maxdepth 1 -type f \( -name 'mongo-*.archive.gz' -o -name 'caddy-*.tar.gz' \) -mtime +"$KEEP" -print -delete | sed 's/^/pruned /' >&2
+find "$BACKUPS" -maxdepth 1 -type f \( -name 'mongo-*.archive.gz' -o -name 'caddy-*.tar.gz' -o -name 'uploads-*.tar.gz' \) -mtime +"$KEEP" -print -delete | sed 's/^/pruned /' >&2
 history "backup ok $(basename "$out")"
 echo "$out"

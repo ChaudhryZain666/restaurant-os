@@ -93,6 +93,9 @@ services:
       CUSTOM_DOMAIN_TLS_ASK_PORT: ${CUSTOM_DOMAIN_TLS_ASK_PORT:-4001}
       # Only the private edge network (Caddy and the frontends' nginx) may set X-Forwarded-For.
       TRUST_PROXY: ${GT_EDGE_SUBNET:-172.30.86.0/24}
+    # Uploads when STORAGE_DRIVER=disk (logos, menu photos, menu-import files); archived by backup.sh.
+    volumes:
+      - uploads:/data/uploads
     networks:
       - edge
       - backend
@@ -198,3 +201,4 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  uploads:

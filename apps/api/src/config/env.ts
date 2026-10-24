@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { isValidHostname, normalizeHostname } from "@restaurant/validation";
 import { parseTrustProxy, TrustProxyConfigError } from "./trustProxy.js";
@@ -86,6 +87,13 @@ const baseEnvSchema = z.object({
   STORAGE_ACCESS_KEY: z.string().optional(),
   STORAGE_SECRET_KEY: z.string().optional(),
   STORAGE_PUBLIC_URL: z.string().optional(),
+  // Pre-launch — where uploads (logos, menu photos, menu-import files) live. Unset keeps the original
+  // behaviour: S3/R2 when STORAGE_BUCKET/ACCESS/SECRET are set, else local disk outside production
+  // only. "disk" is the free single-server option for production: files go to STORAGE_DISK_DIR (a
+  // persistent volume — see infrastructure/production/docker-compose.yml) and public images are
+  // served at API_PUBLIC_ORIGIN/files (routes/publicFiles.routes.ts); backup.sh archives the volume.
+  STORAGE_DRIVER: z.enum(["s3", "disk"]).optional(),
+  STORAGE_DISK_DIR: z.string().default("/data/uploads"),
 
   // Email (optional — unset or "console" logs the rendered email instead of sending it; see
   // apps/api/src/email/index.ts. No real provider is wired up yet — this is the extension point).
@@ -322,6 +330,9 @@ const baseEnvSchema = z.object({
  *  triggering the process.exit(1) below (that only ever runs against the module's own top-level
  *  parse of the real process.env). */
 export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
+  if (data.STORAGE_DRIVER === "disk" && !isAbsolute(data.STORAGE_DISK_DIR)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["STORAGE_DISK_DIR"], message: "STORAGE_DRIVER=disk requires an absolute STORAGE_DISK_DIR." });
+  }
   // Phase 85A — validated in every environment, so a typo fails at boot rather than at the first
   // proxied request.
   try {

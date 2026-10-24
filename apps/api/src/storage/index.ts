@@ -15,7 +15,19 @@ let instance: StorageService | null = null;
  *  local-storage.routes.ts at boot, before any request has actually called getStorageService().
  *  Never true in production. */
 export function isLocalDiskStorageActive(): boolean {
+  if (env.STORAGE_DRIVER) return false;
   return env.NODE_ENV !== "production" && (!env.STORAGE_BUCKET || !env.STORAGE_ACCESS_KEY || !env.STORAGE_SECRET_KEY);
+}
+
+/** Pre-launch — the production "disk" driver (STORAGE_DRIVER=disk): uploads on the server's own
+ *  persistent volume, public images served by routes/publicFiles.routes.ts at /files. */
+export function isServerDiskStorageActive(): boolean {
+  return env.STORAGE_DRIVER === "disk";
+}
+
+/** Where the "disk" driver's public images are served from — the API's own public origin. */
+export function serverDiskPublicBaseUrl(): string {
+  return `${env.API_PUBLIC_ORIGIN.replace(/\/$/, "")}/files`;
 }
 
 /** The directory local-disk storage reads/writes under when active. */
@@ -30,11 +42,16 @@ export function getLocalDiskStorageRoot(): string {
 export function getStorageService(): StorageService {
   if (instance) return instance;
 
+  if (env.STORAGE_DRIVER === "disk") {
+    instance = new LocalDiskStorageService({ baseDir: env.STORAGE_DISK_DIR, publicBaseUrl: serverDiskPublicBaseUrl() });
+    return instance;
+  }
+
   if (!env.STORAGE_BUCKET || !env.STORAGE_ACCESS_KEY || !env.STORAGE_SECRET_KEY) {
-    if (env.NODE_ENV === "production") {
+    if (env.NODE_ENV === "production" || env.STORAGE_DRIVER === "s3") {
       throw new Error(
-        "File storage is not configured. Set STORAGE_BUCKET, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY " +
-          "(and STORAGE_ENDPOINT for R2/S3-compatible providers) in the environment."
+        "File storage is not configured. Set STORAGE_DRIVER=disk (files on this server's persistent volume), " +
+          "or STORAGE_BUCKET, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY (and STORAGE_ENDPOINT for R2/S3-compatible providers)."
       );
     }
     logger.warn(

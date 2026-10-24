@@ -17,8 +17,9 @@ import { jsonRateLimitHandler } from "./middleware/rateLimitHandler.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { sitemapRouter } from "./routes/sitemap.routes.js";
 import { localStorageRouter } from "./routes/localStorage.routes.js";
+import { publicFilesRouter } from "./routes/publicFiles.routes.js";
 import { apiRouter } from "./routes/index.js";
-import { isLocalDiskStorageActive } from "./storage/index.js";
+import { isLocalDiskStorageActive, isServerDiskStorageActive } from "./storage/index.js";
 
 const API_VERSION_PREFIX = "/api/v1";
 
@@ -72,6 +73,10 @@ export function createApp() {
 
   // Dev-only: serves LocalDiskStorageService's files back over HTTP when no real S3/R2 storage is
   // configured (never mounted in production — see storage/index.ts's isLocalDiskStorageActive()).
+  // Pre-launch — the production "disk" driver's public images (public image keys only).
+  if (isServerDiskStorageActive()) {
+    app.use("/files", publicFilesRouter);
+  }
   if (isLocalDiskStorageActive()) {
     app.use("/local-storage", localStorageRouter);
   }

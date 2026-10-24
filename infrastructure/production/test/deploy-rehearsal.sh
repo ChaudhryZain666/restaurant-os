@@ -266,6 +266,7 @@ archive=$(tail -1 "$SIM/backup.log")
 check "backup.sh produced a MongoDB dump (mode 600)" "exit $RC, $(basename "$archive") $(du -h "$archive" 2> /dev/null | cut -f1)" \
   sh -c "[ $RC -eq 0 ] && [ -s '$archive' ] && [ \"\$(stat -c %a '$archive')\" = 600 ]"
 check "backup.sh saved the Caddy certificate store" "$(ls "$GT_ROOT/backups" | grep caddy- | head -1)" sh -c "ls '$GT_ROOT'/backups/caddy-*.tar.gz > /dev/null 2>&1"
+check "backup.sh saved the uploads volume" "$(ls "$GT_ROOT/backups" | grep uploads- | head -1)" sh -c "ls '$GT_ROOT'/backups/uploads-*.tar.gz > /dev/null 2>&1"
 grep 'WARNING' "$SIM/backup.log" | while read -r l; do info "backup.sh" "${l:0:300}"; done
 check "Backup log never shows the connection string" "grep mongodb:// in logs" sh -c "! grep -q 'mongodb://' '$SIM/backup.log'"
 step restore "$SCRIPTS/restore.sh" "$archive" --to-db gt_restore_check
