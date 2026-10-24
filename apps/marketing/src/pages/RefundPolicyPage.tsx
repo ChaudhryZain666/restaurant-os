@@ -5,7 +5,7 @@ import { LegalReviewNote } from "../components/LegalReviewNote";
 import { LEGAL, SHOW_LEGAL_PENDING_NOTICE } from "../lib/legal";
 import { LegalPendingNotice } from "../components/LegalPendingNotice";
 
-const LAST_UPDATED = "September 14, 2026";
+const LAST_UPDATED = "October 24, 2026";
 
 export function RefundPolicyPage() {
   usePageMeta({
@@ -58,10 +58,15 @@ export function RefundPolicyPage() {
 
       <h2>5. Refunds</h2>
       <p>
-        <LegalReviewNote>refund policy not yet finalized.</LegalReviewNote> A specific refund window
-        (for example, a number of days after a charge within which a refund may be requested) has not yet been
-        approved and must not be assumed from this page. Until a specific policy is published here, refund requests
-        are reviewed individually — contact us as described in Section 8.
+        Refund requests are reviewed individually based on the circumstances, billing records, service provided,
+        payment-provider rules, and applicable law. Contact us using the billing address in Section 8 and include
+        the account email, transaction reference (if available), and a description of the issue. Do not send full
+        card details by email.
+        <LegalReviewNote>
+          The founder selected case-by-case review and has not approved a fixed discretionary refund window. Have
+          Pakistan-qualified counsel review this policy against applicable law and Paddle's merchant-of-record
+          requirements before publication.
+        </LegalReviewNote>
       </p>
       <p>The following principles do apply regardless of the final policy above:</p>
       <ul>
@@ -98,8 +103,7 @@ export function RefundPolicyPage() {
 
       <h2>8. Policy changes and contact</h2>
       <p>
-        We may update this policy from time to time, including once the refund window referenced in Section 5 is
-        finalized. For a billing question, a refund request, or anything else covered by this page, contact us
+        We may update this policy from time to time. For a billing question, a refund request, or anything else covered by this page, contact us
         through our <Link to="/contact">contact page</Link>, or by email to <strong><a href={`mailto:${LEGAL.billingEmail}`}>{LEGAL.billingEmail}</a></strong>.
       </p>
     </LegalPageLayout>
