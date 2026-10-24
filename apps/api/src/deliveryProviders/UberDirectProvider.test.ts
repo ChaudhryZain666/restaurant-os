@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { clearUberDirectTokenCache } from "./uberDirectTokenCache.js";
 import { createHmac } from "node:crypto";
 import { UberDirectProvider, mapUberStatus } from "./UberDirectProvider.js";
 import type { DeliveryContact } from "./DeliveryProvider.js";
 
 afterEach(() => {
   jest.restoreAllMocks();
+  // Phase 89 — Uber tokens are cached process-wide; each test starts from an empty cache.
+  clearUberDirectTokenCache();
 });
 
 const AUTH_RESPONSE = { access_token: "test-token", expires_in: 2_592_000 };
@@ -332,6 +335,7 @@ describe("UberDirectProvider Phase 89 — structured requests", () => {
   it("an address Uber does not serve is reported as outside the service area, not a malformed address", async () => {
     mockAuthThen(400, { code: "address_undeliverable", message: "The specified location is not in a deliverable area." });
     await expect(provider().getQuote({ pickup, dropoff, currency: "USD" })).rejects.toMatchObject({ code: "outside_service_area" });
+    clearUberDirectTokenCache(); // the next scenario queues its own token response
     mockAuthThen(422, { code: "invalid_params", message: "dropoff_address is invalid" });
     await expect(provider().getQuote({ pickup, dropoff, currency: "USD" })).rejects.toMatchObject({ code: "invalid_address" });
   });
