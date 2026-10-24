@@ -262,17 +262,28 @@ export function refundConfirmationEmail(
   }, brand);
 }
 
-export function trialEndingEmail(to: string, details: { planName: string; trialEndsAt: string; billingUrl: string }): EmailMessage {
+/**
+ * `autoRenews` — only a subscription already backed by the payment provider (a card on file) is
+ * billed when its trial ends. The usual GarnishTable trial needs no card and is never charged
+ * automatically: it simply ends, plan features (analytics, promotions, custom domains) pause, and the
+ * storefront and online ordering keep working (subscription.service.ts / entitlementLimit.service.ts).
+ */
+export function trialEndingEmail(
+  to: string,
+  details: { planName: string; trialEndsAt: string; billingUrl: string; autoRenews: boolean }
+): EmailMessage {
+  const after = details.autoRenews
+    ? "After that, billing begins automatically unless you cancel first."
+    : "You won't be charged automatically. When it ends, plan features such as analytics, promotions and custom domains pause until you choose a paid plan — your storefront and online ordering keep working.";
   return {
     to,
     subject: `Your GarnishTable trial ends ${details.trialEndsAt}`,
     html: layout(
       "Your trial is ending soon",
-      `<p>Your <strong>${escapeHtml(details.planName)}</strong> trial ends on <strong>${escapeHtml(details.trialEndsAt)}</strong>. After that,
-       billing begins automatically unless you cancel first.</p>
+      `<p>Your <strong>${escapeHtml(details.planName)}</strong> trial ends on <strong>${escapeHtml(details.trialEndsAt)}</strong>. ${escapeHtml(after)}</p>
        <p><a href="${escapeHtml(details.billingUrl)}" style="color:#4e1d25;">Review your plan</a></p>`
     ),
-    text: `Your ${details.planName} trial ends on ${details.trialEndsAt}. After that, billing begins automatically unless you cancel first.\n\nReview your plan: ${details.billingUrl}`,
+    text: `Your ${details.planName} trial ends on ${details.trialEndsAt}. ${after}\n\nReview your plan: ${details.billingUrl}`,
   };
 }
 

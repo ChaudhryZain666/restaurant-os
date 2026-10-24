@@ -249,7 +249,12 @@ export async function dispatchBillingLifecycleNotification(payload: BillingLifec
 
   if (payload.kind === "trial_ending" && subscription.trialEnd) {
     await emailService.send(
-      trialEndingEmail(identity.email, { planName, trialEndsAt: subscription.trialEnd.toLocaleDateString(), billingUrl })
+      trialEndingEmail(identity.email, {
+        planName,
+        trialEndsAt: subscription.trialEnd.toLocaleDateString(),
+        billingUrl,
+        autoRenews: Boolean(subscription.providerSubscriptionId),
+      })
     );
   } else if (payload.kind === "past_due") {
     await emailService.send(subscriptionPastDueEmail(identity.email, { planName, billingUrl }));
