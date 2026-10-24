@@ -284,6 +284,21 @@ infrastructure/production/scripts/smoke-test.sh --expect <commit>
   --nsInclude='restaurant_platform.*'` the archive into it (read it with `sudo cat`, the files are
   root-only), compare per-collection counts with production, then remove the container and network.
 
+### File storage (uploads)
+
+Logos, cover images, menu photos and menu-import files need file storage; without it every upload
+fails. Two options in `api.env`:
+
+- **On this server (free):** `STORAGE_DRIVER=disk`. Files go to the API's `uploads` volume
+  (`/data/uploads`), public images are served at `https://<API_HOST>/files/…` (only the
+  `restaurants/<id>/<logo|coverImage|menuItemImage>/<uuid>.<ext>` keys — menu-import files are never
+  served), and `backup.sh` archives the volume nightly (`backups/uploads-*.tar.gz`, local only — the
+  off-site copy stays database-only). Enable: set the variable, then deploy (or recreate the api
+  container) so the volume is mounted. Rolling back to a release without the driver leaves the files
+  in the volume untouched.
+- **S3/R2 bucket:** leave `STORAGE_DRIVER` empty (or `s3`) and set `STORAGE_BUCKET`,
+  `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_ENDPOINT`, `STORAGE_PUBLIC_URL`.
+
 ### Off-site backups
 
 `backup.sh` runs `GT_BACKUP_OFFSITE_CMD` with the dump's path appended, so it must point at

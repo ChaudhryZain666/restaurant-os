@@ -58,6 +58,9 @@ COPY --from=build --chown=node:node /repo/apps/api/dist apps/api/dist
 COPY --from=build --chown=node:node /repo/apps/api/node_modules apps/api/node_modules
 # /api/docs (Swagger) reads ../../docs/openapi.yaml relative to apps/api (app.ts).
 COPY --chown=node:node docs/openapi.yaml docs/openapi.yaml
+# STORAGE_DRIVER=disk keeps uploads here (a named volume in production — docker-compose.yml). A new
+# volume takes this directory's ownership, so the unprivileged node user can write to it.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 USER node
 WORKDIR /repo/apps/api
 EXPOSE 4000
