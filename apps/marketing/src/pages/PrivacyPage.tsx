@@ -142,12 +142,12 @@ export function PrivacyPage() {
       <p>
         Because the Service relies on third-party infrastructure and integrations, personal information is
         processed in countries outside Pakistan. The servers that run the Service, including their cache, logs and
-        backups, are in Frankfurt, Germany. Other providers listed in Section 4 process information in the
-        locations they operate from.
+        backups, are in Frankfurt, Germany. The database is hosted by MongoDB Atlas on Amazon Web Services in
+        Mumbai, India. Other providers listed in Section 4 process information in the locations they operate
+        from.
         <LegalReviewNote>
-          Verified: DigitalOcean droplet region fra1 (Frankfurt) from the server's own metadata. Strongly indicated
-          but unconfirmed: the MongoDB Atlas cluster's nodes resolve to addresses MongoDB's published geofeed places
-          in Mumbai, India — confirm the region in the Atlas console, then name it here. Unresolved: Brevo,
+          Verified: DigitalOcean droplet region fra1 (Frankfurt) from the server's own metadata; MongoDB Atlas
+          region AWS AP_SOUTH_1 (Mumbai, India) from Atlas's own replica-set member tags (25 Oct 2026). Unresolved: Brevo,
           Anthropic, Hostinger, Google Fonts, Paddle and OpenStreetMap processing locations, and any transfer
           safeguards. Do not claim a mechanism without evidence.
         </LegalReviewNote>

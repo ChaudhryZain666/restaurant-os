@@ -38,7 +38,7 @@ geofeed, and the source code at `c9ceca3`. Nothing was changed. Production runs 
 | --- | --- | --- |
 | Hosting | DigitalOcean droplet, region **fra1 (Frankfurt, Germany)** | droplet metadata |
 | Cache | Redis 7 container **on the same droplet** (not a third-party service) | running containers, `REDIS_URL` host |
-| Database | **MongoDB Atlas**; node addresses fall in a MongoDB-owned block that MongoDB's geofeed places in **Mumbai, India** | `MONGO_URI` host, DNS SRV/A, RDAP, geofeed — *region to confirm in the Atlas console* |
+| Database | **MongoDB Atlas on AWS, region `AP_SOUTH_1` (Mumbai, India)**, AZ `aps1-az2` | Atlas's own replica-set member tags (`hello`, 25 Oct 2026); consistent with DNS/RDAP/MongoDB geofeed |
 | Email (sending) | **Brevo** SMTP relay, port 2525; sender domain garnishtable.com | `SMTP_HOST`, `EMAIL_PROVIDER=smtp` |
 | Domain, DNS, mailboxes | **Hostinger** (registrar Hostinger operations, UAB; Hostinger nameservers and MX) | RDAP, DNS NS/MX/SPF |
 | AI menu import | **Anthropic**, live (`claude-sonnet-4-6`); OpenAI not configured | `MENU_EXTRACTION_PROVIDER_MODE=live`, key presence |
@@ -60,7 +60,7 @@ Corrections made to the drafts from this evidence:
 - **Privacy §4** now names the providers actually configured (above) and the browser-loaded third parties, instead of a list of possible integrations; Paddle/order payment providers are described as not yet active.
 - **Privacy §5** states the verified backup retention (about 30 days) and log rotation.
 - **Privacy §7** states what self-deletion removes and that order records keep their details; fixed a wrong cross-reference (Section 10 → 11).
-- **Privacy §8** names Frankfurt, Germany for the servers. India is **not** published until confirmed in Atlas.
+- **Privacy §8** names Frankfurt, Germany for the servers and, since 25 Oct 2026 (Atlas member tags), Mumbai, India for the database.
 - **Refund §1** no longer says a trial "proceeds" to a paid plan or that nothing is ever charged during it: a no-card trial expires, and starting a paid plan mid-trial charges immediately.
 - **Refund §5** failed-payment sentence flagged as unverified (depends on Paddle dunning).
 - **Terms §6** cross-reference fixed (payment providers are Section 8, not 10).
