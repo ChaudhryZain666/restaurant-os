@@ -9,7 +9,8 @@
 #
 # A copy that only lives on this server is not a backup of this server: set GT_BACKUP_OFFSITE_CMD in
 # edge.env to a command that ships the file elsewhere (it is run with the file path appended), e.g.
-#   GT_BACKUP_OFFSITE_CMD=rclone copy --quiet --config /opt/garnishtable/config/rclone.conf
+#   GT_BACKUP_OFFSITE_CMD=/opt/garnishtable/repo/infrastructure/production/scripts/offsite-copy.sh offsite:garnishtable-backups
+# (offsite-copy.sh puts the appended file first, as rclone needs — a bare `rclone copy …` can't be used)
 # and keep Atlas's own backups enabled on a paid tier (see the runbook).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GT_LOG_TAG=backup
