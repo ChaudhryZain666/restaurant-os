@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { getMockBillingProvider } from "../billing/index.js";
 import { connectDB } from "../config/db.js";
+import { env } from "../config/env.js";
 import { Agency } from "../models/Agency.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { AgencyAuditLog } from "../models/AgencyAuditLog.js";
@@ -471,5 +472,57 @@ describe("billing history for a no-card trial (Phase 89)", () => {
     expect((await request(app).post(`/api/v1/billing/mock-checkout/${token}/complete`)).status).not.toBe(200);
     expect(await BillingHistoryEvent.countDocuments({ ownerType: "business", ownerId: business._id })).toBe(3);
     expect(await Subscription.countDocuments({ ownerType: "business", ownerId: business._id, status: { $in: ["trialing", "active", "past_due", "cancelling"] } })).toBe(1);
+  });
+});
+
+describe("checkout launch guards (pre-launch)", () => {
+  async function ownerWithPlan(providerPriceId: string) {
+    const business = await createTestBusiness();
+    const location = await createTestRestaurant({ businessId: business._id });
+    const owner = await createTestUser("restaurant_owner", location._id, { businessId: business._id });
+    const plan = await createTestPlan({ pricing: [{ interval: "monthly", amountCents: 5900, currency: "USD", providerPriceId }] });
+    businessIds.push(business.id);
+    restaurantIds.push(location.id);
+    userIds.push(owner.id as string);
+    planIds.push(plan.id);
+    const checkout = () =>
+      request(app)
+        .post(`/api/v1/businesses/${business.id}/subscription/checkout`)
+        .set("Authorization", `Bearer ${tokenFor(owner)}`)
+        .send({ planCode: plan.code, billingInterval: "monthly" });
+    return { checkout };
+  }
+
+  it("BILLING_CHECKOUT_ENABLED=false pauses new paid checkouts before any provider call", async () => {
+    const { checkout } = await ownerWithPlan("mock_price_paused_m");
+    const createCustomer = jest.spyOn(getMockBillingProvider(), "createCustomer");
+    const saved = env.BILLING_CHECKOUT_ENABLED;
+    env.BILLING_CHECKOUT_ENABLED = false;
+    try {
+      const res = await checkout();
+      expect(res.status).toBe(503);
+      expect(res.body.error.message).toMatch(/paused/);
+      expect(createCustomer).not.toHaveBeenCalled();
+    } finally {
+      env.BILLING_CHECKOUT_ENABLED = saved;
+      createCustomer.mockRestore();
+    }
+    expect((await checkout()).status).toBe(200); // back on: checkout works again
+  });
+
+  it("under Paddle, a plan still carrying a seeded mock_price_* placeholder is refused before any Paddle call", async () => {
+    const { checkout } = await ownerWithPlan("mock_price_not_loaded_m");
+    const provider = getMockBillingProvider();
+    const createCustomer = jest.spyOn(provider, "createCustomer");
+    Object.defineProperty(provider, "name", { value: "paddle", configurable: true });
+    try {
+      const res = await checkout();
+      expect(res.status).toBe(503);
+      expect(res.body.error.message).toMatch(/isn't available yet/);
+      expect(createCustomer).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(provider, "name", { value: "mock", configurable: true });
+      createCustomer.mockRestore();
+    }
   });
 });
