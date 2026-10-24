@@ -25,7 +25,12 @@ export function buildDeliveryProviderFromAccount(account: RestaurantDeliveryProv
   if (account.provider === "uber_direct") {
     const blob = account.encryptedCredentials as EncryptedBlob;
     const creds = decryptCredentials<UberDirectCredentials>(blob);
-    return new UberDirectProvider(creds.clientId, creds.clientSecret, creds.customerId, creds.webhookSigningSecret ?? "");
+    // Phase 89 — the account id scopes the shared token cache (uberDirectTokenCache.ts), so tokens
+    // are reused across these per-call instances but never across accounts.
+    const accountId = (account as { _id?: { toString(): string } })._id?.toString();
+    return new UberDirectProvider(creds.clientId, creds.clientSecret, creds.customerId, creds.webhookSigningSecret ?? "", {
+      tokenScope: accountId ? `account:${accountId}` : undefined,
+    });
   }
   throw new Error(`"${account.provider as string}" is not a BYOC-eligible delivery provider.`);
 }
