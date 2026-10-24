@@ -37,6 +37,13 @@ import "../models/LoyaltyReward.js";
 import "../models/SupportTicket.js";
 import "../models/KnowledgeBase.js";
 import "../models/Counter.js";
+import "../models/ClientCommercialTerms.js";
+import "../models/MarketplaceMenuMapping.js";
+import "../models/MarketplaceWebhookEvent.js";
+import "../models/OAuthConnectState.js";
+import "../models/PrintJob.js";
+import "../models/Printer.js";
+import "../models/RestaurantMarketplaceIntegration.js";
 
 import { User } from "../models/User.js";
 import { Restaurant } from "../models/Restaurant.js";
