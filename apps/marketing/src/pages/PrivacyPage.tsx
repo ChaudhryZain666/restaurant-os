@@ -78,39 +78,44 @@ export function PrivacyPage() {
       </p>
 
       <h2>4. Service providers</h2>
-      <p>
-        Depending on the features enabled and providers configured for the deployment, information may be processed
-        by service providers in these categories:
-      </p>
+      <p>The Service currently uses these service providers to process information on our behalf:</p>
       <ul>
-        <li>Database and application infrastructure providers, including MongoDB Atlas and Redis services where configured.</li>
-        <li>S3-compatible object storage providers for uploaded menu and branding images.</li>
-        <li>SMTP email providers for verification, password-reset, invitation, order, and account-related messages.</li>
-        <li>Payment providers configured for restaurant order payments, including Stripe or Safepay where enabled, and Paddle for GarnishTable subscription billing if enabled.</li>
-        <li>LocationIQ for address autocomplete/geocoding when delivery-address lookup is enabled.</li>
-        <li>Anthropic or OpenAI for AI-assisted menu extraction only if that provider is configured and the feature is used.</li>
+        <li><strong>DigitalOcean</strong> — hosts the servers that run the Service, including its cache, server logs and database backups.</li>
+        <li><strong>MongoDB Atlas</strong> (MongoDB, Inc.) — hosts the database that stores accounts, restaurants, menus and orders.</li>
+        <li><strong>Brevo</strong> — sends account and order emails (verification, password reset, invitations, order updates).</li>
+        <li><strong>Hostinger</strong> — provides our domain name service and the mailboxes that receive email sent to our contact addresses.</li>
+        <li><strong>Anthropic</strong> — reads menu files a restaurant uploads for AI-assisted menu import, only when that feature is used.</li>
       </ul>
       <p>
-        Information sent to a provider depends on the feature: for example, address text is sent for geocoding,
-        uploaded menu content may be sent for menu extraction, and billing identifiers/statuses are exchanged with
-        payment providers. Provider processing is subject to their applicable terms and privacy documentation.
+        Some pages also load resources directly from third parties, which receive your browser's IP address and
+        standard request information when the page loads: web fonts from <strong>Google Fonts</strong> (our website and
+        the restaurant/agency dashboard), the <strong>Paddle</strong> checkout script (the restaurant/agency dashboard)
+        and map tiles from <strong>OpenStreetMap</strong> (address maps in the dashboard).
+      </p>
+      <p>
+        Paid subscription billing will be processed by <strong>Paddle</strong>, as merchant of record, once paid plans are
+        offered; card payments for restaurant orders by a restaurant's own connected payment provider once online
+        payment is offered. We will update this list before adding a new provider.
         <LegalReviewNote>
-          This is a code-derived list of possible integrations, not a verified list of active subprocessors. Confirm
-          production values, named vendors, data categories, contractual roles, and provider privacy terms; publish
-          only providers actually used. Do not imply every listed integration is active.
+          Verified against production on 24 October 2026 (read-only): the providers above are the ones configured;
+          not configured: Paddle billing, Stripe, Safepay, LocationIQ, OpenAI, object storage, analytics. Still
+          unresolved: each provider's contracting entity, data-processing terms and processing locations (other than
+          those in Section 8), and whether Paddle.js should load before billing is live.
         </LegalReviewNote>
       </p>
-
       <h2>5. Data retention</h2>
       <p>
         We retain personal information for as long as reasonably necessary to provide the Service, maintain account
         and transaction records, address security incidents and disputes, and meet applicable legal obligations.
         When information is no longer required, it should be deleted or de-identified where feasible, subject to
-        backups, technical constraints, and lawful retention requirements.
+        backups, technical constraints, and lawful retention requirements. Database backups are taken daily and kept
+        for about 30 days, so deleted information can remain in a backup for up to that long before the backup is
+        removed. Server logs are rotated automatically by size.
         <LegalReviewNote>
-          The implementation does not establish a complete, approved retention schedule. Confirm periods for account
-          data, orders, logs, uploaded files, billing records, support requests, backups, and deletion propagation
-          before publication. Do not promise a fixed deletion deadline until verified.
+          Verified (production, read-only): daily backups kept 30 days (GT_BACKUP_KEEP_DAYS=30), stored only on the
+          production server (no off-site copy configured); container logs rotate at 10 MB × 3 files. Still
+          unresolved: an approved retention schedule for accounts, orders, billing records, support requests and
+          uploads; there is no automatic deletion of these today. Do not promise a fixed deletion deadline.
         </LegalReviewNote>
       </p>
 
@@ -126,18 +131,25 @@ export function PrivacyPage() {
       <p>
         Depending on your location, you may have rights to access, correct, or request deletion of your personal
         information, or to object to certain processing. A customer can update their profile and delete their own
-        account directly from their account settings. For any other request, or if you are a restaurant owner,
-        agency, or staff member, contact us as described in Section 10.
+        account directly from their account settings: this removes the name, email address, phone number and saved
+        addresses from the account and disables sign-in. The contact and delivery details given with past orders
+        stay with those orders, as part of the restaurant's order records. For any other request, or if you are a
+        restaurant owner, agency, or staff member (these accounts can't be deleted from the settings page), contact
+        us as described in Section 11.
       </p>
 
       <h2>8. International data considerations</h2>
       <p>
-        Because the Service relies on third-party infrastructure and integrations, personal information may be
-        processed in countries outside Pakistan, depending on providers and their configured regions.
+        Because the Service relies on third-party infrastructure and integrations, personal information is
+        processed in countries outside Pakistan. The servers that run the Service, including their cache, logs and
+        backups, are in Frankfurt, Germany. Other providers listed in Section 4 process information in the
+        locations they operate from.
         <LegalReviewNote>
-          The repository does not establish every live region or transfer safeguard. Verify actual production regions,
-          international recipients, applicable transfer terms, and safeguards before publication; do not claim a
-          specific mechanism without evidence.
+          Verified: DigitalOcean droplet region fra1 (Frankfurt) from the server's own metadata. Strongly indicated
+          but unconfirmed: the MongoDB Atlas cluster's nodes resolve to addresses MongoDB's published geofeed places
+          in Mumbai, India — confirm the region in the Atlas console, then name it here. Unresolved: Brevo,
+          Anthropic, Hostinger, Google Fonts, Paddle and OpenStreetMap processing locations, and any transfer
+          safeguards. Do not claim a mechanism without evidence.
         </LegalReviewNote>
       </p>
 

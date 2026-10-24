@@ -80,7 +80,7 @@ export function TermsPage() {
         then-current price unless cancelled before the renewal date, consistent with the cancellation behavior
         described in our{" "}
         <Link to="/refund-policy">Refund &amp; Cancellation Policy</Link>. Subscription payments are processed by a
-        third-party payment provider (see Section 10); we do not store your full payment card details.
+        third-party payment provider (see Section 8); we do not store your full payment card details.
       </p>
 
       <h2>7. Customer orders</h2>

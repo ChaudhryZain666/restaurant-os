@@ -23,10 +23,11 @@ export function RefundPolicyPage() {
 
       <h2>1. Free trials</h2>
       <p>
-        Where a plan includes a free trial, no payment method is required to start it, and no charge occurs during
-        the trial. You may cancel at any time during the trial with immediate effect and no charge. If a trial is not
-        cancelled before it ends, your subscription proceeds as described in Section 2 (if you've chosen a plan) or
-        simply expires with no charge (if no payment has been set up).
+        Where a plan includes a free trial, no payment method is required to start it, and nothing is charged during
+        the trial. You may cancel at any time during the trial with immediate effect and no charge. A trial does not
+        turn into a paid subscription on its own: if you haven't started a paid subscription by the time it ends, it
+        simply expires with no charge. If you choose to start a paid subscription before the trial ends, the trial
+        ends at that point and your first billing period — and its charge — starts immediately.
       </p>
 
       <h2>2. Cancelling a paid subscription</h2>
@@ -78,6 +79,11 @@ export function RefundPolicyPage() {
           <strong>Failed payments.</strong> A failed subscription payment does not immediately cancel your
           subscription. Access continues while the payment is retried; if it cannot be recovered, the subscription
           is cancelled and you are not charged further.
+          <LegalReviewNote>
+            Unverified: GarnishTable keeps access during past_due but does not itself cancel after a fixed period
+            (PAST_DUE_GRACE_PERIOD_DAYS is display-only); the final cancellation comes from Paddle's retry/dunning
+            settings, which are not configured in Paddle Live yet. Confirm that setting, then this sentence.
+          </LegalReviewNote>
         </li>
         <li>
           We do not automatically refund the unused portion of a billing period when you cancel partway through it,
