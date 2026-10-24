@@ -47,6 +47,8 @@ jobs:
         run: shellcheck -S error infrastructure/production/scripts/*.sh infrastructure/production/test/*.sh infrastructure/docker/*.sh
       - name: Alert delivery (lib.sh alert, local capture server only)
         run: bash infrastructure/production/test/alert-test.sh
+      - name: Off-site backup copy (offsite-copy.sh argument order, fake docker, no network)
+        run: bash infrastructure/production/test/offsite-copy-test.sh
       - name: Legal pages configuration (all five values or none; "being finalized" build)
         run: |
           npm test -w apps/marketing
