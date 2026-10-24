@@ -151,7 +151,7 @@ async function createCheckoutSessionCore(
   // Phase 85A — the mock provider's checkout "completes" without payment (MockCheckoutPage), so a
   // production deployment that hasn't configured Paddle yet offers trials only, and says so.
   if (getBillingProvider().name === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
-    throw ApiError.serviceUnavailable("Paid plan checkout isn't available yet. Your free trial stays active in the meantime.");
+    throw ApiError.serviceUnavailable("Paid plan checkout isn't open yet, so nothing can be charged. Your storefront and online ordering keep working either way.");
   }
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);

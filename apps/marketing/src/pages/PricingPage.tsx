@@ -61,7 +61,7 @@ export function PricingPage() {
       <MarketingPageHero
         eyebrow="Pricing"
         title="Simple pricing, built to grow with you"
-        description="No credit card required to start your 14-day trial — cancel anytime before it ends."
+        description="No credit card required for your 14-day trial — nothing is charged unless you choose a paid plan."
       />
 
       <Section tone="surface">
