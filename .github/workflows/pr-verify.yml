@@ -111,3 +111,89 @@ jobs:
           s=$(grep -E '^(Tests|Test Suites):' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | tr '\n' ' ')
           echo "::notice title=API tests::${s:-no summary (see log)}"
           grep -E '^\s+● ' "$RUNNER_TEMP/api-tests.log" 2> /dev/null | sort -u | head -20 | while read -r l; do echo "::error title=API test failure::$l"; done
+
+  # The restaurant customer journey in a real browser: signup -> trial -> menu (manual and imported)
+  # -> publish -> storefront -> customer order -> owner manages it, plus tenant isolation and menu
+  # permissions. These Playwright specs live in e2e/ but nothing ran them, so they could drift
+  # unnoticed. Same stack as verify (MongoDB 7 replica set, Redis 7); mock providers only, throwaway
+  # values, no secrets. A separate job, so the verify-step parity check above is unaffected.
+  e2e-journey:
+    name: E2E restaurant journey
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Databases (MongoDB 7 replica set, Redis 7) on localhost
+        run: |
+          docker run -d --name mongo -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all > /dev/null
+          docker run -d --name redis -p 127.0.0.1:6379:6379 redis:7-alpine > /dev/null
+          for i in $(seq 1 60); do docker exec mongo mongosh --quiet --eval 'db.runCommand({ping:1}).ok' > /dev/null 2>&1 && break; sleep 1; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]}).ok'
+          for i in $(seq 1 60); do [ "$(docker exec mongo mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && break; sleep 1; done
+      - name: API configuration (throwaway values, mock providers)
+        run: |
+          a=$(openssl rand -hex 32); b=$(openssl rand -hex 32); k=$(openssl rand -base64 32)
+          echo "::add-mask::$a"; echo "::add-mask::$b"; echo "::add-mask::$k"
+          umask 077
+          cat > apps/api/.env <<EOF
+          MONGO_URI=mongodb://localhost:27017/restaurant_platform
+          REDIS_URL=redis://localhost:6379/1
+          JWT_ACCESS_SECRET=$a
+          JWT_REFRESH_SECRET=$b
+          CREDENTIAL_ENCRYPTION_KEY=$k
+          AUTH_RATE_LIMIT_MAX=10000
+          GLOBAL_RATE_LIMIT_MAX=50000
+          GEOCODING_PROVIDER=test
+          POS_TERMINAL_PROVIDER=mock
+          MENU_EXTRACTION_PROVIDER_MODE=mock
+          EOF
+      - name: Seed plan catalog and demo data
+        run: |
+          npm run seed -w apps/api
+          npm run seed:demo -w apps/api
+      - name: Start API, storefront and admin
+        run: |
+          (cd apps/api && nohup npx tsx src/index.ts > "$RUNNER_TEMP/api.log" 2>&1 &)
+          (cd apps/web && VITE_RESTAURANT_SLUG=demo-restaurant VITE_API_URL=http://localhost:4000 VITE_ADMIN_URL=http://localhost:5174 nohup npx vite --port 5173 --strictPort > "$RUNNER_TEMP/web.log" 2>&1 &)
+          (cd apps/admin && VITE_API_URL=http://localhost:4000 VITE_STOREFRONT_URL=http://localhost:5173 nohup npx vite --port 5174 --strictPort > "$RUNNER_TEMP/admin.log" 2>&1 &)
+          for i in $(seq 1 120); do
+            curl -sf http://localhost:4000/health/live > /dev/null && curl -sf http://localhost:5173 > /dev/null && curl -sf http://localhost:5174 > /dev/null && { echo "servers up"; exit 0; }
+            sleep 2
+          done
+          echo "servers did not start"; tail -40 "$RUNNER_TEMP/api.log"; exit 1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Journey specs
+        run: |
+          npx playwright test --workers=1 --reporter=list \
+            e2e/owner-self-serve-signup.spec.ts \
+            e2e/owner-self-serve-launch-journey.spec.ts \
+            e2e/menu-builder-manual-journey.spec.ts \
+            e2e/menu-import-pdf-journey.spec.ts \
+            e2e/menu-import-photos-journey.spec.ts \
+            e2e/menu-import-url-journey.spec.ts \
+            e2e/storefront.spec.ts \
+            e2e/demo-restaurant-menu-ordering.spec.ts \
+            e2e/full-order-flow.spec.ts \
+            e2e/order-cancellation.spec.ts \
+            e2e/kitchen-realtime.spec.ts \
+            e2e/admin-tenant-isolation.spec.ts \
+            e2e/multi-tenant.spec.ts \
+            e2e/menu-rbac.spec.ts
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-journey-${{ github.run_id }}
+          path: |
+            test-results/
+            ${{ runner.temp }}/*.log
+          retention-days: 7
