@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { timezoneSchema } from "./timezone.js";
 import { WEEKDAYS } from "@restaurant/types";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -12,7 +13,7 @@ export const createRestaurantSchema = z
   .object({
     name: z.string().min(2).max(120),
     slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
-    timezone: z.string().min(1).optional(),
+    timezone: timezoneSchema.optional(),
     currency: z.string().length(3).optional(),
     // Phase 18 — omitted (the default): `owner` is required, and a new Business is created
     // alongside this Restaurant, same as before this field existed. Provided: this Restaurant
@@ -44,7 +45,7 @@ export type CreateRestaurantInput = z.infer<typeof createRestaurantSchema>;
 export const createLocationSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
-  timezone: z.string().min(1).optional(),
+  timezone: timezoneSchema.optional(),
   currency: z.string().length(3).optional(),
   cloneFromLocationId: z.string().min(1).optional(),
 });
@@ -63,7 +64,7 @@ export const businessHoursDaySchema = z
 
 export const restaurantSettingsSchema = z.object({
   currency: z.string().length(3).optional(),
-  timezone: z.string().min(1).optional(),
+  timezone: timezoneSchema.optional(),
   orderingEnabled: z.boolean().optional(),
   pickupEnabled: z.boolean().optional(),
   deliveryEnabled: z.boolean().optional(),

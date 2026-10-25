@@ -29,6 +29,9 @@ import { test, expect } from "@playwright/test";
  * not a demo/seeded one, with a real trial.
  */
 test.describe.serial("owner self-serve signup -> trial activation (Phase 44)", () => {
+  // The owner signs up from Pakistan (UTC+5). Business hours are enforced in the restaurant's own
+  // timezone, so the first location must get the owner's timezone, not the UTC default.
+  test.use({ timezoneId: "Asia/Karachi" });
   let db: mongoose.Connection;
 
   test.beforeAll(async () => {
@@ -114,6 +117,8 @@ test.describe.serial("owner self-serve signup -> trial activation (Phase 44)", (
     const subscription = await db.collection("subscriptions").findOne({ ownerType: "business", ownerId: business!._id });
     expect(subscription?.status).toBe("trialing");
     expect(subscription?.providerSubscriptionId).toBeFalsy();
+    const restaurant = await db.collection("restaurants").findOne({ slug });
+    expect(restaurant?.settings?.timezone).toBe("Asia/Karachi");
 
     // --- Logout/login still works for the freshly created account ---
     await page.getByRole("button", { name: /log ?out/i }).click();

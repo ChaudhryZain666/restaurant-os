@@ -68,6 +68,16 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
   return `${amount}/${interval === "monthly" ? "mo" : "yr"}`;
 }
 
+
+/** The owner's IANA timezone from the browser (undefined when the browser can't tell). */
+function browserTimezone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Phase 44 — the real "an independent restaurant owner starts their own trial" flow, the owner
  * counterpart to AgencySignupWizardPage. Sequences existing, UNMODIFIED endpoints in the order the
@@ -217,7 +227,9 @@ export function OwnerSignupWizardPage() {
     try {
       const { business } = await apiClient.request<{ business: { id: string } }>("/businesses/self-serve", {
         method: "POST",
-        body: { name: restaurantName, slug: restaurantSlug },
+        // Business hours (and so whether orders are accepted) run in the restaurant's timezone: start
+        // from the owner's own instead of UTC. Unrecognised values are ignored server-side.
+        body: { name: restaurantName, slug: restaurantSlug, timezone: browserTimezone() },
       });
       // The JWT still reflects the pre-creation role/businessId — refresh before the subscription
       // call below needs the new businessId to actually be usable (same contract as the agency
