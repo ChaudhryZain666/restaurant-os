@@ -295,6 +295,14 @@ const baseEnvSchema = z.object({
   // testing only, not a commercial decision (see docs/commercial-decisions.md). A Plan's own
   // trialDays (Phase 27) overrides this per-plan when set.
   TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).default(14),
+  // Pre-launch — while production can't take payment (BILLING_PROVIDER=mock), no-card trials don't
+  // lapse (services/trialExtension.service.ts). "false" is the rollback: normal expiry resumes, after
+  // the grace below. When checkout opens, each held trial gets the grace, then normal expiry.
+  TRIAL_EXTENSION_WHILE_CHECKOUT_UNAVAILABLE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  TRIAL_GRACE_AFTER_CHECKOUT_OPENS_DAYS: z.coerce.number().int().min(0).default(7),
   // Phase 27 — how long a "past_due" subscription keeps full access before auto-transitioning to
   // "cancelled" if the provider never reports recovery. No final policy decision has been made
   // (see docs/commercial-decisions.md's "Failed-payment policy" section) — this is a working,

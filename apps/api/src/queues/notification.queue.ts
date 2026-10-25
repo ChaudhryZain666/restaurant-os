@@ -2,6 +2,7 @@ import { Queue, Worker, type Job } from "bullmq";
 import type { SubscriptionOwnerType } from "@restaurant/types";
 import { queueConnection } from "./connection.js";
 import { logger } from "../common/logger.js";
+import { trialExtensionActive } from "../services/trialExtension.service.js";
 import { env } from "../config/env.js";
 import { Order } from "../models/Order.js";
 import { Restaurant } from "../models/Restaurant.js";
@@ -281,6 +282,10 @@ export async function runTrialEndingReminderSweep(): Promise<void> {
     status: "trialing",
     trialEnd: { $gte: now, $lte: windowEnd },
     trialEndingReminderSentAt: { $exists: false },
+    // Pre-launch — while paid checkout is unavailable a no-card trial doesn't end
+    // (services/trialExtension.service.ts), so "your trial ends …" would be false; it is reminded
+    // once checkout opens and the trial gets its grace period.
+    ...(trialExtensionActive() ? { providerSubscriptionId: { $exists: true, $nin: [null, ""] } } : {}),
   }).select("_id ownerType ownerId");
 
   for (const sub of candidates) {

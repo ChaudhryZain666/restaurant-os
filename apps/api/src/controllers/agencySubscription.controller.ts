@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isExtendableTrial, trialExtensionActive } from "../services/trialExtension.service.js";
 import type { HydratedDocument } from "mongoose";
 import type { ChangeSubscriptionPlanInput, CreateSubscriptionInput, PaginationQueryInput } from "@restaurant/validation";
 import { Plan } from "../models/Plan.js";
@@ -33,7 +34,13 @@ async function toResponseShape(subscription: HydratedDocument<SubscriptionDoc>) 
     subscription.status === "past_due"
       ? new Date(subscription.updatedAt.getTime() + env.PAST_DUE_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString()
       : undefined;
-  return { subscription: subscription.toJSON(), plan: plan ? plan.toJSON() : null, pastDueDeadline };
+  return {
+    subscription: subscription.toJSON(),
+    plan: plan ? plan.toJSON() : null,
+    pastDueDeadline,
+    // Pre-launch — this no-card trial won't lapse while paid checkout is unavailable.
+    trialExtended: trialExtensionActive() && isExtendableTrial(subscription),
+  };
 }
 
 export async function getAgencySubscriptionHandler(req: Request, res: Response) {

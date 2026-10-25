@@ -35,6 +35,13 @@ const subscriptionSchema = new Schema(
     // never overloaded onto BillingHistoryEvent, which exists for financial history, not
     // notification bookkeeping.
     trialEndingReminderSentAt: { type: Date },
+    // Pre-launch — set when a no-card trial was held past its trialEnd because paid checkout was
+    // unavailable (services/trialExtension.service.ts); `endedAt` when checkout opened (or the
+    // extension was turned off) and the trial got its grace. originalTrialEnd is never overwritten.
+    trialExtension: {
+      type: new Schema({ extendedAt: Date, originalTrialEnd: Date, endedAt: Date }, { _id: false }),
+      default: undefined,
+    },
     // Phase 89 — `occurred_at` of the newest provider webhook whose period/plan details were
     // applied; an older event arriving late must not roll them back (subscription.service.ts's
     // applyProviderSubscriptionDetails).

@@ -79,6 +79,8 @@ export function BillingPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [pastDueDeadline, setPastDueDeadline] = useState<string | undefined>();
+  // Pre-launch — a no-card trial doesn't lapse while paid checkout is unavailable (API: trialExtended).
+  const [trialExtended, setTrialExtended] = useState(false);
   const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
   const [history, setHistory] = useState<BillingHistoryEvent[]>([]);
   const [selectedPlanCode, setSelectedPlanCode] = useState("");
@@ -95,7 +97,7 @@ export function BillingPage() {
 
   async function reload() {
     const [subRes, plansRes, historyRes] = await Promise.all([
-      apiClient.request<{ subscription: Subscription | null; plan: Plan | null; pastDueDeadline?: string }>(
+      apiClient.request<{ subscription: Subscription | null; plan: Plan | null; pastDueDeadline?: string; trialExtended?: boolean }>(
         `/businesses/${businessId}/subscription`
       ),
       apiClient.request<{ plans: Plan[] }>("/plans"),
@@ -104,6 +106,7 @@ export function BillingPage() {
     setSubscription(subRes.subscription);
     setPlan(subRes.plan);
     setPastDueDeadline(subRes.pastDueDeadline);
+    setTrialExtended(Boolean(subRes.trialExtended));
     const ownerPlans = plansRes.plans.filter((p) => p.type === "OWNER");
     setAvailablePlans(ownerPlans);
     setHistory(historyRes.items);
@@ -337,7 +340,7 @@ export function BillingPage() {
               signup ever takes) previously had NO checkout button anywhere while still trialing —
               createCheckoutSessionCore already allows it server-side ("a local-only trial is
               explicitly ALLOWED to proceed to checkout"), nothing here ever surfaced it. */}
-          {earlyCheckout && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
+          {earlyCheckout && !trialExtended && subscription.trialEnd && isEndingSoon(subscription.trialEnd) && canManage && (
             <Alert tone="warning" className="flex flex-wrap items-center justify-between gap-3">
               <span>
                 Your trial ends {new Date(subscription.trialEnd).toLocaleDateString()}. Subscribe to keep your
@@ -350,7 +353,13 @@ export function BillingPage() {
           )}
 
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            {subscription.trialEnd && subscription.status === "trialing" && (
+            {subscription.status === "trialing" && trialExtended && (
+              <div>
+                <dt className="text-muted">Trial</dt>
+                <dd className="text-foreground">Free until paid plans open — nothing is charged</dd>
+              </div>
+            )}
+            {subscription.trialEnd && subscription.status === "trialing" && !trialExtended && (
               <div>
                 <dt className="text-muted">Trial ends</dt>
                 <dd className="text-foreground">{new Date(subscription.trialEnd).toLocaleDateString()}</dd>

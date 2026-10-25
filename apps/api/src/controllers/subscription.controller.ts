@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { isExtendableTrial, trialExtensionActive } from "../services/trialExtension.service.js";
 import type { HydratedDocument, Types } from "mongoose";
 import type { CreateSubscriptionInput, ChangeSubscriptionPlanInput } from "@restaurant/validation";
 import type { PaginationQueryInput } from "@restaurant/validation";
@@ -72,6 +73,8 @@ async function toResponseShape(subscription: HydratedDocument<SubscriptionDoc>) 
     subscription: subscription.toJSON(),
     plan: plan ? plan.toJSON() : null,
     pastDueDeadline,
+    // Pre-launch — this no-card trial won't lapse while paid checkout is unavailable.
+    trialExtended: trialExtensionActive() && isExtendableTrial(subscription),
   };
 }
 

@@ -6,6 +6,7 @@ import { BillingWebhookEvent } from "../models/BillingWebhookEvent.js";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logger } from "../common/logger.js";
+import { trialExtensionActive } from "./trialExtension.service.js";
 import { env } from "../config/env.js";
 import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { getBillingProvider } from "../billing/index.js";
@@ -992,10 +993,40 @@ export async function processBillingProviderEvent(providerName: string, event: P
  */
 export async function runTrialExpirationSweep(): Promise<void> {
   const now = new Date();
+  const noCard = { $or: [{ providerSubscriptionId: { $exists: false } }, { providerSubscriptionId: null }, { providerSubscriptionId: "" }] };
+
+  if (trialExtensionActive()) {
+    // Pre-launch — nobody can pay yet, so a no-card trial is held rather than expired
+    // (trialExtension.service.ts). Recorded once per trial; trialStart/trialEnd stay as they were.
+    await Subscription.updateMany(
+      { status: "trialing", trialEnd: { $lte: now }, provider: { $ne: "internal" }, "trialExtension.extendedAt": { $exists: false }, ...noCard },
+      [{ $set: { trialExtension: { extendedAt: now, originalTrialEnd: "$trialEnd" } } }]
+    );
+  } else {
+    // Checkout is available again (or the extension was turned off): every held trial gets the grace
+    // from now — never less than its own trialEnd — and a fresh trial-ending reminder, then the normal
+    // expiry below applies to it like any other trial.
+    const graceEnd = new Date(now.getTime() + env.TRIAL_GRACE_AFTER_CHECKOUT_OPENS_DAYS * 24 * 60 * 60 * 1000);
+    const held = await Subscription.find({
+      status: "trialing",
+      "trialExtension.extendedAt": { $exists: true },
+      "trialExtension.endedAt": { $exists: false },
+    }).select("_id trialEnd");
+    for (const sub of held) {
+      const newEnd = sub.trialEnd && sub.trialEnd.getTime() > graceEnd.getTime() ? sub.trialEnd : graceEnd;
+      await Subscription.updateOne(
+        { _id: sub._id, status: "trialing", "trialExtension.endedAt": { $exists: false } },
+        { $set: { trialEnd: newEnd, "trialExtension.endedAt": now }, $unset: { trialEndingReminderSentAt: "" } }
+      );
+    }
+  }
+
   const candidates = await Subscription.find({
     status: "trialing",
     trialEnd: { $lte: now },
     provider: { $ne: "internal" },
+    // While the extension is active only trials with a provider subscription behind them can lapse.
+    ...(trialExtensionActive() ? { providerSubscriptionId: { $exists: true, $nin: [null, ""] } } : {}),
   }).select("_id");
 
   for (const candidate of candidates) {
