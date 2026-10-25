@@ -2,6 +2,7 @@ import type { HydratedDocument } from "mongoose";
 import type { SubscriptionOwnerType, SubscriptionStatus } from "@restaurant/types";
 import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { Plan, type PlanDoc } from "../models/Plan.js";
+import { isExtendableTrial, trialExtensionActive } from "./trialExtension.service.js";
 
 /**
  * Phase 63 — the single, shared source of truth for "is this subscription genuinely live," used by
@@ -28,11 +29,14 @@ export const LIVE_STATUSES: readonly SubscriptionStatus[] = ["trialing", "active
  * check — called from the read/decision path, never assumed to already be reflected in `status`.
  */
 export function isSubscriptionLive(
-  sub: Pick<SubscriptionDoc, "status" | "trialEnd">,
+  sub: Pick<SubscriptionDoc, "status" | "trialEnd"> & Partial<Pick<SubscriptionDoc, "providerSubscriptionId" | "provider">>,
   now: Date = new Date()
 ): boolean {
   if (!LIVE_STATUSES.includes(sub.status as SubscriptionStatus)) return false;
-  if (sub.status === "trialing" && sub.trialEnd && sub.trialEnd.getTime() <= now.getTime()) return false;
+  if (sub.status === "trialing" && sub.trialEnd && sub.trialEnd.getTime() <= now.getTime()) {
+    // Pre-launch — a no-card trial doesn't lapse while nobody can pay (trialExtension.service.ts).
+    return trialExtensionActive() && isExtendableTrial(sub);
+  }
   return true;
 }
 
