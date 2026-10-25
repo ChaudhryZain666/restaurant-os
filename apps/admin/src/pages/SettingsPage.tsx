@@ -57,6 +57,32 @@ function timezoneOptions(): string[] {
   }
 }
 
+/** One timezone picker for every place a restaurant's timezone is edited (Payment and Business Hours
+ *  tabs). Keeps an unlisted stored value selectable rather than silently replacing it. */
+function TimezoneSelect({
+  value,
+  onChange,
+  className,
+  "aria-label": ariaLabel,
+}: {
+  value: string;
+  onChange: (timezone: string) => void;
+  className?: string;
+  "aria-label"?: string;
+}) {
+  const options = timezoneOptions();
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className} aria-label={ariaLabel}>
+      {!options.includes(value) && <option value={value}>{value}</option>}
+      {options.map((tz) => (
+        <option key={tz} value={tz}>
+          {tz}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ComingSoon({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-dashed border-border bg-background p-3 text-xs text-muted">
@@ -651,20 +677,11 @@ export function SettingsPage() {
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Timezone
-              <select
+              <TimezoneSelect
                 value={restaurant.settings.timezone}
-                onChange={(e) => setRestaurant({ ...restaurant, settings: { ...restaurant.settings, timezone: e.target.value } })}
+                onChange={(timezone) => setRestaurant({ ...restaurant, settings: { ...restaurant.settings, timezone } })}
                 className={inputClass}
-              >
-                {!timezoneOptions().includes(restaurant.settings.timezone) && (
-                  <option value={restaurant.settings.timezone}>{restaurant.settings.timezone}</option>
-                )}
-                {timezoneOptions().map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
           </div>
           <ComingSoon>
@@ -677,6 +694,17 @@ export function SettingsPage() {
       {tab === "Business Hours" && (
         <fieldset className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
           <legend className="px-1 text-sm font-medium">Weekly hours</legend>
+          {/* The hours below are in this timezone — it decides when orders are accepted, so it is
+              shown (and editable) right here, not only on the Payment tab. */}
+          <label className="mb-1 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted">These hours are in</span>
+            <TimezoneSelect
+              value={restaurant.settings.timezone}
+              onChange={(timezone) => setRestaurant({ ...restaurant, settings: { ...restaurant.settings, timezone } })}
+              className={inputClass}
+              aria-label="Timezone for business hours"
+            />
+          </label>
           {availability && (
             <div className="mb-1 flex items-center gap-2 text-sm">
               <span className="text-muted">Current status (per your saved settings):</span>

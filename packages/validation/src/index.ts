@@ -31,3 +31,4 @@ export * from "./pos.js";
 export * from "./contact.js";
 export * from "./printer.js";
 export * from "./marketplaceIntegration.js";
+export * from "./timezone.js";

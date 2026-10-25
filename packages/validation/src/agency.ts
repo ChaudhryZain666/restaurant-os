@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { timezoneSchema } from "./timezone.js";
 import { paginationQueryShape, sortableQueryShape } from "./pagination.js";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -69,7 +70,7 @@ export const createAgencyBusinessSchema = z.object({
   ownerEmail: z.string().email(),
   locationName: z.string().min(2).max(120),
   locationSlug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
-  timezone: z.string().min(1).optional(),
+  timezone: timezoneSchema.optional(),
   currency: z.string().length(3).optional(),
   // Phase 28 — "invite" (default, unchanged Phase 25 behavior): owner gets an unusable random
   // password + an email invite token. "direct": agency gets a real, system-generated one-time

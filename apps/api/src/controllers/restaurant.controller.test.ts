@@ -619,6 +619,24 @@ describe("restaurant retrieval", () => {
 });
 
 describe("restaurant settings update (OWNER-only operation)", () => {
+  it("rejects an unknown timezone (it would make every business-hours check — and so every order — fail) and accepts a real one", async () => {
+    const bad = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ settings: { timezone: "Mars/Olympus" } });
+    expect(bad.status).toBe(400);
+    const before = (await Restaurant.findById(restaurantA._id).lean())!.settings!.timezone;
+    expect(before).not.toBe("Mars/Olympus");
+
+    const good = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ settings: { timezone: "Asia/Karachi" } });
+    expect(good.status).toBe(200);
+    expect(good.body.data.restaurant.settings.timezone).toBe("Asia/Karachi");
+    await Restaurant.updateOne({ _id: restaurantA._id }, { $set: { "settings.timezone": before } });
+  });
+
   it("owner can update settings, and a partial settings update does not wipe untouched fields", async () => {
     const res = await request(app)
       .patch(`/api/v1/restaurants/${restaurantA.id}`)

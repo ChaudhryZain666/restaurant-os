@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { browserTimezoneSchema } from "./timezone.js";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -11,7 +12,7 @@ const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const createBusinessSelfServeSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(60).regex(slugPattern, "Use lowercase letters, numbers, and hyphens only"),
-  timezone: z.string().min(1).optional(),
+  timezone: browserTimezoneSchema,
   currency: z.string().length(3).optional(),
 });
 export type CreateBusinessSelfServeInput = z.infer<typeof createBusinessSelfServeSchema>;

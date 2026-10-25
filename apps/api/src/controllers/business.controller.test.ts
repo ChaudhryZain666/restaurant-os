@@ -428,6 +428,31 @@ describe("POST /businesses/self-serve (Phase 37) — individual owner self-provi
     await User.deleteMany({ _id: { $in: cleanupUserIds } });
   });
 
+  // Business hours (and so whether orders are accepted) are evaluated in the restaurant's timezone;
+  // the signup wizard sends the owner's browser timezone so a non-UTC restaurant isn't open at the
+  // wrong hours. An unrecognised value must not block signup — it falls back to the UTC default.
+  async function selfServe(timezone: string | undefined) {
+    const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date(), legalAcceptedAt: new Date() });
+    cleanupUserIds.push(customer._id);
+    const res = await request(app)
+      .post("/api/v1/businesses/self-serve")
+      .set("Authorization", `Bearer ${tokenFor(customer)}`)
+      .send({ name: "Timezone Kitchen", slug: `selfserve-tz-${Date.now()}-${Math.round(Math.random() * 1e6)}`, ...(timezone !== undefined ? { timezone } : {}) });
+    expect(res.status).toBe(201);
+    cleanupBusinessIds.push(new mongoose.Types.ObjectId(res.body.data.business.id));
+    cleanupRestaurantIds.push(new mongoose.Types.ObjectId(res.body.data.restaurant.id));
+    return (await Restaurant.findById(res.body.data.restaurant.id).lean())!.settings!.timezone;
+  }
+
+  it("the first location gets the owner's browser timezone", async () => {
+    expect(await selfServe("Asia/Karachi")).toBe("Asia/Karachi");
+  });
+
+  it("an unrecognised browser timezone is ignored (UTC default), never blocking signup", async () => {
+    expect(await selfServe("Mars/Olympus")).toBe("UTC");
+    expect(await selfServe(undefined)).toBe("UTC");
+  });
+
   it("a verified customer becomes the real owner of a brand-new business + restaurant", async () => {
     const customer = await createTestUser("customer", undefined, { emailVerifiedAt: new Date(), legalAcceptedAt: new Date() });
     cleanupUserIds.push(customer._id);
