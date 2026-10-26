@@ -4,6 +4,8 @@ import { logger } from "../common/logger.js";
 import type { MarketplaceProvider } from "./MarketplaceProvider.js";
 import { MockMarketplaceProvider } from "./MockMarketplaceProvider.js";
 import { UberEatsProvider } from "./UberEatsProvider.js";
+import { resolveUberEatsHosts } from "./uberEatsHosts.js";
+import { marketplaceModeFor, uberEatsConnectionsClosed } from "./providerMode.js";
 import { DoorDashProvider } from "./DoorDashProvider.js";
 import { FoodpandaProvider } from "./FoodpandaProvider.js";
 
@@ -27,7 +29,9 @@ function buildLiveProvider(name: MarketplaceProviderName): MarketplaceProvider {
     if (!env.UBER_EATS_CLIENT_ID || !env.UBER_EATS_CLIENT_SECRET) {
       throw new Error('Provider "uber_eats" requires UBER_EATS_CLIENT_ID and UBER_EATS_CLIENT_SECRET to both be set.');
     }
-    return new UberEatsProvider(env.UBER_EATS_CLIENT_ID, env.UBER_EATS_CLIENT_SECRET);
+    return new UberEatsProvider(env.UBER_EATS_CLIENT_ID, env.UBER_EATS_CLIENT_SECRET, resolveUberEatsHosts(env.UBER_EATS_ENVIRONMENT, env.NODE_ENV), {
+      connectionsOpen: !uberEatsConnectionsClosed(),
+    });
   }
   if (name === "doordash") {
     if (!env.DOORDASH_DEVELOPER_ID || !env.DOORDASH_KEY_ID || !env.DOORDASH_SIGNING_SECRET) {
@@ -61,7 +65,7 @@ export function getMarketplaceProvider(name: MarketplaceProviderName): Marketpla
       "[marketplace] Running MOCK marketplace providers in production — no real Uber Eats/DoorDash/foodpanda orders will be ingested. Set MARKETPLACE_PROVIDER_MODE=live once real provider credentials/approval exist."
     );
   }
-  const built = env.MARKETPLACE_PROVIDER_MODE === "mock" ? new MockMarketplaceProvider(name, env.MOCK_MARKETPLACE_WEBHOOK_SECRET) : buildLiveProvider(name);
+  const built = marketplaceModeFor(name) === "mock" ? new MockMarketplaceProvider(name, env.MOCK_MARKETPLACE_WEBHOOK_SECRET) : buildLiveProvider(name);
   instances.set(name, built);
   return built;
 }

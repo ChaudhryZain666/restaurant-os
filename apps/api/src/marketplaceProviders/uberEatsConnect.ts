@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { env } from "../config/env.js";
+import { resolveUberEatsHosts } from "./uberEatsHosts.js";
+import { marketplaceModeFor } from "./providerMode.js";
 
-const AUTHORIZE_URL = "https://auth.uber.com/oauth/v2/authorize";
-const TOKEN_URL = "https://auth.uber.com/oauth/v2/token";
-const STORES_URL = "https://api.uber.com/v1/eats/stores";
 const REQUEST_TIMEOUT_MS = 10_000;
+
+/** Sandbox or production hosts per UBER_EATS_ENVIRONMENT — never a hardcoded live URL. */
+function hosts() {
+  return resolveUberEatsHosts(env.UBER_EATS_ENVIRONMENT, env.NODE_ENV);
+}
 
 /**
  * Phase 78 — the restaurant-facing side of Uber Eats' OAuth: minting the authorize redirect,
@@ -20,7 +24,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
  * `revokeToken` below is a deliberate no-op rather than a guessed URL. Still requires Uber's own
  * written API approval before any of this can complete against a real account.
  *
- * MARKETPLACE_PROVIDER_MODE=mock (the default everywhere except a deployment that has deliberately
+ * Mock mode (MARKETPLACE_PROVIDER_MODE=mock unless UBER_EATS_PROVIDER_MODE overrides it — the default everywhere except a deployment that has deliberately
  * opted into "live") never leaves this deployment: `buildAuthorizeUrl` redirects straight back to
  * our own callback with a canned code, so the whole real code path — state mint, redirect, callback,
  * exchange, discovery, persistence — is exercisable in tests/Playwright with zero third-party origin
@@ -48,7 +52,7 @@ export interface UberEatsStoreCandidate {
 }
 
 export function buildAuthorizeUrl(state: string, redirectUri: string): string {
-  if (env.MARKETPLACE_PROVIDER_MODE === "mock") {
+  if (marketplaceModeFor("uber_eats") === "mock") {
     const url = new URL(redirectUri);
     url.searchParams.set("code", MOCK_AUTH_CODE);
     url.searchParams.set("state", state);
@@ -57,7 +61,7 @@ export function buildAuthorizeUrl(state: string, redirectUri: string): string {
   if (!env.UBER_EATS_CLIENT_ID) {
     throw new Error("UBER_EATS_CLIENT_ID is not configured on this deployment.");
   }
-  const url = new URL(AUTHORIZE_URL);
+  const url = new URL(`${hosts().authBaseUrl}/oauth/v2/authorize`);
   url.searchParams.set("client_id", env.UBER_EATS_CLIENT_ID);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", redirectUri);
@@ -80,7 +84,7 @@ async function withTimeout(run: (signal: AbortSignal) => Promise<Response>, labe
 }
 
 export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<UberEatsTokenExchangeResult> {
-  if (env.MARKETPLACE_PROVIDER_MODE === "mock") {
+  if (marketplaceModeFor("uber_eats") === "mock") {
     if (code !== MOCK_AUTH_CODE) throw new Error("Invalid or expired authorization code.");
     return { accessToken: `${MOCK_ACCESS_TOKEN_PREFIX}${randomUUID()}`, expiresIn: 2_592_000 };
   }
@@ -95,7 +99,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
     redirect_uri: redirectUri,
   });
   const res = await withTimeout(
-    (signal) => fetch(TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal }),
+    (signal) => fetch(`${hosts().authBaseUrl}/oauth/v2/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal }),
     "exchange the authorization code"
   );
   const json = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; expires_in?: number };
@@ -106,13 +110,13 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
 }
 
 export async function discoverStores(accessToken: string): Promise<UberEatsStoreCandidate[]> {
-  if (env.MARKETPLACE_PROVIDER_MODE === "mock") {
+  if (marketplaceModeFor("uber_eats") === "mock") {
     if (!accessToken.startsWith(MOCK_ACCESS_TOKEN_PREFIX)) throw new Error("Invalid access token.");
     const suffix = accessToken.slice(MOCK_ACCESS_TOKEN_PREFIX.length);
     return [{ externalStoreId: `mock_store_${suffix}`, displayName: "Mock Restaurant (Uber Eats)" }];
   }
   const res = await withTimeout(
-    (signal) => fetch(STORES_URL, { headers: { Authorization: `Bearer ${accessToken}` }, signal }),
+    (signal) => fetch(`${hosts().apiBaseUrl}/v1/eats/stores`, { headers: { Authorization: `Bearer ${accessToken}` }, signal }),
     "discover stores"
   );
   const json = (await res.json().catch(() => ({}))) as { stores?: { store_id?: string; name?: string }[] };
@@ -120,6 +124,34 @@ export async function discoverStores(accessToken: string): Promise<UberEatsStore
   return (json.stores ?? [])
     .filter((s): s is { store_id: string; name?: string } => Boolean(s.store_id))
     .map((s) => ({ externalStoreId: s.store_id, displayName: s.name ?? s.store_id }));
+}
+
+/**
+ * Activates GarnishTable's integration for the chosen store: POST /v1/eats/stores/{store_id}/pos_data
+ * with the merchant's eats.pos_provisioning token (Integration Activation guide). Without it Uber
+ * sends no webhooks for the store, and `is_order_manager: true` is what allows this app to accept
+ * and deny its orders. Uber's reference lists these fields as query parameters but its example sends
+ * a JSON body, so both carry them; the sandbox check confirms which Uber honours.
+ */
+export async function activateStore(accessToken: string, externalStoreId: string, integratorStoreId: string): Promise<void> {
+  if (marketplaceModeFor("uber_eats") === "mock") {
+    if (!accessToken.startsWith(MOCK_ACCESS_TOKEN_PREFIX)) throw new Error("Invalid access token.");
+    return;
+  }
+  const url = new URL(`${hosts().apiBaseUrl}/v1/eats/stores/${encodeURIComponent(externalStoreId)}/pos_data`);
+  url.searchParams.set("is_order_manager", "true");
+  url.searchParams.set("integrator_store_id", integratorStoreId);
+  const res = await withTimeout(
+    (signal) =>
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ is_order_manager: true, integrator_store_id: integratorStoreId }),
+        signal,
+      }),
+    "activate the store"
+  );
+  if (!res.ok) throw new Error(`Uber Eats store activation failed (HTTP ${res.status}).`);
 }
 
 /**

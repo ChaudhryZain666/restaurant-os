@@ -104,6 +104,8 @@ describe("POST /webhooks/marketplace/:provider — auth", () => {
     const { rawBody, signatureHeader } = mock.signPayload(payload);
     const res = await post("uber_eats", rawBody, signatureHeader);
     expect(res.status).toBe(200);
+    // Uber's webhook contract: acknowledge with HTTP 200 and an empty body.
+    expect(res.text).toBe("");
   });
 });
 

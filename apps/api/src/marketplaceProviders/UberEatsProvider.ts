@@ -8,80 +8,76 @@ import {
   type PushMenuResult,
 } from "./MarketplaceProvider.js";
 import type { MarketplaceProviderCapabilities } from "@restaurant/types";
+import { UBER_EATS_HOSTS, type UberEatsHosts } from "./uberEatsHosts.js";
 
-const AUTH_URL = "https://auth.uber.com/oauth/v2/token";
-const API_BASE_URL = "https://api.uber.com/v1/eats";
 const REQUEST_TIMEOUT_MS = 10_000;
 // Uber issues a token valid ~30 days per their docs; refreshing a day early is cheap insurance
 // against clock-skew/edge-of-expiry races — same margin UberDirectProvider.ts uses for the
 // (different) Uber Direct token.
 const TOKEN_REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000;
+// Only the scopes this adapter's calls need: eats.store (menu upload, item update) and eats.order
+// (order details, accept, deny). Asking for a scope the app hasn't been granted fails the whole
+// token request, so unused scopes (eats.report) are deliberately not requested.
+const CLIENT_CREDENTIALS_SCOPE = "eats.store eats.order";
+// Uber's documented example of an open-ended item suspension (Update Menu Item reference).
+const SUSPEND_INDEFINITELY_UNTIL = 8_640_000_000;
+// MultiLanguageText takes exactly one translation; Uber's own examples use en_us.
+const MENU_LOCALE = "en_us";
+const NEW_ORDER_EVENT_TYPES = new Set(["orders.notification", "orders.scheduled.notification"]);
+const UBER_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /**
  * Uber Eats Marketplace — order-ingestion, distinct from deliveryProviders/UberDirectProvider.ts
  * (courier dispatch; a different Uber product with a different API entirely, do not conflate).
  *
- * Researched directly against Uber's own current developer documentation
- * (developer.uber.com/docs/eats/introduction, .../guides/authentication, .../guides/webhooks) on
- * 2026-09-19, not invented. What follows is explicit about VERIFIED (read directly from those pages)
- * versus reasonably INFERRED (a documented convention, not independently confirmed against a live
- * payload):
+ * Every path and field below was checked on 2026-10-25 against Uber's API reference
+ * (developer.uber.com/docs/eats/references/api/...) and the sandbox, authentication and webhooks
+ * guides:
+ *  - Auth: POST {auth}/oauth/v2/token, grant_type=client_credentials, scopes eats.store + eats.order.
+ *    Tokens last 30 days and token creation is limited to 100/hour, so the token is cached.
+ *  - Orders: GET /v2/eats/order/{order_id}; POST /v1/eats/orders/{order_id}/accept_pos_order
+ *    ({reason}); POST /v1/eats/orders/{order_id}/deny_pos_order ({reason: {explanation, code}}).
+ *    Accept/deny return 204 with an empty body and require this app to be the store's order manager.
+ *  - Menu: PUT /v2/eats/stores/{store_id}/menus (MenuConfiguration, 204); item availability via
+ *    POST /v2/eats/stores/{store_id}/menus/items/{item_id} with suspension_info (204). Menu ids are
+ *    chosen by us, so an uploaded item's id is what comes back as cart.items[].id on an order.
+ *  - Webhooks: X-Uber-Signature = lowercase-hex HMAC-SHA256 of the raw body keyed with the client
+ *    secret; the store is meta.user_id and the order is meta.resource_id.
  *
- * VERIFIED:
- *  - Auth: POST https://auth.uber.com/oauth/v2/token, grant_type=client_credentials, form-encoded
- *    client_id/client_secret/scope — server-to-server ops use scopes eats.store/eats.order/
- *    eats.report. Returns a bearer access_token valid ~30 days. "Your app operates on stores you're
- *    already connected to using your app's credentials" — i.e. this one platform-level token
- *    authorizes calls for every store that has separately completed the per-store
- *    `authorization_code` merchant-activation flow (not implemented by this adapter — see
- *    restaurantMarketplaceIntegration.controller.ts's connect flow for where that redirect lives).
- *  - Webhook signature: header `X-Uber-Signature`, a lowercase-hex HMAC-SHA256 of the raw request
- *    body using the app's client secret as the key.
- *  - Webhook event types: `orders.notification` (new order), `orders.cancel`/`orders.failure`
- *    (cancellation), `store.provisioned`/`store.deprovisioned`/`store.status.changed`. The webhook
- *    body carries `resource_href`/`resource_id`, not the full order — the full order is fetched
- *    separately via a GET.
- *  - Timing: the webhook receiver must return HTTP 200 with an empty body IMMEDIATELY on receipt,
- *    then within 11.5 minutes call an accept/deny endpoint or the order auto-cancels. This is why
- *    marketplaceWebhook.controller.ts acknowledges before enqueuing the ingestion job rather than
- *    processing inline, and why that job is enqueued at elevated BullMQ priority.
- *  - "Access to these APIs may require written approval from Uber" — a real commercial/approval
- *    gate this adapter cannot work around, same class of constraint UberDirectProvider.ts already
- *    documents for Uber Direct.
- *
- * NOT independently verified against a live payload (a reasonable, documented inference — never
- * invented — but not exercised against real traffic):
- *  - The exact JSON field names of a fetched order's line items/modifiers/customer/address, and of
- *    the menu-push request/response — Uber's docs describe the general "stores, menus, orders"
- *    surface but this adapter's precise request/response mapping was written against the
- *    documented shape, not confirmed against a real account (none was available).
- *  - The exact accept/deny endpoint paths (`/accept_pos_order`/`/deny_pos_order`, per the docs'
- *    accept/deny-within-11.5-minutes description) and the exact per-item availability-toggle path.
- *
- * Like every payments/delivery adapter in this codebase with the same "researched, never run
- * against a live account" status, this has never been exercised against Uber's own sandbox — no
- * developer-portal credentials were available when it was written.
+ * Still unproven against a real sandbox account (no TESTING app credentials yet): whether an empty
+ * tax_info object is accepted on menu items, and the exact accepted fields of the pos_data
+ * activation call (see uberEatsConnect.ts). scripts/uberEatsSandboxCheck.ts exercises both.
  */
 export class UberEatsProvider implements MarketplaceProvider {
   readonly name = "uber_eats" as const;
   readonly signatureHeaderName = "X-Uber-Signature";
-  readonly capabilities: MarketplaceProviderCapabilities = {
-    menuSync: true,
-    itemAvailabilityUpdate: true,
-    orderAccept: true,
-    orderDeny: true,
-    // Phase 78 — the one provider with a real merchant-facing authorization_code OAuth flow (see
-    // marketplaceProviders/uberEatsConnect.ts). Still requires Uber's own written API approval before
-    // a restaurant can complete a real connection — see this file's own header comment.
-    connect: { mechanism: "oauth_redirect" },
-  };
+  readonly capabilities: MarketplaceProviderCapabilities;
 
   private cachedToken: { value: string; expiresAt: number } | null = null;
 
   constructor(
     private readonly clientId: string,
-    private readonly clientSecret: string
-  ) {}
+    private readonly clientSecret: string,
+    // Sandbox unless a caller explicitly passes production hosts (see uberEatsHosts.ts).
+    private readonly hosts: UberEatsHosts = UBER_EATS_HOSTS.sandbox,
+    options: { connectionsOpen?: boolean } = {}
+  ) {
+    this.capabilities = {
+      menuSync: true,
+      itemAvailabilityUpdate: true,
+      orderAccept: true,
+      orderDeny: true,
+      // Phase 78 — the one provider with a real merchant-facing authorization_code OAuth flow (see
+      // marketplaceProviders/uberEatsConnect.ts). Closed (not_available) while a production
+      // deployment runs this adapter against Uber's sandbox — see providerMode.ts.
+      connect: options.connectionsOpen === false ? { mechanism: "not_available" } : { mechanism: "oauth_redirect" },
+    };
+  }
+
+  get environment() {
+    return this.hosts.environment;
+  }
 
   private async getAccessToken(): Promise<string> {
     if (this.cachedToken && this.cachedToken.expiresAt - TOKEN_REFRESH_MARGIN_MS > Date.now()) {
@@ -91,11 +87,14 @@ export class UberEatsProvider implements MarketplaceProvider {
       client_id: this.clientId,
       client_secret: this.clientSecret,
       grant_type: "client_credentials",
-      scope: "eats.store eats.order eats.report",
+      scope: CLIENT_CREDENTIALS_SCOPE,
     });
     const res = await this.withTimeout((signal) =>
-      fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal })
+      fetch(`${this.hosts.authBaseUrl}/oauth/v2/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, signal })
     );
+    if (res.status === 429) {
+      throw new MarketplaceProviderError("Uber Eats token rate limit reached (100 tokens/hour)", "rate_limited");
+    }
     const json = await this.parseJson<{ access_token?: string; expires_in?: number }>(res, "authenticate");
     if (!res.ok || !json.access_token) {
       throw new MarketplaceProviderError(`Uber Eats authentication failed (HTTP ${res.status})`, "invalid_credentials");
@@ -127,16 +126,23 @@ export class UberEatsProvider implements MarketplaceProvider {
     }
   }
 
-  private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  /** `expectBody: false` is for Uber's 204 No Content endpoints (accept, deny, menu upload, item
+   *  update) — their success has no JSON to parse. A 401 drops the cached token and retries once
+   *  with a fresh one, in case the cached token was revoked or invalidated early. */
+  private async request<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown, expectBody = true, retried = false): Promise<T> {
     const token = await this.getAccessToken();
     const res = await this.withTimeout((signal) =>
-      fetch(`${API_BASE_URL}${path}`, {
+      fetch(`${this.hosts.apiBaseUrl}${path}`, {
         method,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: body ? JSON.stringify(body) : undefined,
         signal,
       })
     );
+    if (res.status === 401 && !retried) {
+      this.cachedToken = null;
+      return this.request<T>(method, path, body, expectBody, true);
+    }
     if (!res.ok) {
       const json = await this.parseJson<{ message?: string }>(res, path).catch(() => ({}) as { message?: string });
       const message = json.message ?? `HTTP ${res.status}`;
@@ -145,6 +151,7 @@ export class UberEatsProvider implements MarketplaceProvider {
       if (res.status === 404) throw new MarketplaceProviderError(`Uber Eats: ${message}`, "not_found");
       throw new MarketplaceProviderError(`Uber Eats error: ${message}`, "provider_error");
     }
+    if (!expectBody) return undefined as T;
     return this.parseJson<T>(res, path);
   }
 
@@ -155,6 +162,13 @@ export class UberEatsProvider implements MarketplaceProvider {
     } catch {
       return false;
     }
+  }
+
+  /** GET /v1/eats/stores with the app's client_credentials token — the stores provisioned to this
+   *  app (eats.store). Read-only; used by the sandbox check to list the test stores. */
+  async listStores(): Promise<{ storeId: string; name?: string }[]> {
+    const res = await this.request<{ stores?: { store_id?: string; name?: string }[] }>("GET", "/v1/eats/stores");
+    return (res?.stores ?? []).filter((s) => typeof s.store_id === "string").map((s) => ({ storeId: s.store_id!, name: s.name }));
   }
 
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): MarketplaceWebhookEvent | null {
@@ -170,44 +184,51 @@ export class UberEatsProvider implements MarketplaceProvider {
     } catch {
       return null;
     }
-    if (!parsed.event_id || !parsed.event_type || !parsed.store_id) return null;
+    const storeId = parsed?.meta?.user_id;
+    if (typeof parsed?.event_id !== "string" || typeof parsed.event_type !== "string" || typeof storeId !== "string" || !storeId) return null;
+
+    // Only a new order is ingested. Cancellations, store provisioning and status changes are
+    // acknowledged without an order id, so they are never mistaken for an order to create/accept.
+    const resourceId = parsed.meta?.resource_id;
+    const isNewOrder = NEW_ORDER_EVENT_TYPES.has(parsed.event_type) && typeof resourceId === "string" && resourceId.length > 0;
 
     return {
       eventId: parsed.event_id,
       eventType: parsed.event_type,
-      externalStoreId: parsed.store_id,
-      externalOrderId: parsed.resource_id,
+      externalStoreId: storeId,
+      externalOrderId: isNewOrder ? resourceId : undefined,
       raw: parsed,
     };
   }
 
   async fetchOrder(externalStoreId: string, externalOrderId: string): Promise<MarketplaceOrder> {
-    const res = await this.request<UberEatsOrderResponse>("GET", `/stores/${externalStoreId}/orders/${externalOrderId}`);
+    const res = await this.request<UberEatsOrderResponse>("GET", `/v2/eats/order/${encodeURIComponent(externalOrderId)}`);
+    if (!res || typeof res.id !== "string" || !Array.isArray(res.cart?.items)) {
+      throw new MarketplaceProviderError("Uber Eats returned an order without an id or cart items", "provider_error");
+    }
+    // Tenant isolation: the order must belong to the store this integration is connected to.
+    if (res.store?.id && res.store.id !== externalStoreId) {
+      throw new MarketplaceProviderError("Uber Eats order belongs to a different store than this integration", "provider_error");
+    }
+    const location = res.eater?.delivery?.location;
     return {
       externalOrderId: res.id,
       externalStoreId,
-      externalStatus: res.current_state,
-      externalCreatedAt: res.placed_at,
+      externalStatus: res.current_state ?? "UNKNOWN",
+      externalCreatedAt: res.placed_at ?? "",
       customerName: res.eater?.first_name,
       customerPhone: res.eater?.phone,
       orderType: res.type === "DELIVERY_BY_UBER" || res.type === "DELIVERY_BY_RESTAURANT" ? "delivery" : "pickup",
-      deliveryAddress: res.delivery?.location
-        ? {
-            line1: res.delivery.location.street_address ?? "",
-            city: res.delivery.location.city,
-            state: res.delivery.location.state,
-            postalCode: res.delivery.location.zip_code,
-            country: res.delivery.location.country,
-          }
-        : undefined,
-      items: (res.cart?.items ?? []).map((item) => ({
-        externalItemId: item.instance_id,
+      deliveryAddress: location?.street_address ? { line1: location.street_address } : undefined,
+      items: res.cart.items.map((item) => ({
+        // `id` is the menu item id we uploaded (instance_id is per-cart), so it's what maps back.
+        externalItemId: item.id,
         name: item.title,
         quantity: item.quantity,
         unitPriceCents: item.price?.unit_price?.amount ?? 0,
         modifiers: (item.selected_modifier_groups ?? []).flatMap((g) =>
           (g.selected_items ?? []).map((m) => ({
-            externalOptionId: m.instance_id,
+            externalOptionId: m.id,
             name: m.title,
             priceCents: m.price?.unit_price?.amount ?? 0,
           }))
@@ -216,70 +237,124 @@ export class UberEatsProvider implements MarketplaceProvider {
       subtotalCents: res.payment?.charges?.sub_total?.amount ?? 0,
       totalCents: res.payment?.charges?.total?.amount ?? 0,
       currency: res.payment?.charges?.total?.currency_code ?? "USD",
-      customerNotes: res.special_instructions,
+      customerNotes: res.cart.special_instructions,
       raw: res,
     };
   }
 
-  async acceptOrder(externalStoreId: string, externalOrderId: string): Promise<void> {
-    await this.request("POST", `/stores/${externalStoreId}/orders/${externalOrderId}/accept_pos_order`, { reason: "confirmed" });
+  async acceptOrder(_externalStoreId: string, externalOrderId: string): Promise<void> {
+    await this.request("POST", `/v1/eats/orders/${encodeURIComponent(externalOrderId)}/accept_pos_order`, { reason: "Accepted by GarnishTable" }, false);
   }
 
-  async denyOrder(externalStoreId: string, externalOrderId: string, reason: string): Promise<void> {
-    await this.request("POST", `/stores/${externalStoreId}/orders/${externalOrderId}/deny_pos_order`, { reason });
+  async denyOrder(_externalStoreId: string, externalOrderId: string, reason: string): Promise<void> {
+    await this.request(
+      "POST",
+      `/v1/eats/orders/${encodeURIComponent(externalOrderId)}/deny_pos_order`,
+      { reason: { explanation: reason, code: "OTHER" } },
+      false
+    );
   }
 
   async pushMenu(input: PushMenuInput): Promise<PushMenuResult> {
-    const res = await this.request<{ categories?: { id: string }[]; items?: { id: string }[] }>(
-      "POST",
-      `/stores/${input.externalStoreId}/menu`,
-      {
-        categories: input.categories.map((c) => ({ id: c.externalId, title: c.name, sort_order: c.sortOrder })),
-        items: input.items.map((i) => ({
-          id: i.externalId,
-          title: i.name,
-          description: i.description,
-          price: i.priceCents,
-          category_id: i.categoryExternalId,
-          suspended: !i.isAvailable,
-        })),
-      }
-    );
+    const categories = input.categories.map((c) => ({ internalId: c.internalId, externalId: c.externalId || c.internalId, name: c.name }));
+    const categoryIdByInternal = new Map(categories.map((c) => [c.internalId, c.externalId]));
+    const items = input.items.map((i) => ({
+      ...i,
+      externalId: i.externalId || i.internalId,
+      categoryId: i.categoryExternalId || (i.categoryInternalId ? categoryIdByInternal.get(i.categoryInternalId) : undefined),
+    }));
+
+    const text = (value: string) => ({ translations: { [MENU_LOCALE]: value } });
+    const body = {
+      menus: [
+        {
+          id: "garnishtable-menu",
+          title: text("Menu"),
+          service_availability: toServiceAvailability(input.serviceHours),
+          category_ids: categories.map((c) => c.externalId),
+        },
+      ],
+      categories: categories.map((c) => ({
+        id: c.externalId,
+        title: text(c.name),
+        entities: items.filter((i) => i.categoryId === c.externalId).map((i) => ({ id: i.externalId, type: "ITEM" })),
+      })),
+      items: items.map((i) => ({
+        id: i.externalId,
+        title: text(i.name),
+        ...(i.description ? { description: text(i.description) } : {}),
+        price_info: { price: i.priceCents },
+        tax_info: {},
+        ...(i.isAvailable ? {} : { suspension_info: { suspension: { suspend_until: SUSPEND_INDEFINITELY_UNTIL } } }),
+      })),
+    };
+
+    await this.request("PUT", `/v2/eats/stores/${encodeURIComponent(input.externalStoreId)}/menus`, body, false);
     return {
-      categories: (res.categories ?? []).map((c, idx) => ({ internalId: input.categories[idx]?.internalId ?? "", externalId: c.id })),
-      items: (res.items ?? []).map((i, idx) => ({ internalId: input.items[idx]?.internalId ?? "", externalId: i.id })),
-      raw: res,
+      categories: categories.map((c) => ({ internalId: c.internalId, externalId: c.externalId })),
+      items: items.map((i) => ({ internalId: i.internalId, externalId: i.externalId })),
+      raw: null,
     };
   }
 
   async updateItemAvailability(externalStoreId: string, externalItemId: string, isAvailable: boolean): Promise<void> {
-    await this.request("POST", `/stores/${externalStoreId}/menu/items/${externalItemId}/availability`, { suspended: !isAvailable });
+    await this.request(
+      "POST",
+      `/v2/eats/stores/${encodeURIComponent(externalStoreId)}/menus/items/${encodeURIComponent(externalItemId)}`,
+      { suspension_info: { suspension: isAvailable ? null : { suspend_until: SUSPEND_INDEFINITELY_UNTIL } } },
+      false
+    );
   }
 }
 
+/** Restaurant weekly hours → Uber ServiceAvailability ("HH:MM", each period within one day). An
+ *  overnight span (close earlier than open) is split at midnight. No hours configured means always
+ *  available, matching how GarnishTable itself treats a restaurant without hours. */
+export function toServiceAvailability(hours: PushMenuInput["serviceHours"]) {
+  const periods = new Map<string, { start_time: string; end_time: string }[]>();
+  const add = (day: string, start: string, end: string) => periods.set(day, [...(periods.get(day) ?? []), { start_time: start, end_time: end }]);
+
+  if (!hours || hours.length === 0) {
+    for (const day of UBER_WEEKDAYS) add(day, "00:00", "23:59");
+  } else {
+    for (const d of hours) {
+      const dayIdx = UBER_WEEKDAYS.indexOf(d.day as (typeof UBER_WEEKDAYS)[number]);
+      if (d.isClosed || dayIdx < 0 || !d.open || !d.close || !HHMM.test(d.open) || !HHMM.test(d.close)) continue;
+      if (d.close > d.open) {
+        add(d.day, d.open, d.close);
+      } else {
+        add(d.day, d.open, "23:59");
+        if (d.close !== "00:00") add(UBER_WEEKDAYS[(dayIdx + 1) % 7]!, "00:00", d.close);
+      }
+    }
+  }
+  return UBER_WEEKDAYS.filter((day) => periods.has(day)).map((day) => ({ day_of_week: day, time_periods: periods.get(day)! }));
+}
+
 interface UberEatsWebhookPayload {
-  event_id?: string;
-  event_type?: string;
-  store_id?: string;
+  event_id?: unknown;
+  event_type?: unknown;
+  event_time?: number;
+  meta?: { resource_id?: unknown; status?: string; user_id?: unknown };
   resource_href?: string;
-  resource_id?: string;
 }
 
 interface UberEatsOrderResponse {
   id: string;
-  current_state: string;
-  placed_at: string;
+  current_state?: string;
+  placed_at?: string;
   type?: string;
-  special_instructions?: string;
-  eater?: { first_name?: string; phone?: string };
-  delivery?: { location?: { street_address?: string; city?: string; state?: string; zip_code?: string; country?: string } };
-  cart?: {
-    items?: {
-      instance_id: string;
+  store?: { id?: string };
+  eater?: { first_name?: string; phone?: string; delivery?: { location?: { street_address?: string } } };
+  cart: {
+    special_instructions?: string;
+    items: {
+      id: string;
+      instance_id?: string;
       title: string;
       quantity: number;
       price?: { unit_price?: { amount?: number } };
-      selected_modifier_groups?: { selected_items?: { instance_id: string; title: string; price?: { unit_price?: { amount?: number } } }[] }[];
+      selected_modifier_groups?: { selected_items?: { id: string; title: string; price?: { unit_price?: { amount?: number } } }[] }[];
     }[];
   };
   payment?: { charges?: { sub_total?: { amount?: number }; total?: { amount?: number; currency_code?: string } } };
