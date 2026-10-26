@@ -3,6 +3,7 @@ import type { MarketplaceProviderName } from "@restaurant/types";
 import { ApiError } from "../utils/ApiError.js";
 import { KNOWN_MARKETPLACE_PROVIDER_NAMES, getMarketplaceProvider } from "../marketplaceProviders/index.js";
 import { resolveMarketplaceIntegrationByExternalStore } from "../marketplaceProviders/restaurantMarketplaceProvider.js";
+import { marketplaceModeFor } from "../marketplaceProviders/providerMode.js";
 import { MarketplaceWebhookEvent } from "../models/MarketplaceWebhookEvent.js";
 import { notificationQueue } from "../queues/notification.queue.js";
 import { logger } from "../common/logger.js";
@@ -35,7 +36,8 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
   const provider = providerName as MarketplaceProviderName;
   // Phase 85A — in mock mode every provider's webhook is verified with the public dev-only mock
   // secret, so in production anyone could inject orders into a restaurant's kitchen.
-  if (env.MARKETPLACE_PROVIDER_MODE === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
+  // Per provider: Uber Eats can run live (UBER_EATS_PROVIDER_MODE) while the others stay mock.
+  if (marketplaceModeFor(provider) === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
     throw ApiError.notFound();
   }
 
@@ -59,7 +61,7 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
   if (!claimed) {
     // Already processed, or a concurrent delivery is in flight — the routine, expected outcome of
     // a provider's at-least-once redelivery. Acknowledged without reprocessing.
-    res.status(200).json({ received: true });
+    acknowledge(res, provider);
     return;
   }
 
@@ -67,7 +69,7 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
   if (!integration) {
     logger.warn("marketplace webhook for an unknown or disconnected store", { provider, externalStoreId: event.externalStoreId, eventId: event.eventId });
     await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
-    res.status(200).json({ received: true });
+    acknowledge(res, provider);
     return;
   }
 
@@ -77,7 +79,7 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
     // docs/marketplace-integration-architecture.md), acknowledged and marked processed so a
     // redelivery of the same event doesn't re-log it.
     await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
-    res.status(200).json({ received: true });
+    acknowledge(res, provider);
     return;
   }
 
@@ -104,6 +106,16 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
     logger.error("failed to enqueue marketplace order ingestion", { provider, eventId: event.eventId, error: (err as Error).message });
   }
 
+  acknowledge(res, provider);
+}
+
+/** Uber Eats requires the acknowledgement to be HTTP 200 with an empty body
+ *  (developer.uber.com/docs/eats/guides/webhooks); the other providers keep the JSON ack. */
+function acknowledge(res: Response, provider: MarketplaceProviderName) {
+  if (provider === "uber_eats") {
+    res.status(200).end();
+    return;
+  }
   res.status(200).json({ received: true });
 }
 

@@ -8,6 +8,7 @@ import { RestaurantMarketplaceIntegration, type RestaurantMarketplaceIntegration
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { KNOWN_MARKETPLACE_PROVIDER_NAMES, getMarketplaceProvider } from "../marketplaceProviders/index.js";
+import { UBER_EATS_CONNECTIONS_CLOSED_MESSAGE, uberEatsConnectionsClosed } from "../marketplaceProviders/providerMode.js";
 import { buildAuthorizeUrl } from "../marketplaceProviders/uberEatsConnect.js";
 import { notificationQueue } from "../queues/notification.queue.js";
 import { recordAuditEvent } from "../services/audit.service.js";
@@ -178,6 +179,7 @@ export async function startProviderOAuthConnect(req: Request, res: Response) {
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
   if (!restaurant.businessId) throw ApiError.badRequest("This restaurant has no business association yet");
 
+  if (provider === "uber_eats" && uberEatsConnectionsClosed()) throw ApiError.forbidden(UBER_EATS_CONNECTIONS_CLOSED_MESSAGE);
   const capability = getMarketplaceProvider(provider).capabilities.connect;
   if (capability.mechanism !== "oauth_redirect") {
     throw ApiError.badRequest(`"${provider}" is not connected via a redirect flow on this deployment.`);

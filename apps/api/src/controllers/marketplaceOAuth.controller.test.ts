@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
 import { createApp } from "../app.js";
+import { env } from "../config/env.js";
 import { connectDB } from "../config/db.js";
 import { Business } from "../models/Business.js";
 import { Restaurant } from "../models/Restaurant.js";
@@ -8,7 +9,7 @@ import { User } from "../models/User.js";
 import { RestaurantMarketplaceIntegration } from "../models/RestaurantMarketplaceIntegration.js";
 import { OAuthConnectState } from "../models/OAuthConnectState.js";
 import { closeTestConnections, createTestBusiness, createTestRestaurant, createTestUser, tokenFor } from "../test-utils/fixtures.js";
-import type { EncryptedBlob } from "../utils/credentialEncryption.js";
+import { encryptCredentials, type EncryptedBlob } from "../utils/credentialEncryption.js";
 
 const app = createApp();
 
@@ -203,6 +204,9 @@ describe("POST /marketplace-oauth/uber_eats/select-store", () => {
         { externalStoreId: "store_downtown", displayName: "Downtown" },
         { externalStoreId: "store_uptown", displayName: "Uptown" },
       ],
+      // What completeUberEatsConnect stores: the merchant token, needed to activate the picked store.
+      pendingEncryptedCredentials: encryptCredentials({ accessToken: "mock_access_token_select_store" }),
+      pendingCredentialFingerprint: "mock····tore",
     });
 
     const res = await request(app)
@@ -235,5 +239,36 @@ describe("POST /marketplace-oauth/uber_eats/select-store", () => {
       .set("Authorization", `Bearer ${otherOwnerToken}`)
       .send({ stateId: state.id, externalStoreId: "store_a" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("Uber Eats store activation (live code path, sandbox hosts, mocked HTTP)", () => {
+  it("is not recorded as connected when Uber refuses the pos_data activation", async () => {
+    const { restaurant, ownerToken } = await ownedRestaurant();
+    const { state } = await startConnect(restaurant.id, ownerToken);
+    const saved = { mode: env.MARKETPLACE_PROVIDER_MODE, environment: env.UBER_EATS_ENVIRONMENT, id: env.UBER_EATS_CLIENT_ID, secret: env.UBER_EATS_CLIENT_SECRET };
+    Object.assign(env, { MARKETPLACE_PROVIDER_MODE: "live", UBER_EATS_ENVIRONMENT: "sandbox", UBER_EATS_CLIENT_ID: "test-client", UBER_EATS_CLIENT_SECRET: "test-secret" });
+    const replies = [
+      { status: 200, body: { access_token: "merchant-token", expires_in: 2592000 } },
+      { status: 200, body: { stores: [{ store_id: `sandbox-store-${restaurant.id}`, name: "Sandbox Store" }] } },
+      { status: 403, body: { message: "forbidden" } },
+    ];
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const next = replies.shift()!;
+      return { status: next.status, ok: next.status < 300, json: async () => next.body } as unknown as Response;
+    });
+    try {
+      const res = await request(app)
+        .post("/api/v1/marketplace-oauth/uber_eats/callback")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ code: "sandbox-code", state });
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe("error");
+      expect(String(fetchSpy.mock.calls[2]![0])).toContain("https://test-api.uber.com/v1/eats/stores/");
+      expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurant._id, status: "active" })).toBe(0);
+    } finally {
+      Object.assign(env, { MARKETPLACE_PROVIDER_MODE: saved.mode, UBER_EATS_ENVIRONMENT: saved.environment, UBER_EATS_CLIENT_ID: saved.id, UBER_EATS_CLIENT_SECRET: saved.secret });
+      fetchSpy.mockRestore();
+    }
   });
 });

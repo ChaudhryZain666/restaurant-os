@@ -9,6 +9,9 @@ export interface MarketplaceMenuItemInput {
   currency: string;
   isAvailable: boolean;
   categoryExternalId: string;
+  /** The item's own category — lets a provider whose menu ids are chosen by us (Uber Eats) link
+   *  items to categories on the very first sync, before any external id has been stored. */
+  categoryInternalId?: string;
 }
 
 export interface MarketplaceMenuCategoryInput {
@@ -22,6 +25,9 @@ export interface PushMenuInput {
   externalStoreId: string;
   categories: MarketplaceMenuCategoryInput[];
   items: MarketplaceMenuItemInput[];
+  /** The restaurant's weekly hours (Restaurant.settings.businessHours), for providers whose menu
+   *  carries its own availability window. Empty/absent means no hours are configured. */
+  serviceHours?: { day: string; isClosed: boolean; open?: string | null; close?: string | null }[];
 }
 
 export interface MenuSyncResultEntry {

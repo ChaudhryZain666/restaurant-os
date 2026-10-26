@@ -4,10 +4,14 @@ import { Restaurant } from "../models/Restaurant.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
 import { logger } from "../common/logger.js";
-import { encryptCredentials } from "../utils/credentialEncryption.js";
+import { decryptCredentials, encryptCredentials } from "../utils/credentialEncryption.js";
 import { consumeOAuthConnectState, finalizePendingStoreSelection, savePendingStoreSelection } from "../services/oauthConnectState.service.js";
-import { discoverStores, exchangeCodeForToken } from "../marketplaceProviders/uberEatsConnect.js";
+import { activateStore, discoverStores, exchangeCodeForToken } from "../marketplaceProviders/uberEatsConnect.js";
 import { activateIntegration } from "./restaurantMarketplaceIntegration.controller.js";
+import { UBER_EATS_CONNECTIONS_CLOSED_MESSAGE, uberEatsConnectionsClosed } from "../marketplaceProviders/providerMode.js";
+
+// Never recorded as connected unless Uber accepted the activation — no webhooks would arrive.
+const ACTIVATION_FAILED_MESSAGE = "Uber Eats connected, but we couldn't activate GarnishTable for this store. Please try again.";
 
 function fingerprint(secret: string): string {
   const tail = secret.slice(-4);
@@ -25,6 +29,7 @@ function fingerprint(secret: string): string {
  * server-derived, never browser-supplied" for this flow.
  */
 export async function completeUberEatsConnect(req: Request, res: Response) {
+  if (uberEatsConnectionsClosed()) throw ApiError.forbidden(UBER_EATS_CONNECTIONS_CLOSED_MESSAGE);
   const { code, state: rawState, error } = req.body as CompleteMarketplaceOAuthConnectInput;
 
   const consumed = await consumeOAuthConnectState(rawState, "uber_eats");
@@ -80,6 +85,13 @@ export async function completeUberEatsConnect(req: Request, res: Response) {
   const credentialFingerprint = fingerprint(tokenResult.accessToken);
 
   if (stores.length === 1) {
+    try {
+      await activateStore(tokenResult.accessToken, stores[0]!.externalStoreId, restaurant.id);
+    } catch (err) {
+      logger.warn("Uber Eats store activation failed", { restaurantId: restaurant.id, error: (err as Error).message });
+      sendSuccess(res, { status: "error", message: ACTIVATION_FAILED_MESSAGE });
+      return;
+    }
     const integration = await activateIntegration({
       restaurantId: restaurant._id,
       businessId: restaurant.businessId,
@@ -105,10 +117,21 @@ export async function completeUberEatsConnect(req: Request, res: Response) {
  *  restaurant/business this concerns comes back from the state document via
  *  finalizePendingStoreSelection, never from the request body. */
 export async function selectUberEatsStore(req: Request, res: Response) {
+  if (uberEatsConnectionsClosed()) throw ApiError.forbidden(UBER_EATS_CONNECTIONS_CLOSED_MESSAGE);
   const { stateId, externalStoreId } = req.body as SelectMarketplaceOAuthStoreInput;
 
   const picked = await finalizePendingStoreSelection(stateId, externalStoreId, req.user!.id);
   if (!picked) throw ApiError.notFound("This connection attempt has expired or is no longer valid. Please start over.");
+
+  try {
+    if (!picked.encryptedCredentials) throw new Error("No stored merchant token for this connection attempt");
+    const { accessToken } = decryptCredentials<{ accessToken: string }>(picked.encryptedCredentials);
+    await activateStore(accessToken, picked.externalStoreId, picked.restaurantId.toString());
+  } catch (err) {
+    logger.warn("Uber Eats store activation failed", { restaurantId: picked.restaurantId.toString(), error: (err as Error).message });
+    sendSuccess(res, { status: "error", message: ACTIVATION_FAILED_MESSAGE });
+    return;
+  }
 
   const integration = await activateIntegration({
     restaurantId: picked.restaurantId,

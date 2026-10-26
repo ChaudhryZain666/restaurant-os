@@ -19,7 +19,7 @@ export async function syncMenuToMarketplace(integrationId: string): Promise<{ ca
   const externalStoreId = integration.externalStoreId as string | undefined;
   if (!externalStoreId) throw ApiError.badRequest("This integration has no connected store id yet");
 
-  const restaurant = await Restaurant.findById(integration.restaurantId).select("businessId settings.currency");
+  const restaurant = await Restaurant.findById(integration.restaurantId).select("businessId settings.currency settings.businessHours");
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
 
   const scopeFilter = restaurant.businessId ? { businessId: restaurant.businessId } : { restaurantId: integration.restaurantId };
@@ -55,7 +55,9 @@ export async function syncMenuToMarketplace(integrationId: string): Promise<{ ca
         currency,
         isAvailable: i.isAvailable,
         categoryExternalId: existingByInternalId.get(i.categoryId?.toString() ?? "")?.externalId ?? "",
+        categoryInternalId: i.categoryId?.toString(),
       })),
+      serviceHours: restaurant.settings?.businessHours ?? [],
     });
 
     await Promise.all([

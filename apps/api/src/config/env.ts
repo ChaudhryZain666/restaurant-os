@@ -213,14 +213,23 @@ const baseEnvSchema = z.object({
   MOCK_MARKETPLACE_WEBHOOK_SECRET: z.string().default("mock-marketplace-webhook-secret-dev-only"),
   UBER_EATS_CLIENT_ID: z.string().optional(),
   UBER_EATS_CLIENT_SECRET: z.string().optional(),
+  // Which Uber Eats environment the live adapter talks to (marketplaceProviders/uberEatsHosts.ts):
+  // "sandbox" = test-api.uber.com + sandbox-login.uber.com with a TESTING app's credentials;
+  // "production" = api.uber.com + auth.uber.com, accepted only when NODE_ENV=production. Defaults to
+  // sandbox so credentials pasted into a dev .env can never reach Uber's live API by accident.
+  UBER_EATS_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
+  // Overrides MARKETPLACE_PROVIDER_MODE for Uber Eats only (marketplaceProviders/providerMode.ts), so
+  // Uber Eats can run live — e.g. to verify Uber's sandbox webhooks — while DoorDash and foodpanda
+  // stay on the global mode. Unset = follow MARKETPLACE_PROVIDER_MODE.
+  UBER_EATS_PROVIDER_MODE: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["mock", "live"]).optional()),
   // Phase 78 — the restaurant-facing OAuth redirect_uri registered with Uber (a single static URL,
   // never tenant-scoped — see marketplaceOAuth.routes.ts's own header comment for why). Optional:
   // defaults to `${ADMIN_ORIGIN}/marketplace/oauth-callback` at the point of use, an explicit
   // override only needed where a deployment's registered Uber redirect URI differs from that.
   UBER_EATS_REDIRECT_URI: z.string().optional(),
-  // The signing secret for Uber's ONE centralized "Primary Webhook URL" (see
-  // developer.uber.com/docs/eats/guides/webhooks) — every store's events arrive at the same
-  // endpoint, verified with this one secret, never a per-store secret.
+  // Not used for verification: Uber signs X-Uber-Signature with the app's client secret
+  // (developer.uber.com/docs/eats/guides/webhooks), so UberEatsProvider verifies with
+  // UBER_EATS_CLIENT_SECRET. Kept so existing env files stay valid.
   UBER_EATS_WEBHOOK_SECRET: z.string().optional(),
   // DoorDash's signing key is issued per-partner only after a Technical-Account-Manager-assisted
   // onboarding/certification process (see developer.doordash.com's Marketplace getting-started

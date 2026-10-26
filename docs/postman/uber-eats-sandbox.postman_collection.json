@@ -1,0 +1,1289 @@
+{
+  "info": {
+    "_postman_id": "cff97e77-bc3a-493b-b53d-204e77dcbcc1",
+    "name": "GarnishTable \u2014 Uber Eats Marketplace (sandbox)",
+    "description": "Every Uber Eats Marketplace call GarnishTable makes, plus coverage-only checks, with paths, payloads, grants and scopes from Uber's API reference. Use with the 'Uber Eats Sandbox' environment. Secrets live only in secret-type environment variables \u2014 never in this file. A collection-level guard blocks every host except Uber's sandbox and localhost.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Resolve {{variables}} first: the raw URL still holds placeholders at this point.",
+          "const allowed = ['sandbox-login.uber.com', 'test-api.uber.com', 'localhost', '127.0.0.1'];",
+          "const resolved = pm.variables.replaceIn(pm.request.url.toString());",
+          "const host = ((resolved.match(/^https?:\\/\\/([^\\/:?#]+)/) || [])[1] || '').toLowerCase();",
+          "if (!allowed.includes(host)) {",
+          "  console.log('BLOCKED \u2014 ' + (host || 'unresolved host') + ' is not an Uber sandbox host; this collection never calls production.');",
+          "  pm.request.url.update('http://blocked.invalid/');",
+          "  pm.execution.skipRequest();",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1 \u00b7 Authentication (no store needed)",
+      "item": [
+        {
+          "name": "App token \u2014 client_credentials (eats.store eats.order)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "GarnishTable: UberEatsProvider.getAccessToken. Grant client_credentials; client secret in the form body. Token valid 30 days; Uber limits token creation to 100/hour.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.store eats.order",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"access_token issued\", () => pm.expect(body.access_token).to.be.a(\"string\"));",
+                  "pm.test(\"eats.store and eats.order granted\", () => pm.expect(body.scope).to.include(\"eats.store\").and.include(\"eats.order\"));",
+                  "// Stored as a secret environment variable; never logged.",
+                  "if (body.access_token) pm.environment.set(\"access_token\", body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "App token \u2014 client_credentials (eats.store.orders.read)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "Separate token for eats.store.orders.read. GarnishTable's integration doesn't request this scope \u2014 kept for endpoint coverage checks.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.store.orders.read",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"eats.store.orders.read granted\", () => pm.expect(body.scope).to.include(\"eats.store.orders.read\"));",
+                  "if (body.access_token) pm.environment.set(\"orders_read_token\", body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "App token \u2014 client_credentials (eats.store.status.write)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "Separate token for eats.store.status.write. GarnishTable's integration doesn't request this scope \u2014 kept for endpoint coverage checks.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.store.status.write",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"eats.store.status.write granted\", () => pm.expect(body.scope).to.include(\"eats.store.status.write\"));",
+                  "if (body.access_token) pm.environment.set(\"status_write_token\", body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "App token \u2014 client_credentials (eats.report)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "Separate token for eats.report. GarnishTable's integration doesn't request this scope \u2014 kept for endpoint coverage checks.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.report",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"eats.report granted\", () => pm.expect(body.scope).to.include(\"eats.report\"));",
+                  "if (body.access_token) pm.environment.set(\"report_token\", body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative \u2014 client_credentials cannot carry eats.pos_provisioning",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "Shows eats.pos_provisioning needs the authorization_code flow (merchant login).",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.pos_provisioning",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"invalid_scope\", () => pm.expect(pm.response.json().error).to.eql(\"invalid_scope\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative \u2014 wrong client secret is rejected",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "wrong-secret-for-negative-test",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "eats.store",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400/401/403\", () => pm.expect(pm.response.code).to.be.oneOf([400, 401, 403]));",
+                  "pm.test(\"no token issued\", () => pm.expect(pm.response.json().access_token).to.be.undefined);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative \u2014 API call without a token is rejected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{api_base_url}}/v1/eats/stores",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.expect(pm.response.code).to.be.oneOf([401]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 \u00b7 Store discovery and details",
+      "item": [
+        {
+          "name": "List stores provisioned to the app",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores",
+            "description": "GarnishTable: UberEatsProvider.listStores. Scope eats.store. An empty list means no test store is provisioned yet \u2014 that is NOT a store test."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"stores is an array\", () => pm.expect(b.stores).to.be.an(\"array\"));",
+                  "if (b.stores && b.stores[0] && !pm.environment.get(\"store_id\")) pm.environment.set(\"store_id\", b.stores[0].store_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Store details (needs store_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}",
+            "description": "Scope eats.store. Verification only (GarnishTable doesn't call it)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 \u00b7 Store status (needs store_id)",
+      "item": [
+        {
+          "name": "Get store status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/store/{{store_id}}/status",
+            "description": "Scope eats.store. Not implemented in GarnishTable \u2014 coverage only."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test(\"has status\", () => pm.expect(pm.response.json().status).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set store status ONLINE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{status_write_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/store/{{store_id}}/status",
+            "description": "Scope eats.store.status.write. Not implemented in GarnishTable \u2014 coverage only. ONLINE is the safe, reversible value for a test store.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ONLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 \u00b7 Menu retrieval and upload (needs store_id)",
+      "item": [
+        {
+          "name": "Upload test menu",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v2/eats/stores/{{store_id}}/menus",
+            "description": "GarnishTable: UberEatsProvider.pushMenu (same shape). Scope eats.store. Replaces the TEST store's menu only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menus\": [\n    {\n      \"id\": \"garnishtable-menu\",\n      \"title\": {\n        \"translations\": {\n          \"en_us\": \"Menu\"\n        }\n      },\n      \"service_availability\": [\n        {\n          \"day_of_week\": \"monday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"tuesday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"wednesday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"thursday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"friday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"saturday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        },\n        {\n          \"day_of_week\": \"sunday\",\n          \"time_periods\": [\n            {\n              \"start_time\": \"00:00\",\n              \"end_time\": \"23:59\"\n            }\n          ]\n        }\n      ],\n      \"category_ids\": [\n        \"gt-sandbox-category\"\n      ]\n    }\n  ],\n  \"categories\": [\n    {\n      \"id\": \"gt-sandbox-category\",\n      \"title\": {\n        \"translations\": {\n          \"en_us\": \"GarnishTable Sandbox\"\n        }\n      },\n      \"entities\": [\n        {\n          \"id\": \"gt-sandbox-item-1\",\n          \"type\": \"ITEM\"\n        },\n        {\n          \"id\": \"gt-sandbox-item-2\",\n          \"type\": \"ITEM\"\n        }\n      ]\n    }\n  ],\n  \"items\": [\n    {\n      \"id\": \"gt-sandbox-item-1\",\n      \"title\": {\n        \"translations\": {\n          \"en_us\": \"Sandbox Burger\"\n        }\n      },\n      \"description\": {\n        \"translations\": {\n          \"en_us\": \"Test item\"\n        }\n      },\n      \"price_info\": {\n        \"price\": 1000\n      },\n      \"tax_info\": {}\n    },\n    {\n      \"id\": \"gt-sandbox-item-2\",\n      \"title\": {\n        \"translations\": {\n          \"en_us\": \"Sandbox Fries\"\n        }\n      },\n      \"price_info\": {\n        \"price\": 400\n      },\n      \"tax_info\": {}\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retrieve menu (read back)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v2/eats/stores/{{store_id}}/menus",
+            "description": "Scope eats.store. Verification only: confirms the upload was stored."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test(\"test item is on the menu\", () => pm.expect(JSON.stringify(pm.response.json())).to.include(\"gt-sandbox-item-1\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 \u00b7 Item availability (needs store_id + uploaded menu)",
+      "item": [
+        {
+          "name": "Suspend item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v2/eats/stores/{{store_id}}/menus/items/{{item_id}}",
+            "description": "GarnishTable: UberEatsProvider.updateItemAvailability(false). Scope eats.store.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"suspension_info\": {\n    \"suspension\": {\n      \"suspend_until\": 8640000000\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Un-suspend item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v2/eats/stores/{{store_id}}/menus/items/{{item_id}}",
+            "description": "GarnishTable: UberEatsProvider.updateItemAvailability(true). Scope eats.store.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"suspension_info\": {\n    \"suspension\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 \u00b7 Order retrieval and lifecycle (needs a test order)",
+      "item": [
+        {
+          "name": "Order details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v2/eats/order/{{order_id}}",
+            "description": "GarnishTable: UberEatsProvider.fetchOrder. Scope eats.order. Place the order in the Uber Eats app signed in as the test developer account, delivering to the test store's address."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"order_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"belongs to the test store\", () => pm.expect(b.store && b.store.id).to.eql(pm.environment.get(\"store_id\")));",
+                  "pm.test(\"cart items carry the uploaded item id\", () => pm.expect(b.cart.items[0].id).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/orders/{{order_id}}/accept_pos_order",
+            "description": "GarnishTable: UberEatsProvider.acceptOrder. Scope eats.order. Requires this app to be the store's order manager (pos_data is_order_manager).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Accepted by GarnishTable\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"order_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deny order (a second test order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/orders/{{deny_order_id}}/deny_pos_order",
+            "description": "GarnishTable: UberEatsProvider.denyOrder. Scope eats.order.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": {\n    \"explanation\": \"GarnishTable sandbox test\",\n    \"code\": \"OTHER\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"deny_order_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7 \u00b7 Created orders and reporting (needs store_id)",
+      "item": [
+        {
+          "name": "Created orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{orders_read_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/created-orders",
+            "description": "Scope eats.store.orders.read. Not used by GarnishTable (it is webhook-driven) \u2014 coverage only. Reporting (eats.report) is not implemented and Uber's Request Report reference page currently returns 404, so no reporting request is included."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test(\"orders array\", () => pm.expect(pm.response.json().orders).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 \u00b7 POS provisioning and merchant authorization (needs test store + merchant login)",
+      "item": [
+        {
+          "name": "Merchant login (open in a browser) \u2014 authorization_code, eats.pos_provisioning",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/authorize?client_id={{client_id}}&response_type=code&scope=eats.pos_provisioning&redirect_uri={{redirect_uri}}&state=postman-test",
+            "description": "GarnishTable: uberEatsConnect.buildAuthorizeUrl (GarnishTable mints a one-time state bound to the signed-in user and verifies it on return). Open in a browser, log in as the TEST STORE's merchant user, copy `code` from the redirect into auth_code. Needs redirect_uri registered on the test app. In Postman/newman this only checks that Uber hands the browser to its login page (302); the redirect URI is validated by Uber after login."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"redirect_uri\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 302\", () => pm.expect(pm.response.code).to.be.oneOf([302]));",
+                  "pm.test(\"redirects to Uber login\", () => pm.expect(pm.response.headers.get(\"Location\") || \"\").to.match(/^https:\\/\\/(auth|login|sandbox-login)\\.uber\\.com\\//));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Exchange code \u2014 authorization_code",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{auth_base_url}}/oauth/v2/token",
+            "description": "GarnishTable: uberEatsConnect.exchangeCodeForToken.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code",
+                  "type": "text"
+                },
+                {
+                  "key": "code",
+                  "value": "{{auth_code}}",
+                  "type": "text"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirect_uri}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"auth_code\", \"redirect_uri\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const b = pm.response.json(); if (b.access_token) pm.environment.set(\"merchant_access_token\", b.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Merchant's stores",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchant_access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores",
+            "description": "GarnishTable: uberEatsConnect.discoverStores. User token, eats.pos_provisioning."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"merchant_access_token\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate integration (pos_data)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchant_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/pos_data?is_order_manager=true&integrator_store_id={{integrator_store_id}}",
+            "description": "GarnishTable: uberEatsConnect.activateStore. Uber's reference lists these as query params but its example sends a body; GarnishTable sends both.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_order_manager\": true,\n  \"integrator_store_id\": \"{{integrator_store_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\", \"merchant_access_token\", \"integrator_store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200/201/204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read integration (pos_data)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchant_access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/pos_data",
+            "description": "Verification only (GarnishTable doesn't call it)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\", \"merchant_access_token\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9 \u00b7 Webhook verification \u2014 GarnishTable receiver (local API, no Uber call)",
+      "item": [
+        {
+          "name": "Signed orders.notification \u2192 200, empty body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{garnishtable_webhook_url}}",
+            "description": "Uber's documented payload, signed with the client secret. An unconnected store is acknowledged and ignored.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event_type\": \"orders.notification\", \"event_id\": \"{{$guid}}\", \"event_time\": 1427343990, \"meta\": {\"resource_id\": \"{{webhook_order_id}}\", \"status\": \"pos\", \"user_id\": \"{{webhook_store_id}}\"}, \"resource_href\": \"{{api_base_url}}/v2/eats/order/{{webhook_order_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sign exactly like Uber: lowercase-hex HMAC-SHA256 of the raw body, keyed with the client secret.",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "pm.request.body.raw = raw;",
+                  "pm.request.headers.upsert({ key: \"X-Uber-Signature\", value: require(\"crypto-js\").HmacSHA256(raw, pm.environment.get(\"client_secret\")).toString() });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "pm.test(\"empty body (Uber contract)\", () => pm.expect(pm.response.text()).to.eql(\"\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad signature \u2192 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{garnishtable_webhook_url}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event_type\": \"orders.notification\", \"event_id\": \"{{$guid}}\", \"event_time\": 1427343990, \"meta\": {\"resource_id\": \"{{webhook_order_id}}\", \"status\": \"pos\", \"user_id\": \"{{webhook_store_id}}\"}, \"resource_href\": \"{{api_base_url}}/v2/eats/order/{{webhook_order_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.body.raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "pm.request.headers.upsert({ key: \"X-Uber-Signature\", value: \"0\".repeat(64) });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate event_id (1st delivery) \u2192 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{garnishtable_webhook_url}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event_type\": \"orders.notification\", \"event_id\": \"{{$guid}}\", \"event_time\": 1427343990, \"meta\": {\"resource_id\": \"{{webhook_order_id}}\", \"status\": \"pos\", \"user_id\": \"{{webhook_store_id}}\"}, \"resource_href\": \"{{api_base_url}}/v2/eats/order/{{webhook_order_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fixed event_id: send twice; both 200, recorded once.",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw).replace(/\"event_id\": ?\"[^\"]*\"/, '\"event_id\": \"postman-duplicate-check\"');",
+                  "pm.request.body.raw = raw;",
+                  "pm.request.headers.upsert({ key: \"X-Uber-Signature\", value: require(\"crypto-js\").HmacSHA256(raw, pm.environment.get(\"client_secret\")).toString() });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate event_id (redelivery) \u2192 200, not reprocessed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{garnishtable_webhook_url}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event_type\": \"orders.notification\", \"event_id\": \"{{$guid}}\", \"event_time\": 1427343990, \"meta\": {\"resource_id\": \"{{webhook_order_id}}\", \"status\": \"pos\", \"user_id\": \"{{webhook_store_id}}\"}, \"resource_href\": \"{{api_base_url}}/v2/eats/order/{{webhook_order_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fixed event_id: send twice; both 200, recorded once.",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw).replace(/\"event_id\": ?\"[^\"]*\"/, '\"event_id\": \"postman-duplicate-check\"');",
+                  "pm.request.body.raw = raw;",
+                  "pm.request.headers.upsert({ key: \"X-Uber-Signature\", value: require(\"crypto-js\").HmacSHA256(raw, pm.environment.get(\"client_secret\")).toString() });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
