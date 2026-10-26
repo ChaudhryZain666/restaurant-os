@@ -299,6 +299,35 @@ describe("webhooks", () => {
     expect(p.verifyWebhookSignature(notJson, createHmac("sha256", "client-secret").update(notJson).digest("hex"))).toBeNull();
   });
 
+  it("with a dashboard webhook signing key (BASIC_HMAC): accepts that key's signature AND the client secret's", () => {
+    const p = new UberEatsProvider("client-id", "client-secret", UBER_EATS_HOSTS.sandbox, { webhookSigningKey: "dashboard-signing-key" });
+    const byKey = signed(NOTIFICATION, "dashboard-signing-key");
+    const bySecret = signed(NOTIFICATION, "client-secret");
+    expect(p.verifyWebhookSignature(byKey.rawBody, byKey.signature)?.eventId).toBe(NOTIFICATION.event_id);
+    expect(p.verifyWebhookSignature(bySecret.rawBody, bySecret.signature)?.eventId).toBe(NOTIFICATION.event_id);
+  });
+
+  it("with a signing key configured, any other key — and a tampered body — is still rejected", () => {
+    const p = new UberEatsProvider("client-id", "client-secret", UBER_EATS_HOSTS.sandbox, { webhookSigningKey: "dashboard-signing-key" });
+    const forged = signed(NOTIFICATION, "attacker-key");
+    expect(p.verifyWebhookSignature(forged.rawBody, forged.signature)).toBeNull();
+    const byKey = signed(NOTIFICATION, "dashboard-signing-key");
+    expect(p.verifyWebhookSignature(Buffer.from(JSON.stringify({ ...NOTIFICATION, event_id: "other" })), byKey.signature)).toBeNull();
+  });
+
+  it("without a signing key, only the client secret verifies (an empty key is never used)", () => {
+    const p = new UberEatsProvider("client-id", "client-secret", UBER_EATS_HOSTS.sandbox, { webhookSigningKey: "" });
+    const emptyKey = signed(NOTIFICATION, "");
+    expect(p.verifyWebhookSignature(emptyKey.rawBody, emptyKey.signature)).toBeNull();
+    const bySecret = signed(NOTIFICATION, "client-secret");
+    expect(p.verifyWebhookSignature(bySecret.rawBody, bySecret.signature)).not.toBeNull();
+  });
+
+  it("tolerates surrounding whitespace in the header", () => {
+    const { rawBody, signature } = signed(NOTIFICATION);
+    expect(provider().verifyWebhookSignature(rawBody, ` ${signature} `)).not.toBeNull();
+  });
+
   it("accepts an uppercase-hex signature header", () => {
     const { rawBody, signature } = signed(NOTIFICATION);
     expect(provider().verifyWebhookSignature(rawBody, signature.toUpperCase())).not.toBeNull();

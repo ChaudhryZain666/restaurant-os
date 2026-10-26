@@ -20,13 +20,16 @@ import { closeTestConnections, createTestBusiness, createTestRestaurant, createT
  * registry is built fresh in live mode rather than reusing another suite's mock instance.
  */
 const CLIENT_SECRET = "uber-eats-webhook-test-secret";
+// The dashboard's Primary Webhook URL signing key (BASIC_HMAC).
+const SIGNING_KEY = "uber-eats-dashboard-signing-key";
 const saved = {
   mode: env.MARKETPLACE_PROVIDER_MODE,
   environment: env.UBER_EATS_ENVIRONMENT,
   id: env.UBER_EATS_CLIENT_ID,
   secret: env.UBER_EATS_CLIENT_SECRET,
+  signingKey: env.UBER_EATS_WEBHOOK_SECRET,
 };
-Object.assign(env, { MARKETPLACE_PROVIDER_MODE: "live", UBER_EATS_ENVIRONMENT: "sandbox", UBER_EATS_CLIENT_ID: "uber-eats-test-client", UBER_EATS_CLIENT_SECRET: CLIENT_SECRET });
+Object.assign(env, { MARKETPLACE_PROVIDER_MODE: "live", UBER_EATS_ENVIRONMENT: "sandbox", UBER_EATS_CLIENT_ID: "uber-eats-test-client", UBER_EATS_CLIENT_SECRET: CLIENT_SECRET, UBER_EATS_WEBHOOK_SECRET: SIGNING_KEY });
 
 const app = createApp();
 const businessIds: string[] = [];
@@ -82,7 +85,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  Object.assign(env, { MARKETPLACE_PROVIDER_MODE: saved.mode, UBER_EATS_ENVIRONMENT: saved.environment, UBER_EATS_CLIENT_ID: saved.id, UBER_EATS_CLIENT_SECRET: saved.secret });
+  Object.assign(env, { MARKETPLACE_PROVIDER_MODE: saved.mode, UBER_EATS_ENVIRONMENT: saved.environment, UBER_EATS_CLIENT_ID: saved.id, UBER_EATS_CLIENT_SECRET: saved.secret, UBER_EATS_WEBHOOK_SECRET: saved.signingKey });
   await Promise.all([
     MarketplaceWebhookEvent.deleteMany({ provider: "uber_eats", eventId: { $regex: `^evt-.*-${run}` } }),
     RestaurantMarketplaceIntegration.deleteMany({ restaurantId: { $in: restaurantIds } }),
@@ -138,6 +141,20 @@ describe("Uber Eats webhook — real adapter, Uber's documented payload", () => 
     expect(res.status).toBe(200);
     expect(res.text).toBe("");
     expect(addSpy).not.toHaveBeenCalled();
+  });
+
+  it("an event signed with the dashboard webhook signing key (BASIC_HMAC) is accepted and ingested", async () => {
+    const addSpy = jest.spyOn(notificationQueue, "add").mockResolvedValue({} as never);
+    const storeId = `ue-store-key-${run}`;
+    const integrationId = await connectedStore(storeId);
+    const res = await postSigned(uberEvent("orders.notification", storeId, `order-key-${run}`, `evt-key-${run}`), SIGNING_KEY);
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("");
+    expect(addSpy).toHaveBeenCalledWith(
+      "marketplace.order_ingest",
+      { provider: "uber_eats", integrationId, externalOrderId: `order-key-${run}`, eventId: `evt-key-${run}` },
+      { priority: 1 }
+    );
   });
 
   it("rejects a payload signed with any other secret, and one with no signature", async () => {

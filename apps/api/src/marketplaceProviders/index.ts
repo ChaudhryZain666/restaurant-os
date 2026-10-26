@@ -31,6 +31,7 @@ function buildLiveProvider(name: MarketplaceProviderName): MarketplaceProvider {
     }
     return new UberEatsProvider(env.UBER_EATS_CLIENT_ID, env.UBER_EATS_CLIENT_SECRET, resolveUberEatsHosts(env.UBER_EATS_ENVIRONMENT, env.NODE_ENV), {
       connectionsOpen: !uberEatsConnectionsClosed(),
+      webhookSigningKey: env.UBER_EATS_WEBHOOK_SECRET,
     });
   }
   if (name === "doordash") {
