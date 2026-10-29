@@ -229,6 +229,53 @@ describe("POST /platform/restaurants/:id/marketplace-integrations/foodpanda/link
     }
   });
 
+  it("linking the same foodpanda store to the same restaurant twice succeeds (no duplicate-key failure)", async () => {
+    const business = await createTestBusiness();
+    const restaurant = await createTestRestaurant({ businessId: business._id });
+    const { RestaurantMarketplaceIntegration } = await import("../models/RestaurantMarketplaceIntegration.js");
+    try {
+      const send = () =>
+        request(app)
+          .post(`/api/v1/platform/restaurants/${restaurant.id}/marketplace-integrations/foodpanda/link`)
+          .set("Authorization", `Bearer ${platformAdminToken}`)
+          .send({ externalStoreId: `store_fp_relink_${restaurant.id}` });
+      const first = await send();
+      const second = await send();
+      expect([first.status, second.status]).toEqual([201, 201]);
+      expect(second.body.data.integration.id).toBe(first.body.data.integration.id);
+      expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurant._id, status: "active" })).toBe(1);
+    } finally {
+      await Promise.all([
+        RestaurantMarketplaceIntegration.deleteMany({ restaurantId: restaurant._id }),
+        Restaurant.deleteOne({ _id: restaurant._id }),
+        Business.deleteOne({ _id: business._id }),
+      ]);
+    }
+  });
+
+  it("a foodpanda store already held by another restaurant is refused with 409, not a server error", async () => {
+    const business = await createTestBusiness();
+    const [one, two] = await Promise.all([createTestRestaurant({ businessId: business._id }), createTestRestaurant({ businessId: business._id })]);
+    const { RestaurantMarketplaceIntegration } = await import("../models/RestaurantMarketplaceIntegration.js");
+    try {
+      const store = `store_fp_shared_${one.id}`;
+      const linkTo = (r: { id?: unknown }) =>
+        request(app)
+          .post(`/api/v1/platform/restaurants/${r.id}/marketplace-integrations/foodpanda/link`)
+          .set("Authorization", `Bearer ${platformAdminToken}`)
+          .send({ externalStoreId: store });
+      expect((await linkTo(one)).status).toBe(201);
+      expect((await linkTo(two)).status).toBe(409);
+      expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: one._id, status: "active" })).toBe(1);
+    } finally {
+      await Promise.all([
+        RestaurantMarketplaceIntegration.deleteMany({ restaurantId: { $in: [one._id, two._id] } }),
+        Restaurant.deleteMany({ _id: { $in: [one._id, two._id] } }),
+        Business.deleteOne({ _id: business._id }),
+      ]);
+    }
+  });
+
   it("a restaurant owner cannot use this platform-only linking action (no restaurant.marketplace.* bypass)", async () => {
     const res = await request(app)
       .post(`/api/v1/platform/restaurants/${restaurantA.id}/marketplace-integrations/foodpanda/link`)

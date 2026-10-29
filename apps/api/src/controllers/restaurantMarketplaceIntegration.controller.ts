@@ -60,14 +60,29 @@ interface ActivateIntegrationInput {
  *  comment notes the sibling payment-account flow does this the other way around and calls out the
  *  resulting race; not repeated here), then records the audit event. Callers are responsible for
  *  verifying the connection is real (healthCheck/OAuth token exchange/admin confirmation) BEFORE
- *  calling this — it never itself decides whether a connection is legitimate. */
+ *  calling this — it never itself decides whether a connection is legitimate. Refuses (409) a store
+ *  that another restaurant's record already holds, and reuses this restaurant's own earlier record
+ *  for the same store, so relinking or retrying a link never fails halfway. */
 export async function activateIntegration(input: ActivateIntegrationInput): Promise<HydratedDocument<RestaurantMarketplaceIntegrationDoc>> {
-  const integration = new RestaurantMarketplaceIntegration({
-    restaurantId: input.restaurantId,
+  // A store id can belong to one integration record ever ({provider, externalStoreId} is unique
+  // across every status), so check it BEFORE touching anything: another restaurant's record for this
+  // store is a conflict, and this restaurant's own earlier record for it is reactivated in place —
+  // inserting a second one would fail after the restaurant's current link had been disconnected.
+  const existingForStore = await RestaurantMarketplaceIntegration.findOne({ provider: input.provider, externalStoreId: input.externalStoreId });
+  if (existingForStore && existingForStore.restaurantId?.toString() !== input.restaurantId.toString()) {
+    throw ApiError.conflict("This store is already linked to another restaurant.");
+  }
+
+  const integration =
+    existingForStore ??
+    new RestaurantMarketplaceIntegration({
+      restaurantId: input.restaurantId,
+      provider: input.provider,
+      externalStoreId: input.externalStoreId,
+    });
+  integration.set({
     businessId: input.businessId,
-    provider: input.provider,
     status: "active",
-    externalStoreId: input.externalStoreId,
     connectedByUserId: input.actorUserId,
     lastVerifiedAt: new Date(),
     ...(input.encryptedCredentials ? { encryptedCredentials: input.encryptedCredentials } : {}),

@@ -28,11 +28,20 @@ responses, all read-only, using the app token (`client_credentials`):
 
 **Linking the store to a restaurant.** Uber pre-integrated this store, so no merchant OAuth is needed.
 A platform admin links it with `POST /platform/restaurants/:id/marketplace-integrations/uber_eats/link`
-and the body `{ "externalStoreId": "<store uuid>" }`. The endpoint:
+and the body `{ "externalStoreId": "<store uuid>", "confirmSandboxTestRestaurant": true }`. The
+confirmation is required while Uber Eats points at the sandbox, because sandbox test orders reach
+the linked restaurant's kitchen; only send it for a test restaurant. The endpoint:
 - **Verifies with Uber** (`GET pos_data`): the store must be provisioned to us, the integration must be
   enabled (or send `enableIntegration: true` to switch it on), and this app must be the order manager.
 - **Records our restaurant id** on the store (`PATCH pos_data integrator_store_id`).
-- **Activates the connection.** A store already linked to another restaurant is refused with 409.
+- **Activates the connection.** A store held by another restaurant's record, active or not, is
+  refused with 409 before any call to Uber.
+- **Writes nothing to Uber until every check passes.** A failed Uber write leaves no local link.
+  Re-running the link for the same restaurant and store is safe: the existing record is reactivated.
+
+**Webhook retries.** If processing fails after an event is claimed (database or queue unavailable),
+the receiver releases the claim and answers 503. Uber then redelivers, because it retries only on
+5xx and timeouts, and the event is processed once.
 
 **Before the first test order,** sync GarnishTable's menu to the store. The sync replaces Uber's
 one-item menu, and an order for an item GarnishTable never uploaded is denied as unmappable.

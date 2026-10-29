@@ -328,7 +328,7 @@ function uberEatsLinkError(err: unknown): ApiError {
  */
 export async function linkUberEatsStore(req: Request, res: Response) {
   const { id } = req.params;
-  const { externalStoreId, enableIntegration } = req.body as LinkUberEatsStoreInput;
+  const { externalStoreId, enableIntegration, confirmSandboxTestRestaurant } = req.body as LinkUberEatsStoreInput;
 
   const restaurant = await Restaurant.findById(id);
   if (!restaurant) throw ApiError.notFound("Restaurant not found");
@@ -339,11 +339,17 @@ export async function linkUberEatsStore(req: Request, res: Response) {
   }
   const adapter = getMarketplaceProvider("uber_eats");
   if (!(adapter instanceof UberEatsProvider)) throw ApiError.badRequest("Uber Eats is not live on this deployment.");
+  if (adapter.environment === "sandbox" && confirmSandboxTestRestaurant !== true) {
+    throw ApiError.badRequest(
+      "Uber Eats is connected to Uber's sandbox, whose test orders would reach this restaurant. Confirm it is a test restaurant with confirmSandboxTestRestaurant: true."
+    );
+  }
 
+  // One store, one tenant — checked before anything is sent to Uber. Any record for this store,
+  // active or not, held by another restaurant blocks the link (see activateIntegration).
   const elsewhere = await RestaurantMarketplaceIntegration.findOne({
     provider: "uber_eats",
     externalStoreId,
-    status: "active",
     restaurantId: { $ne: restaurant._id },
   }).select("_id");
   if (elsewhere) throw ApiError.conflict("This Uber Eats store is already linked to another restaurant.");
@@ -351,37 +357,46 @@ export async function linkUberEatsStore(req: Request, res: Response) {
   let store: UberEatsStoreIntegration;
   try {
     store = await adapter.getStoreIntegration(externalStoreId);
-    if (!store.integrationEnabled && enableIntegration) {
+  } catch (err) {
+    throw uberEatsLinkError(err);
+  }
+  // Every precondition is verified before any write to Uber.
+  if (store.storeId !== externalStoreId) throw ApiError.serviceUnavailable("Uber Eats returned a different store than requested.");
+  if (!store.isOrderManager) {
+    throw ApiError.conflict("GarnishTable's app is not this store's Uber Eats order manager, so it could not accept or deny orders. Ask Uber to nominate it.");
+  }
+  if (!store.integrationEnabled && !enableIntegration) {
+    throw ApiError.conflict("GarnishTable's integration is switched off for this Uber Eats store. Re-send with enableIntegration: true to switch it on.");
+  }
+
+  try {
+    if (!store.integrationEnabled) {
       await adapter.updateStoreIntegration(externalStoreId, { integrationEnabled: true });
       store = await adapter.getStoreIntegration(externalStoreId);
+      if (!store.integrationEnabled) throw ApiError.serviceUnavailable("Uber Eats did not switch the integration on for this store.");
+    }
+    if (store.integratorStoreId !== restaurant.id) {
+      await adapter.updateStoreIntegration(externalStoreId, { integratorStoreId: restaurant.id });
     }
   } catch (err) {
     throw uberEatsLinkError(err);
   }
-  if (store.storeId !== externalStoreId) throw ApiError.serviceUnavailable("Uber Eats returned a different store than requested.");
-  if (!store.integrationEnabled) {
-    throw ApiError.conflict("GarnishTable's integration is switched off for this Uber Eats store. Re-send with enableIntegration: true to switch it on.");
-  }
-  if (!store.isOrderManager) {
-    throw ApiError.conflict("GarnishTable's app is not this store's Uber Eats order manager, so it could not accept or deny orders. Ask Uber to nominate it.");
-  }
 
-  if (store.integratorStoreId !== restaurant.id) {
-    try {
-      await adapter.updateStoreIntegration(externalStoreId, { integratorStoreId: restaurant.id });
-    } catch (err) {
-      throw uberEatsLinkError(err);
-    }
+  let integration;
+  try {
+    integration = await activateIntegration({
+      restaurantId: restaurant._id,
+      businessId: restaurant.businessId,
+      provider: "uber_eats",
+      externalStoreId,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+    });
+  } catch (err) {
+    // A concurrent link for the same store won the race (unique index).
+    if ((err as { code?: number }).code === 11000) throw ApiError.conflict("This Uber Eats store is already linked to another restaurant.");
+    throw err;
   }
-
-  const integration = await activateIntegration({
-    restaurantId: restaurant._id,
-    businessId: restaurant.businessId,
-    provider: "uber_eats",
-    externalStoreId,
-    actorUserId: req.user!.id,
-    actorRole: req.user!.role,
-  });
 
   sendSuccess(
     res,

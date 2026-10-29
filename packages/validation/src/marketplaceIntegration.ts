@@ -42,5 +42,8 @@ export const linkUberEatsStoreSchema = z.object({
   externalStoreId: z.string().uuid(),
   // Switch the integration on via Uber's Integration Configuration API if it is currently off.
   enableIntegration: z.boolean().optional(),
+  // Required while Uber Eats points at Uber's SANDBOX: its test orders land in this restaurant's
+  // kitchen, so the operator confirms the target is a test restaurant, not a real merchant.
+  confirmSandboxTestRestaurant: z.boolean().optional(),
 });
 export type LinkUberEatsStoreInput = z.infer<typeof linkUberEatsStoreSchema>;

@@ -46,7 +46,15 @@ let ownerToken = "";
 let ownerRestaurantId = "";
 
 /** Uber's side of the conversation, per test. */
-let uber: { posData: Record<string, unknown> | null; posStatus: number; tokenStatus: number; patches: { url: string; body: unknown }[] };
+let uber: {
+  posData: Record<string, unknown> | null;
+  posStatus: number;
+  posBody?: unknown;
+  posTimeout?: boolean;
+  patchStatus: number;
+  tokenStatus: number;
+  patches: { url: string; body: unknown }[];
+};
 
 function storeId(n: number) {
   // A valid UUID unique to this run, as Uber's store ids are.
@@ -65,10 +73,15 @@ function stubUber() {
       ({ status, ok: status >= 200 && status < 300, json: async () => (body === undefined ? Promise.reject(new SyntaxError("empty")) : body) }) as unknown as Response;
     if (!url.startsWith("https://sandbox-login.uber.com/") && !url.startsWith("https://test-api.uber.com/")) throw new Error(`unexpected host ${url}`);
     if (url.endsWith("/oauth/v2/token")) return uber.tokenStatus === 200 ? reply(200, { access_token: "app-token", expires_in: 2592000, scope: "eats.store eats.order" }) : reply(uber.tokenStatus, { error: "invalid_client" });
-    if (url.includes("/pos_data") && method === "GET") return uber.posStatus === 200 ? reply(200, uber.posData) : reply(uber.posStatus, { code: "not_found", message: "not found" });
+    if (url.includes("/pos_data") && method === "GET") {
+      if (uber.posTimeout) return Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      if (uber.posBody !== undefined) return reply(200, uber.posBody);
+      return uber.posStatus === 200 ? reply(200, uber.posData) : reply(uber.posStatus, { code: "error", message: `HTTP ${uber.posStatus}` });
+    }
     if (url.includes("/pos_data") && method === "PATCH") {
       const body = JSON.parse(String(init?.body));
       uber.patches.push({ url, body });
+      if (uber.patchStatus !== 204) return reply(uber.patchStatus, { message: "patch failed" });
       if (uber.posData && "integration_enabled" in body) uber.posData = { ...uber.posData, integration_enabled: body.integration_enabled, pos_integration_enabled: body.integration_enabled };
       return reply(204);
     }
@@ -85,7 +98,12 @@ async function newRestaurant() {
 }
 
 function link(restaurantId: string, body: Record<string, unknown>, token = adminToken) {
-  return request(app).post(`/api/v1/platform/restaurants/${restaurantId}/marketplace-integrations/uber_eats/link`).set("Authorization", `Bearer ${token}`).send(body);
+  // Uber Eats points at the sandbox here, so the operator's test-restaurant confirmation is sent
+  // unless a test deliberately leaves it out.
+  return request(app)
+    .post(`/api/v1/platform/restaurants/${restaurantId}/marketplace-integrations/uber_eats/link`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({ confirmSandboxTestRestaurant: true, ...body });
 }
 
 beforeAll(async () => {
@@ -100,7 +118,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  uber = { posData: null, posStatus: 200, tokenStatus: 200, patches: [] };
+  uber = { posData: null, posStatus: 200, patchStatus: 204, tokenStatus: 200, patches: [] };
 });
 
 afterEach(() => {
@@ -191,7 +209,100 @@ describe("platform admin links an Uber-provisioned store", () => {
   });
 });
 
+describe("retries and relinks", () => {
+  it("linking the same store to the same restaurant again succeeds and keeps one active record (retry-safe)", async () => {
+    const restaurant = await newRestaurant();
+    const id = storeId(20);
+    uber.posData = sandboxPosData(id);
+    stubUber();
+    const first = await link(restaurant.id, { externalStoreId: id });
+    expect(first.status).toBe(201);
+    const again = await link(restaurant.id, { externalStoreId: id });
+    expect(again.status).toBe(201);
+    expect(again.body.data.integration.id).toBe(first.body.data.integration.id);
+    expect(await RestaurantMarketplaceIntegration.countDocuments({ provider: "uber_eats", externalStoreId: id })).toBe(1);
+    expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurant._id, provider: "uber_eats", status: "active" })).toBe(1);
+  });
+
+  it("relinking a store whose earlier link was disconnected reactivates that record instead of failing", async () => {
+    const restaurant = await newRestaurant();
+    const id = storeId(21);
+    uber.posData = sandboxPosData(id);
+    stubUber();
+    const first = await link(restaurant.id, { externalStoreId: id });
+    await RestaurantMarketplaceIntegration.updateOne({ _id: first.body.data.integration.id }, { $set: { status: "disconnected" } });
+
+    const relinked = await link(restaurant.id, { externalStoreId: id });
+    expect(relinked.status).toBe(201);
+    expect(relinked.body.data.integration).toMatchObject({ id: first.body.data.integration.id, status: "active" });
+  });
+
+  it("a failed Uber write leaves no local link, and the retry then succeeds", async () => {
+    const restaurant = await newRestaurant();
+    const id = storeId(22);
+    uber.posData = sandboxPosData(id);
+    uber.patchStatus = 500;
+    stubUber();
+    expect((await link(restaurant.id, { externalStoreId: id })).status).toBe(503);
+    expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurant._id })).toBe(0);
+
+    uber.patchStatus = 204;
+    expect((await link(restaurant.id, { externalStoreId: id })).status).toBe(201);
+  });
+});
+
 describe("refusals — nothing is recorded or changed on Uber", () => {
+  it("400 without the sandbox test-restaurant confirmation, before calling Uber", async () => {
+    const restaurant = await newRestaurant();
+    const spy = stubUber();
+    const res = await request(app)
+      .post(`/api/v1/platform/restaurants/${restaurant.id}/marketplace-integrations/uber_eats/link`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ externalStoreId: storeId(23) });
+    expect(res.status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("never switches the integration on when we are not the order manager", async () => {
+    const restaurant = await newRestaurant();
+    const id = storeId(24);
+    uber.posData = sandboxPosData(id, { integration_enabled: false, pos_integration_enabled: false, order_manager_client_id: "another-app" });
+    stubUber();
+    expect((await link(restaurant.id, { externalStoreId: id, enableIntegration: true })).status).toBe(409);
+    expect(uber.patches).toHaveLength(0);
+  });
+
+  it("409 when another restaurant once held this store, even if that link is disconnected", async () => {
+    const first = await newRestaurant();
+    const second = await newRestaurant();
+    const id = storeId(25);
+    uber.posData = sandboxPosData(id);
+    const spy = stubUber();
+    const linked = await link(first.id, { externalStoreId: id });
+    await RestaurantMarketplaceIntegration.updateOne({ _id: linked.body.data.integration.id }, { $set: { status: "disconnected" } });
+    const calls = spy.mock.calls.length;
+    uber.patches = [];
+
+    expect((await link(second.id, { externalStoreId: id })).status).toBe(409);
+    expect(spy.mock.calls.length).toBe(calls);
+    expect(uber.patches).toHaveLength(0);
+  });
+
+  it("503 for Uber rate limiting, a timeout, or a malformed pos_data body — and nothing is recorded", async () => {
+    const restaurant = await newRestaurant();
+    stubUber();
+    uber.posStatus = 429;
+    expect((await link(restaurant.id, { externalStoreId: storeId(26) })).status).toBe(503);
+    uber.posStatus = 200;
+    uber.posTimeout = true;
+    expect((await link(restaurant.id, { externalStoreId: storeId(27) })).status).toBe(503);
+    uber.posTimeout = false;
+    uber.posBody = { integration_enabled: true };
+    expect((await link(restaurant.id, { externalStoreId: storeId(28) })).status).toBe(503);
+    expect(uber.patches).toHaveLength(0);
+    expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurant._id })).toBe(0);
+  });
+
   it("409 when another app is the store's order manager (we could not accept or deny its orders)", async () => {
     const restaurant = await newRestaurant();
     const id = storeId(5);
