@@ -65,25 +65,29 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
     return;
   }
 
-  const integration = await resolveMarketplaceIntegrationByExternalStore(provider, event.externalStoreId);
-  if (!integration) {
-    logger.warn("marketplace webhook for an unknown or disconnected store", { provider, externalStoreId: event.externalStoreId, eventId: event.eventId });
-    await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
-    acknowledge(res, provider);
-    return;
-  }
-
-  if (!event.externalOrderId) {
-    // Store-status/menu-processing events (store.provisioned, store.status.changed, etc.) — not
-    // acted on this phase (two-way status sync is explicitly out of scope, see
-    // docs/marketplace-integration-architecture.md), acknowledged and marked processed so a
-    // redelivery of the same event doesn't re-log it.
-    await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
-    acknowledge(res, provider);
-    return;
-  }
-
+  // Everything after the claim either finishes or releases it: a failure here (a database blip, the
+  // queue being down) releases the claim and answers 503, so the provider's retry — Uber retries
+  // only on 5xx/timeouts, never after a 200 — can reclaim and process the event instead of finding
+  // it "already in flight" and dropping an order that would then auto-cancel.
   try {
+    const integration = await resolveMarketplaceIntegrationByExternalStore(provider, event.externalStoreId);
+    if (!integration) {
+      logger.warn("marketplace webhook for an unknown or disconnected store", { provider, externalStoreId: event.externalStoreId, eventId: event.eventId });
+      await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+      acknowledge(res, provider);
+      return;
+    }
+
+    if (!event.externalOrderId) {
+      // Store-status/menu-processing events (store.provisioned, store.status.changed, etc.) — not
+      // acted on this phase (two-way status sync is explicitly out of scope, see
+      // docs/marketplace-integration-architecture.md), acknowledged and marked processed so a
+      // redelivery of the same event doesn't re-log it.
+      await MarketplaceWebhookEvent.updateOne({ provider, eventId: event.eventId }, { $set: { processedAt: new Date() } });
+      acknowledge(res, provider);
+      return;
+    }
+
     await notificationQueue.add(
       "marketplace.order_ingest",
       { provider, integrationId: integration._id.toString(), externalOrderId: event.externalOrderId, eventId: event.eventId },
@@ -102,8 +106,9 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
     await MarketplaceWebhookEvent.updateOne(
       { provider, eventId: event.eventId },
       { $set: { processingError: (err as Error).message }, $unset: { processingStartedAt: "" } }
-    );
-    logger.error("failed to enqueue marketplace order ingestion", { provider, eventId: event.eventId, error: (err as Error).message });
+    ).catch(() => undefined);
+    logger.error("marketplace webhook processing failed; released for the provider's retry", { provider, eventId: event.eventId, error: (err as Error).message });
+    throw ApiError.serviceUnavailable("Webhook could not be processed right now; please retry.");
   }
 
   acknowledge(res, provider);
