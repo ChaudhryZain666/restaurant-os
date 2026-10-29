@@ -157,6 +157,43 @@ describe("Uber Eats webhook — real adapter, Uber's documented payload", () => 
     );
   });
 
+  it("a failure after the claim answers 503 and releases it, so Uber's retry is processed (no lost order)", async () => {
+    const storeId = `ue-store-retry-${run}`;
+    const integrationId = await connectedStore(storeId);
+    const payload = uberEvent("orders.notification", storeId, `order-retry-${run}`, `evt-retry-${run}`);
+
+    // First delivery: the queue is down.
+    const addSpy = jest.spyOn(notificationQueue, "add").mockRejectedValueOnce(new Error("queue unavailable"));
+    const first = await postSigned(payload);
+    expect(first.status).toBe(503);
+    const afterFirst = await MarketplaceWebhookEvent.findOne({ provider: "uber_eats", eventId: `evt-retry-${run}` });
+    expect(afterFirst?.processingStartedAt).toBeFalsy();
+    expect(afterFirst?.processedAt).toBeFalsy();
+
+    // Uber's retry: reclaimed and enqueued exactly once.
+    addSpy.mockResolvedValue({} as never);
+    const retry = await postSigned(payload);
+    expect(retry.status).toBe(200);
+    expect(addSpy).toHaveBeenLastCalledWith(
+      "marketplace.order_ingest",
+      { provider: "uber_eats", integrationId, externalOrderId: `order-retry-${run}`, eventId: `evt-retry-${run}` },
+      { priority: 1 }
+    );
+    expect(await MarketplaceWebhookEvent.countDocuments({ provider: "uber_eats", eventId: `evt-retry-${run}` })).toBe(1);
+  });
+
+  it("a database failure while resolving the store also answers 503 and stays retryable", async () => {
+    const storeId = `ue-store-dbfail-${run}`;
+    await connectedStore(storeId);
+    const payload = uberEvent("orders.notification", storeId, `order-dbfail-${run}`, `evt-dbfail-${run}`);
+    jest.spyOn(RestaurantMarketplaceIntegration, "findOne").mockRejectedValueOnce(new Error("db blip") as never);
+    expect((await postSigned(payload)).status).toBe(503);
+    jest.restoreAllMocks();
+    const addSpy = jest.spyOn(notificationQueue, "add").mockResolvedValue({} as never);
+    expect((await postSigned(payload)).status).toBe(200);
+    expect(addSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects a payload signed with any other secret, and one with no signature", async () => {
     const payload = uberEvent("orders.notification", `ue-store-${run}`, `order-forged-${run}`, `evt-forged-${run}`);
     expect((await postSigned(payload, "someone-elses-secret")).status).toBe(400);
