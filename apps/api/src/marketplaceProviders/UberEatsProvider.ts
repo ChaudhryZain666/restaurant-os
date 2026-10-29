@@ -135,7 +135,7 @@ export class UberEatsProvider implements MarketplaceProvider {
   /** `expectBody: false` is for Uber's 204 No Content endpoints (accept, deny, menu upload, item
    *  update) — their success has no JSON to parse. A 401 drops the cached token and retries once
    *  with a fresh one, in case the cached token was revoked or invalidated early. */
-  private async request<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown, expectBody = true, retried = false): Promise<T> {
+  private async request<T>(method: "GET" | "POST" | "PUT" | "PATCH", path: string, body?: unknown, expectBody = true, retried = false): Promise<T> {
     const token = await this.getAccessToken();
     const res = await this.withTimeout((signal) =>
       fetch(`${this.hosts.apiBaseUrl}${path}`, {
@@ -175,6 +175,42 @@ export class UberEatsProvider implements MarketplaceProvider {
   async listStores(): Promise<{ storeId: string; name?: string }[]> {
     const res = await this.request<{ stores?: { store_id?: string; name?: string }[] }>("GET", "/v1/eats/stores");
     return (res?.stores ?? []).filter((s) => typeof s.store_id === "string").map((s) => ({ storeId: s.store_id!, name: s.name }));
+  }
+
+  /** Integration Configuration API: GET /v1/eats/stores/{store_id}/pos_data (eats.store) — whether
+   *  this app is enabled on the store, which app is its order manager, and our own ids on it. */
+  async getStoreIntegration(externalStoreId: string): Promise<UberEatsStoreIntegration> {
+    const res = await this.request<UberEatsPosDataResponse>("GET", `/v1/eats/stores/${encodeURIComponent(externalStoreId)}/pos_data`);
+    if (!res || typeof res.store_id !== "string") {
+      throw new MarketplaceProviderError("Uber Eats returned store integration data without a store id", "provider_error");
+    }
+    const enabled = res.integration_enabled ?? res.pos_integration_enabled;
+    return {
+      storeId: res.store_id,
+      integrationEnabled: enabled === true,
+      // Uber may redact another app's client id; only an exact match means we're the order manager.
+      isOrderManager: res.order_manager_client_id === this.clientId,
+      orderManagerPending: res.is_order_manager_pending === true,
+      integratorStoreId: res.integrator_store_id || undefined,
+      onlineStatus: res.online_status,
+      autoAcceptEnabled: res.auto_accept_enabled === true,
+      requireManualAcceptance: res.require_manual_acceptance === true,
+    };
+  }
+
+  /** Integration Configuration API: PATCH /v1/eats/stores/{store_id}/pos_data (eats.store, 204).
+   *  Sparse — only the fields given are sent. `integrationEnabled: false` switches the store off for
+   *  this app, so callers pass it only on an explicit admin decision. */
+  async updateStoreIntegration(
+    externalStoreId: string,
+    patch: { integrationEnabled?: boolean; integratorStoreId?: string; storeConfigurationData?: string }
+  ): Promise<void> {
+    const body: Record<string, unknown> = {};
+    if (patch.integrationEnabled !== undefined) body.integration_enabled = patch.integrationEnabled;
+    if (patch.integratorStoreId !== undefined) body.integrator_store_id = patch.integratorStoreId;
+    if (patch.storeConfigurationData !== undefined) body.store_configuration_data = patch.storeConfigurationData;
+    if (Object.keys(body).length === 0) throw new MarketplaceProviderError("No store integration fields to update", "provider_error");
+    await this.request("PATCH", `/v1/eats/stores/${encodeURIComponent(externalStoreId)}/pos_data`, body, false);
   }
 
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): MarketplaceWebhookEvent | null {
@@ -337,6 +373,29 @@ export function toServiceAvailability(hours: PushMenuInput["serviceHours"]) {
     }
   }
   return UBER_WEEKDAYS.filter((day) => periods.has(day)).map((day) => ({ day_of_week: day, time_periods: periods.get(day)! }));
+}
+
+export interface UberEatsStoreIntegration {
+  storeId: string;
+  integrationEnabled: boolean;
+  isOrderManager: boolean;
+  orderManagerPending: boolean;
+  integratorStoreId?: string;
+  onlineStatus?: string;
+  autoAcceptEnabled: boolean;
+  requireManualAcceptance: boolean;
+}
+
+interface UberEatsPosDataResponse {
+  store_id?: string;
+  integration_enabled?: boolean;
+  pos_integration_enabled?: boolean;
+  order_manager_client_id?: string;
+  is_order_manager_pending?: boolean;
+  integrator_store_id?: string;
+  online_status?: string;
+  auto_accept_enabled?: boolean;
+  require_manual_acceptance?: boolean;
 }
 
 interface UberEatsWebhookPayload {

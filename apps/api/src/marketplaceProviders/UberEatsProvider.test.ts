@@ -334,6 +334,82 @@ describe("webhooks", () => {
   });
 });
 
+describe("Integration Configuration API (pos_data)", () => {
+  // Shape of the real sandbox response for the provisioned test store (2026-10-30), ids changed.
+  const POS_DATA = {
+    store_id: "39a899b2-e44f-4eb9-b3e2-272e92d83bea",
+    pos_integration_enabled: true,
+    integration_enabled: true,
+    online_status: "online",
+    order_release_enabled: false,
+    auto_accept_enabled: false,
+    order_manager_client_id: "client-id",
+    merchant_store_id: "",
+    webhooks_config: { schedule_order_webhooks: { is_enabled: false } },
+    require_manual_acceptance: false,
+  };
+
+  it("GET /v1/eats/stores/{id}/pos_data: maps enablement, order-manager status and our integrator id", async () => {
+    const spy = stubFetch(TOKEN, { status: 200, body: { ...POS_DATA, integrator_store_id: "restaurant-1" } });
+    await expect(provider().getStoreIntegration(POS_DATA.store_id)).resolves.toEqual({
+      storeId: POS_DATA.store_id,
+      integrationEnabled: true,
+      isOrderManager: true,
+      orderManagerPending: false,
+      integratorStoreId: "restaurant-1",
+      onlineStatus: "online",
+      autoAcceptEnabled: false,
+      requireManualAcceptance: false,
+    });
+    expect(call(spy, 1).url).toBe(`https://test-api.uber.com/v1/eats/stores/${POS_DATA.store_id}/pos_data`);
+    expect(call(spy, 1).init.method).toBe("GET");
+  });
+
+  it("another app (or a redacted id) as order manager means we are NOT the order manager", async () => {
+    stubFetch(TOKEN, { status: 200, body: { ...POS_DATA, order_manager_client_id: "someone-else" } });
+    expect((await provider().getStoreIntegration(POS_DATA.store_id)).isOrderManager).toBe(false);
+    stubFetch(TOKEN, { status: 200, body: { ...POS_DATA, order_manager_client_id: "****" } });
+    expect((await provider().getStoreIntegration(POS_DATA.store_id)).isOrderManager).toBe(false);
+    stubFetch(TOKEN, { status: 200, body: { ...POS_DATA, order_manager_client_id: undefined } });
+    expect((await provider().getStoreIntegration(POS_DATA.store_id)).isOrderManager).toBe(false);
+  });
+
+  it("falls back to pos_integration_enabled; an absent flag counts as disabled", async () => {
+    stubFetch(TOKEN, { status: 200, body: { store_id: "s", pos_integration_enabled: true } });
+    expect((await provider().getStoreIntegration("s")).integrationEnabled).toBe(true);
+    stubFetch(TOKEN, { status: 200, body: { store_id: "s" } });
+    expect((await provider().getStoreIntegration("s")).integrationEnabled).toBe(false);
+  });
+
+  it("rejects a malformed body, an unknown store (404) and refused credentials (403)", async () => {
+    stubFetch(TOKEN, { status: 200, body: { integration_enabled: true } });
+    await expect(provider().getStoreIntegration("s")).rejects.toMatchObject({ code: "provider_error" });
+    stubFetch(TOKEN, { status: 200, unreadable: true });
+    await expect(provider().getStoreIntegration("s")).rejects.toMatchObject({ code: "provider_error" });
+    stubFetch(TOKEN, { status: 404, body: { code: "not_found", message: "not found" } });
+    await expect(provider().getStoreIntegration("s")).rejects.toMatchObject({ code: "not_found" });
+    stubFetch(TOKEN, { status: 403, body: { message: "forbidden" } });
+    await expect(provider().getStoreIntegration("s")).rejects.toMatchObject({ code: "invalid_credentials" });
+  });
+
+  it("PATCH /v1/eats/stores/{id}/pos_data sends only the given fields; 204 is success", async () => {
+    const spy = stubFetch(TOKEN, { status: 204 }, { status: 204 });
+    const p = provider();
+    await expect(p.updateStoreIntegration("s", { integratorStoreId: "restaurant-1" })).resolves.toBeUndefined();
+    await p.updateStoreIntegration("s", { integrationEnabled: true, storeConfigurationData: "{}" });
+    expect(call(spy, 1).init.method).toBe("PATCH");
+    expect(call(spy, 1).url).toBe("https://test-api.uber.com/v1/eats/stores/s/pos_data");
+    expect(call(spy, 1).body).toEqual({ integrator_store_id: "restaurant-1" });
+    expect(call(spy, 2).body).toEqual({ integration_enabled: true, store_configuration_data: "{}" });
+  });
+
+  it("an empty update is refused without calling Uber", async () => {
+    const spy = stubFetch();
+    await expect(provider().updateStoreIntegration("s", {})).rejects.toMatchObject({ code: "provider_error" });
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
 describe("stores", () => {
   it("GET /v1/eats/stores lists the stores provisioned to the app", async () => {
     const spy = stubFetch(TOKEN, { status: 200, body: { stores: [{ store_id: "store-1", name: "Test" }, { name: "no id" }], next_key: "" } });

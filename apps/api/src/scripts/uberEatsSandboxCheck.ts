@@ -63,6 +63,15 @@ async function main() {
     return `${stores.length} store(s): ${stores.map((s) => s.storeId).join(", ")}`;
   });
 
+  if (storeId) {
+    await step("2b. GET /v1/eats/stores/{store_id}/pos_data — Integration Configuration (read-only)", async () => {
+      const store = await uber.getStoreIntegration(storeId);
+      if (!store.integrationEnabled) throw new Error("integration is switched off for this store");
+      if (!store.isOrderManager) throw new Error("this app is not the store's order manager");
+      return `integration enabled, order manager = this app, online status ${store.onlineStatus ?? "unknown"}, integrator_store_id ${store.integratorStoreId ? "set" : "not set"}`;
+    });
+  }
+
   if (process.argv.includes("--menu")) {
     if (!storeId) throw new Error("--menu needs UBER_EATS_TEST_STORE_ID (a sandbox test store id from step 2).");
     await step("3. PUT /v2/eats/stores/{store_id}/menus — upload a test menu", async () => {
