@@ -227,10 +227,10 @@ const baseEnvSchema = z.object({
   // defaults to `${ADMIN_ORIGIN}/marketplace/oauth-callback` at the point of use, an explicit
   // override only needed where a deployment's registered Uber redirect URI differs from that.
   UBER_EATS_REDIRECT_URI: z.string().optional(),
-  // Not used for verification: Uber signs X-Uber-Signature with the app's client secret
-  // (developer.uber.com/docs/eats/guides/webhooks), so UberEatsProvider verifies with
-  // UBER_EATS_CLIENT_SECRET. Kept so existing env files stay valid.
-  UBER_EATS_WEBHOOK_SECRET: z.string().optional(),
+  // The signing key Uber's dashboard shows for the app's Primary Webhook URL (BASIC_HMAC). When set,
+  // X-Uber-Signature is accepted if it was made with this key or with UBER_EATS_CLIENT_SECRET (the key
+  // Uber's Eats webhooks guide documents). Empty = client secret only.
+  UBER_EATS_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   // DoorDash's signing key is issued per-partner only after a Technical-Account-Manager-assisted
   // onboarding/certification process (see developer.doordash.com's Marketplace getting-started
   // guide) — a real, documented approval gate this adapter cannot work around, same class of

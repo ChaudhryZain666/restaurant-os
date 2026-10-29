@@ -42,8 +42,9 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
  *  - Menu: PUT /v2/eats/stores/{store_id}/menus (MenuConfiguration, 204); item availability via
  *    POST /v2/eats/stores/{store_id}/menus/items/{item_id} with suspension_info (204). Menu ids are
  *    chosen by us, so an uploaded item's id is what comes back as cart.items[].id on an order.
- *  - Webhooks: X-Uber-Signature = lowercase-hex HMAC-SHA256 of the raw body keyed with the client
- *    secret; the store is meta.user_id and the order is meta.resource_id.
+ *  - Webhooks: X-Uber-Signature = lowercase-hex HMAC-SHA256 of the raw body, keyed with the Primary
+ *    Webhook URL's signing key (dashboard, BASIC_HMAC) or the client secret; the store is
+ *    meta.user_id and the order is meta.resource_id.
  *
  * Still unproven against a real sandbox account (no TESTING app credentials yet): whether an empty
  * tax_info object is accepted on menu items, and the exact accepted fields of the pos_data
@@ -55,14 +56,19 @@ export class UberEatsProvider implements MarketplaceProvider {
   readonly capabilities: MarketplaceProviderCapabilities;
 
   private cachedToken: { value: string; expiresAt: number } | null = null;
+  private readonly webhookSigningKeys: string[];
 
   constructor(
     private readonly clientId: string,
     private readonly clientSecret: string,
     // Sandbox unless a caller explicitly passes production hosts (see uberEatsHosts.ts).
     private readonly hosts: UberEatsHosts = UBER_EATS_HOSTS.sandbox,
-    options: { connectionsOpen?: boolean } = {}
+    options: { connectionsOpen?: boolean; webhookSigningKey?: string } = {}
   ) {
+    // X-Uber-Signature keys: the webhook signing key set for the app's Primary Webhook URL in Uber's
+    // dashboard (BASIC_HMAC) when configured, and the client secret, which Uber's Eats webhooks guide
+    // documents. Both are this app's own secrets, so accepting either never widens who can sign.
+    this.webhookSigningKeys = [options.webhookSigningKey, clientSecret].filter((k): k is string => Boolean(k));
     this.capabilities = {
       menuSync: true,
       itemAvailabilityUpdate: true,
@@ -173,10 +179,12 @@ export class UberEatsProvider implements MarketplaceProvider {
 
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): MarketplaceWebhookEvent | null {
     if (!signatureHeader) return null;
-    const expected = createHmac("sha256", this.clientSecret).update(rawBody).digest("hex");
-    const expectedBuf = Buffer.from(expected, "utf-8");
-    const actualBuf = Buffer.from(signatureHeader.toLowerCase(), "utf-8");
-    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) return null;
+    const actualBuf = Buffer.from(signatureHeader.trim().toLowerCase(), "utf-8");
+    const signedByUs = this.webhookSigningKeys.some((key) => {
+      const expectedBuf = Buffer.from(createHmac("sha256", key).update(rawBody).digest("hex"), "utf-8");
+      return expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
+    });
+    if (!signedByUs) return null;
 
     let parsed: UberEatsWebhookPayload;
     try {
