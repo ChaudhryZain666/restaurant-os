@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import type {
   LinkFoodpandaIntegrationInput,
+  LinkUberEatsStoreInput,
   ListPlatformRestaurantsQueryInput,
   ListPlatformUsersQueryInput,
   UpdateRestaurantStatusInput,
@@ -24,6 +25,9 @@ import { RestaurantMarketplaceIntegration } from "../models/RestaurantMarketplac
 import { Subscription } from "../models/Subscription.js";
 import { getMarketplaceProvider } from "../marketplaceProviders/index.js";
 import { activateIntegration } from "./restaurantMarketplaceIntegration.controller.js";
+import { MarketplaceProviderError } from "../marketplaceProviders/MarketplaceProvider.js";
+import { UberEatsProvider, type UberEatsStoreIntegration } from "../marketplaceProviders/UberEatsProvider.js";
+import { marketplaceModeFor } from "../marketplaceProviders/providerMode.js";
 import { Plan } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
 import { Agency } from "../models/Agency.js";
@@ -296,6 +300,97 @@ export async function linkFoodpandaIntegration(req: Request, res: Response) {
   });
 
   sendSuccess(res, { integration: integration.toJSON() }, 201);
+}
+
+/** Uber's errors → this endpoint's: a store Uber doesn't show to our app is a 404, credentials or
+ *  scope trouble is ours to fix (503), anything else is Uber being unavailable (503). */
+function uberEatsLinkError(err: unknown): ApiError {
+  if (err instanceof MarketplaceProviderError) {
+    if (err.code === "not_found") return ApiError.notFound("Uber Eats doesn't show this store as provisioned to GarnishTable's app.");
+    if (err.code === "invalid_credentials") return ApiError.serviceUnavailable("Uber Eats rejected GarnishTable's credentials or scopes for this store.");
+    return ApiError.serviceUnavailable(`Uber Eats could not be reached to verify this store (${err.code}).`);
+  }
+  return err instanceof ApiError ? err : ApiError.serviceUnavailable("Uber Eats could not be reached to verify this store.");
+}
+
+/**
+ * POST /platform/restaurants/:id/marketplace-integrations/uber_eats/link — links a store that Uber
+ * provisioned to GarnishTable's app itself ("Uber may pre-integrate a store", Integration Activation
+ * guide) to one restaurant, so its webhooks and orders reach that restaurant. Platform-admin only,
+ * like the foodpanda link above, and available while restaurant-facing Uber Eats connections are
+ * closed (providerMode.ts): no merchant OAuth is involved, only the app's client_credentials token.
+ *
+ * Before anything is recorded, Uber's Integration Configuration API (GET pos_data) must confirm
+ * that the store is provisioned to this app, the integration is enabled (or `enableIntegration`
+ * switches it on), and this app is the store's order manager — otherwise accept/deny would fail.
+ * The restaurant id is then written to the store as integrator_store_id (PATCH pos_data). A store
+ * already linked to a different restaurant is refused: one store, one tenant.
+ */
+export async function linkUberEatsStore(req: Request, res: Response) {
+  const { id } = req.params;
+  const { externalStoreId, enableIntegration } = req.body as LinkUberEatsStoreInput;
+
+  const restaurant = await Restaurant.findById(id);
+  if (!restaurant) throw ApiError.notFound("Restaurant not found");
+  if (!restaurant.businessId) throw ApiError.badRequest("This restaurant has no business association yet");
+
+  if (marketplaceModeFor("uber_eats") !== "live") {
+    throw ApiError.badRequest("Uber Eats is not live on this deployment (UBER_EATS_PROVIDER_MODE).");
+  }
+  const adapter = getMarketplaceProvider("uber_eats");
+  if (!(adapter instanceof UberEatsProvider)) throw ApiError.badRequest("Uber Eats is not live on this deployment.");
+
+  const elsewhere = await RestaurantMarketplaceIntegration.findOne({
+    provider: "uber_eats",
+    externalStoreId,
+    status: "active",
+    restaurantId: { $ne: restaurant._id },
+  }).select("_id");
+  if (elsewhere) throw ApiError.conflict("This Uber Eats store is already linked to another restaurant.");
+
+  let store: UberEatsStoreIntegration;
+  try {
+    store = await adapter.getStoreIntegration(externalStoreId);
+    if (!store.integrationEnabled && enableIntegration) {
+      await adapter.updateStoreIntegration(externalStoreId, { integrationEnabled: true });
+      store = await adapter.getStoreIntegration(externalStoreId);
+    }
+  } catch (err) {
+    throw uberEatsLinkError(err);
+  }
+  if (store.storeId !== externalStoreId) throw ApiError.serviceUnavailable("Uber Eats returned a different store than requested.");
+  if (!store.integrationEnabled) {
+    throw ApiError.conflict("GarnishTable's integration is switched off for this Uber Eats store. Re-send with enableIntegration: true to switch it on.");
+  }
+  if (!store.isOrderManager) {
+    throw ApiError.conflict("GarnishTable's app is not this store's Uber Eats order manager, so it could not accept or deny orders. Ask Uber to nominate it.");
+  }
+
+  if (store.integratorStoreId !== restaurant.id) {
+    try {
+      await adapter.updateStoreIntegration(externalStoreId, { integratorStoreId: restaurant.id });
+    } catch (err) {
+      throw uberEatsLinkError(err);
+    }
+  }
+
+  const integration = await activateIntegration({
+    restaurantId: restaurant._id,
+    businessId: restaurant.businessId,
+    provider: "uber_eats",
+    externalStoreId,
+    actorUserId: req.user!.id,
+    actorRole: req.user!.role,
+  });
+
+  sendSuccess(
+    res,
+    {
+      integration: integration.toJSON(),
+      uberStore: { integrationEnabled: store.integrationEnabled, isOrderManager: store.isOrderManager, onlineStatus: store.onlineStatus },
+    },
+    201
+  );
 }
 
 /**

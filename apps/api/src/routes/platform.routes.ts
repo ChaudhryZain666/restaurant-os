@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createSubscriptionSchema,
   linkFoodpandaIntegrationSchema,
+  linkUberEatsStoreSchema,
   listPlatformRestaurantsQuerySchema,
   listPlatformUsersQuerySchema,
   paginationQuerySchema,
@@ -21,6 +22,7 @@ import {
   getPlatformRestaurantDetail,
   getPlatformRevenue,
   linkFoodpandaIntegration,
+  linkUberEatsStore,
   listPlatformAgencies,
   listPlatformRestaurants,
   listPlatformSubscriptions,
@@ -71,6 +73,12 @@ platformRouter.post(
   requirePermission("platform.restaurants.manage"),
   validateBody(linkFoodpandaIntegrationSchema),
   asyncHandler(linkFoodpandaIntegration)
+);
+platformRouter.post(
+  "/restaurants/:id/marketplace-integrations/uber_eats/link",
+  requirePermission("platform.restaurants.manage"),
+  validateBody(linkUberEatsStoreSchema),
+  asyncHandler(linkUberEatsStore)
 );
 platformRouter.get(
   "/subscriptions",

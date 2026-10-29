@@ -246,6 +246,18 @@ describe("POST /platform/restaurants/:id/marketplace-integrations/foodpanda/link
   });
 });
 
+describe("POST /platform/restaurants/:id/marketplace-integrations/uber_eats/link — mock mode", () => {
+  it("is refused (400) when Uber Eats isn't live on the deployment, and records nothing", async () => {
+    const res = await request(app)
+      .post(`/api/v1/platform/restaurants/${restaurantA.id}/marketplace-integrations/uber_eats/link`)
+      .set("Authorization", `Bearer ${platformAdminToken}`)
+      .send({ externalStoreId: "39a899b2-e44f-4eb9-b3e2-272e92d83bea" });
+    expect(res.status).toBe(400);
+    const { RestaurantMarketplaceIntegration } = await import("../models/RestaurantMarketplaceIntegration.js");
+    expect(await RestaurantMarketplaceIntegration.countDocuments({ restaurantId: restaurantA._id, provider: "uber_eats", status: "active" })).toBe(0);
+  });
+});
+
 describe("GET /platform/restaurants — pagination/search/filter", () => {
   let extraRestaurants: Awaited<ReturnType<typeof createTestRestaurant>>[];
 

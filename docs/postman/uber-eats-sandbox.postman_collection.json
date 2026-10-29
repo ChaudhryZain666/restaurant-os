@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "cff97e77-bc3a-493b-b53d-204e77dcbcc1",
+    "_postman_id": "a46d777a-c078-45df-9b8e-499881d03913",
     "name": "GarnishTable \u2014 Uber Eats Marketplace (sandbox)",
     "description": "Every Uber Eats Marketplace call GarnishTable makes, plus coverage-only checks, with paths, payloads, grants and scopes from Uber's API reference. Use with the 'Uber Eats Sandbox' environment. Secrets live only in secret-type environment variables \u2014 never in this file. A collection-level guard blocks every host except Uber's sandbox and localhost.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -406,8 +406,106 @@
       ]
     },
     {
-      "name": "3 \u00b7 Store status (needs store_id)",
+      "name": "3 \u00b7 Store integration configuration and status (needs store_id)",
       "item": [
+        {
+          "name": "Read integration configuration (pos_data)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/pos_data",
+            "description": "GarnishTable: UberEatsProvider.getStoreIntegration (platform link + sandbox check). App token, scope eats.store. Read-only."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"same store\", () => pm.expect(b.store_id).to.eql(pm.environment.get(\"store_id\")));",
+                  "pm.test(\"integration enabled\", () => pm.expect(b.integration_enabled === true || b.pos_integration_enabled === true).to.be.true);",
+                  "pm.test(\"this app is the order manager\", () => pm.expect(b.order_manager_client_id).to.eql(pm.environment.get(\"client_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record GarnishTable's restaurant id on the store (pos_data)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/pos_data",
+            "description": "GarnishTable: UberEatsProvider.updateStoreIntegration, sent by the platform link. App token, scope eats.store. WRITE: changes the test store's integrator id only. Sparse PATCH; never send integration_enabled:false unless you mean to switch the integration off.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"integrator_store_id\": \"{{integrator_store_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const needed = [\"store_id\", \"integrator_store_id\"];",
+                  "const missing = needed.filter((v) => !pm.environment.get(v));",
+                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.expect(pm.response.code).to.be.oneOf([204]));"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "Get store status",
           "request": {
@@ -419,7 +517,7 @@
               }
             ],
             "url": "{{api_base_url}}/v1/eats/store/{{store_id}}/status",
-            "description": "Scope eats.store. Not implemented in GarnishTable \u2014 coverage only."
+            "description": "Scope eats.store. Not used by GarnishTable \u2014 coverage only."
           },
           "event": [
             {
@@ -460,7 +558,7 @@
               }
             ],
             "url": "{{api_base_url}}/v1/eats/store/{{store_id}}/status",
-            "description": "Scope eats.store.status.write. Not implemented in GarnishTable \u2014 coverage only. ONLINE is the safe, reversible value for a test store.",
+            "description": "Scope eats.store.status.write. Not used by GarnishTable \u2014 coverage only. WRITE; ONLINE is the store's current, safe value.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"ONLINE\"\n}",
@@ -472,6 +570,15 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
             {
               "listen": "prerequest",
               "script": {
@@ -531,6 +638,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
                   "const needed = [\"store_id\"];",
                   "const missing = needed.filter((v) => !pm.environment.get(v));",
                   "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
@@ -559,7 +675,7 @@
               }
             ],
             "url": "{{api_base_url}}/v2/eats/stores/{{store_id}}/menus",
-            "description": "Scope eats.store. Verification only: confirms the upload was stored."
+            "description": "Scope eats.store. Read-only. After an approved upload (allow_writes=yes), also confirms the test menu was stored."
           },
           "event": [
             {
@@ -579,7 +695,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  "pm.test(\"test item is on the menu\", () => pm.expect(JSON.stringify(pm.response.json())).to.include(\"gt-sandbox-item-1\"));"
+                  "const b = pm.response.json();",
+                  "pm.test(\"menu has menus, categories and items arrays\", () => { pm.expect(b.menus).to.be.an(\"array\"); pm.expect(b.categories).to.be.an(\"array\"); pm.expect(b.items).to.be.an(\"array\"); });",
+                  "if (pm.environment.get(\"allow_writes\") === \"yes\") pm.test(\"our uploaded test item is on the menu\", () => pm.expect(JSON.stringify(b)).to.include(\"gt-sandbox-item-1\"));"
                 ]
               }
             }
@@ -617,6 +735,15 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
             {
               "listen": "prerequest",
               "script": {
@@ -666,6 +793,15 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
             {
               "listen": "prerequest",
               "script": {
@@ -764,6 +900,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
                   "const needed = [\"order_id\"];",
                   "const missing = needed.filter((v) => !pm.environment.get(v));",
                   "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
@@ -808,6 +953,15 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
             {
               "listen": "prerequest",
               "script": {
@@ -875,7 +1029,7 @@
       ]
     },
     {
-      "name": "8 \u00b7 POS provisioning and merchant authorization (needs test store + merchant login)",
+      "name": "8 \u00b7 POS provisioning and merchant authorization (needs a merchant login \u2014 not needed for a store Uber pre-integrated)",
       "item": [
         {
           "name": "Merchant login (open in a browser) \u2014 authorization_code, eats.pos_provisioning",
@@ -1042,6 +1196,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "if (pm.environment.get('allow_writes') !== 'yes') { console.log('SKIPPED \u2014 write request; set allow_writes=yes to send it'); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
                   "const needed = [\"store_id\", \"merchant_access_token\", \"integrator_store_id\"];",
                   "const missing = needed.filter((v) => !pm.environment.get(v));",
                   "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
@@ -1054,42 +1217,6 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200/201/204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Read integration (pos_data)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{merchant_access_token}}"
-              }
-            ],
-            "url": "{{api_base_url}}/v1/eats/stores/{{store_id}}/pos_data",
-            "description": "Verification only (GarnishTable doesn't call it)."
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const needed = [\"store_id\", \"merchant_access_token\"];",
-                  "const missing = needed.filter((v) => !pm.environment.get(v));",
-                  "if (missing.length) { console.log('SKIPPED \u2014 needs ' + missing.join(', ')); pm.execution.skipRequest(); }"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
                 ]
               }
             }

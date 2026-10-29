@@ -11,6 +11,35 @@ tested, before it validates and grants production scopes to production applicati
 the app (`GET /v1/eats/stores` returns `{"stores":[]}`). Every store, menu, order and activation
 endpoint is therefore untested against Uber. End-to-end validation is **not** complete.
 
+## Provisioned test store (2026-10-30)
+
+Uber provisioned store `39a899b2-e44f-4eb9-b3e2-272e92d83bea` ("GarnishTable Sandbox") to test
+Client ID `8V7ei2htyv6F3lyq39wu0M5ElNzwZRUc`, with this app as **order manager**. Real sandbox
+responses, all read-only, using the app token (`client_credentials`):
+
+| Request | HTTP | Result |
+|---|---|---|
+| `GET /v1/eats/stores` | 200 | 1 store: this one, `active` |
+| `GET /v1/eats/stores/{id}` | 200 | name "GarnishTable Sandbox", timezone America/New_York |
+| `GET /v1/eats/store/{id}/status` | 200 | `ONLINE` |
+| `GET /v1/eats/stores/{id}/pos_data` | 200 | `integration_enabled: true`, `order_manager_client_id` = our test Client ID, `integrator_store_id` not set, `auto_accept_enabled: false`, `require_manual_acceptance: false` |
+| `GET /v2/eats/stores/{id}/menus` | 200 | Uber's provisioned menu: 1 menu ("Specials"), 1 category, 1 item `external_item_1` (price 100, locale `en`, no `tax_info`) |
+| `GET /v1/eats/stores/{id}/created-orders` | 200 | none (needs `eats.store.orders.read`) |
+
+**Linking the store to a restaurant.** Uber pre-integrated this store, so no merchant OAuth is needed.
+A platform admin links it with `POST /platform/restaurants/:id/marketplace-integrations/uber_eats/link`
+and the body `{ "externalStoreId": "<store uuid>" }`. The endpoint:
+- **Verifies with Uber** (`GET pos_data`): the store must be provisioned to us, the integration must be
+  enabled (or send `enableIntegration: true` to switch it on), and this app must be the order manager.
+- **Records our restaurant id** on the store (`PATCH pos_data integrator_store_id`).
+- **Activates the connection.** A store already linked to another restaurant is refused with 409.
+
+**Before the first test order,** sync GarnishTable's menu to the store. The sync replaces Uber's
+one-item menu, and an order for an item GarnishTable never uploaded is denied as unmappable.
+
+**"Staging":** Uber's email mentions using the Integration Configuration API to "manage staging".
+None of Uber's published pos_data fields refer to staging, so this needs Uber to name the field.
+
 ## Environments
 
 | | Sandbox (testing) | Production |
