@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   MarketplaceProviderError,
   type MarketplaceOrder,
@@ -222,26 +222,33 @@ export class UberEatsProvider implements MarketplaceProvider {
     });
     if (!signedByUs) return null;
 
-    let parsed: UberEatsWebhookPayload;
+    // From here the event is authentically Uber's, so it is always returned (acknowledged and
+    // recorded), whatever its shape: store events such as store.provisioned need not look like
+    // the documented order notification, and answering 400 to a correctly signed event would make
+    // Uber treat it as failed. Only a new-order event with a store and an order id is ingested.
+    let parsed: UberEatsWebhookPayload | null = null;
     try {
-      parsed = JSON.parse(rawBody.toString("utf-8"));
+      const value = JSON.parse(rawBody.toString("utf-8"));
+      if (value && typeof value === "object") parsed = value as UberEatsWebhookPayload;
     } catch {
-      return null;
+      parsed = null;
     }
-    const storeId = parsed?.meta?.user_id;
-    if (typeof parsed?.event_id !== "string" || typeof parsed.event_type !== "string" || typeof storeId !== "string" || !storeId) return null;
+    const eventType = typeof parsed?.event_type === "string" && parsed.event_type ? parsed.event_type : parsed ? "unknown" : "unparseable";
+    const eventId =
+      typeof parsed?.event_id === "string" && parsed.event_id ? parsed.event_id : `body-sha256:${createHash("sha256").update(rawBody).digest("hex")}`;
+    const storeId = typeof parsed?.meta?.user_id === "string" ? parsed.meta.user_id : "";
+    const resourceId = parsed?.meta?.resource_id;
 
     // Only a new order is ingested. Cancellations, store provisioning and status changes are
     // acknowledged without an order id, so they are never mistaken for an order to create/accept.
-    const resourceId = parsed.meta?.resource_id;
-    const isNewOrder = NEW_ORDER_EVENT_TYPES.has(parsed.event_type) && typeof resourceId === "string" && resourceId.length > 0;
+    const isNewOrder = NEW_ORDER_EVENT_TYPES.has(eventType) && Boolean(storeId) && typeof resourceId === "string" && resourceId.length > 0;
 
     return {
-      eventId: parsed.event_id,
-      eventType: parsed.event_type,
+      eventId,
+      eventType,
       externalStoreId: storeId,
-      externalOrderId: isNewOrder ? resourceId : undefined,
-      raw: parsed,
+      externalOrderId: isNewOrder ? (resourceId as string) : undefined,
+      raw: parsed ?? { unparseable_body: rawBody.toString("utf-8").slice(0, 4000) },
     };
   }
 

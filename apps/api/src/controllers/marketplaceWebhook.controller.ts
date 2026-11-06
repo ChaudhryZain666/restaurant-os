@@ -53,7 +53,15 @@ export async function handleMarketplaceWebhook(req: Request, res: Response) {
   const signatureHeader = req.header(adapter.signatureHeaderName);
   const event = adapter.verifyWebhookSignature(rawBody, signatureHeader);
   if (!event) {
-    logger.warn("marketplace webhook signature verification failed", { provider });
+    // Lengths only — never the signature, the key or the body.
+    logger.warn("marketplace webhook signature verification failed", {
+      provider,
+      hasSignature: Boolean(signatureHeader),
+      signatureLength: signatureHeader?.length ?? 0,
+      bodyBytes: rawBody.length,
+      rawBodyCaptured: Boolean((req as Request & { rawBody?: Buffer }).rawBody),
+      contentType: req.header("content-type"),
+    });
     throw ApiError.badRequest("Invalid webhook signature");
   }
 
