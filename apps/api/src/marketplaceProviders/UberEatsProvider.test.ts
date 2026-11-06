@@ -210,6 +210,8 @@ describe("menu", () => {
     expect(url).toBe("https://test-api.uber.com/v2/eats/stores/store-1/menus");
     expect(init.method).toBe("PUT");
     expect(body.menus[0]).toMatchObject({ title: { translations: { en_us: "Menu" } }, category_ids: ["cat-1"] });
+    // Uber's sandbox answers 400 "required field modifier_groups not found in data" without it.
+    expect(body.modifier_groups).toEqual([]);
     expect(body.menus[0].service_availability).toHaveLength(7);
     expect(body.categories[0]).toEqual({
       id: "cat-1",
