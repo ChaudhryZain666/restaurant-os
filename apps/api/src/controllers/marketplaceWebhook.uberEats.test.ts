@@ -194,6 +194,20 @@ describe("Uber Eats webhook — real adapter, Uber's documented payload", () => 
     expect(addSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("a correctly signed event of an unexpected shape (e.g. store.provisioned) gets 200 and is recorded, not ingested", async () => {
+    const addSpy = jest.spyOn(notificationQueue, "add").mockResolvedValue({} as never);
+    const storeId = `ue-store-shape-${run}`;
+    await connectedStore(storeId);
+    const payload = { event_type: "store.provisioned", event_id: `evt-shape-${run}`, store_id: storeId, provisioned_at: run };
+    const res = await postSigned(payload);
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("");
+    expect(addSpy).not.toHaveBeenCalled();
+    const stored = await MarketplaceWebhookEvent.findOne({ provider: "uber_eats", eventId: `evt-shape-${run}` });
+    expect(stored?.eventType).toBe("store.provisioned");
+    expect(stored?.processedAt).toBeTruthy();
+  });
+
   it("rejects a payload signed with any other secret, and one with no signature", async () => {
     const payload = uberEvent("orders.notification", `ue-store-${run}`, `order-forged-${run}`, `evt-forged-${run}`);
     expect((await postSigned(payload, "someone-elses-secret")).status).toBe(400);

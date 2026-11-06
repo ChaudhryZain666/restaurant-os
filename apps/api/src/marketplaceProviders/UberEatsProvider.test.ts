@@ -293,10 +293,33 @@ describe("webhooks", () => {
     expect(p.verifyWebhookSignature(Buffer.from(JSON.stringify({ ...NOTIFICATION, event_id: "x" })), good.signature)).toBeNull();
     expect(p.verifyWebhookSignature(good.rawBody, undefined)).toBeNull();
     expect(p.verifyWebhookSignature(good.rawBody, "zz")).toBeNull();
+  });
+
+  it("a correctly signed event of another shape is accepted (never a 400), but never ingested as an order", () => {
+    const p = provider();
+    // e.g. a store event without the order notification's meta.user_id / event_id
+    const storeEvent = signed({ event_type: "store.provisioned", store_id: "s1", meta: { resource_id: "o" } });
+    const ev = p.verifyWebhookSignature(storeEvent.rawBody, storeEvent.signature);
+    expect(ev).toMatchObject({ eventType: "store.provisioned", externalStoreId: "", externalOrderId: undefined });
+    expect(ev?.eventId).toMatch(/^body-sha256:[0-9a-f]{64}$/);
+
+    // an orders.notification without a store id is still not ingested
     const noStore = signed({ ...NOTIFICATION, meta: { resource_id: "o" } });
-    expect(p.verifyWebhookSignature(noStore.rawBody, noStore.signature)).toBeNull();
+    expect(p.verifyWebhookSignature(noStore.rawBody, noStore.signature)).toMatchObject({ externalStoreId: "", externalOrderId: undefined });
+
+    // a signed body that isn't JSON is recorded as unparseable
     const notJson = Buffer.from("not json");
-    expect(p.verifyWebhookSignature(notJson, createHmac("sha256", "client-secret").update(notJson).digest("hex"))).toBeNull();
+    expect(p.verifyWebhookSignature(notJson, createHmac("sha256", "client-secret").update(notJson).digest("hex"))).toMatchObject({
+      eventType: "unparseable",
+      externalStoreId: "",
+      externalOrderId: undefined,
+    });
+  });
+
+  it("the derived event id is stable for the same body, so a redelivery is still de-duplicated", () => {
+    const p = provider();
+    const a = signed({ event_type: "store.provisioned" });
+    expect(p.verifyWebhookSignature(a.rawBody, a.signature)?.eventId).toBe(p.verifyWebhookSignature(a.rawBody, a.signature)?.eventId);
   });
 
   it("with a dashboard webhook signing key (BASIC_HMAC): accepts that key's signature AND the client secret's", () => {
