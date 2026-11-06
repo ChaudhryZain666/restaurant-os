@@ -27,7 +27,7 @@ const subscriptionSchema = new Schema(
     trialEnd: { type: Date },
     cancelAt: { type: Date },
     cancelledAt: { type: Date },
-    provider: { type: String, enum: ["mock", "internal", "paddle"], required: true },
+    provider: { type: String, enum: ["mock", "internal", "paddle", "lemonsqueezy"], required: true },
     providerCustomerId: { type: String },
     providerSubscriptionId: { type: String },
     // Phase 34, additive — dedup marker for the daily trial-ending-reminder sweep
