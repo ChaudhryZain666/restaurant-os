@@ -167,9 +167,15 @@ export async function getDailyTimeSeries(restaurantId: string, from: Date, to: D
   // Intl.DateTimeFormat, not manual offset math, so it inherits the ICU timezone database's DST
   // handling instead of this code needing to reimplement it.
   const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" });
+  // Walk CALENDAR dates, not fixed 24-hour steps: across a DST change a local day is 23 or 25
+  // hours long, so stepping 24h from local midnight drifts to 23:00 of the previous day and the
+  // range's last day (usually "today") would never be emitted for a week after every change.
+  const firstKey = dayFormatter.format(rangeStart);
+  const lastKey = dayFormatter.format(to);
   const points: DailyAnalyticsPoint[] = [];
-  for (let d = new Date(rangeStart); d <= to; d.setUTCDate(d.getUTCDate() + 1)) {
-    const key = dayFormatter.format(d);
+  for (let day = new Date(`${firstKey}T12:00:00.000Z`); ; day.setUTCDate(day.getUTCDate() + 1)) {
+    const key = day.toISOString().slice(0, 10);
+    if (key > lastKey) break;
     const row = byDate.get(key);
     points.push({ date: key, orders: row?.orders ?? 0, revenue: Math.round((row?.revenue ?? 0) * 100) / 100 });
   }
