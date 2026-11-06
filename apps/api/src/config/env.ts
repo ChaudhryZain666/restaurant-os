@@ -281,7 +281,7 @@ const baseEnvSchema = z.object({
   // selecting it without real PADDLE_* credentials throws clearly (getBillingProvider in
   // billing/index.ts) rather than silently falling back to the mock — mirrors PAYMENT_PROVIDER's
   // "safepay" precedent exactly.
-  BILLING_PROVIDER: z.enum(["mock", "paddle"]).default("mock"),
+  BILLING_PROVIDER: z.enum(["mock", "paddle", "lemonsqueezy"]).default("mock"),
   MOCK_BILLING_WEBHOOK_SECRET: z.string().default("mock-billing-webhook-secret-dev-only"),
   // Paddle: real network-capable adapter as of Phase 27 (apps/api/src/billing/
   // PaddleBillingProvider.ts), but never exercised against a live account — see that file's header
@@ -299,6 +299,18 @@ const baseEnvSchema = z.object({
   // previously and incorrectly returned the per-customer providerCustomerId in this field's place, a
   // real bug this phase's live verification found and fixed.
   PADDLE_CLIENT_TOKEN: z.string().optional(),
+  // Lemon Squeezy (apps/api/src/billing/LemonSqueezyBillingProvider.ts). One API host for both
+  // modes: the API key decides test vs live, and LEMONSQUEEZY_TEST_MODE must say which one it is —
+  // it defaults to test so an incomplete config can never bill live, and webhooks for objects from
+  // the other mode are recorded but never applied. Store id and webhook signing secret come from the
+  // Lemon Squeezy dashboard (Settings → Stores / Settings → Webhooks).
+  LEMONSQUEEZY_API_KEY: z.string().optional(),
+  LEMONSQUEEZY_WEBHOOK_SECRET: z.string().optional(),
+  LEMONSQUEEZY_STORE_ID: z.string().regex(/^\d+$/, "LEMONSQUEEZY_STORE_ID is the numeric store id").optional(),
+  LEMONSQUEEZY_TEST_MODE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
   // No final trial-length commercial decision has been made — this stays configuration, never a
   // hardcoded literal in application code. 14 here is a working default for local development/
   // testing only, not a commercial decision (see docs/commercial-decisions.md). A Plan's own
@@ -473,6 +485,20 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         path: ["PADDLE_API_KEY"],
         message: 'PADDLE_API_KEY is a sandbox key ("pdl_sdbx_…"). Production needs a live API key.',
       });
+    }
+  }
+  if (data.BILLING_PROVIDER === "lemonsqueezy") {
+    if (data.LEMONSQUEEZY_TEST_MODE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["LEMONSQUEEZY_TEST_MODE"],
+        message: "Production with BILLING_PROVIDER=lemonsqueezy requires LEMONSQUEEZY_TEST_MODE=false and a live-mode API key — a production deployment must never bill in test mode.",
+      });
+    }
+    for (const key of ["LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "LEMONSQUEEZY_STORE_ID"] as const) {
+      if (!data[key]) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `Production with BILLING_PROVIDER=lemonsqueezy requires ${key}.` });
+      }
     }
   }
 

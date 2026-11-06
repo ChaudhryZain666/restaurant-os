@@ -28,7 +28,7 @@ export type SubscriptionStatus = "trialing" | "active" | "past_due" | "cancellin
  * verified vs. assumed; it has never been exercised against a live Paddle account in this
  * environment, mirroring apps/api/src/payments/SafepayProvider.ts's own honesty precedent.
  */
-export type SubscriptionProvider = "mock" | "internal" | "paddle";
+export type SubscriptionProvider = "mock" | "internal" | "paddle" | "lemonsqueezy";
 
 export interface Subscription {
   id: string;

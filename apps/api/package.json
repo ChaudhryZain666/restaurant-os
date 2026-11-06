@@ -24,6 +24,7 @@
     "backup": "tsx src/scripts/backupDatabase.ts",
     "restore": "tsx src/scripts/restoreDatabase.ts",
     "billing:set-paddle-prices": "tsx src/scripts/setPaddlePriceIds.ts",
+    "billing:set-lemonsqueezy-variants": "tsx src/scripts/setLemonSqueezyVariantIds.ts",
     "uber:sandbox-check": "tsx src/scripts/uberDirectSandboxCheck.ts",
     "uber-eats:sandbox-check": "tsx src/scripts/uberEatsSandboxCheck.ts",
     "lint": "eslint .",

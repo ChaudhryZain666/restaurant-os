@@ -528,8 +528,12 @@ async function applyProviderSubscriptionDetails(
   const set: Record<string, unknown> = {};
   let planChange: { code: string; amountCents?: number | null; currency?: string | null } | null = null;
   if (event.currentPeriod) {
-    set.currentPeriodStart = event.currentPeriod.start;
-    set.currentPeriodEnd = event.currentPeriod.end;
+    const { start, end } = event.currentPeriod;
+    // A provider that reports only the period end (Lemon Squeezy): a later end is a renewal, so the
+    // new period starts where the old one ended.
+    if (start) set.currentPeriodStart = start;
+    else if (current.currentPeriodEnd && end > current.currentPeriodEnd) set.currentPeriodStart = current.currentPeriodEnd;
+    set.currentPeriodEnd = end;
   }
   if (event.scheduledCancelAt) set.cancelAt = event.scheduledCancelAt;
   if (event.providerPriceId) {

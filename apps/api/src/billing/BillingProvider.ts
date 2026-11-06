@@ -111,8 +111,9 @@ export interface ProviderBillingWebhookEvent {
    *  Subscription.lastProviderEventAt). Absent when the provider doesn't say. */
   occurredAt?: Date;
   /** Phase 89 — the subscription's current billing period, when the event carries it (renewals
-   *  move it forward). */
-  currentPeriod?: { start: Date; end: Date };
+   *  move it forward). `start` is absent when the provider reports only the period end (Lemon
+   *  Squeezy's renews_at): a later end then starts the new period where the old one ended. */
+  currentPeriod?: { start?: Date; end: Date };
   /** Phase 89 — a scheduled cancellation's effective date; null means the event says none is
    *  scheduled; undefined means the event doesn't say. */
   scheduledCancelAt?: Date | null;

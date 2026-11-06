@@ -410,7 +410,7 @@ export function AgencyBillingPage() {
                   Reactivate
                 </Button>
               )}
-              {subscription.provider === "paddle" &&
+              {(subscription.provider === "paddle" || subscription.provider === "lemonsqueezy") &&
                 subscription.providerSubscriptionId &&
                 ["active", "past_due", "cancelling"].includes(subscription.status) && (
                   <Button size="sm" variant={subscription.status === "past_due" ? "primary" : "outline"} onClick={updatePaymentMethod} disabled={busy}>
