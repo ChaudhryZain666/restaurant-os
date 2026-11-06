@@ -338,6 +338,9 @@ export class UberEatsProvider implements MarketplaceProvider {
         tax_info: {},
         ...(i.isAvailable ? {} : { suspension_info: { suspension: { suspend_until: SUSPEND_INDEFINITELY_UNTIL } } }),
       })),
+      // Required by Uber even when empty: the sandbox rejects a menu without it ("required field
+      // modifier_groups not found in data", HTTP 400). GarnishTable does not upload modifiers yet.
+      modifier_groups: [],
     };
 
     await this.request("PUT", `/v2/eats/stores/${encodeURIComponent(input.externalStoreId)}/menus`, body, false);
