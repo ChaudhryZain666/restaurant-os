@@ -87,6 +87,8 @@ function historyDetail(event: BillingHistoryEvent): string | null {
   const m = (event.metadata ?? {}) as Record<string, unknown>;
   if (event.type === "subscription_extended" && typeof m.to === "string") return `to ${formatDate(m.to)}`;
   if (event.type === "suspended" && typeof m.reason === "string") return m.reason;
+  if (event.type === "reactivated" && m.from === "suspended") return "after suspension";
+  if (event.type === "reactivated" && m.from === "cancelling") return "cancellation withdrawn";
   if (typeof m.newPlanCode === "string") return `to ${m.newPlanCode}`;
   if (m.kind === "complimentary") return "complimentary";
   if (m.kind === "offline" && typeof m.agreedAmountCents === "number") {
@@ -263,7 +265,7 @@ export function PlatformPlanCard({
   const createBlocked = !selected || busy || (mode === "offline" && !isPrice(price)) || (mode !== "trial" && datesInvalid) || (mode === "trial" && !selected?.assignable);
 
   return (
-    <Card>
+    <Card role="region" aria-label="Plan & billing">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="font-heading text-sm font-semibold text-foreground">Plan & billing</h2>
         {source && <Badge tone={source.tone}>{source.label}</Badge>}
