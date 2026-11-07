@@ -1,28 +1,35 @@
 import { useEffect, useState } from "react";
-import type { CurrencyAmount, Paginated, SubscriptionStatus } from "@restaurant/types";
+import type { CurrencyAmount, Paginated, PlatformSubscriptionSummary, SubscriptionBillingSource, SubscriptionStatus } from "@restaurant/types";
 import { Badge, Card, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 
-interface PlatformSubscriptionRow {
-  id: string;
+interface PlatformSubscriptionRow extends PlatformSubscriptionSummary {
   ownerType: "business" | "agency";
+  ownerId: string;
   businessName?: string;
   businessSlug?: string;
-  planCode?: string;
-  planName?: string;
-  status: SubscriptionStatus;
-  billingInterval: "monthly" | "yearly";
-  currentPeriodEnd: string;
-  trialEnd: string | null;
-  provider: "mock" | "internal" | "paddle" | "lemonsqueezy";
+  agencyName?: string;
   createdAt: string;
 }
 
 interface PlatformRevenue {
   mrrByCurrency: CurrencyAmount[];
+  /** The part of MRR invoiced outside GarnishTable (manual offline agreements). */
+  offlineMrrByCurrency: CurrencyAmount[];
   liveSubscriptionCount: number;
+  complimentaryCount: number;
   trialingCount: number;
 }
+
+const SOURCE_LABEL: Record<SubscriptionBillingSource, string> = {
+  lemonsqueezy: "Lemon Squeezy",
+  paddle: "Paddle",
+  mock: "Development billing",
+  manual_offline: "Manual · offline",
+  complimentary: "Complimentary",
+  trial: "Free trial",
+  internal: "Grandfathered",
+};
 
 const STATUS_TONE: Record<SubscriptionStatus, "success" | "neutral" | "warning" | "danger"> = {
   trialing: "warning",
@@ -36,11 +43,9 @@ const STATUS_TONE: Record<SubscriptionStatus, "success" | "neutral" | "warning" 
 const PAGE_SIZE = 20;
 
 /**
- * Phase 24 — read-only platform-wide billing overview, replacing the earlier PlaceholderPage stub.
- * Deliberately no admin actions: cancelling/changing a business's plan stays owner-only via
- * billing.manage, which platform_admin never holds (see subscription.controller.ts). This is
- * investigative visibility only, matching how domains/analytics are surfaced read-only elsewhere
- * in the platform admin views.
+ * Phase 24 — platform-wide billing overview. Each row says where its money comes from (provider,
+ * manual offline agreement, complimentary, free trial). Plans are managed from the restaurant's or
+ * agency's own page (PlatformPlanCard); this list links there.
  */
 export function PlatformSubscriptionsPage() {
   const [page, setPage] = useState(1);
@@ -71,7 +76,7 @@ export function PlatformSubscriptionsPage() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Subscriptions</h1>
-        <p className="text-sm text-muted">Every business's subscription, across the whole platform. Read-only.</p>
+        <p className="text-sm text-muted">Every restaurant and agency subscription, and where it is billed. Manage a plan from the restaurant's or agency's own page.</p>
       </div>
 
       {revenue && (
@@ -101,6 +106,23 @@ export function PlatformSubscriptionsPage() {
             <p className="text-xs uppercase tracking-wide text-muted">Trialing</p>
             <p className="font-heading text-lg font-medium text-foreground">{revenue.trialingCount}</p>
           </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted">Complimentary</p>
+            <p className="font-heading text-lg font-medium text-foreground">{revenue.complimentaryCount ?? 0}</p>
+          </div>
+          {(revenue.offlineMrrByCurrency ?? []).length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted">Of which invoiced offline</p>
+              <div className="flex flex-wrap gap-3">
+                {revenue.offlineMrrByCurrency.map((c) => (
+                  <p key={c.currency} className="font-heading text-lg font-medium text-foreground">
+                    {c.amount.toLocaleString(undefined, { style: "currency", currency: c.currency })}
+                    <span className="ml-1 text-xs font-normal text-muted">{c.currency}/mo</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -116,25 +138,32 @@ export function PlatformSubscriptionsPage() {
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-3 font-medium">Business</th>
+                <th className="py-2 pr-3 font-medium">Account</th>
                 <th className="py-2 pr-3 font-medium">Plan</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Interval</th>
                 <th className="py-2 pr-3 font-medium">Period ends</th>
-                <th className="py-2 pr-3 font-medium">Provider</th>
+                <th className="py-2 pr-3 font-medium">Billed through</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((s) => (
                 <tr key={s.id}>
-                  <td className="py-2.5 pr-3 font-medium text-foreground">{s.businessName ?? "—"}</td>
+                  <td className="py-2.5 pr-3 font-medium text-foreground">
+                    {s.ownerType === "agency" ? (s.agencyName ?? "—") : (s.businessName ?? "—")}
+                    {s.ownerType === "agency" && <span className="ml-1 text-xs font-normal text-muted">agency</span>}
+                  </td>
                   <td className="py-2.5 pr-3 text-muted">{s.planName ?? s.planCode ?? "—"}</td>
                   <td className="py-2.5 pr-3">
-                    <Badge tone={STATUS_TONE[s.status]}>{s.status}</Badge>
+                    <span className="flex flex-wrap gap-1">
+                      <Badge tone={STATUS_TONE[s.status]}>{s.status}</Badge>
+                      {s.suspendedAt && <Badge tone="danger">suspended</Badge>}
+                      {!s.isLive && !s.suspendedAt && ["active", "cancelling", "trialing", "past_due"].includes(s.status) && <Badge tone="danger">lapsed</Badge>}
+                    </span>
                   </td>
                   <td className="py-2.5 pr-3 text-muted">{s.billingInterval}</td>
                   <td className="py-2.5 pr-3 text-muted">{new Date(s.currentPeriodEnd).toLocaleDateString()}</td>
-                  <td className="py-2.5 pr-3 text-muted">{s.provider}</td>
+                  <td className="py-2.5 pr-3 text-muted">{SOURCE_LABEL[s.billingSource] ?? s.provider}</td>
                 </tr>
               ))}
             </tbody>

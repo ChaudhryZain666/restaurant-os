@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { formatHistoryAmount } from "../lib/billingHistoryDisplay";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
+import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
 import { earlyTrialCheckout, subscribeNowLabel, type CheckoutTarget } from "../lib/trialCheckout";
@@ -42,6 +43,8 @@ const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
   refunded: "Refund issued",
   chargeback: "Chargeback",
   chargeback_reversed: "Chargeback reversed",
+  subscription_extended: "Plan extended",
+  suspended: "Plan paused",
 };
 
 // Phase 64 — mirrors notification.queue.ts's own TRIAL_REMINDER_WINDOW_DAYS exactly (a backend-only
@@ -71,6 +74,19 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
  * rows, doubling as the Invoices list via each payment_succeeded row's receiptUrl), past_due
  * grace-period messaging, and a "pay now" checkout path alongside the existing no-card trial path.
  */
+/** A plan set up by a GarnishTable platform admin (provider "manual"): no checkout, card or
+ *  self-serve changes — the API refuses them too (subscription.service.ts assertNotPlatformManaged). */
+function platformManaged(subscription: Subscription | null): subscription is Subscription & { provider: "manual" } {
+  return subscription?.provider === "manual";
+}
+
+function managedTermsLabel(subscription: Subscription) {
+  const terms = subscription.manualBilling;
+  if (!terms || terms.kind === "complimentary") return "Complimentary · provided by GarnishTable";
+  const per = subscription.billingInterval === "monthly" ? "month" : "year";
+  return `${formatCurrency(terms.amountCents / 100, terms.currency)} per ${per} · invoiced by GarnishTable`;
+}
+
 export function BillingPage() {
   const businessId = useActiveBusinessId();
   const { locations } = useActiveLocation();
@@ -280,7 +296,9 @@ export function BillingPage() {
   // Phase 89 — a no-card trial's early checkout is for its own plan and interval, and is offered only
   // when that interval's price is configured (otherwise the server refuses it: a dead action). The
   // amount charged today is shown on the button before Paddle opens. See trialCheckout.ts.
-  const earlyCheckout = earlyTrialCheckout(subscription, plan);
+  const earlyCheckout = platformManaged(subscription) ? null : earlyTrialCheckout(subscription, plan);
+  const managed = platformManaged(subscription);
+  const managedEnded = Boolean(managed && subscription && new Date(subscription.currentPeriodEnd).getTime() <= Date.now());
 
   return (
     <div className="flex flex-col gap-6">
@@ -319,11 +337,21 @@ export function BillingPage() {
                 <Badge tone={STATUS_TONE[subscription.status]}>{STATUS_LABEL[subscription.status]}</Badge>
               </p>
               <p className="text-sm text-muted">
-                {formatPrice(plan.pricing, subscription.billingInterval) ?? (subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly")}
+                {managed
+                  ? managedTermsLabel(subscription)
+                  : (formatPrice(plan.pricing, subscription.billingInterval) ?? (subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly"))}
                 {subscription.provider === "internal" && " · Platform-granted, no billing relationship"}
               </p>
             </div>
           </div>
+
+          {managed && (subscription.suspendedAt || managedEnded) && (
+            <Alert tone="warning">
+              {subscription.suspendedAt
+                ? `Your plan is paused by GarnishTable${subscription.suspendedReason ? `: ${subscription.suspendedReason}` : ""}. Contact support to restore it.`
+                : "Your plan has ended. Contact GarnishTable support to renew it."}
+            </Alert>
+          )}
 
           {subscription.status === "past_due" && pastDueDeadline && (
             <Alert tone="warning">
@@ -366,7 +394,7 @@ export function BillingPage() {
               </div>
             )}
             <div>
-              <dt className="text-muted">Current period ends</dt>
+              <dt className="text-muted">{managed ? "Plan runs until" : "Current period ends"}</dt>
               <dd className="text-foreground">{new Date(subscription.currentPeriodEnd).toLocaleDateString()}</dd>
             </div>
             {subscription.cancelAt && (
@@ -379,6 +407,8 @@ export function BillingPage() {
 
           {isEndedNotNew ? (
             <p className="text-sm text-muted">Choose a plan below to pick up where you left off.</p>
+          ) : managed ? (
+            <p className="text-sm text-muted">Your plan is managed by GarnishTable. To change, extend or cancel it, contact support.</p>
           ) : canManage ? (
             <div className="flex flex-wrap gap-3">
               {subscription.status === "cancelling" && (

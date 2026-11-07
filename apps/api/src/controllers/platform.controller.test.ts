@@ -628,7 +628,7 @@ describe("GET /platform/revenue (Phase 27) — currency-grouped MRR, never a ble
         billingInterval: "monthly",
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        provider: "internal",
+        provider: "mock",
       },
       {
         ownerType: "business",
@@ -638,7 +638,7 @@ describe("GET /platform/revenue (Phase 27) — currency-grouped MRR, never a ble
         billingInterval: "yearly",
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        provider: "internal",
+        provider: "mock",
       },
       {
         ownerType: "business",

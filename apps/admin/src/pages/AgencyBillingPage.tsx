@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { formatHistoryAmount } from "../lib/billingHistoryDisplay";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
+import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useAgency } from "../context/AgencyContext";
 import { isPaddleJsLoaded, openPaddleCheckout } from "../lib/paddle";
@@ -41,6 +42,8 @@ const HISTORY_LABEL: Record<BillingHistoryEvent["type"], string> = {
   refunded: "Refund issued",
   chargeback: "Chargeback",
   chargeback_reversed: "Chargeback reversed",
+  subscription_extended: "Plan extended",
+  suspended: "Plan paused",
 };
 
 function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): string | null {
@@ -276,7 +279,10 @@ export function AgencyBillingPage() {
   const isEndedNotNew = Boolean(subscription && (subscription.status === "expired" || subscription.status === "cancelled"));
   // Phase 89 — a trial's early checkout is for the trial's OWN plan and interval (never the hidden
   // picker's monthly default), and its charge is shown from that same target before Paddle opens.
-  const trialTarget = trialCheckoutTarget(subscription, plan?.code);
+  // A plan a GarnishTable platform admin set up (provider "manual") has no checkout, card or
+  // self-serve changes — the API refuses them too (subscription.service.ts assertNotPlatformManaged).
+  const managed = subscription?.provider === "manual";
+  const trialTarget = managed ? null : trialCheckoutTarget(subscription, plan?.code);
   const trialChargeToday = trialTarget && plan ? immediateChargeAmount(plan.pricing, trialTarget.billingInterval) : null;
   const atOrOverCapacity = Boolean(usage && usage.businessCount >= usage.maxBusinesses);
 
@@ -348,8 +354,13 @@ export function AgencyBillingPage() {
                 <Badge tone={STATUS_TONE[subscription.status]}>{STATUS_LABEL[subscription.status]}</Badge>
               </p>
               <p className="text-sm text-muted">
-                {formatPrice(plan.pricing, subscription.billingInterval) ?? (subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly")}
+                {managed
+                  ? subscription.manualBilling?.kind === "offline"
+                    ? `${formatCurrency(subscription.manualBilling.amountCents / 100, subscription.manualBilling.currency)} per ${subscription.billingInterval === "monthly" ? "month" : "year"} · invoiced by GarnishTable`
+                    : "Complimentary · provided by GarnishTable"
+                  : (formatPrice(plan.pricing, subscription.billingInterval) ?? (subscription.billingInterval === "monthly" ? "Billed monthly" : "Billed yearly"))}
                 {subscription.provider === "internal" && " · Platform-granted, no billing relationship"}
+                {managed && subscription.suspendedAt && " · Paused by GarnishTable"}
               </p>
             </div>
           </div>
@@ -403,6 +414,8 @@ export function AgencyBillingPage() {
 
           {isEndedNotNew ? (
             <p className="text-sm text-muted">Choose a plan below to pick up where you left off.</p>
+          ) : managed ? (
+            <p className="text-sm text-muted">Your plan is managed by GarnishTable. To change, extend or cancel it, contact support.</p>
           ) : canManage ? (
             <div className="flex flex-wrap gap-3">
               {subscription.status === "cancelling" && (

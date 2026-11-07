@@ -36,7 +36,10 @@ export async function auditAcrossBusiness(
     | "subscription.plan_changed"
     | "subscription.cancellation_requested"
     | "subscription.reactivated"
-    | "subscription.cancelled",
+    | "subscription.cancelled"
+    | "subscription.extended"
+    | "subscription.suspended"
+    | "subscription.unsuspended",
   subscriptionId: Types.ObjectId,
   metadata?: Record<string, unknown>
 ) {

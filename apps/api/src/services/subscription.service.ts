@@ -49,8 +49,56 @@ function assertSelfServePlan(plan: Pick<PlanDoc, "isPubliclyListed"> & { _id: un
 
 /** The interval-matched price, if the plan has one configured — used both to stamp economic terms
  *  onto a BillingHistoryEvent and to resolve a real provider's price identifier for checkout. */
-function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: BillingInterval) {
+export function resolvePricing(plan: Pick<PlanDoc, "pricing">, billingInterval: BillingInterval) {
   return plan.pricing.find((p) => p.interval === billingInterval);
+}
+
+/** What an owner sees when trying to change a subscription a platform admin set up. */
+export const PLATFORM_MANAGED_SUBSCRIPTION_MESSAGE = "Your plan is managed by GarnishTable. Contact support to change it.";
+
+/**
+ * Platform-admin subscriptions (provider "manual") change only through platformSubscription.service.ts.
+ * The owner's own billing actions would otherwise call a billing provider about a subscription it
+ * has never heard of — or, through checkout, replace a complimentary plan with a paid one.
+ */
+function assertNotPlatformManaged(subscription: Pick<SubscriptionDoc, "provider"> | null | undefined) {
+  if (subscription?.provider === "manual") throw ApiError.conflict(PLATFORM_MANAGED_SUBSCRIPTION_MESSAGE);
+}
+
+/**
+ * A manual subscription past its end date stops being live at once (isSubscriptionLive), but its
+ * status keeps reading "active"/"cancelling" until this persists the end — and until then the
+ * one-live-subscription index still counts it. Run by the periodic sweep, and for one owner before
+ * anything new is created for them. Guarded on the status it read, so an admin extension racing
+ * this wins.
+ */
+export async function expireLapsedManualSubscriptions(
+  scope: { ownerType?: SubscriptionOwnerType; ownerId?: string } = {},
+  now: Date = new Date()
+): Promise<void> {
+  const lapsed = await Subscription.find({
+    ...scope,
+    provider: "manual",
+    status: { $in: ["active", "cancelling"] },
+    currentPeriodEnd: { $lte: now },
+  }).select("_id status");
+  for (const candidate of lapsed) {
+    const ended: SubscriptionStatus = candidate.status === "cancelling" ? "cancelled" : "expired";
+    const updated = await Subscription.findOneAndUpdate(
+      { _id: candidate._id, status: candidate.status, currentPeriodEnd: { $lte: now } },
+      { $set: { status: ended, ...(ended === "cancelled" ? { cancelledAt: now } : {}) } },
+      { new: true }
+    );
+    if (!updated) continue;
+    await recordBillingHistoryEvent({
+      ownerType: updated.ownerType as SubscriptionOwnerType,
+      ownerId: updated.ownerId.toString(),
+      subscriptionId: updated._id,
+      type: ended,
+      provider: updated.provider,
+      metadata: { reason: "manual_end_date_reached", endedAt: updated.currentPeriodEnd },
+    });
+  }
 }
 
 /**
@@ -80,6 +128,7 @@ async function createSubscriptionCore(
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
+  await expireLapsedManualSubscriptions({ ownerType, ownerId });
   const existing = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
   if (existing) throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
 
@@ -160,10 +209,14 @@ async function createCheckoutSessionCore(
   // A local-only trial (createSubscriptionCore — no providerSubscriptionId yet) is explicitly
   // ALLOWED to proceed to checkout: that's how it ever gets a real payment method attached. Only a
   // subscription already backed by a real provider resource blocks a second checkout.
+  await expireLapsedManualSubscriptions({ ownerType, ownerId });
   const existing = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
   if (existing?.providerSubscriptionId) {
     throw ApiError.conflict(`This ${OWNER_LABEL[ownerType]} already has an active subscription`);
   }
+  // A manual subscription has no provider id either, but unlike a local trial it must never be
+  // converted (replaced) by a checkout.
+  assertNotPlatformManaged(existing);
 
   const plan = await Plan.findOne({ code: planCode, isActive: true });
   if (!plan) throw ApiError.badRequest("Unknown or inactive plan");
@@ -263,6 +316,7 @@ async function getLiveSubscriptionOrThrow(
   ownerType: SubscriptionOwnerType,
   ownerId: string
 ): Promise<HydratedDocument<SubscriptionDoc>> {
+  await expireLapsedManualSubscriptions({ ownerType, ownerId });
   const subscription = await Subscription.findOne({ ownerType, ownerId, status: { $in: LIVE_STATUSES } });
   if (!subscription) throw ApiError.notFound(`This ${OWNER_LABEL[ownerType]} has no active subscription`);
   return subscription;
@@ -283,6 +337,7 @@ async function cancelSubscriptionCore(
   atPeriodEnd = true
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
+  assertNotPlatformManaged(subscription);
   if (subscription.status === "cancelling") {
     throw ApiError.badRequest("This subscription is already scheduled to cancel");
   }
@@ -333,6 +388,7 @@ export async function cancelAgencySubscription(agencyId: string, atPeriodEnd = t
 /** Un-cancels a scheduled (not yet effective) cancellation — only valid from "cancelling". */
 async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, ownerId: string): Promise<HydratedDocument<SubscriptionDoc>> {
   const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
+  assertNotPlatformManaged(subscription);
   if (!isValidSubscriptionTransition(subscription.status, "active")) {
     throw ApiError.badRequest(`Cannot reactivate a subscription with status "${subscription.status}"`);
   }
@@ -362,6 +418,7 @@ async function reactivateSubscriptionCore(ownerType: SubscriptionOwnerType, owne
  */
 async function getPaymentMethodUpdateUrlCore(ownerType: SubscriptionOwnerType, ownerId: string): Promise<string> {
   const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
+  assertNotPlatformManaged(subscription);
   if (!subscription.providerSubscriptionId) {
     throw ApiError.badRequest("There's no payment method on file yet — choose a plan to add one.");
   }
@@ -396,6 +453,7 @@ async function changeSubscriptionPlanCore(
   newPlanCode: string
 ): Promise<HydratedDocument<SubscriptionDoc>> {
   const subscription = await getLiveSubscriptionOrThrow(ownerType, ownerId);
+  assertNotPlatformManaged(subscription);
   if (!["trialing", "active", "past_due"].includes(subscription.status)) {
     throw ApiError.badRequest(`Cannot change plan on a subscription with status "${subscription.status}"`);
   }
@@ -639,11 +697,15 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
   const snapshot = await provider.retrieveSubscription(event.providerSubscriptionId);
   const status: SubscriptionStatus = snapshot.status === "trialing" ? "trialing" : "active";
 
+  await expireLapsedManualSubscriptions({ ownerType: meta.ownerType, ownerId: meta.ownerId });
+  // A live manual (platform-admin) subscription is never converted: the create below then hits the
+  // one-live-subscription index and is reported as a duplicate purchase for a human to resolve.
   const existingLocalTrial = await Subscription.findOne({
     ownerType: meta.ownerType,
     ownerId: meta.ownerId,
     status: { $in: LIVE_STATUSES },
     providerSubscriptionId: { $exists: false },
+    provider: { $ne: "manual" },
   });
 
   let subscription: HydratedDocument<SubscriptionDoc>;
@@ -1102,4 +1164,7 @@ export async function runTrialExpirationSweep(): Promise<void> {
       provider: updated.provider,
     });
   }
+
+  // Same job, same reason: platform-admin subscriptions past their agreed end date.
+  await expireLapsedManualSubscriptions({}, now);
 }

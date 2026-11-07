@@ -20,7 +20,7 @@ const billingHistoryEventSchema = new Schema(
     type: { type: String, enum: BILLING_HISTORY_EVENT_TYPES, required: true },
     amountCents: { type: Number, min: 0 },
     currency: { type: String },
-    provider: { type: String, enum: ["mock", "internal", "paddle", "lemonsqueezy"], required: true },
+    provider: { type: String, enum: ["mock", "internal", "paddle", "lemonsqueezy", "manual"], required: true },
     providerReference: { type: String },
     receiptUrl: { type: String },
     occurredAt: { type: Date, required: true, default: () => new Date() },
