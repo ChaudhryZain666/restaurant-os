@@ -10,6 +10,12 @@ describe("planChangeBillingNote", () => {
     );
   });
 
+  it("a Lemon Squeezy subscription gets the same note: its default proration is also billed on the next invoice", () => {
+    expect(
+      planChangeBillingNote({ status: "active", provider: "lemonsqueezy", providerSubscriptionId: "555" }, "Owner — Growth", "$99.00/mo", "11/13/2026")
+    ).toContain("Nothing is charged today");
+  });
+
   it("never states a proration amount, and still reads correctly when the new price is unknown", () => {
     const note = planChangeBillingNote({ status: "active", provider: "paddle", providerSubscriptionId: "sub_123" }, "Owner — Growth", null, "11/13/2026");
     expect(note).toBe(

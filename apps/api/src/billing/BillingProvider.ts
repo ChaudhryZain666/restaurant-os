@@ -111,8 +111,9 @@ export interface ProviderBillingWebhookEvent {
    *  Subscription.lastProviderEventAt). Absent when the provider doesn't say. */
   occurredAt?: Date;
   /** Phase 89 — the subscription's current billing period, when the event carries it (renewals
-   *  move it forward). */
-  currentPeriod?: { start: Date; end: Date };
+   *  move it forward). `start` is absent when the provider reports only the period end (Lemon
+   *  Squeezy's renews_at): a later end then starts the new period where the old one ended. */
+  currentPeriod?: { start?: Date; end: Date };
   /** Phase 89 — a scheduled cancellation's effective date; null means the event says none is
    *  scheduled; undefined means the event doesn't say. */
   scheduledCancelAt?: Date | null;
@@ -124,6 +125,11 @@ export interface ProviderBillingWebhookEvent {
    *  rather than something that happened to a real subscription. Set by the adapter only from the
    *  signature-verified payload. Such events are acknowledged and recorded, never applied. */
   simulated?: boolean;
+  /** Set by an adapter when a correctly signed event must still not be applied — e.g. a Lemon
+   *  Squeezy subscription_created whose checkout data this server didn't sign. Recorded with this
+   *  reason and logged as an alert (a real customer may have paid), never applied. */
+  rejectedReason?: string;
+  /** What is persisted with the event — adapters strip anything that must not be stored. */
   raw: unknown;
   /**
    * Phase 27 — present ONLY on a checkout-completion event (a brand-new subscription being

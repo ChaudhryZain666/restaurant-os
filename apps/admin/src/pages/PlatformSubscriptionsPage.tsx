@@ -14,7 +14,7 @@ interface PlatformSubscriptionRow {
   billingInterval: "monthly" | "yearly";
   currentPeriodEnd: string;
   trialEnd: string | null;
-  provider: "mock" | "internal" | "paddle";
+  provider: "mock" | "internal" | "paddle" | "lemonsqueezy";
   createdAt: string;
 }
 

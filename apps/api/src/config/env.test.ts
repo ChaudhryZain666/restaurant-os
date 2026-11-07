@@ -336,6 +336,32 @@ describe("envSchema — Phase 85A production hardening", () => {
       expect(envSchema.safeParse({ ...REQUIRED_BASE, BILLING_PROVIDER: "paddle", PADDLE_ENV: "sandbox" }).success).toBe(true);
     });
   });
+
+  describe("Lemon Squeezy in production", () => {
+    const LEMONSQUEEZY_LIVE = {
+      ...PRODUCTION_READY,
+      BILLING_PROVIDER: "lemonsqueezy",
+      LEMONSQUEEZY_API_KEY: "live-api-key",
+      LEMONSQUEEZY_WEBHOOK_SECRET: "whsec",
+      LEMONSQUEEZY_STORE_ID: "517310",
+      LEMONSQUEEZY_CHECKOUT_SECRET: "c".repeat(64),
+      LEMONSQUEEZY_TEST_MODE: "false",
+    };
+
+    it("accepts Lemon Squeezy production with every credential in live mode", () => {
+      expect(envSchema.safeParse(LEMONSQUEEZY_LIVE).success).toBe(true);
+    });
+
+    it("requires the server-only checkout signing secret, at least 32 chars", () => {
+      expect(fieldErrors({ ...LEMONSQUEEZY_LIVE, LEMONSQUEEZY_CHECKOUT_SECRET: undefined }).LEMONSQUEEZY_CHECKOUT_SECRET?.[0]).toMatch(/requires LEMONSQUEEZY_CHECKOUT_SECRET/);
+      expect(fieldErrors({ ...LEMONSQUEEZY_LIVE, LEMONSQUEEZY_CHECKOUT_SECRET: "" }).LEMONSQUEEZY_CHECKOUT_SECRET?.[0]).toMatch(/requires LEMONSQUEEZY_CHECKOUT_SECRET/);
+      expect(fieldErrors({ ...LEMONSQUEEZY_LIVE, LEMONSQUEEZY_CHECKOUT_SECRET: "too-short" }).LEMONSQUEEZY_CHECKOUT_SECRET?.[0]).toMatch(/at least 32 chars/);
+    });
+
+    it("refuses test mode in production (LEMONSQUEEZY_TEST_MODE defaults to true)", () => {
+      expect(fieldErrors({ ...LEMONSQUEEZY_LIVE, LEMONSQUEEZY_TEST_MODE: undefined }).LEMONSQUEEZY_TEST_MODE?.[0]).toMatch(/LEMONSQUEEZY_TEST_MODE=false/);
+    });
+  });
 });
 
 describe("envSchema — Phase 86 custom-domain edge settings", () => {

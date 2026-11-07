@@ -3,6 +3,7 @@ import { logger } from "../common/logger.js";
 import type { BillingProvider } from "./BillingProvider.js";
 import { MockBillingProvider } from "./MockBillingProvider.js";
 import { PaddleBillingProvider } from "./PaddleBillingProvider.js";
+import { LemonSqueezyBillingProvider } from "./LemonSqueezyBillingProvider.js";
 
 let instance: BillingProvider | null = null;
 let mockInstance: MockBillingProvider | null = null;
@@ -46,6 +47,21 @@ export function getBillingProvider(): BillingProvider {
       env.PADDLE_WEBHOOK_SECRET,
       PaddleBillingProvider.baseUrlForEnv(env.PADDLE_ENV),
       env.PADDLE_CLIENT_TOKEN
+    );
+    return instance;
+  }
+  if (env.BILLING_PROVIDER === "lemonsqueezy") {
+    if (!env.LEMONSQUEEZY_API_KEY || !env.LEMONSQUEEZY_WEBHOOK_SECRET || !env.LEMONSQUEEZY_STORE_ID || !env.LEMONSQUEEZY_CHECKOUT_SECRET) {
+      throw new Error(
+        "BILLING_PROVIDER=lemonsqueezy requires LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET, LEMONSQUEEZY_STORE_ID and LEMONSQUEEZY_CHECKOUT_SECRET to be configured."
+      );
+    }
+    instance = new LemonSqueezyBillingProvider(
+      env.LEMONSQUEEZY_API_KEY,
+      env.LEMONSQUEEZY_WEBHOOK_SECRET,
+      env.LEMONSQUEEZY_STORE_ID,
+      env.LEMONSQUEEZY_TEST_MODE,
+      env.LEMONSQUEEZY_CHECKOUT_SECRET
     );
     return instance;
   }

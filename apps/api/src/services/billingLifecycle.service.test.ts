@@ -155,6 +155,24 @@ describe("P3 — renewals, scheduled cancellation, ordering, outside plan change
     expect(sub!.status).toBe("active");
   });
 
+  it("a provider that reports only the period end (Lemon Squeezy): a later end starts the new period at the old end", async () => {
+    const { ownerId, providerSubscriptionId } = await paddleSubscription();
+    // Same end (e.g. a plan change mid-period): the period start is left alone.
+    await processBillingProviderEvent(
+      "paddle",
+      event(providerSubscriptionId, { status: "active", occurredAt: new Date("2026-10-15T00:00:00Z"), currentPeriod: { end: new Date("2026-11-01T00:00:00Z") } })
+    );
+    expect((await Subscription.findOne({ ownerId }))!.currentPeriodStart).toEqual(new Date("2026-10-01T00:00:00Z"));
+
+    await processBillingProviderEvent(
+      "paddle",
+      event(providerSubscriptionId, { status: "active", occurredAt: new Date("2026-11-01T00:00:05Z"), currentPeriod: { end: new Date("2026-12-01T00:00:00Z") } })
+    );
+    const sub = await Subscription.findOne({ ownerId });
+    expect(sub!.currentPeriodStart).toEqual(new Date("2026-11-01T00:00:00Z"));
+    expect(sub!.currentPeriodEnd).toEqual(new Date("2026-12-01T00:00:00Z"));
+  });
+
   it("an older event arriving late does not roll the period back", async () => {
     const { ownerId, providerSubscriptionId } = await paddleSubscription();
     const newer = { start: new Date("2026-11-01T00:00:00Z"), end: new Date("2026-12-01T00:00:00Z") };

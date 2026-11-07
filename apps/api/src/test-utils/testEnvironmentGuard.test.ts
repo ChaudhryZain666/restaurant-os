@@ -25,6 +25,13 @@ describe("testEnvironmentGuard", () => {
     }
   });
 
+  it("refuses any loaded Lemon Squeezy credential, and accepts the blanked ones .env.test sets", () => {
+    for (const key of ["LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "LEMONSQUEEZY_CHECKOUT_SECRET"]) {
+      expect(() => assertSafeTestEnvironment({ ...SAFE, [key]: "synthetic-value" })).toThrow(new RegExp(`${key} is set`));
+    }
+    expect(testEnvironmentProblems({ ...SAFE, LEMONSQUEEZY_API_KEY: "", LEMONSQUEEZY_WEBHOOK_SECRET: "", LEMONSQUEEZY_CHECKOUT_SECRET: "" })).toEqual([]);
+  });
+
   it("refuses the dev database, a remote database, or a missing/invalid URI", () => {
     expect(() => assertSafeTestEnvironment({ ...SAFE, MONGO_URI: "mongodb://localhost:27017/restaurant_platform" })).toThrow(/must end in "_test"/);
     expect(() => assertSafeTestEnvironment({ ...SAFE, MONGO_URI: "mongodb+srv://cluster0.example.net/app_test" })).toThrow(/local MongoDB/);

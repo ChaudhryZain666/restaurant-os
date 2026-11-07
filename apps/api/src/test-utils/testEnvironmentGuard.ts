@@ -1,6 +1,6 @@
 /**
  * Phase 89 — what jest.setup.env.ts checks before any test runs: the test process must use its own
- * local database and the mock billing provider, with no Paddle credentials loaded. Tests write
+ * local database and the mock billing provider, with no Paddle or Lemon Squeezy credentials loaded. Tests write
  * fixtures freely and call billing code paths, so either of these pointing somewhere real would
  * pollute the dev database or send real requests to Paddle.
  */
@@ -14,6 +14,9 @@ export function testEnvironmentProblems(vars: Record<string, string | undefined>
   }
   for (const key of ["PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET", "PADDLE_CLIENT_TOKEN"]) {
     if (vars[key]) problems.push(`${key} is set — tests must not load Paddle credentials`);
+  }
+  for (const key of ["LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "LEMONSQUEEZY_CHECKOUT_SECRET"]) {
+    if (vars[key]) problems.push(`${key} is set — tests must not load Lemon Squeezy credentials`);
   }
 
   const mongoUri = vars.MONGO_URI;
