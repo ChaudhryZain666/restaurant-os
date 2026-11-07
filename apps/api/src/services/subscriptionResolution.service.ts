@@ -29,10 +29,16 @@ export const LIVE_STATUSES: readonly SubscriptionStatus[] = ["trialing", "active
  * check — called from the read/decision path, never assumed to already be reflected in `status`.
  */
 export function isSubscriptionLive(
-  sub: Pick<SubscriptionDoc, "status" | "trialEnd"> & Partial<Pick<SubscriptionDoc, "providerSubscriptionId" | "provider">>,
+  sub: Pick<SubscriptionDoc, "status" | "trialEnd"> &
+    Partial<Pick<SubscriptionDoc, "providerSubscriptionId" | "provider" | "currentPeriodEnd" | "suspendedAt">>,
   now: Date = new Date()
 ): boolean {
   if (!LIVE_STATUSES.includes(sub.status as SubscriptionStatus)) return false;
+  // A platform admin's suspension, and a manual subscription past its agreed end date (nothing
+  // renews it — only an admin extension does), end access the moment they apply, independent of
+  // the sweep that later persists "expired" (runManualSubscriptionExpirySweep).
+  if (sub.suspendedAt) return false;
+  if (sub.provider === "manual" && sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() <= now.getTime()) return false;
   if (sub.status === "trialing" && sub.trialEnd && sub.trialEnd.getTime() <= now.getTime()) {
     // Pre-launch — a no-card trial doesn't lapse while nobody can pay (trialExtension.service.ts).
     return trialExtensionActive() && isExtendableTrial(sub);

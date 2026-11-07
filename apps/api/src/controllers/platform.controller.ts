@@ -32,6 +32,8 @@ import { Plan } from "../models/Plan.js";
 import { Business } from "../models/Business.js";
 import { Agency } from "../models/Agency.js";
 import { recordAgencyAuditEvent } from "../services/agencyAudit.service.js";
+import { toPlatformSubscriptionSummary } from "../services/platformSubscription.service.js";
+import { isSubscriptionLive } from "../services/subscriptionResolution.service.js";
 import { AgencyMembership } from "../models/AgencyMembership.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sendSuccess } from "../common/response.js";
@@ -211,15 +213,14 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
     RestaurantMarketplaceIntegration.find({ restaurantId: restaurant._id, status: { $ne: "disconnected" } }).sort({ createdAt: -1 }),
   ]);
 
-  // Phase 24 — read-only billing visibility for investigation, same rationale as domains above:
-  // platform_admin has no write access to billing (that stays owner-only via billing.manage,
-  // which platform_admin never holds) — the one exception is assigning a plan as a no-card trial
-  // when there's no live subscription (platformSubscription.controller.ts). Provider IDs are stripped — they're an external billing
-  // system's internal reference, not something a support investigation needs to see.
+  // Phase 24 — the business's most recent subscription for the platform admin: its billing source,
+  // terms and dates. Platform admins act on it only through platformSubscription.controller.ts
+  // (trial assignment and manual subscriptions); a provider-paid plan stays the owner's to change.
+  // Provider IDs are stripped — an external billing system's internal reference.
   const subscription = restaurant.businessId
     ? await Subscription.findOne({ ownerType: "business", ownerId: restaurant.businessId }).sort({ createdAt: -1 })
     : null;
-  const subscriptionPlan = subscription ? await Plan.findById(subscription.planId) : null;
+  const subscriptionPlan = subscription ? await Plan.findById(subscription.planId).select("code name") : null;
 
   sendSuccess(res, {
     restaurant: restaurant.toJSON(),
@@ -228,18 +229,7 @@ export async function getPlatformRestaurantDetail(req: Request, res: Response) {
       const { verificationToken: _verificationToken, ...rest } = d.toJSON();
       return rest;
     }),
-    subscription: subscription
-      ? {
-          status: subscription.status,
-          billingInterval: subscription.billingInterval,
-          currentPeriodEnd: subscription.currentPeriodEnd,
-          trialEnd: subscription.trialEnd ?? null,
-          cancelAt: subscription.cancelAt ?? null,
-          provider: subscription.provider,
-          planCode: subscriptionPlan?.code ?? null,
-          planName: subscriptionPlan?.name ?? null,
-        }
-      : null,
+    subscription: subscription ? toPlatformSubscriptionSummary(subscription, subscriptionPlan) : null,
     owner: owner
       ? {
           id: owner.id as string,
@@ -532,30 +522,29 @@ export async function listPlatformSubscriptions(req: Request, res: Response) {
 
   const result = await paginateQuery(Subscription.find().sort({ createdAt: -1 }), { page, limit });
 
-  const businessIds = [...new Set(result.items.map((s) => s.ownerId.toString()))];
+  const ownerIdsOf = (type: string) => [...new Set(result.items.filter((s) => s.ownerType === type).map((s) => s.ownerId.toString()))];
   const planIds = [...new Set(result.items.map((s) => s.planId.toString()))];
-  const [businesses, plans] = await Promise.all([
-    Business.find({ _id: { $in: businessIds } }).select("name slug"),
+  const [businesses, agencies, plans] = await Promise.all([
+    Business.find({ _id: { $in: ownerIdsOf("business") } }).select("name slug"),
+    Agency.find({ _id: { $in: ownerIdsOf("agency") } }).select("name slug"),
     Plan.find({ _id: { $in: planIds } }).select("code name"),
   ]);
   const businessById = new Map(businesses.map((b) => [b.id as string, b]));
+  const agencyById = new Map(agencies.map((a) => [a.id as string, a]));
   const planById = new Map(plans.map((p) => [p.id as string, p]));
 
+  const now = new Date();
   const items = result.items.map((s) => {
     const business = s.ownerType === "business" ? businessById.get(s.ownerId.toString()) : undefined;
-    const plan = planById.get(s.planId.toString());
+    const agency = s.ownerType === "agency" ? agencyById.get(s.ownerId.toString()) : undefined;
+    const plan = planById.get(s.planId.toString()) ?? null;
     return {
-      id: s.id as string,
+      ...toPlatformSubscriptionSummary(s, plan, now),
       ownerType: s.ownerType,
+      ownerId: s.ownerId.toString(),
       businessName: business?.name,
       businessSlug: business?.slug,
-      planCode: plan?.code,
-      planName: plan?.name,
-      status: s.status,
-      billingInterval: s.billingInterval,
-      currentPeriodEnd: s.currentPeriodEnd,
-      trialEnd: s.trialEnd ?? null,
-      provider: s.provider,
+      agencyName: agency?.name,
       createdAt: (s as unknown as { createdAt: Date }).createdAt.toISOString(),
     };
   });
@@ -573,9 +562,14 @@ export async function listPlatformSubscriptions(req: Request, res: Response) {
  * — the same "group by currency, never blend" convention Phase 23 established, not a second one.
  */
 export async function getPlatformRevenue(_req: Request, res: Response) {
-  const liveSubscriptions = await Subscription.find({ status: { $in: ["active", "past_due", "cancelling"] } }).select(
-    "planId billingInterval status"
-  );
+  const now = new Date();
+  const candidates = await Subscription.find({
+    status: { $in: ["active", "past_due", "cancelling"] },
+    // Grandfathered accounts have no commercial relationship at all.
+    provider: { $ne: "internal" },
+  }).select("planId billingInterval status provider currentPeriodEnd suspendedAt trialEnd manualBilling");
+  // A suspended or lapsed manual subscription isn't paying, whatever its stored status says.
+  const liveSubscriptions = candidates.filter((s) => isSubscriptionLive(s, now));
   const trialingCount = await Subscription.countDocuments({ status: "trialing" });
 
   const planIds = [...new Set(liveSubscriptions.map((s) => s.planId.toString()))];
@@ -583,17 +577,38 @@ export async function getPlatformRevenue(_req: Request, res: Response) {
   const planById = new Map(plans.map((p) => [p.id as string, p]));
 
   const monthlyAmounts: Array<{ currency: string; amount: number }> = [];
+  const offlineMonthlyAmounts: Array<{ currency: string; amount: number }> = [];
+  let complimentaryCount = 0;
   for (const sub of liveSubscriptions) {
-    const plan = planById.get(sub.planId.toString());
-    const pricing = plan?.pricing.find((p) => p.interval === sub.billingInterval);
-    if (!pricing?.amountCents || !pricing.currency) continue; // no real price configured — excluded, never guessed
-    const monthlyCents = sub.billingInterval === "yearly" ? pricing.amountCents / 12 : pricing.amountCents;
-    monthlyAmounts.push({ currency: pricing.currency, amount: monthlyCents / 100 });
+    // A manual subscription earns its agreed price (possibly negotiated), never the list price —
+    // and a complimentary one earns nothing.
+    let amountCents: number | undefined;
+    let currency: string | undefined;
+    if (sub.provider === "manual") {
+      if (!sub.manualBilling || sub.manualBilling.kind === "complimentary" || sub.manualBilling.amountCents === 0) {
+        complimentaryCount += 1;
+        continue;
+      }
+      amountCents = sub.manualBilling.amountCents;
+      currency = sub.manualBilling.currency;
+    } else {
+      const plan = planById.get(sub.planId.toString());
+      const pricing = plan?.pricing.find((p) => p.interval === sub.billingInterval);
+      amountCents = pricing?.amountCents ?? undefined;
+      currency = pricing?.currency ?? undefined;
+    }
+    if (!amountCents || !currency) continue; // no real price configured — excluded, never guessed
+    const monthly = { currency, amount: (sub.billingInterval === "yearly" ? amountCents / 12 : amountCents) / 100 };
+    monthlyAmounts.push(monthly);
+    if (sub.provider === "manual") offlineMonthlyAmounts.push(monthly);
   }
 
   sendSuccess(res, {
     mrrByCurrency: sumAmountsByCurrency(monthlyAmounts),
+    /** The part of mrrByCurrency billed outside GarnishTable (manual offline agreements). */
+    offlineMrrByCurrency: sumAmountsByCurrency(offlineMonthlyAmounts),
     liveSubscriptionCount: liveSubscriptions.length,
+    complimentaryCount,
     trialingCount,
   });
 }

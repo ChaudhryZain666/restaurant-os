@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { AgencyEmailSenderStatus, Paginated } from "@restaurant/types";
 import { Alert, Badge, Button, Card, Pagination } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
+import { PlatformPlanCard } from "../components/PlatformPlanCard";
 import { EMAIL_SENDER_STATUS_COPY } from "../lib/whiteLabelCopy";
 
 interface PlatformAgencyRow {
@@ -22,13 +23,15 @@ interface PlatformAgencyRow {
  * agency's custom sender address. The email transport is generic SMTP with no verification API, so
  * "Authorize" is the platform team's statement that the SMTP provider account is set up to send for
  * that domain (SPF/DKIM at the provider). The server refuses it unless the agency's domain is
- * DNS-verified and unclaimed by any other agency.
+ * DNS-verified and unclaimed by any other agency. Each agency's own platform plan opens inline
+ * (PlatformPlanCard — trials, complimentary and offline-billed manual subscriptions).
  */
 export function PlatformAgenciesPage() {
   const [data, setData] = useState<Paginated<PlatformAgencyRow> | null>(null);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [planOpenId, setPlanOpenId] = useState<string | null>(null);
 
   function load(p = page) {
     return apiClient
@@ -70,7 +73,7 @@ export function PlatformAgenciesPage() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Agencies</h1>
-        <p className="text-sm text-muted">Agencies on the platform, and custom email senders waiting for authorization.</p>
+        <p className="text-sm text-muted">Agencies on the platform, their plans, and custom email senders waiting for authorization.</p>
       </div>
       {error && (
         <Alert tone="danger" role="alert">
@@ -92,11 +95,13 @@ export function PlatformAgenciesPage() {
                 <th className="px-4 py-2 font-medium">Clients</th>
                 <th className="px-4 py-2 font-medium">Domain</th>
                 <th className="px-4 py-2 font-medium">Custom email sender</th>
+                <th className="px-4 py-2 font-medium">Plan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {data.items.map((agency) => (
-                <tr key={agency.id} className="align-top">
+                <Fragment key={agency.id}>
+                <tr className="align-top">
                   <td className="px-4 py-3">
                     <div className="font-medium text-foreground">{agency.name}</div>
                     <div className="text-xs text-muted">
@@ -144,7 +149,25 @@ export function PlatformAgenciesPage() {
                       <span className="text-xs text-muted">None requested</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-expanded={planOpenId === agency.id}
+                      onClick={() => setPlanOpenId(planOpenId === agency.id ? null : agency.id)}
+                    >
+                      {planOpenId === agency.id ? "Hide plan" : "Plan"}
+                    </Button>
+                  </td>
                 </tr>
+                {planOpenId === agency.id && (
+                  <tr>
+                    <td colSpan={5} className="bg-black/[0.02] px-4 py-3">
+                      <PlatformPlanCard ownerType="agency" ownerId={agency.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -5,7 +5,7 @@ import type { AuditLogEntry } from "./auditLog.js";
 import type { RestaurantPaymentAccount } from "./restaurantPaymentAccount.js";
 import type { RestaurantMarketplaceIntegration } from "./marketplace.js";
 import type { BillingInterval, PlanType } from "./plan.js";
-import type { SubscriptionProvider, SubscriptionStatus } from "./subscription.js";
+import type { ManualBillingTerms, SubscriptionProvider, SubscriptionStatus } from "./subscription.js";
 
 export interface PlatformRestaurantSummary {
   id: string;
@@ -67,15 +67,33 @@ export interface PlatformRestaurantDetail {
   subscription: PlatformSubscriptionSummary | null;
 }
 
+/**
+ * Where a subscription's money comes from, as a platform admin needs to read it — never inferred
+ * from the plan price. "trial" is a no-card trial (nothing charged yet); "lemonsqueezy"/"paddle"
+ * are paid through that provider; "mock" is the development billing stand-in; "manual_offline" and
+ * "complimentary" are platform-admin subscriptions (provider "manual"); "internal" is a
+ * grandfathered account outside plan enforcement.
+ */
+export type SubscriptionBillingSource = "trial" | "lemonsqueezy" | "paddle" | "mock" | "manual_offline" | "complimentary" | "internal";
+
 export interface PlatformSubscriptionSummary {
+  id: string;
   status: SubscriptionStatus;
+  /** Whether it grants access right now (a lapsed manual end date or a suspension is not live
+   *  even while `status` still reads "active"). */
+  isLive: boolean;
+  billingSource: SubscriptionBillingSource;
   billingInterval: BillingInterval;
+  currentPeriodStart: string;
   currentPeriodEnd: string;
   trialEnd: string | null;
   cancelAt: string | null;
   provider: SubscriptionProvider;
   planCode: string | null;
   planName: string | null;
+  manualBilling: ManualBillingTerms | null;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
 }
 
 /** GET /platform/plans — every ACTIVE plan, including private (isPubliclyListed:false) ones made

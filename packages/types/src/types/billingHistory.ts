@@ -26,6 +26,9 @@ export const BILLING_HISTORY_EVENT_TYPES = [
   "refunded",
   "chargeback",
   "chargeback_reversed",
+  // Platform-admin actions on a manual subscription (provider:"manual"). Never payments.
+  "subscription_extended",
+  "suspended",
 ] as const;
 
 export type BillingHistoryEventType = (typeof BILLING_HISTORY_EVENT_TYPES)[number];

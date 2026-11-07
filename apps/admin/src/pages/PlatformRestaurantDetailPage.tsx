@@ -130,7 +130,6 @@ export function PlatformRestaurantDetailPage() {
     businessLocationCount,
     paymentAccount,
     marketplaceIntegrations,
-    subscription,
   } = detail;
   const foodpandaIntegration = marketplaceIntegrations.find((m) => m.provider === "foodpanda");
   const foodpandaNeedsLinking = !foodpandaIntegration || foodpandaIntegration.status !== "active";
@@ -298,7 +297,7 @@ export function PlatformRestaurantDetailPage() {
         </Card>
       </div>
 
-      <PlatformPlanCard businessId={restaurant.businessId} subscription={subscription} onAssigned={reload} />
+      <PlatformPlanCard ownerType="business" ownerId={restaurant.businessId} onChanged={reload} />
 
       <Card>
         <h2 className="mb-2 font-heading text-sm font-semibold text-foreground">Payment &amp; marketplace connections</h2>

@@ -37,6 +37,10 @@ export const AUDIT_ACTIONS = [
   "subscription.cancellation_requested",
   "subscription.reactivated",
   "subscription.cancelled",
+  // Platform-admin actions on a manual subscription (platformSubscription.controller.ts).
+  "subscription.extended",
+  "subscription.suspended",
+  "subscription.unsuspended",
   // Phase 27 — webhook-driven state changes, distinct from the owner-initiated actions above, so a
   // payment failure/recovery is auditable too, not just direct user actions.
   "subscription.payment_succeeded",

@@ -24,6 +24,11 @@ export const AGENCY_AUDIT_ACTIONS = [
   "agency.subscription_plan_changed",
   "agency.subscription_cancellation_requested",
   "agency.subscription_reactivated",
+  // Platform-admin actions on the agency's manual subscription (platformSubscription.controller.ts).
+  "agency.subscription_cancelled",
+  "agency.subscription_extended",
+  "agency.subscription_suspended",
+  "agency.subscription_unsuspended",
   // Phase 27 — webhook-driven state changes, mirroring the business-side AUDIT_ACTIONS additions.
   "agency.subscription_payment_succeeded",
   "agency.subscription_payment_failed",

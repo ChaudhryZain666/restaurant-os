@@ -1,6 +1,11 @@
 import { Router } from "express";
 import {
+  adminCancelSubscriptionSchema,
+  changeManualSubscriptionPlanSchema,
+  createManualSubscriptionSchema,
   createSubscriptionSchema,
+  extendManualSubscriptionSchema,
+  suspendManualSubscriptionSchema,
   linkFoodpandaIntegrationSchema,
   linkUberEatsStoreSchema,
   listPlatformRestaurantsQuerySchema,
@@ -35,9 +40,20 @@ import {
   updateUserStatus,
 } from "../controllers/platform.controller.js";
 import {
+  adminCancelSubscriptionHandler,
   assignAgencyPlanHandler,
   assignBusinessPlanHandler,
+  changeManualSubscriptionPlanHandler,
+  createManualAgencySubscriptionHandler,
+  createManualBusinessSubscriptionHandler,
+  extendManualSubscriptionHandler,
+  getAgencyBillingHistoryHandler,
+  getBusinessBillingHistoryHandler,
+  getPlatformSubscriptionHandler,
   listPlatformPlans,
+  resumeManualSubscriptionHandler,
+  suspendManualSubscriptionHandler,
+  unsuspendManualSubscriptionHandler,
 } from "../controllers/platformSubscription.controller.js";
 
 /** Cross-tenant platform-admin views — not restaurant-scoped. Mounted at /platform. */
@@ -100,6 +116,60 @@ platformRouter.post(
   requirePermission("platform.restaurants.manage"),
   validateBody(createSubscriptionSchema),
   asyncHandler(assignAgencyPlanHandler)
+);
+// Platform-admin manual subscriptions (complimentary, or billed offline at an agreed price) — no
+// billing provider is ever called. See services/platformSubscription.service.ts.
+const managePlatform = requirePermission("platform.restaurants.manage");
+platformRouter.post(
+  "/businesses/:businessId/subscription/manual",
+  managePlatform,
+  validateBody(createManualSubscriptionSchema),
+  asyncHandler(createManualBusinessSubscriptionHandler)
+);
+platformRouter.post(
+  "/agencies/:agencyId/subscription/manual",
+  managePlatform,
+  validateBody(createManualSubscriptionSchema),
+  asyncHandler(createManualAgencySubscriptionHandler)
+);
+platformRouter.get(
+  "/businesses/:businessId/billing-history",
+  managePlatform,
+  validateQuery(paginationQuerySchema),
+  asyncHandler(getBusinessBillingHistoryHandler)
+);
+platformRouter.get(
+  "/agencies/:agencyId/billing-history",
+  managePlatform,
+  validateQuery(paginationQuerySchema),
+  asyncHandler(getAgencyBillingHistoryHandler)
+);
+platformRouter.get("/subscriptions/:subscriptionId", managePlatform, asyncHandler(getPlatformSubscriptionHandler));
+platformRouter.post(
+  "/subscriptions/:subscriptionId/extend",
+  managePlatform,
+  validateBody(extendManualSubscriptionSchema),
+  asyncHandler(extendManualSubscriptionHandler)
+);
+platformRouter.post(
+  "/subscriptions/:subscriptionId/change-plan",
+  managePlatform,
+  validateBody(changeManualSubscriptionPlanSchema),
+  asyncHandler(changeManualSubscriptionPlanHandler)
+);
+platformRouter.post(
+  "/subscriptions/:subscriptionId/suspend",
+  managePlatform,
+  validateBody(suspendManualSubscriptionSchema),
+  asyncHandler(suspendManualSubscriptionHandler)
+);
+platformRouter.post("/subscriptions/:subscriptionId/unsuspend", managePlatform, asyncHandler(unsuspendManualSubscriptionHandler));
+platformRouter.post("/subscriptions/:subscriptionId/resume", managePlatform, asyncHandler(resumeManualSubscriptionHandler));
+platformRouter.post(
+  "/subscriptions/:subscriptionId/cancel",
+  managePlatform,
+  validateBody(adminCancelSubscriptionSchema),
+  asyncHandler(adminCancelSubscriptionHandler)
 );
 platformRouter.get(
   "/agencies",

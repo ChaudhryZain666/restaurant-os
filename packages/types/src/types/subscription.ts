@@ -28,7 +28,26 @@ export type SubscriptionStatus = "trialing" | "active" | "past_due" | "cancellin
  * verified vs. assumed; it has never been exercised against a live Paddle account in this
  * environment, mirroring apps/api/src/payments/SafepayProvider.ts's own honesty precedent.
  */
-export type SubscriptionProvider = "mock" | "internal" | "paddle" | "lemonsqueezy";
+export type SubscriptionProvider = "mock" | "internal" | "paddle" | "lemonsqueezy" | "manual";
+
+/**
+ * `provider: "manual"` — a subscription a platform admin set up directly (no checkout, no billing
+ * provider behind it). Unlike "internal" it IS enforced like any other plan: its plan's
+ * entitlements apply and it stops being live at `currentPeriodEnd` unless extended. No billing
+ * provider is ever called for it and no payment is ever recorded for it.
+ *  - "complimentary": free — agreed price 0.
+ *  - "offline": paid outside GarnishTable (invoice, bank transfer) at the agreed price, which may be
+ *    a custom negotiated one. GarnishTable records the agreement, never a payment.
+ */
+export type ManualBillingKind = "complimentary" | "offline";
+
+export interface ManualBillingTerms {
+  kind: ManualBillingKind;
+  /** The agreed price per billing interval, in cents (0 for complimentary). Not a payment. */
+  amountCents: number;
+  currency: string;
+  note?: string;
+}
 
 export interface Subscription {
   id: string;
@@ -49,6 +68,11 @@ export interface Subscription {
   provider: SubscriptionProvider;
   providerCustomerId?: string;
   providerSubscriptionId?: string;
+  /** Present only on provider:"manual" subscriptions. */
+  manualBilling?: ManualBillingTerms;
+  /** A platform admin suspended this (manual) subscription: not live until unsuspended. */
+  suspendedAt?: string;
+  suspendedReason?: string;
   createdAt: string;
   updatedAt: string;
 }

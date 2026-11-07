@@ -27,9 +27,28 @@ const subscriptionSchema = new Schema(
     trialEnd: { type: Date },
     cancelAt: { type: Date },
     cancelledAt: { type: Date },
-    provider: { type: String, enum: ["mock", "internal", "paddle", "lemonsqueezy"], required: true },
+    provider: { type: String, enum: ["mock", "internal", "paddle", "lemonsqueezy", "manual"], required: true },
     providerCustomerId: { type: String },
     providerSubscriptionId: { type: String },
+    // provider:"manual" only — the terms a platform admin agreed (platformSubscription.service.ts).
+    // amountCents is the agreed price per interval, never a payment; GarnishTable collects nothing.
+    manualBilling: {
+      type: new Schema(
+        {
+          kind: { type: String, enum: ["complimentary", "offline"], required: true },
+          amountCents: { type: Number, min: 0, required: true },
+          currency: { type: String, required: true },
+          note: { type: String },
+          createdByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+    // A platform admin suspended this manual subscription — not live until unsuspended
+    // (subscriptionResolution.service.ts's isSubscriptionLive).
+    suspendedAt: { type: Date },
+    suspendedReason: { type: String },
     // Phase 34, additive — dedup marker for the daily trial-ending-reminder sweep
     // (queues/notification.queue.ts's registerTrialReminderJob). Absence means "not sent yet" —
     // never overloaded onto BillingHistoryEvent, which exists for financial history, not
@@ -49,6 +68,23 @@ const subscriptionSchema = new Schema(
   },
   { timestamps: true, toJSON: idTransform }
 );
+
+// toJSON is what owner-facing billing responses send: a manual subscription's internal admin note
+// and the admin who created it stay platform-side (platformSubscription.service.ts's summary is the
+// admin view). Set after construction — a custom transform in the constructor options breaks
+// InferSchemaType for every field.
+subscriptionSchema.set("toJSON", {
+  ...idTransform,
+  transform(doc: unknown, ret: Record<string, unknown>) {
+    idTransform.transform(doc, ret);
+    const manual = ret.manualBilling as Record<string, unknown> | undefined;
+    if (manual) {
+      delete manual.note;
+      delete manual.createdByUserId;
+    }
+    return ret;
+  },
+});
 
 // At most one LIVE subscription per owner — a real DB constraint, not just application discipline,
 // mirroring DomainMapping.ts's "one active domain per location" pattern exactly. A cancelled/
