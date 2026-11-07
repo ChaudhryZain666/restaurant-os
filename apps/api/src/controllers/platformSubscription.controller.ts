@@ -15,6 +15,8 @@ import { Subscription, type SubscriptionDoc } from "../models/Subscription.js";
 import { BillingHistoryEvent } from "../models/BillingHistoryEvent.js";
 import { Business } from "../models/Business.js";
 import { Agency } from "../models/Agency.js";
+import { Restaurant } from "../models/Restaurant.js";
+import { logger } from "../common/logger.js";
 import { sendSuccess } from "../common/response.js";
 import { ApiError } from "../utils/ApiError.js";
 import { paginateQuery } from "../utils/pagination.js";
@@ -145,6 +147,17 @@ async function auditSubscription(req: Request, sub: HydratedDocument<Subscriptio
       targetType: "subscription",
       targetId: sub._id,
       metadata: details,
+    });
+    return;
+  }
+  // A business's audit trail lives on its locations; one with none yet has nowhere to record it, so
+  // the action is at least logged rather than silently unaudited.
+  if (!(await Restaurant.exists({ businessId: sub.ownerId }))) {
+    logger.warn("platform subscription action on a business with no locations — not in any audit log", {
+      action: BUSINESS_AUDIT_ACTION[kind],
+      businessId: sub.ownerId.toString(),
+      subscriptionId: sub.id,
+      actorUserId: req.user!.id,
     });
     return;
   }

@@ -64,7 +64,8 @@ const endOfDayIso = (date: string) => new Date(`${date}T23:59:59`).toISOString()
 const startOfDayIso = (date: string) => new Date(`${date}T00:00:00`).toISOString();
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 const dollarsToCents = (value: string) => Math.round(Number(value) * 100);
-const isPrice = (value: string) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+/** An offline-billed price: above zero (a free plan is complimentary). */
+const isPrice = (value: string) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) > 0;
 
 function listPrice(plan: PlatformPlanOption | undefined, interval: BillingInterval) {
   return plan?.pricing.find((p) => p.interval === interval);
@@ -623,7 +624,9 @@ export function PlatformPlanCard({
             <p className="text-sm text-foreground">
               {isLocalTrial
                 ? "The free trial ends now."
-                : `Cancellation is scheduled with the billing provider for ${formatDate(subscription.currentPeriodEnd)}. The owner keeps the period they've paid for.`}
+                : subscription.status === "past_due"
+                  ? "Its last payment failed, so plan features end now and the billing provider stops trying to charge it."
+                  : `Cancellation is scheduled with the billing provider for ${formatDate(subscription.currentPeriodEnd)}. The owner keeps the period they've paid for.`}
             </p>
           )}
           <div className="flex gap-2">

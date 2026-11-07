@@ -16,6 +16,7 @@ import { Subscription } from "../models/Subscription.js";
 import { User } from "../models/User.js";
 import { expireLapsedManualSubscriptions, processBillingProviderEvent } from "../services/subscription.service.js";
 import { resolveSubscriptionState } from "../services/subscriptionResolution.service.js";
+import { logger } from "../common/logger.js";
 import {
   closeTestConnections,
   createTestAgency,
@@ -199,6 +200,7 @@ describe("creating a manual subscription", () => {
     const base = { planCode: starter.code, billingInterval: "monthly", kind: "offline", endsAt: inDays(30) };
     const cases: Array<[Record<string, unknown>, number, RegExp]> = [
       [{ ...base, kind: "complimentary", amountCents: 500 }, 400, /complimentary subscription has no price/i],
+      [{ ...base, amountCents: 0 }, 400, /needs a price above zero/],
       [{ ...base, planCode: agencyPlan.code }, 400, /not available for business accounts/],
       [{ ...base, startsAt: inDays(3) }, 400, /can't start in the future/],
       [{ ...base, endsAt: inDays(-1) }, 400, /must be in the future/],
@@ -242,6 +244,18 @@ describe("creating a manual subscription", () => {
     const refused = await createManual(paid.business.id, body);
     expect(refused.status).toBe(409);
     expect(refused.body.error.message).toMatch(/already has a Lemon Squeezy subscription/);
+  });
+
+  it("still works for a business with no locations yet, logging that there was no audit log to write to", async () => {
+    const business = await createTestBusiness();
+    businessIds.push(business._id);
+    const warn = jest.spyOn(logger, "warn");
+    const res = await createManual(business.id, { planCode: starter.code, billingInterval: "monthly", kind: "complimentary", endsAt: inDays(30) });
+    expect(res.status).toBe(201);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("no locations"),
+      expect.objectContaining({ action: "subscription.created", businessId: business.id })
+    );
   });
 
   it("works for an agency too, audited on the agency's own log", async () => {
@@ -296,6 +310,7 @@ describe("managing a manual subscription", () => {
     expect(res.body.data.subscription).toMatchObject({ planCode: growth.code, billingInterval: "yearly", manualBilling: { amountCents: 99000 } });
     const custom = await action(id, "change-plan", { planCode: growth.code, billingInterval: "monthly", amountCents: 7500 });
     expect(custom.body.data.subscription.manualBilling.amountCents).toBe(7500);
+    expect((await action(id, "change-plan", { planCode: growth.code, billingInterval: "monthly", amountCents: 0 })).status).toBe(400);
     const changes = await BillingHistoryEvent.find({ ownerId: business._id, type: "plan_changed" }).lean();
     expect(changes).toHaveLength(2);
     expect(changes.every((c) => c.amountCents === undefined)).toBe(true);

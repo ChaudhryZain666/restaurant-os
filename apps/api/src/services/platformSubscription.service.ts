@@ -113,6 +113,8 @@ function agreedTerms(plan: HydratedDocument<PlanDoc>, billingInterval: "monthly"
   if (amount === undefined || amount === null) {
     throw ApiError.badRequest(`The ${plan.name} plan has no ${billingInterval} price — enter the agreed price`);
   }
+  // A $0 "offline" plan would read as billed while earning nothing — that is a complimentary plan.
+  if (amount <= 0) throw ApiError.badRequest("An offline-billed plan needs a price above zero — use complimentary for a free plan");
   return { amountCents: amount, currency };
 }
 
