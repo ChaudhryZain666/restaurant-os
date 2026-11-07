@@ -307,6 +307,13 @@ const baseEnvSchema = z.object({
   LEMONSQUEEZY_API_KEY: z.string().optional(),
   LEMONSQUEEZY_WEBHOOK_SECRET: z.string().optional(),
   LEMONSQUEEZY_STORE_ID: z.string().regex(/^\d+$/, "LEMONSQUEEZY_STORE_ID is the numeric store id").optional(),
+  // Server-only key that signs the owner/plan/variant we put in a checkout's custom data. Unlike the
+  // webhook secret it is never given to Lemon Squeezy; rotating it only affects checkouts started
+  // but not yet paid (those purchases are then rejected and alerted on, not linked).
+  LEMONSQUEEZY_CHECKOUT_SECRET: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().min(32, "LEMONSQUEEZY_CHECKOUT_SECRET must be at least 32 chars").optional()
+  ),
   LEMONSQUEEZY_TEST_MODE: z
     .enum(["true", "false"])
     .default("true")
@@ -495,7 +502,7 @@ export const envSchema = baseEnvSchema.superRefine((data, ctx) => {
         message: "Production with BILLING_PROVIDER=lemonsqueezy requires LEMONSQUEEZY_TEST_MODE=false and a live-mode API key — a production deployment must never bill in test mode.",
       });
     }
-    for (const key of ["LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "LEMONSQUEEZY_STORE_ID"] as const) {
+    for (const key of ["LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "LEMONSQUEEZY_STORE_ID", "LEMONSQUEEZY_CHECKOUT_SECRET"] as const) {
       if (!data[key]) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `Production with BILLING_PROVIDER=lemonsqueezy requires ${key}.` });
       }

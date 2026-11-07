@@ -7,9 +7,10 @@ afterEach(() => {
 });
 
 const SECRET = "test-signing-secret";
+const CHECKOUT_SECRET = "test-checkout-secret-0123456789abcdef";
 
-function provider(testMode = true) {
-  return new LemonSqueezyBillingProvider("api-key", SECRET, "123", testMode, "https://ls.example");
+function provider(testMode = true, checkoutSecret = CHECKOUT_SECRET) {
+  return new LemonSqueezyBillingProvider("api-key", SECRET, "123", testMode, checkoutSecret, "https://ls.example");
 }
 
 function mockFetch(...responses: Array<{ status: number; body: unknown }>) {
@@ -24,10 +25,10 @@ function sign(body: Buffer, secret = SECRET) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-function subscriptionEvent(eventName: string, attributes: Record<string, unknown>, customData?: Record<string, unknown>) {
+function subscriptionEvent(eventName: string, attributes: Record<string, unknown>, customData?: Record<string, unknown>, meta: Record<string, unknown> = {}) {
   return Buffer.from(
     JSON.stringify({
-      meta: { event_name: eventName, ...(customData ? { custom_data: customData } : {}) },
+      meta: { event_name: eventName, ...meta, ...(customData ? { custom_data: customData } : {}) },
       data: {
         type: "subscriptions",
         id: "555",
@@ -49,10 +50,19 @@ function subscriptionEvent(eventName: string, attributes: Record<string, unknown
 const CHECKOUT_INPUT = {
   providerCustomerId: "pending_checkout:business:biz-1",
   providerPriceId: "2346454",
-  metadata: { ownerType: "business", ownerId: "biz-1", planCode: "owner_starter", billingInterval: "monthly" },
+  metadata: { ownerType: "business", ownerId: "6aee6ff96e33177eefa98a9c", planCode: "owner_starter", billingInterval: "monthly" },
   successUrl: "https://admin.example.com/billing-checkout-complete",
   cancelUrl: "https://admin.example.com/billing",
 };
+
+/** The custom data our own createCheckoutSession sends, exactly as Lemon Squeezy echoes it back. */
+async function signedCustomData(input = CHECKOUT_INPUT, checkoutSecret = CHECKOUT_SECRET): Promise<Record<string, unknown>> {
+  const spy = mockFetch({ status: 201, body: { data: { attributes: { url: "https://garnishtable.lemonsqueezy.com/checkout/custom/abc" } } } });
+  await provider(true, checkoutSecret).createCheckoutSession(input);
+  const custom = JSON.parse((spy.mock.calls[0] as [string, RequestInit])[1].body as string).data.attributes.checkout_data.custom;
+  spy.mockRestore();
+  return custom;
+}
 
 describe("LemonSqueezyBillingProvider.createCheckoutSession", () => {
   it("creates a hosted checkout for the variant with the owner in checkout_data.custom and returns its URL", async () => {
@@ -68,11 +78,24 @@ describe("LemonSqueezyBillingProvider.createCheckoutSession", () => {
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/vnd.api+json");
     const body = JSON.parse(init.body as string);
     expect(body.data.type).toBe("checkouts");
-    expect(body.data.attributes.checkout_data.custom).toEqual(CHECKOUT_INPUT.metadata);
+    expect(body.data.attributes.checkout_data.custom).toEqual({
+      ...CHECKOUT_INPUT.metadata,
+      variantId: "2346454",
+      checkoutSignature: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
     expect(body.data.attributes.product_options.redirect_url).toBe(CHECKOUT_INPUT.successUrl);
     expect(body.data.attributes.test_mode).toBe(true);
     expect(body.data.relationships.store.data).toEqual({ type: "stores", id: "123" });
     expect(body.data.relationships.variant.data).toEqual({ type: "variants", id: "2346454" });
+  });
+
+  it("refuses to create a checkout it can't sign completely, before any request", async () => {
+    const spy = jest.spyOn(globalThis, "fetch");
+    await expect(provider().createCheckoutSession({ ...CHECKOUT_INPUT, metadata: { ...CHECKOUT_INPUT.metadata, ownerId: "" } })).rejects.toThrow(
+      "Lemon Squeezy checkout needs"
+    );
+    await expect(provider().createCheckoutSession({ ...CHECKOUT_INPUT, providerPriceId: "pri_abc" })).rejects.toThrow("Lemon Squeezy checkout needs");
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("throws when Lemon Squeezy returns no https URL", async () => {
@@ -96,8 +119,8 @@ describe("LemonSqueezyBillingProvider.verifyWebhookSignature", () => {
     expect(provider().verifyWebhookSignature(Buffer.from(body.toString().replace("555", "556")), sign(body))).toBeNull();
   });
 
-  it("maps a checkout's subscription_created to checkout metadata carrying the owner and the real customer id", () => {
-    const body = subscriptionEvent("subscription_created", { status: "active" }, CHECKOUT_INPUT.metadata);
+  it("maps a checkout's subscription_created to checkout metadata carrying the owner and the real customer id", async () => {
+    const body = subscriptionEvent("subscription_created", { status: "active" }, await signedCustomData());
     const event = provider().verifyWebhookSignature(body, sign(body));
     expect(event).toMatchObject({
       eventType: "subscription_created",
@@ -108,9 +131,66 @@ describe("LemonSqueezyBillingProvider.verifyWebhookSignature", () => {
       currentPeriod: { end: new Date("2026-12-07T10:00:00Z") },
       occurredAt: new Date("2026-11-07T10:00:05Z"),
       simulated: false,
-      checkoutMetadata: { ownerType: "business", ownerId: "biz-1", planCode: "owner_starter", billingInterval: "monthly", providerCustomerId: "777" },
+      checkoutMetadata: {
+        ownerType: "business",
+        ownerId: "6aee6ff96e33177eefa98a9c",
+        planCode: "owner_starter",
+        billingInterval: "monthly",
+        providerCustomerId: "777",
+      },
     });
+    expect(event!.rejectedReason).toBeUndefined();
     expect(event!.currentPeriod!.start).toBeUndefined();
+  });
+
+  it("accepts checkout data echoed back with stringified values", async () => {
+    const custom = Object.fromEntries(Object.entries(await signedCustomData()).map(([k, v]) => [k, String(v)]));
+    const body = subscriptionEvent("subscription_created", { status: "active", variant_id: "2346454" }, custom);
+    expect(provider().verifyWebhookSignature(body, sign(body))!.checkoutMetadata?.ownerId).toBe("6aee6ff96e33177eefa98a9c");
+  });
+
+  it("rejects a subscription_created whose checkout data was altered, is missing, or names another variant — and maps no owner", async () => {
+    const signed = await signedCustomData();
+    const cases: Array<[string, Record<string, unknown> | undefined, Record<string, unknown>, RegExp]> = [
+      ["another account", { ...signed, ownerId: "6aee6ff96e33177eefa98a9d" }, {}, /signature does not match/],
+      ["an agency instead of a business", { ...signed, ownerType: "agency" }, {}, /signature does not match/],
+      ["a dearer plan", { ...signed, planCode: "agency_growth_v2" }, {}, /signature does not match/],
+      ["another interval", { ...signed, billingInterval: "yearly" }, {}, /signature does not match/],
+      ["a variant claim edited to match a cheaper purchase", { ...signed, variantId: "2346457" }, { variant_id: 2346457 }, /signature does not match/],
+      ["a correctly signed checkout used to buy another variant", signed, { variant_id: 2346465 }, /purchased variant 2346465 is not the checkout's signed variant 2346454/],
+      ["unsigned custom data (a public buy link)", { ...CHECKOUT_INPUT.metadata, variantId: "2346454" }, {}, /without complete signed GarnishTable checkout data/],
+      ["no custom data at all", undefined, {}, /without complete signed GarnishTable checkout data/],
+      ["a malformed owner id", { ...signed, ownerId: "biz-1" }, {}, /without complete signed GarnishTable checkout data/],
+    ];
+    for (const [label, custom, attributes, reason] of cases) {
+      const body = subscriptionEvent("subscription_created", { status: "active", ...attributes }, custom);
+      const event = provider().verifyWebhookSignature(body, sign(body));
+      expect({ label, reason: event?.rejectedReason }).toEqual({ label, reason: expect.stringMatching(reason) });
+      expect(event!.checkoutMetadata).toBeUndefined();
+      expect(event!.providerSubscriptionId).toBe("555");
+    }
+    // Signed by another server's key.
+    const foreign = subscriptionEvent("subscription_created", { status: "active" }, await signedCustomData(CHECKOUT_INPUT, "another-servers-checkout-secret-xyz"));
+    expect(provider().verifyWebhookSignature(foreign, sign(foreign))!.rejectedReason).toMatch(/signature does not match/);
+  });
+
+  it("gives a dashboard resend (new meta.webhook_id) the same event id, and strips the pre-signed urls from what is stored", () => {
+    const urls = { customer_portal: "https://garnishtable.lemonsqueezy.com/billing?expires=1&signature=a", update_payment_method: "https://x.example/payment?signature=b" };
+    const original = subscriptionEvent("subscription_updated", { status: "active", urls }, undefined, { webhook_id: "11111111-aaaa" });
+    const resend = subscriptionEvent(
+      "subscription_updated",
+      { status: "active", urls: { ...urls, customer_portal: "https://garnishtable.lemonsqueezy.com/billing?expires=2&signature=c" } },
+      undefined,
+      { webhook_id: "22222222-bbbb" }
+    );
+    const a = provider().verifyWebhookSignature(original, sign(original))!;
+    const b = provider().verifyWebhookSignature(resend, sign(resend))!;
+    expect(a.eventId).toBe(b.eventId);
+    const raw = a.raw as { meta: Record<string, unknown>; data: { attributes: Record<string, unknown> } };
+    expect(raw.data.attributes).not.toHaveProperty("urls");
+    expect(JSON.stringify(a.raw)).not.toContain("signature=");
+    expect(raw.meta.webhook_id).toBe("11111111-aaaa"); // kept for support lookups, just not hashed
+    expect(raw.data.attributes.status).toBe("active");
   });
 
   it("derives a stable event id from the signed body, so a redelivery de-duplicates and a different body does not", () => {
@@ -194,7 +274,7 @@ describe("LemonSqueezyBillingProvider.verifyWebhookSignature", () => {
   });
 
   it("marks an object from the other mode as simulated (recorded, never applied)", () => {
-    const testBody = subscriptionEvent("subscription_created", { status: "active", test_mode: true }, CHECKOUT_INPUT.metadata);
+    const testBody = subscriptionEvent("subscription_updated", { status: "active", test_mode: true });
     expect(provider(false).verifyWebhookSignature(testBody, sign(testBody))!.simulated).toBe(true);
     expect(provider(true).verifyWebhookSignature(testBody, sign(testBody))!.simulated).toBe(false);
   });

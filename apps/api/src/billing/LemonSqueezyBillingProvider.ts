@@ -31,15 +31,17 @@ export class LemonSqueezyApiError extends Error {
 
 /**
  * Lemon Squeezy (Merchant of Record) platform-billing adapter. Facts below were read from Lemon
- * Squeezy's own API docs (docs.lemonsqueezy.com/api, /help/webhooks) while building this; it has
- * been unit-tested against those documented shapes but not yet run against a live store.
+ * Squeezy's own API docs (docs.lemonsqueezy.com/api, /help/webhooks) and checked against a test-mode
+ * store: checkout, purchase, plan change, cancel, resume and a genuine signed webhook delivery.
  *
  *  - One host for both modes: https://api.lemonsqueezy.com/v1, JSON:API (`application/vnd.api+json`),
  *    Bearer API key. Test vs live is decided by WHICH key is used (keys are created per mode), and
  *    every object carries `test_mode`.
  *  - Checkouts are hosted pages: POST /checkouts with the store + variant relationships returns
  *    `data.attributes.url` — so createCheckoutSession is a "redirect" session. Our owner metadata
- *    rides in `checkout_data.custom` and comes back on webhooks as `meta.custom_data`.
+ *    rides in `checkout_data.custom` and comes back on webhooks as `meta.custom_data`. Anyone can add
+ *    custom data to a public buy link (`?checkout[custom][…]=…`), so ours is signed with a
+ *    server-only secret and bound to the variant bought (see verifyCheckoutData).
  *  - There is no "create subscription" API and no need to create a customer first: the customer and
  *    the subscription are both born from a completed checkout.
  *  - Subscription statuses: on_trial, active, paused, past_due, unpaid, cancelled, expired. NOTE
@@ -50,8 +52,11 @@ export class LemonSqueezyApiError extends Error {
  *    `variant_id` changes plan (prorated on the next invoice by default).
  *  - Webhooks: `X-Signature` = hex HMAC-SHA256 of the raw body with the webhook's signing secret;
  *    `meta.event_name` names the event. There is NO per-event id and no timestamp header, so the
- *    event id is derived from a hash of the signed body (a redelivery is byte-identical, so it
- *    de-duplicates), and there is no replay window beyond that de-duplication.
+ *    event id is derived from a hash of the body. A dashboard resend is NOT byte-identical — it
+ *    carries a new `meta.webhook_id` (observed 2026-11-07) — so that field and the pre-signed `urls`
+ *    are left out of the hash. There is no replay window beyond that de-duplication.
+ *  - `data.attributes.urls` holds pre-signed customer-portal / update-payment-method links (bearer
+ *    access to the customer's billing); they are removed from the payload before it is stored.
  *  - subscription_payment_* events carry a subscription-invoice (`billing_reason` initial / renewal /
  *    updated; integer cents).
  */
@@ -66,6 +71,9 @@ export class LemonSqueezyBillingProvider implements BillingProvider {
     /** Which Lemon Squeezy mode this deployment bills in. A webhook whose object is from the other
      *  mode (a test purchase reaching a live deployment, or the reverse) is recorded, never applied. */
     private readonly testMode: boolean,
+    /** Server-only key for the checkout custom data (LEMONSQUEEZY_CHECKOUT_SECRET) — never sent to
+     *  Lemon Squeezy, unlike the webhook signing secret. */
+    private readonly checkoutSecret: string,
     private readonly baseUrl: string = API_BASE_URL
   ) {}
 
@@ -166,17 +174,20 @@ export class LemonSqueezyBillingProvider implements BillingProvider {
   }
 
   /**
-   * A hosted checkout page for one variant. `checkout_data.custom` carries the owner, plan and
-   * interval; Lemon Squeezy returns it as `meta.custom_data` on subscription_created, which is how
-   * the new subscription is tied to the account that started the checkout. The email/name are
-   * deliberately not pre-filled: the person paying may use a different billing email.
+   * A hosted checkout page for one variant. `checkout_data.custom` carries the owner, plan,
+   * interval and variant, signed (signCheckoutData); Lemon Squeezy returns it as `meta.custom_data`
+   * on subscription_created, which is how the new subscription is tied to the account that started
+   * the checkout. The email/name are deliberately not pre-filled: the person paying may use a
+   * different billing email.
    */
   async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<ProviderCheckoutSession> {
+    const fields = checkoutFieldsOf({ ...input.metadata, variantId: input.providerPriceId });
+    if (!fields) throw new Error("Lemon Squeezy checkout needs ownerType, ownerId, planCode, billingInterval and a numeric variant id.");
     const response = await this.request<{ data?: { attributes?: { url?: string } } }>("POST", "/checkouts", {
       data: {
         type: "checkouts",
         attributes: {
-          checkout_data: { custom: input.metadata },
+          checkout_data: { custom: { ...input.metadata, variantId: fields.variantId, checkoutSignature: this.signCheckoutData(fields) } },
           product_options: { redirect_url: input.successUrl, enabled_variants: [Number(input.providerPriceId)] },
           test_mode: this.testMode,
         },
@@ -248,10 +259,11 @@ export class LemonSqueezyBillingProvider implements BillingProvider {
     const data = parsed.data;
     const attributes = data?.attributes ?? {};
     const updatedAt = toDate(attributes.updated_at);
+    const stored = withoutSignedUrls(parsed);
     const base = {
-      eventId: `${LEMONSQUEEZY_EVENT_ID_PREFIX}${eventType}_${createHash("sha256").update(rawBody).digest("hex")}`,
+      eventId: `${LEMONSQUEEZY_EVENT_ID_PREFIX}${eventType}_${canonicalEventHash(stored)}`,
       eventType,
-      raw: parsed,
+      raw: stored,
       occurredAt: updatedAt,
       // An object from the other mode is acknowledged and recorded, never applied.
       simulated: typeof attributes.test_mode === "boolean" && attributes.test_mode !== this.testMode,
@@ -269,8 +281,20 @@ export class LemonSqueezyBillingProvider implements BillingProvider {
     }
 
     if (!data.id) return null;
-    const customData = parsed.meta?.custom_data as Record<string, unknown> | undefined;
-    const isCheckoutCreation = eventType === "subscription_created" && typeof customData?.ownerType === "string";
+    // Every new subscription must come from a checkout this server signed: one bought through a
+    // public link (or with edited custom data) is recorded and alerted on, never attached to anyone.
+    let checkoutMetadata: ProviderBillingWebhookEvent["checkoutMetadata"];
+    if (eventType === "subscription_created") {
+      const verdict = this.verifyCheckoutData(parsed.meta?.custom_data, attributes.variant_id);
+      if ("rejectedReason" in verdict) return { ...base, providerSubscriptionId: data.id, rejectedReason: verdict.rejectedReason };
+      checkoutMetadata = {
+        ownerType: verdict.ownerType,
+        ownerId: verdict.ownerId,
+        planCode: verdict.planCode,
+        billingInterval: verdict.billingInterval,
+        providerCustomerId: attributes.customer_id != null ? String(attributes.customer_id) : "",
+      };
+    }
     const periodEnd = toDate(attributes.status === "cancelled" || attributes.status === "expired" ? attributes.ends_at : attributes.renews_at);
 
     return {
@@ -281,16 +305,33 @@ export class LemonSqueezyBillingProvider implements BillingProvider {
       currentPeriod: periodEnd && attributes.status !== "expired" ? { end: periodEnd } : undefined,
       scheduledCancelAt: attributes.status === "cancelled" ? (toDate(attributes.ends_at) ?? null) : null,
       providerPriceId: attributes.variant_id != null ? String(attributes.variant_id) : undefined,
-      checkoutMetadata: isCheckoutCreation
-        ? {
-            ownerType: customData!.ownerType as "business" | "agency",
-            ownerId: String(customData!.ownerId),
-            planCode: String(customData!.planCode),
-            billingInterval: customData!.billingInterval as "monthly" | "yearly",
-            providerCustomerId: attributes.customer_id != null ? String(attributes.customer_id) : "",
-          }
-        : undefined,
+      checkoutMetadata,
     };
+  }
+
+  /** HMAC over every field that decides who gets which subscription — including the variant, so a
+   *  signature from one checkout can't be replayed onto a cheaper product's buy link. */
+  private signCheckoutData(fields: CheckoutFields): string {
+    const payload = JSON.stringify([CHECKOUT_SIGNATURE_VERSION, fields.ownerType, fields.ownerId, fields.planCode, fields.billingInterval, fields.variantId]);
+    return createHmac("sha256", this.checkoutSecret).update(payload).digest("hex");
+  }
+
+  /** Trusts `meta.custom_data` only when it is complete, carries our signature over exactly these
+   *  values, and names the variant that was actually bought. */
+  private verifyCheckoutData(customData: Record<string, unknown> | undefined, purchasedVariantId: number | string | undefined): (CheckoutFields & { rejectedReason?: never }) | { rejectedReason: string } {
+    const fields = checkoutFieldsOf(customData);
+    const signature = customData?.checkoutSignature;
+    if (!fields || typeof signature !== "string" || !/^[0-9a-f]{64}$/i.test(signature)) {
+      return { rejectedReason: "subscription_created without complete signed GarnishTable checkout data (bought outside the app?)" };
+    }
+    const expected = Buffer.from(this.signCheckoutData(fields), "hex");
+    if (!timingSafeEqual(Buffer.from(signature, "hex"), expected)) {
+      return { rejectedReason: "checkout data signature does not match (custom data altered or signed with another key)" };
+    }
+    if (purchasedVariantId == null || String(purchasedVariantId) !== fields.variantId) {
+      return { rejectedReason: `purchased variant ${String(purchasedVariantId)} is not the checkout's signed variant ${fields.variantId}` };
+    }
+    return fields;
   }
 
   /** Lemon Squeezy reports only the period END (renews_at); the start is the end stepped back one
@@ -363,8 +404,47 @@ interface LemonSqueezySubscriptionResponse {
 }
 
 interface LemonSqueezyWebhookPayload {
-  meta?: { event_name?: string; custom_data?: Record<string, unknown> };
+  meta?: { event_name?: string; custom_data?: Record<string, unknown>; webhook_id?: string; test_mode?: boolean };
   data?: { type?: string; id?: string; attributes?: LemonSqueezySubscriptionAttributes & LemonSqueezyInvoiceAttributes };
+}
+
+const CHECKOUT_SIGNATURE_VERSION = "lsq-checkout-v1";
+
+interface CheckoutFields {
+  ownerType: "business" | "agency";
+  ownerId: string;
+  planCode: string;
+  billingInterval: "monthly" | "yearly";
+  variantId: string;
+}
+
+/** The signed checkout fields, validated; null when any is missing or malformed. Lemon Squeezy may
+ *  hand custom data back with values stringified, so everything is compared as strings. */
+function checkoutFieldsOf(source: Record<string, unknown> | undefined): CheckoutFields | null {
+  if (!source) return null;
+  const { ownerType, ownerId, planCode, billingInterval } = source;
+  const variantId = source.variantId != null ? String(source.variantId) : "";
+  if (ownerType !== "business" && ownerType !== "agency") return null;
+  if (typeof ownerId !== "string" || !/^[0-9a-f]{24}$/i.test(ownerId)) return null;
+  if (typeof planCode !== "string" || !planCode) return null;
+  if (billingInterval !== "monthly" && billingInterval !== "yearly") return null;
+  if (!/^[1-9]\d*$/.test(variantId)) return null;
+  return { ownerType, ownerId, planCode, billingInterval, variantId };
+}
+
+/** The payload as stored: without `data.attributes.urls` (pre-signed billing links). */
+function withoutSignedUrls(parsed: LemonSqueezyWebhookPayload): LemonSqueezyWebhookPayload {
+  if (!parsed.data?.attributes || !("urls" in parsed.data.attributes)) return parsed;
+  const attributes = { ...parsed.data.attributes };
+  delete attributes.urls;
+  return { ...parsed, data: { ...parsed.data, attributes } };
+}
+
+/** Hash of the event's content, minus the per-delivery `meta.webhook_id` (new on every resend). */
+function canonicalEventHash(stored: LemonSqueezyWebhookPayload): string {
+  const meta = { ...stored.meta };
+  delete meta.webhook_id;
+  return createHash("sha256").update(JSON.stringify({ ...stored, meta })).digest("hex");
 }
 
 function toDate(value: string | null | undefined): Date | undefined {

@@ -39,7 +39,8 @@ async function main() {
     env.LEMONSQUEEZY_API_KEY,
     env.LEMONSQUEEZY_WEBHOOK_SECRET ?? "",
     env.LEMONSQUEEZY_STORE_ID ?? "",
-    env.LEMONSQUEEZY_TEST_MODE
+    env.LEMONSQUEEZY_TEST_MODE,
+    env.LEMONSQUEEZY_CHECKOUT_SECRET ?? "" // read-only script: never signs a checkout
   );
   await connectDB();
   try {

@@ -173,6 +173,9 @@ infrastructure/credentials this repo doesn't have and shouldn't invent):**
     crash-and-restart (a real uncaughtException/unhandledRejection that isn't the known non-fatal
     carve-out); MongoDB unreachable; sustained Redis failure (new logins/refreshes failing);
     notification worker not processing (queue backlog growing with no matching completions).
+  - **Billing (page on every occurrence)**: any log line with `alert: "billing_duplicate_purchase"`
+    or `alert: "billing_webhook_rejected"` — a customer is paying for a subscription no account
+    uses. Steps: `docs/billing-duplicate-purchase-runbook.md`.
   - **Important**: repeated `"notification job failed"` / `"webhook signature verification failed"`
     log lines in a short window; repeated order/billing notification email failures; delivery
     provider failures.

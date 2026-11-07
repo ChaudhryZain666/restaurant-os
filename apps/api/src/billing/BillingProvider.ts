@@ -125,6 +125,11 @@ export interface ProviderBillingWebhookEvent {
    *  rather than something that happened to a real subscription. Set by the adapter only from the
    *  signature-verified payload. Such events are acknowledged and recorded, never applied. */
   simulated?: boolean;
+  /** Set by an adapter when a correctly signed event must still not be applied — e.g. a Lemon
+   *  Squeezy subscription_created whose checkout data this server didn't sign. Recorded with this
+   *  reason and logged as an alert (a real customer may have paid), never applied. */
+  rejectedReason?: string;
+  /** What is persisted with the event — adapters strip anything that must not be stored. */
   raw: unknown;
   /**
    * Phase 27 — present ONLY on a checkout-completion event (a brand-new subscription being

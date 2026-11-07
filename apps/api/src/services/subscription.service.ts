@@ -680,18 +680,7 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
       });
     } catch (err) {
       if ((err as { code?: number }).code === 11000) {
-        logger.info("duplicate checkout-completion event ignored — owner already has a live subscription", {
-          provider: providerName,
-          ownerType: meta.ownerType,
-          ownerId: meta.ownerId,
-        });
-        await BillingWebhookEvent.updateOne(
-          { provider: providerName, eventId: event.eventId },
-          {
-            $set: { processedAt: new Date(), processingError: "Duplicate: owner already has a live subscription" },
-            $unset: { processingStartedAt: "" },
-          }
-        );
+        await recordDuplicateCheckoutCompletion(providerName, event);
         return;
       }
       throw err;
@@ -726,6 +715,52 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
   await BillingWebhookEvent.updateOne(
     { provider: providerName, eventId: event.eventId },
     { $set: { processedAt: new Date() }, $unset: { processingStartedAt: "", processingError: "" } }
+  );
+}
+
+/** Alert keys for log-based alerting (docs/operations-monitoring.md): each marks a paid provider
+ *  subscription that is NOT linked to any account and needs a human. */
+export const BILLING_ALERT_DUPLICATE_PURCHASE = "billing_duplicate_purchase";
+export const BILLING_ALERT_REJECTED_EVENT = "billing_webhook_rejected";
+
+/**
+ * A checkout completion that lost the unique-index race. Either a redelivery of a subscription that
+ * is already linked (harmless), or a SECOND purchase by an owner who already has a live
+ * subscription: the customer was charged and the provider keeps billing a subscription no account
+ * uses. Nothing is refunded or cancelled automatically (no tested policy for that exists — see
+ * docs/billing-duplicate-purchase-runbook.md); it is recorded and raised as an error-level alert.
+ */
+async function recordDuplicateCheckoutCompletion(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
+  const meta = event.checkoutMetadata!;
+  const alreadyLinked = await Subscription.exists({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId });
+  let processingError: string;
+  if (alreadyLinked) {
+    logger.info("checkout-completion redelivery ignored — this provider subscription is already linked", {
+      provider: providerName,
+      providerSubscriptionId: event.providerSubscriptionId,
+    });
+    processingError = "Duplicate: provider subscription already linked";
+  } else {
+    const existing = await Subscription.findOne({ ownerType: meta.ownerType, ownerId: meta.ownerId, status: { $in: LIVE_STATUSES } }).select(
+      "_id provider providerSubscriptionId"
+    );
+    logger.error("duplicate purchase — owner already has a live subscription; the new paid provider subscription is NOT linked", {
+      alert: BILLING_ALERT_DUPLICATE_PURCHASE,
+      provider: providerName,
+      ownerType: meta.ownerType,
+      ownerId: meta.ownerId,
+      existingSubscriptionId: existing?.id,
+      existingProviderSubscriptionId: existing?.providerSubscriptionId,
+      unlinkedProviderSubscriptionId: event.providerSubscriptionId,
+      providerCustomerId: meta.providerCustomerId,
+      eventId: event.eventId,
+      action: "Review at the provider: refund and cancel the unlinked subscription, or contact the customer (docs/billing-duplicate-purchase-runbook.md).",
+    });
+    processingError = `Duplicate purchase: owner already has live subscription ${existing?.id ?? "(unknown)"}; provider subscription ${event.providerSubscriptionId} is NOT linked — needs manual review`;
+  }
+  await BillingWebhookEvent.updateOne(
+    { provider: providerName, eventId: event.eventId },
+    { $set: { processedAt: new Date(), processingError }, $unset: { processingStartedAt: "" } }
   );
 }
 
@@ -843,6 +878,24 @@ export async function processBillingProviderEvent(providerName: string, event: P
       await BillingWebhookEvent.updateOne(
         { provider: providerName, eventId: event.eventId },
         { $set: { processedAt: new Date(), processingError: SIMULATED_EVENT_IGNORED }, $unset: { processingStartedAt: "" } }
+      );
+      return;
+    }
+
+    // A signed event the adapter refused to trust (e.g. a purchase whose checkout data this server
+    // didn't sign): recorded and alerted on, never applied — and never retried, it won't change.
+    if (event.rejectedReason) {
+      logger.error("billing webhook event rejected — not applied; a paid provider subscription may not be linked to any account", {
+        alert: BILLING_ALERT_REJECTED_EVENT,
+        provider: providerName,
+        eventType: event.eventType,
+        eventId: event.eventId,
+        providerSubscriptionId: event.providerSubscriptionId,
+        reason: event.rejectedReason,
+      });
+      await BillingWebhookEvent.updateOne(
+        { provider: providerName, eventId: event.eventId },
+        { $set: { processedAt: new Date(), processingError: `Rejected: ${event.rejectedReason}` }, $unset: { processingStartedAt: "" } }
       );
       return;
     }

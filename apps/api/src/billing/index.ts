@@ -51,14 +51,17 @@ export function getBillingProvider(): BillingProvider {
     return instance;
   }
   if (env.BILLING_PROVIDER === "lemonsqueezy") {
-    if (!env.LEMONSQUEEZY_API_KEY || !env.LEMONSQUEEZY_WEBHOOK_SECRET || !env.LEMONSQUEEZY_STORE_ID) {
-      throw new Error("BILLING_PROVIDER=lemonsqueezy requires LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET and LEMONSQUEEZY_STORE_ID to be configured.");
+    if (!env.LEMONSQUEEZY_API_KEY || !env.LEMONSQUEEZY_WEBHOOK_SECRET || !env.LEMONSQUEEZY_STORE_ID || !env.LEMONSQUEEZY_CHECKOUT_SECRET) {
+      throw new Error(
+        "BILLING_PROVIDER=lemonsqueezy requires LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_WEBHOOK_SECRET, LEMONSQUEEZY_STORE_ID and LEMONSQUEEZY_CHECKOUT_SECRET to be configured."
+      );
     }
     instance = new LemonSqueezyBillingProvider(
       env.LEMONSQUEEZY_API_KEY,
       env.LEMONSQUEEZY_WEBHOOK_SECRET,
       env.LEMONSQUEEZY_STORE_ID,
-      env.LEMONSQUEEZY_TEST_MODE
+      env.LEMONSQUEEZY_TEST_MODE,
+      env.LEMONSQUEEZY_CHECKOUT_SECRET
     );
     return instance;
   }
