@@ -7,6 +7,7 @@ export default {
     // Same setup as apps/web/jest.config.js: workspace packages resolve to TS source.
     "^@restaurant/types$": "<rootDir>/../../packages/types/src/index.ts",
     "^@restaurant/utils$": "<rootDir>/../../packages/utils/src/index.ts",
+    "^@restaurant/validation$": "<rootDir>/../../packages/validation/src/index.ts",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],

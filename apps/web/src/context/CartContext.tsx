@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MenuItem, ReorderPreviewItem, SelectedModifier } from "@restaurant/types";
+import { linePrice } from "../lib/itemPrice";
 
 // Session-scoped (not permanent) — a fresh tab/visit starts empty, matching TableContext's
 // sessionStorage pattern. Without this, a full-page navigation (the only way to reach a
@@ -139,10 +140,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const subtotal = useMemo(
     () =>
-      lines.reduce((sum, l) => {
-        const modifierTotal = l.selectedModifiers.reduce((s, m) => s + m.priceAdjustment, 0);
-        return sum + (l.menuItem.price + modifierTotal) * l.quantity;
-      }, 0),
+      lines.reduce((sum, l) => sum + linePrice(l.menuItem.price, l.selectedModifiers, l.quantity), 0),
     [lines]
   );
 

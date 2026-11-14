@@ -1,0 +1,87 @@
+{
+  "ids": {
+    "order": "6aeff13726baf4f1c95b9543",
+    "customerOrder": "6aeff13726baf4f1c95b9543",
+    "restaurantTicket": "6aeff13926baf4f1c95b957b",
+    "customerTicket": "6aeff13926baf4f1c95b957b",
+    "adminTicket": "6aeff13926baf4f1c95b957b",
+    "kbSlug": "how-do-i-place-an-order",
+    "tableToken": "fd71e5d71e5a81064a64b1b65bae6fd8",
+    "promo": 409,
+    "printJob": "6af8b6268b4575338cfa274d",
+    "printJobCreate": 201,
+    "importJob": "6aeff1cf5910fd2efd744fc6",
+    "posEnable": 200,
+    "checkoutStatus": 200,
+    "mockToken": "set",
+    "agencyBusiness": "6af8b6508b4575338cfa288b",
+    "agencyLocation": "6af8b6508b4575338cfa288d"
+  },
+  "counts": {
+    "marketing": 16,
+    "storefront": 26,
+    "admin": 67
+  },
+  "results": [
+    {
+      "app": "admin",
+      "route": "/customers",
+      "url": "/customers",
+      "role": "owner",
+      "checks": {
+        "directLoad": "PASS",
+        "rendering": "PASS",
+        "functional": "PASS",
+        "controls": "PASS (0 safe controls)",
+        "forms": "N/A (no form)",
+        "refresh": "PASS",
+        "backForward": "PASS",
+        "mobile390": "PASS",
+        "signedOutDenied": "PASS",
+        "wrongRoleDenied": "PASS (admin → /platform)",
+        "consoleNetwork": "PASS"
+      },
+      "notes": [],
+      "finalPath": "/customers",
+      "h1": "Customers",
+      "evidence": "admin-_customers-owner.png",
+      "functional": "search found Jordan",
+      "controlsTested": [],
+      "sessionAfter": "ok",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "serverErrors": [],
+      "apiClientErrors": [],
+      "status": "PASS"
+    },
+    {
+      "app": "admin",
+      "route": "/mock-checkout/:token",
+      "url": "/mock-checkout/bca4230af4fda4cb4b64cefd87c459b8?ownerType=business",
+      "role": "owner",
+      "checks": {
+        "directLoad": "PASS",
+        "rendering": "PASS",
+        "functional": "PASS",
+        "controls": "PASS (0 safe controls)",
+        "forms": "N/A (no form)",
+        "refresh": "PASS",
+        "backForward": "PASS",
+        "mobile390": "PASS",
+        "consoleNetwork": "PASS"
+      },
+      "notes": [],
+      "finalPath": "/mock-checkout/bca4230af4fda4cb4b64cefd87c459b8",
+      "h1": "Mock checkout",
+      "evidence": "admin-_mock_checkout_token-owner.png",
+      "functional": "Mock checkout",
+      "controlsTested": [],
+      "sessionAfter": "ok",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "serverErrors": [],
+      "apiClientErrors": [],
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { agencyRoleGrantsPermission, roleHasPermission, type AgencyMembershipRole, type Permission, type UserRole } from "@restaurant/types";
-import { Logo, useToast } from "@restaurant/ui";
+import { Logo, Spinner, useToast } from "@restaurant/ui";
 import { describeAvailability } from "@restaurant/utils";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useActiveLocation } from "../context/LocationContext";
@@ -386,7 +386,7 @@ export function Layout() {
 
 function LayoutContent() {
   const { user, logout } = useAuth();
-  const { activeLocationId, locations } = useActiveLocation();
+  const { activeLocationId, locations, loading: locationLoading } = useActiveLocation();
   const { activeAgencyId, agencies, switchAgency } = useAgency();
   const { activeBusinessId, isActingAsAgency, isActingAsPlatformOwner, agencyRoleForActiveBusiness, activeBusinessName, activeAgencyName, exitBusiness } =
     useBusiness();
@@ -727,7 +727,16 @@ function LayoutContent() {
               entering a DIFFERENT managed business can land on the same location-list-relative
               position (e.g. "first location") without activeLocationId itself changing, which
               would otherwise skip the remount and leave the previous business's data on screen. */}
-          <Outlet key={`${activeBusinessId ?? ""}:${activeLocationId ?? ""}`} />
+          {/* QA-003 — on a direct visit or refresh the active location is still resolving; a page
+              rendered now would request /restaurants/null/... (403) before the real id lands. Wait
+              for it instead. Accounts with no location (platform admin, agency) resolve at once. */}
+          {locationLoading ? (
+            <div className="flex justify-center py-16">
+              <Spinner label="Loading your restaurant" />
+            </div>
+          ) : (
+            <Outlet key={`${activeBusinessId ?? ""}:${activeLocationId ?? ""}`} />
+          )}
         </main>
       </div>
     </div>

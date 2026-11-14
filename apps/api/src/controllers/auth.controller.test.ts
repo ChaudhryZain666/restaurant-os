@@ -26,6 +26,33 @@ function track(id: string) {
   return id;
 }
 
+describe("POST /auth/refresh — signed-out visitors (QA-012)", () => {
+  it("no refresh cookie: 204, no tokens, no cookie set", async () => {
+    const res = await request(app).post("/api/v1/auth/refresh");
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("a malformed refresh cookie is still refused with 401", async () => {
+    const res = await request(app).post("/api/v1/auth/refresh").set("Cookie", "refreshToken=not-a-token");
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+  });
+
+  it("a valid refresh cookie still rotates and returns an access token", async () => {
+    const user = await createTestUser("customer");
+    track(user.id);
+    const refreshToken = await issueRefreshToken(user.id);
+    const res = await request(app).post("/api/v1/auth/refresh").set("Cookie", `refreshToken=${refreshToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.data.accessToken).toBe("string");
+    // Reused (already rotated) token: refused, reuse detection unchanged.
+    const reused = await request(app).post("/api/v1/auth/refresh").set("Cookie", `refreshToken=${refreshToken}`);
+    expect(reused.status).toBe(401);
+  });
+});
+
 describe("POST /auth/register — concurrent-duplicate-email race (Phase 49)", () => {
   it("returns a clean 409, not an unhandled 500, when User.create() loses a race to an already-committed duplicate email", async () => {
     const email = `race-register-${Date.now()}@test.local`;

@@ -180,7 +180,7 @@ const REASONS = [
   },
   {
     title: "Transparent pricing",
-    copy: "A flat monthly or yearly subscription, and no GarnishTable commission on direct orders. Card processing is Stripe's standard fee, paid to Stripe.",
+    copy: "A flat monthly or yearly subscription, and no GarnishTable commission on direct orders. Online card payments (coming soon) carry Stripe's standard fee, paid to Stripe.",
   },
   {
     title: "Built for growth",

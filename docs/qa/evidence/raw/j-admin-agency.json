@@ -1,0 +1,542 @@
+{
+  "admin": {
+    "steps": [
+      {
+        "id": "ADMIN-01",
+        "label": "Admin signs in, logs out, and protected pages then require sign-in",
+        "result": "PASS",
+        "observed": {
+          "landing": "/platform",
+          "afterLogout": "/login",
+          "backButton": "/login"
+        },
+        "url": "http://localhost:5174/login",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-01.png"
+      },
+      {
+        "id": "ADMIN-02",
+        "label": "Restaurants list: search filters results",
+        "result": "PASS",
+        "observed": {
+          "rowsBefore": 3,
+          "rowsAfterSearch": 1,
+          "showsSpice": true
+        },
+        "url": "http://localhost:5174/platform/restaurants",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-02.png"
+      },
+      {
+        "id": "ADMIN-03",
+        "label": "Create restaurant: empty, invalid email and duplicate slug are refused",
+        "result": "PASS",
+        "observed": {
+          "emptyBlocked": true,
+          "invalidEmailBlocked": true,
+          "duplicateSlugMessage": "That restaurant slug is already taken"
+        },
+        "url": "http://localhost:5174/platform/restaurants/new",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-03.png"
+      },
+      {
+        "id": "ADMIN-04",
+        "label": "Create restaurant with valid details",
+        "result": "PASS",
+        "observed": "created; invite sent (console email provider)",
+        "url": "http://localhost:5174/platform/restaurants/new",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-04.png"
+      },
+      {
+        "id": "ADMIN-05",
+        "label": "Duplicate owner email is refused",
+        "result": "PASS",
+        "observed": "That email already owns a business. To give them another location, add it under their existing business instead.",
+        "url": "http://localhost:5174/platform/restaurants/new",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-05.png"
+      },
+      {
+        "id": "ADMIN-06",
+        "label": "Resend the owner invite from the list",
+        "result": "PASS",
+        "observed": [
+          "Invitation resent to qa-owner-1794099928572@test.local.",
+          "QA Bistro 1794099928572\tQA OwnerInvite pending",
+          "Resend invite"
+        ],
+        "url": "http://localhost:5174/platform/restaurants",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-06.png"
+      },
+      {
+        "id": "ADMIN-07",
+        "label": "Detail page: set up an offline-billed plan at a negotiated price",
+        "result": "PASS",
+        "observed": {
+          "zeroPriceBlocked": true,
+          "badge": true,
+          "price": "$45.00 per month, invoiced outside GarnishTable"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-07.png"
+      },
+      {
+        "id": "ADMIN-08",
+        "label": "Plan: Extend the plan",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Extended to Feb 7, 2027.",
+          "status": "active"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-08.png"
+      },
+      {
+        "id": "ADMIN-09",
+        "label": "Plan: Change plan to Growth yearly at $900",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Plan changed to Owner — Starter.",
+          "status": "active"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-09.png"
+      },
+      {
+        "id": "ADMIN-10",
+        "label": "Plan: Suspend with a reason",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Subscription suspended.",
+          "status": "Subscription suspended."
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-10.png"
+      },
+      {
+        "id": "ADMIN-11",
+        "label": "Plan: Unsuspend",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Subscription unsuspended.",
+          "status": "Subscription unsuspended."
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-11.png"
+      },
+      {
+        "id": "ADMIN-12",
+        "label": "Plan: Cancel at the end of the term",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Cancellation recorded.",
+          "status": "cancelling"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-12.png"
+      },
+      {
+        "id": "ADMIN-13",
+        "label": "Plan: Resume the cancelled plan",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Cancellation withdrawn.",
+          "status": "active"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-13.png"
+      },
+      {
+        "id": "ADMIN-14",
+        "label": "Plan: Cancel immediately",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Manual · billed offline / Cancellation recorded.",
+          "status": "cancelled"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-14.png"
+      },
+      {
+        "id": "ADMIN-15",
+        "label": "Plan: Set up a complimentary plan after the cancellation",
+        "result": "PASS",
+        "observed": {
+          "badges": "Plan & billing / Complimentary / Complimentary Owner — Growth subscription created.",
+          "status": "active"
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-15.png"
+      },
+      {
+        "id": "ADMIN-16",
+        "label": "Plan history and audit trail are visible on the detail page",
+        "result": "PASS",
+        "observed": {
+          "historyRows": 18,
+          "firstRows": [
+            "Subscription created · complimentary",
+            "Nov 8, 2026 · manual",
+            "Cancelled",
+            "Nov 8, 2026 · manual"
+          ],
+          "auditMentions": 8
+        },
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-16.png"
+      },
+      {
+        "id": "ADMIN-17",
+        "label": "Subscriptions page lists the plan with its billing source; revenue tiles render",
+        "result": "PASS",
+        "observed": {
+          "complimentaryRows": 1,
+          "offlineRows": 1,
+          "tiles": "Subscriptions |  | Every restaurant and agency subscription, and where it is billed. Manage a plan from the restaurant's or agency's own page. |  | MRR |  | — |  | LIVE SUBSCRIPTIONS |  | 1 |  | TRIALING | "
+        },
+        "url": "http://localhost:5174/platform/subscriptions",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-17.png"
+      },
+      {
+        "id": "ADMIN-18",
+        "label": "Restaurant status can be changed (test restaurant only)",
+        "result": "PASS",
+        "observed": [],
+        "url": "http://localhost:5174/platform/restaurants/6aefcae758e28b325939dd55",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-admin\\ADMIN-18.png"
+      }
+    ],
+    "consoleErrors": [
+      "http://localhost:5174/login :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5174/platform/restaurants :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5174/platform/restaurants/new :: Failed to load resource: the server responded with a status of 409 (Conflict)"
+    ],
+    "failedRequests": [
+      "401 POST http://localhost:5174/api/v1/auth/refresh",
+      "409 POST http://localhost:5174/api/v1/restaurants"
+    ]
+  },
+  "agency1": {
+    "steps": [
+      {
+        "id": "AGENCY1-01",
+        "label": "Register an agency owner and create the agency",
+        "result": "PASS",
+        "observed": "agency created",
+        "url": "http://localhost:5174/agency",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency1\\AGENCY1-01.png"
+      },
+      {
+        "id": "AGENCY1-02",
+        "label": "Create a client business through the wizard",
+        "result": "PASS",
+        "observed": {
+          "client": "6aefcafd58e28b325939df6e"
+        },
+        "url": "http://localhost:5174/agency/businesses/6aefcafd58e28b325939df6e",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency1\\AGENCY1-02.png"
+      },
+      {
+        "id": "AGENCY1-03",
+        "label": "Agency page /agency renders",
+        "result": "PASS",
+        "observed": "QA Agency 1 1794099928572 Your role: agency_owner Subscription No subscription yet. Manage billing Needs attention QA Client 1 1794099928572",
+        "url": "http://localhost:5174/agency"
+      },
+      {
+        "id": "AGENCY1-04",
+        "label": "Agency page /agency/businesses renders",
+        "result": "PASS",
+        "observed": "Clients The restaurants this agency provisions and supports. New client All clients Live Onboarding Awaiting owner acceptance Inactive Multi",
+        "url": "http://localhost:5174/agency/businesses"
+      },
+      {
+        "id": "AGENCY1-05",
+        "label": "Agency page /agency/locations renders",
+        "result": "PASS",
+        "observed": "Locations Every location across every client this agency manages. LOCATION CLIENT CITY TIMEZONE STATUS ORDERING QA Client Location 1 1794099",
+        "url": "http://localhost:5174/agency/locations"
+      },
+      {
+        "id": "AGENCY1-06",
+        "label": "Agency page /agency/members renders",
+        "result": "PASS",
+        "observed": "Team Who can manage this agency and the clients it manages. Invite member What each role can access Two separate layers: what a role can do ",
+        "url": "http://localhost:5174/agency/members"
+      },
+      {
+        "id": "AGENCY1-07",
+        "label": "Agency page /agency/billing renders",
+        "result": "PASS",
+        "observed": "Agency billing Your agency's subscription status. Client usage 1 of 3 clients used No subscription yet. Plan Agency — Growth — $179.00/mo Bi",
+        "url": "http://localhost:5174/agency/billing",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency1\\AGENCY1-07.png"
+      },
+      {
+        "id": "AGENCY1-08",
+        "label": "Agency page /agency/settings renders",
+        "result": "PASS",
+        "observed": "Agency settings QA Agency 1 1794099928572's profile and branding. Profile Agency name Description (optional) Contact email Customer-facing b",
+        "url": "http://localhost:5174/agency/settings"
+      },
+      {
+        "id": "AGENCY1-09",
+        "label": "Agency page /agency/activity renders",
+        "result": "PASS",
+        "observed": "Activity A record of agency-level actions — team, clients, and your subscription. Target All activity Agency Team Clients Subscription Actio",
+        "url": "http://localhost:5174/agency/activity"
+      }
+    ],
+    "consoleErrors": [
+      "http://localhost:5174/register :: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "failedRequests": [
+      "401 POST http://localhost:5174/api/v1/auth/refresh"
+    ]
+  },
+  "agency2": {
+    "steps": [
+      {
+        "id": "AGENCY2-01",
+        "label": "Register an agency owner and create the agency",
+        "result": "PASS",
+        "observed": "agency created",
+        "url": "http://localhost:5174/agency",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency2\\AGENCY2-01.png"
+      },
+      {
+        "id": "AGENCY2-02",
+        "label": "Create a client business through the wizard",
+        "result": "PASS",
+        "observed": {
+          "client": "6aefcb0e58e28b325939e011"
+        },
+        "url": "http://localhost:5174/agency/businesses/6aefcb0e58e28b325939e011",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency2\\AGENCY2-02.png"
+      },
+      {
+        "id": "AGENCY2-03",
+        "label": "Agency page /agency renders",
+        "result": "PASS",
+        "observed": "QA Agency 2 1794099928572 Your role: agency_owner Subscription No subscription yet. Manage billing Needs attention QA Client 2 1794099928572",
+        "url": "http://localhost:5174/agency"
+      },
+      {
+        "id": "AGENCY2-04",
+        "label": "Agency page /agency/businesses renders",
+        "result": "PASS",
+        "observed": "Clients The restaurants this agency provisions and supports. New client All clients Live Onboarding Awaiting owner acceptance Inactive Multi",
+        "url": "http://localhost:5174/agency/businesses"
+      },
+      {
+        "id": "AGENCY2-05",
+        "label": "Agency page /agency/locations renders",
+        "result": "PASS",
+        "observed": "Locations Every location across every client this agency manages. LOCATION CLIENT CITY TIMEZONE STATUS ORDERING QA Client Location 2 1794099",
+        "url": "http://localhost:5174/agency/locations"
+      },
+      {
+        "id": "AGENCY2-06",
+        "label": "Agency page /agency/members renders",
+        "result": "PASS",
+        "observed": "Team Who can manage this agency and the clients it manages. Invite member What each role can access Two separate layers: what a role can do ",
+        "url": "http://localhost:5174/agency/members"
+      },
+      {
+        "id": "AGENCY2-07",
+        "label": "Agency page /agency/billing renders",
+        "result": "PASS",
+        "observed": "Agency billing Your agency's subscription status. Client usage 1 of 3 clients used No subscription yet. Plan Agency — Growth — $179.00/mo Bi",
+        "url": "http://localhost:5174/agency/billing",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-agency2\\AGENCY2-07.png"
+      },
+      {
+        "id": "AGENCY2-08",
+        "label": "Agency page /agency/settings renders",
+        "result": "PASS",
+        "observed": "Agency settings QA Agency 2 1794099928572's profile and branding. Profile Agency name Description (optional) Contact email Customer-facing b",
+        "url": "http://localhost:5174/agency/settings"
+      },
+      {
+        "id": "AGENCY2-09",
+        "label": "Agency page /agency/activity renders",
+        "result": "PASS",
+        "observed": "Activity A record of agency-level actions — team, clients, and your subscription. Target All activity Agency Team Clients Subscription Actio",
+        "url": "http://localhost:5174/agency/activity"
+      }
+    ],
+    "consoleErrors": [
+      "http://localhost:5174/register :: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    ],
+    "failedRequests": [
+      "401 POST http://localhost:5174/api/v1/auth/refresh"
+    ]
+  },
+  "isolationUi": {
+    "steps": [
+      {
+        "id": "ISOLATION-01",
+        "label": "Agency 2 opens agency 1's client URL",
+        "result": "PASS",
+        "observed": {
+          "landedOn": "/agency/businesses/6aefcafd58e28b325939df6e",
+          "shown": "← Back to clients Business not found"
+        },
+        "url": "http://localhost:5174/agency/businesses/6aefcafd58e28b325939df6e",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-isolation\\ISOLATION-01.png"
+      }
+    ]
+  },
+  "apiProbes": [
+    {
+      "who": "anonymous",
+      "request": "GET /restaurants/:id/orders",
+      "status": 401,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Missing access token"
+    },
+    {
+      "who": "anonymous",
+      "request": "GET /platform/restaurants",
+      "status": 401,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Missing access token"
+    },
+    {
+      "who": "other restaurant's owner",
+      "request": "GET /restaurants/:id/orders",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    },
+    {
+      "who": "other restaurant's owner",
+      "request": "GET /restaurants/:id/analytics",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    },
+    {
+      "who": "other restaurant's owner",
+      "request": "GET /businesses/:id/subscription",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this business"
+    },
+    {
+      "who": "other restaurant's owner",
+      "request": "GET /restaurants/:id/customers",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    },
+    {
+      "who": "owner",
+      "request": "GET /platform/restaurants",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "owner",
+      "request": "GET /platform/subscriptions",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "owner",
+      "request": "POST /platform/businesses/:id/subscription/manual",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "staff",
+      "request": "GET /restaurants/:id/analytics",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "staff",
+      "request": "GET /restaurants/:id/staff",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "staff",
+      "request": "POST /businesses/:id/subscription/cancel",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "Forbidden"
+    },
+    {
+      "who": "customer",
+      "request": "GET /restaurants/:id/orders",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    },
+    {
+      "who": "agency 2",
+      "request": "GET /agencies/:id/businesses",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this agency"
+    },
+    {
+      "who": "agency 2",
+      "request": "GET /businesses/:id/subscription",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this business"
+    },
+    {
+      "who": "agency 1",
+      "request": "GET /restaurants/:id/orders",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    },
+    {
+      "who": "owner",
+      "request": "GET /restaurants/not-a-valid-id/orders",
+      "status": 403,
+      "expected": "denied",
+      "ok": true,
+      "stackLeak": false,
+      "message": "You do not have access to this restaurant"
+    }
+  ]
+}

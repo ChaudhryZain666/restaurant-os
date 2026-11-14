@@ -1,0 +1,123 @@
+{
+  "steps": [
+    {
+      "id": "OWNER2-01",
+      "label": "New item form: which fields does the Create button wait for?",
+      "result": "FAIL",
+      "error": "locator.fill: Error: Cannot type text into input[type=number] | Call log: | \u001b[2m  - waiting for getByPlaceholder('Base price')\u001b[22m | \u001b[2m    - locator resolved to <input min=\"0\" value=\"\" step=\"0.01\" type=\"number\" placeholder=\"Base price\" class=\"w-36 pl-6 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground\"/>\u001b[22m",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - searchbox \"Search menu items\"\n  - paragraph: Filters\n  - group \"Filter by availability\":\n    - button \"All\" [pressed]\n    - button \"Available\"\n    - button \"Unavailable\"\n  - checkbox \"Has add-ons\"\n  - text: Has add-ons\n  - checkbox \"No photo\"\n  - text: No photo\n  - paragraph: Categories\n  - button \"All items 28\"\n  - button \"Wood-Fired Pizza 5\"\n  - button \"Smash Burgers 4\"\n  - button \"Salads 3\"\n  - button \"Starters 4\"\n  - button \"Desserts 3\"\n  - button \"From the Grill 4\"\n  - button \"Drinks 5\"\n  - button \"QA Category 1794099430070 0\"\n  - heading \"Menu\" [level=1]\n  - paragraph: Build your menu, organize your dishes, and control what customers see.\n  - paragraph: 28 items · 8 categories · applies to every location\n  - paragraph: 3 items don't have photos yet.\n  - button \"Live preview\"\n  - link \"View live storefront ↗\":\n    -",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-01.png"
+    },
+    {
+      "id": "OWNER2-02",
+      "label": "New item: choose a category and create",
+      "result": "FAIL",
+      "error": "locator.selectOption: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for locator('form').last().getByRole('combobox').first()\u001b[22m | ",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - searchbox \"Search menu items\"\n  - paragraph: Filters\n  - group \"Filter by availability\":\n    - button \"All\" [pressed]\n    - button \"Available\"\n    - button \"Unavailable\"\n  - checkbox \"Has add-ons\"\n  - text: Has add-ons\n  - checkbox \"No photo\"\n  - text: No photo\n  - paragraph: Categories\n  - button \"All items 28\"\n  - button \"Wood-Fired Pizza 5\"\n  - button \"Smash Burgers 4\"\n  - button \"Salads 3\"\n  - button \"Starters 4\"\n  - button \"Desserts 3\"\n  - button \"From the Grill 4\"\n  - button \"Drinks 5\"\n  - button \"QA Category 1794099430070 0\"\n  - heading \"Menu\" [level=1]\n  - paragraph: Build your menu, organize your dishes, and control what customers see.\n  - paragraph: 28 items · 8 categories · applies to every location\n  - paragraph: 3 items don't have photos yet.\n  - button \"Live preview\"\n  - link \"View live storefront ↗\":\n    -",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-02.png"
+    },
+    {
+      "id": "OWNER2-03",
+      "label": "Item availability toggle and storefront effect",
+      "result": "PASS",
+      "observed": {
+        "toggled": "",
+        "storefront": "(not listed on storefront)"
+      },
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-03.png"
+    },
+    {
+      "id": "OWNER2-04",
+      "label": "Orders list: what does it show?",
+      "result": "PASS",
+      "observed": [
+        "Orders",
+        "All types",
+        "Pickup",
+        "Delivery",
+        "Dine-in",
+        "All payments",
+        "Paid",
+        "Unpaid",
+        "NEW",
+        "(6)",
+        "ORD-1012",
+        "E2E Geocoding Customer · Delivery · 1.77km · 6:56 PM",
+        "unpaid",
+        "1 item · $13.17",
+        "Accept",
+        "Cancel",
+        "ORD-1011",
+        "E2E Geocoding Customer · Delivery · 1.77km · 6:55 PM",
+        "unpaid",
+        "1 item · $11.01",
+        "Accept",
+        "Cancel",
+        "ORD-1010",
+        "E2E Geocoding Customer · Delivery · 1.77km · 6:55 PM",
+        "online · unpaid"
+      ],
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-04.png"
+    },
+    {
+      "id": "OWNER2-05",
+      "label": "Orders: open an order and cancel it with a reason",
+      "result": "PASS",
+      "observed": {
+        "noCancelButton": "Orders\nAll types\nPickup\nDelivery\nDine-in\nAll payments\nPaid\nUnpaid\nNEW\n(6)\nORD-1012\n\nE2E Geocoding Customer · Delivery · 1.77km · 6:56 PM\n\nunpaid\n\n1 item · $13.17\n\nPhone: —\nDelivery: 1200 S 6th St, Spr"
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-05.png"
+    },
+    {
+      "id": "OWNER2-06",
+      "label": "Staff: invite form validates email, then sends",
+      "result": "PASS",
+      "observed": {
+        "invalidMessage": "",
+        "validInviteListed": true
+      },
+      "url": "http://localhost:5174/staff",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-06.png"
+    },
+    {
+      "id": "OWNER2-07",
+      "label": "Promotions: create a 10% code; customer can apply it when signed in",
+      "result": "PASS",
+      "observed": [
+        "  - button \"Cancel\"",
+        "  - textbox \"Code\":",
+        "  - textbox \"Name\":",
+        "  - combobox \"Discount type\":",
+        "  - spinbutton \"Percentage (e.g. 10 = 10%)\"",
+        "  - spinbutton \"Minimum order amount\": \"0\"",
+        "  - spinbutton \"Usage limit (optional)\"",
+        "  - textbox \"Expires (optional)\"",
+        "  - button \"Create promotion\"",
+        "      - button \"Deactivate\"",
+        "      - button \"Delete\""
+      ],
+      "url": "http://localhost:5174/promotions",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner-2\\OWNER2-07.png"
+    }
+  ],
+  "consoleErrors": [
+    "http://localhost:5174/login :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "http://localhost:5174/menu :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/orders :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/staff :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/promotions :: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+  ],
+  "failedRequests": [
+    "401 POST http://localhost:5174/api/v1/auth/refresh",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/menu/overrides",
+    "403 GET http://localhost:5174/api/v1/restaurants/null",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/orders?page=1&limit=50",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/staff",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/promotions"
+  ]
+}

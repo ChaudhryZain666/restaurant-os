@@ -1,0 +1,416 @@
+{
+  "desktop": {
+    "steps": [
+      {
+        "id": "CUST-desktop-01",
+        "label": "Open the restaurant storefront",
+        "result": "PASS",
+        "observed": {
+          "heading": "Wildwood Kitchen",
+          "addButtons": 28
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-01.png"
+      },
+      {
+        "id": "CUST-desktop-02",
+        "label": "Restaurant info shows hours/address/open state",
+        "result": "PASS",
+        "observed": {
+          "openStatus": true,
+          "addressVisible": false
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-02.png"
+      },
+      {
+        "id": "CUST-desktop-03",
+        "label": "Category navigation is present and works",
+        "result": "FAIL",
+        "error": "no category links found",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - navigation \"Primary\":\n    - link \"Menu\":\n      - /url: /r/demo-restaurant\n    - link \"Support\":\n      - /url: /support\n  - link \"Cart, 0 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"0\"\n  - link \"Log in\":\n    - /url: /login\n- main:\n  - text: Open for orders\n  - heading \"Wildwood Kitchen\" [level=1]\n  - text: A wood-fired kitchen for modern American comfort food — hearth-baked pizza, smash burgers, and a grill that never stops, in the heart of Springfield.\n  - button \"Reserve the menu\"\n  - link \"Get directions ↗\":\n    - /url: https://www.google.com/maps/search/?api=1&query=39.7817%2C-89.6501\n  - region \"Featured items\":\n    - text: Signature dish\n    - heading \"Margherita Pizza\" [level=2]\n    - paragraph: Wood-fired with San Marzano-style tomato sauce, fresh mozzarella, and torn basil — the one every pizzeria is judged by.\n    - text: $12.50\n  - paragraph: \"\\\"A wood-fired kitchen for modern American comfort food — hearth-baked pizza, smash burgers, and a grill that never stops, in the heart of Springfield.\\\"\"\n  - paragraph: Wildwood Kitchen\n  - region \"Gallery\"\n  - navigation \"Menu categories\":\n    - button \"Wood-Fired Pizza\"\n    - button \"Smash Burgers\"\n    - button \"Salads\"\n    - button \"Starters\"\n    - button \"Desserts\"\n    - button \"From the Grill\"\n    - button \"Drinks\"\n  - heading \"Wood-Fired Pizza\" [level=2]\n  - list:\n    - listitem:\n      - heading \"Margherita Pizza\" [level=3]\n      - text: $12.50\n      - paragraph: Wood-fired with San Marzano-style tomato sauce, fresh mozzarella, and torn basil — the one every pizzeria is judged by.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Pepperoni Pizza\" [level=3]\n      - text: $14.00\n      - paragraph: A generous layer of cupped, crisp-edged pepperoni over our classic red sauce and mozzarella.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"BBQ Chicken Pizza\" [level=3]\n      - text: $15.50\n      - paragraph: Smoky house BBQ sauce, grilled chicken, thin-sliced red onion, and melted mozzarella, finished under the wood-fire.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Wild Mushroom & Taleggio Pizza\" [level=3]\n      - text: $16.00\n      - paragraph: Roasted wild mushrooms, taleggio, and fresh thyme over a garlic cream base.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Spicy Soppressata Pizza\" [level=3]\n      - ",
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-03.png"
+      },
+      {
+        "id": "CUST-desktop-04",
+        "label": "Open an item with required options; adding without a choice is blocked",
+        "result": "PASS",
+        "observed": {
+          "blockedBy": "dialog stayed open"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-04.png"
+      },
+      {
+        "id": "CUST-desktop-05",
+        "label": "Choose a size option, increase quantity, price updates, add to cart",
+        "result": "PASS",
+        "observed": {
+          "buttonBefore": "ADD TO ORDER — $16.00",
+          "buttonAfter": "ADD TO ORDER — $16.00"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-05.png"
+      },
+      {
+        "id": "CUST-desktop-06",
+        "label": "Add a simple item directly",
+        "result": "PASS",
+        "observed": {
+          "cartLink": "2"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-06.png"
+      },
+      {
+        "id": "CUST-desktop-07",
+        "label": "Cart shows both lines and the subtotal equals the sum of lines",
+        "result": "PASS",
+        "observed": {
+          "subtotal": 21,
+          "moneyFigures": [
+            2,
+            18,
+            3,
+            21,
+            21,
+            21
+          ]
+        },
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-07.png"
+      },
+      {
+        "id": "CUST-desktop-08",
+        "label": "Change a quantity in the cart and the total changes",
+        "result": "PASS",
+        "observed": {
+          "subtotalBefore": 21,
+          "subtotalAfter": 27
+        },
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-08.png"
+      },
+      {
+        "id": "CUST-desktop-09",
+        "label": "Promo code: an invalid code is rejected with a message",
+        "result": "FAIL",
+        "error": "no feedback after applying an invalid promo code",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - navigation \"Primary\":\n    - link \"Menu\":\n      - /url: /r/demo-restaurant\n    - link \"Support\":\n      - /url: /support\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - link \"Log in\":\n    - /url: /login\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-09.png"
+      },
+      {
+        "id": "CUST-desktop-10",
+        "label": "Delivery: an out-of-area address is refused",
+        "result": "FAIL",
+        "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('radio', { name: /Delivery/ }).or(getByRole('button', { name: /^Delivery$/ })).or(getByLabel('Delivery')).first()\u001b[22m | \u001b[2m    - locator resolved to <input type=\"radio\" class=\"sr-only\" value=\"delivery\" name=\"orderType\"/>\u001b[22m",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - navigation \"Primary\":\n    - link \"Menu\":\n      - /url: /r/demo-restaurant\n    - link \"Support\":\n      - /url: /support\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - link \"Log in\":\n    - /url: /login\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-10.png"
+      },
+      {
+        "id": "CUST-desktop-11",
+        "label": "Switch back to pickup",
+        "result": "FAIL",
+        "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('radio', { name: /Pickup/ }).or(getByRole('button', { name: /^Pickup$/ })).or(getByLabel('Pickup')).first()\u001b[22m | \u001b[2m    - locator resolved to <input checked type=\"radio\" value=\"pickup\" class=\"sr-only\" name=\"orderType\"/>\u001b[22m",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - navigation \"Primary\":\n    - link \"Menu\":\n      - /url: /r/demo-restaurant\n    - link \"Support\":\n      - /url: /support\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - link \"Log in\":\n    - /url: /login\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-11.png"
+      },
+      {
+        "id": "CUST-desktop-12",
+        "label": "Placing an order while signed out asks the customer to sign in",
+        "result": "PASS",
+        "observed": "asked to sign in (/login)",
+        "url": "http://localhost:5173/login",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-12.png"
+      },
+      {
+        "id": "CUST-desktop-13",
+        "label": "Register a new customer account (invalid then valid input)",
+        "result": "PASS",
+        "observed": {
+          "emptySubmitBlocked": true,
+          "invalidBlocked": true,
+          "landedOn": "/r/demo-restaurant"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-13.png"
+      },
+      {
+        "id": "CUST-desktop-14",
+        "label": "Cart was kept across sign-in",
+        "result": "PASS",
+        "observed": "cart kept",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-14.png"
+      },
+      {
+        "id": "CUST-desktop-15",
+        "label": "Place the order (local only) and see a confirmation with an order number",
+        "result": "PASS",
+        "observed": {
+          "heading": "Order ORD-1007",
+          "confirmation": true
+        },
+        "url": "http://localhost:5173/orders/6aefc73d58e28b325939b108",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-15.png"
+      },
+      {
+        "id": "CUST-desktop-16",
+        "label": "Order page survives a refresh and shows a status",
+        "result": "PASS",
+        "observed": {
+          "status": "Accepted"
+        },
+        "url": "http://localhost:5173/orders/6aefc73d58e28b325939b108",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-16.png"
+      },
+      {
+        "id": "CUST-desktop-17",
+        "label": "Cart is empty after ordering, with a helpful empty state",
+        "result": "PASS",
+        "observed": "Your cart is empty",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-17.png"
+      },
+      {
+        "id": "CUST-desktop-18",
+        "label": "Order history lists the new order; Back/Forward work",
+        "result": "PASS",
+        "observed": {
+          "orders": 1,
+          "back": "/orders",
+          "forward": "/account"
+        },
+        "url": "http://localhost:5173/account",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\desktop\\CUST-desktop-18.png"
+      }
+    ],
+    "consoleErrors": [
+      "http://localhost:5173/r/demo-restaurant :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/r/demo-restaurant/cart :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/login :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/register :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/register :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/orders/6aefc73d58e28b325939b108 :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/orders :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/account :: Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": [
+      "401 POST http://localhost:5173/api/v1/auth/refresh",
+      "401 POST http://localhost:5173/api/v1/restaurants/6aefc5cf1cf5d65269bdc6f9/promotions/check",
+      "404 GET http://localhost:5173/api/v1/restaurants/by-domain/localhost"
+    ],
+    "orderUrl": "http://localhost:5173/orders/6aefc73d58e28b325939b108"
+  },
+  "mobile": {
+    "steps": [
+      {
+        "id": "CUST-mobile-01",
+        "label": "Open the restaurant storefront",
+        "result": "PASS",
+        "observed": {
+          "heading": "Wildwood Kitchen",
+          "addButtons": 28
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-01.png"
+      },
+      {
+        "id": "CUST-mobile-02",
+        "label": "Restaurant info shows hours/address/open state",
+        "result": "PASS",
+        "observed": {
+          "openStatus": true,
+          "addressVisible": false
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-02.png"
+      },
+      {
+        "id": "CUST-mobile-03",
+        "label": "Category navigation is present and works",
+        "result": "FAIL",
+        "error": "no category links found",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - link \"Cart, 0 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"0\"\n  - button \"Open menu\"\n- main:\n  - text: Open for orders\n  - heading \"Wildwood Kitchen\" [level=1]\n  - text: A wood-fired kitchen for modern American comfort food — hearth-baked pizza, smash burgers, and a grill that never stops, in the heart of Springfield.\n  - button \"Reserve the menu\"\n  - link \"Get directions ↗\":\n    - /url: https://www.google.com/maps/search/?api=1&query=39.7817%2C-89.6501\n  - region \"Featured items\":\n    - text: Signature dish\n    - heading \"Margherita Pizza\" [level=2]\n    - paragraph: Wood-fired with San Marzano-style tomato sauce, fresh mozzarella, and torn basil — the one every pizzeria is judged by.\n    - text: $12.50\n  - paragraph: \"\\\"A wood-fired kitchen for modern American comfort food — hearth-baked pizza, smash burgers, and a grill that never stops, in the heart of Springfield.\\\"\"\n  - paragraph: Wildwood Kitchen\n  - region \"Gallery\"\n  - navigation \"Menu categories\":\n    - button \"Wood-Fired Pizza\"\n    - button \"Smash Burgers\"\n    - button \"Salads\"\n    - button \"Starters\"\n    - button \"Desserts\"\n    - button \"From the Grill\"\n    - button \"Drinks\"\n  - heading \"Wood-Fired Pizza\" [level=2]\n  - list:\n    - listitem:\n      - heading \"Margherita Pizza\" [level=3]\n      - text: $12.50\n      - paragraph: Wood-fired with San Marzano-style tomato sauce, fresh mozzarella, and torn basil — the one every pizzeria is judged by.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Pepperoni Pizza\" [level=3]\n      - text: $14.00\n      - paragraph: A generous layer of cupped, crisp-edged pepperoni over our classic red sauce and mozzarella.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"BBQ Chicken Pizza\" [level=3]\n      - text: $15.50\n      - paragraph: Smoky house BBQ sauce, grilled chicken, thin-sliced red onion, and melted mozzarella, finished under the wood-fire.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Wild Mushroom & Taleggio Pizza\" [level=3]\n      - text: $16.00\n      - paragraph: Roasted wild mushrooms, taleggio, and fresh thyme over a garlic cream base.\n      - button \"Add to order\"\n    - listitem:\n      - heading \"Spicy Soppressata Pizza\" [level=3]\n      - text: $16.50\n      - paragraph: Spicy soppressata and mozzarella with calabrian chili honey, finished with fresh basil.\n      - button \"Ad",
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-03.png"
+      },
+      {
+        "id": "CUST-mobile-04",
+        "label": "Open an item with required options; adding without a choice is blocked",
+        "result": "PASS",
+        "observed": {
+          "blockedBy": "dialog stayed open"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-04.png"
+      },
+      {
+        "id": "CUST-mobile-05",
+        "label": "Choose a size option, increase quantity, price updates, add to cart",
+        "result": "PASS",
+        "observed": {
+          "buttonBefore": "ADD TO ORDER — $16.00",
+          "buttonAfter": "ADD TO ORDER — $16.00"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-05.png"
+      },
+      {
+        "id": "CUST-mobile-06",
+        "label": "Add a simple item directly",
+        "result": "PASS",
+        "observed": {
+          "cartLink": "2"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-06.png"
+      },
+      {
+        "id": "CUST-mobile-07",
+        "label": "Cart shows both lines and the subtotal equals the sum of lines",
+        "result": "PASS",
+        "observed": {
+          "subtotal": 21,
+          "moneyFigures": [
+            2,
+            18,
+            3,
+            21,
+            21,
+            21
+          ]
+        },
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-07.png"
+      },
+      {
+        "id": "CUST-mobile-08",
+        "label": "Change a quantity in the cart and the total changes",
+        "result": "PASS",
+        "observed": {
+          "subtotalBefore": 21,
+          "subtotalAfter": 27
+        },
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-08.png"
+      },
+      {
+        "id": "CUST-mobile-09",
+        "label": "Promo code: an invalid code is rejected with a message",
+        "result": "FAIL",
+        "error": "no feedback after applying an invalid promo code",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - button \"Open menu\"\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-09.png"
+      },
+      {
+        "id": "CUST-mobile-10",
+        "label": "Delivery: an out-of-area address is refused",
+        "result": "FAIL",
+        "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('radio', { name: /Delivery/ }).or(getByRole('button', { name: /^Delivery$/ })).or(getByLabel('Delivery')).first()\u001b[22m | \u001b[2m    - locator resolved to <input type=\"radio\" class=\"sr-only\" value=\"delivery\" name=\"orderType\"/>\u001b[22m",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - button \"Open menu\"\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-10.png"
+      },
+      {
+        "id": "CUST-mobile-11",
+        "label": "Switch back to pickup",
+        "result": "FAIL",
+        "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('radio', { name: /Pickup/ }).or(getByRole('button', { name: /^Pickup$/ })).or(getByLabel('Pickup')).first()\u001b[22m | \u001b[2m    - locator resolved to <input checked type=\"radio\" value=\"pickup\" class=\"sr-only\" name=\"orderType\"/>\u001b[22m",
+        "aria": "- link \"Skip to content\":\n  - /url: \"#main-content\"\n- banner:\n  - link \"Wildwood Kitchen\":\n    - /url: /r/demo-restaurant\n  - link \"Cart, 4 items\":\n    - /url: /r/demo-restaurant/cart\n    - text: \"4\"\n  - button \"Open menu\"\n- main:\n  - heading \"Cart\" [level=1]\n  - paragraph: 4 items from Wildwood Kitchen\n  - list:\n    - listitem:\n      - paragraph: Wild Mushroom & Taleggio Pizza\n      - paragraph: Medium (+$2.00)\n      - paragraph: $18.00 each\n      - spinbutton \"Quantity for Wild Mushroom & Taleggio Pizza\": \"1\"\n      - button \"Remove\"\n    - listitem:\n      - paragraph: San Pellegrino Sparkling Water\n      - paragraph: $3.00 each\n      - spinbutton \"Quantity for San Pellegrino Sparkling Water\": \"3\"\n      - button \"Remove\"\n  - text: Subtotal $27.00 Estimated total $27.00\n  - paragraph: Tax is calculated at checkout — the final total is confirmed on the next page.\n  - text: Promo code\n  - textbox \"Enter a code\": NOT-A-REAL-CODE\n  - button \"Apply\"\n  - paragraph: Missing access token\n  - group \"Order type\":\n    - text: Order type\n    - radio \"Pickup\" [checked]\n    - text: Pickup\n    - radio \"Delivery\"\n    - text: Delivery\n  - group \"Payment\":\n    - text: Payment\n    - radio \"Cash Pay in person\" [checked]\n    - text: Cash Pay in person\n    - radio \"Pay online Card, wallet, etc.\"\n    - text: Pay online Card, wallet, etc.\n  - text: Notes (optional)\n  - textbox \"Notes (optional)\":\n    - /placeholder: Anything the kitchen should know?\n  - button \"Place order — $27.00\"\n- contentinfo:\n  - text: Wildwood Kitchen\n  - paragraph: Open 24 hours\n  - text: 1200 S 6th St, Springfield, IL +1-555-0100 Mon 24 hours Tue 24 hours Wed 24 hours Thu 24 hours Fri 24 hours Sat 24 hours Sun 24 hours\n  - paragraph: Powered by a platform built for real restaurants\n- button \"Open help widget\"",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-11.png"
+      },
+      {
+        "id": "CUST-mobile-12",
+        "label": "Placing an order while signed out asks the customer to sign in",
+        "result": "PASS",
+        "observed": "asked to sign in (/login)",
+        "url": "http://localhost:5173/login",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-12.png"
+      },
+      {
+        "id": "CUST-mobile-13",
+        "label": "Register a new customer account (invalid then valid input)",
+        "result": "PASS",
+        "observed": {
+          "emptySubmitBlocked": true,
+          "invalidBlocked": true,
+          "landedOn": "/r/demo-restaurant"
+        },
+        "url": "http://localhost:5173/r/demo-restaurant",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-13.png"
+      },
+      {
+        "id": "CUST-mobile-14",
+        "label": "Cart was kept across sign-in",
+        "result": "PASS",
+        "observed": "cart kept",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-14.png"
+      },
+      {
+        "id": "CUST-mobile-15",
+        "label": "Place the order (local only) and see a confirmation with an order number",
+        "result": "PASS",
+        "observed": {
+          "heading": "Order ORD-1008",
+          "confirmation": true
+        },
+        "url": "http://localhost:5173/orders/6aefc7b358e28b325939b823",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-15.png"
+      },
+      {
+        "id": "CUST-mobile-16",
+        "label": "Order page survives a refresh and shows a status",
+        "result": "PASS",
+        "observed": {
+          "status": "Accepted"
+        },
+        "url": "http://localhost:5173/orders/6aefc7b358e28b325939b823",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-16.png"
+      },
+      {
+        "id": "CUST-mobile-17",
+        "label": "Cart is empty after ordering, with a helpful empty state",
+        "result": "PASS",
+        "observed": "Your cart is empty",
+        "url": "http://localhost:5173/r/demo-restaurant/cart",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-17.png"
+      },
+      {
+        "id": "CUST-mobile-18",
+        "label": "Order history lists the new order; Back/Forward work",
+        "result": "PASS",
+        "observed": {
+          "orders": 1,
+          "back": "/orders",
+          "forward": "/account"
+        },
+        "url": "http://localhost:5173/account",
+        "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer\\mobile\\CUST-mobile-18.png"
+      }
+    ],
+    "consoleErrors": [
+      "http://localhost:5173/r/demo-restaurant :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/r/demo-restaurant/cart :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/login :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/register :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "http://localhost:5173/register :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/orders/6aefc7b358e28b325939b823 :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/orders :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://localhost:5173/account :: Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": [
+      "401 POST http://localhost:5173/api/v1/auth/refresh",
+      "401 POST http://localhost:5173/api/v1/restaurants/6aefc5cf1cf5d65269bdc6f9/promotions/check",
+      "404 GET http://localhost:5173/api/v1/restaurants/by-domain/localhost"
+    ],
+    "orderUrl": "http://localhost:5173/orders/6aefc7b358e28b325939b823"
+  }
+}

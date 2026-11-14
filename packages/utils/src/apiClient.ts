@@ -23,6 +23,20 @@ export class ApiClientError extends Error {
   }
 }
 
+/** QA-005 — the API answers a failed schema check with the generic "Validation failed" plus
+ *  per-field messages; surface the first field message so the user knows what to fix. */
+export function describeApiError(message: string, details: unknown): string {
+  if (message !== "Validation failed" || !details || typeof details !== "object") return message;
+  for (const [field, messages] of Object.entries(details as Record<string, unknown>)) {
+    const first = Array.isArray(messages) ? messages.find((m): m is string => typeof m === "string") : undefined;
+    if (!first) continue;
+    const label = field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[._]/g, " ").toLowerCase();
+    // A schema message that already names the field reads fine on its own.
+    return first.toLowerCase().includes(label) ? first : `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${first}`;
+  }
+  return message;
+}
+
 export function createApiClient({ basePath }: ApiClientOptions) {
   let accessToken: string | null = null;
   // The refresh token is single-use/rotated server-side (see auth.controller.ts's refresh
@@ -65,7 +79,8 @@ export function createApiClient({ basePath }: ApiClientOptions) {
     refreshPromise = (async () => {
       try {
         const res = await rawRequest("/auth/refresh", { method: "POST", skipRefresh: true });
-        if (!res.ok) return false;
+        // QA-012 — 204: no session to refresh (signed out), as distinct from a rejected token.
+        if (!res.ok || res.status === 204) return false;
         const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
         if (!body.success) return false;
         setAccessToken(body.data.accessToken);
@@ -100,7 +115,7 @@ export function createApiClient({ basePath }: ApiClientOptions) {
 
     const body = (await res.json()) as ApiResponse<T>;
     if (!body.success) {
-      throw new ApiClientError(body.error.message, body.error.code, res.status, body.error.details);
+      throw new ApiClientError(describeApiError(body.error.message, body.error.details), body.error.code, res.status, body.error.details);
     }
     return body.data;
   }

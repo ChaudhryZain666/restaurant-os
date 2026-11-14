@@ -8,6 +8,7 @@ import { useRestaurant } from "../context/RestaurantContext";
 import { useActiveTheme } from "../theme/useActiveTheme";
 import { PlateIcon } from "../theme/icons";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { selectionsToModifiers } from "../lib/itemPrice";
 import { useStorefrontSeo, type MenuResponse } from "../hooks/useStorefrontSeo";
 
 /**
@@ -221,18 +222,7 @@ export function MenuPage() {
     }
     setError(null);
 
-    const selectedModifiers: SelectedModifier[] = groups.flatMap((group) =>
-      (selections[group.id] ?? []).map((optionId) => {
-        const option = group.options.find((o) => o.id === optionId)!;
-        return {
-          groupId: group.id,
-          groupName: group.name,
-          optionId: option.id,
-          optionName: option.name,
-          priceAdjustment: option.priceAdjustment,
-        };
-      })
-    );
+    const selectedModifiers: SelectedModifier[] = selectionsToModifiers(groups, selections);
 
     const specialInstructions = instructionsDraft.trim() || undefined;
     if (addItem(item, selectedModifiers, specialInstructions) === "conflict") {

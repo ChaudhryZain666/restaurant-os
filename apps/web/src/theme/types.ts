@@ -26,6 +26,9 @@ export interface HeaderProps {
   cartPopping: boolean;
   userName: string | null;
   onLogout: () => void;
+  /** QA-009 — set only for a page with no restaurant on the platform's own storefront host (see
+   *  lib/platformHost.ts platformBrandName); replaces the generic "Restaurant" placeholder. */
+  brandName?: string;
 }
 
 export interface FooterProps {
@@ -33,6 +36,8 @@ export interface FooterProps {
   /** True when resolved via an active custom domain (Phase 22/28) — the footer must never expose
    *  platform branding on a white-labeled storefront. */
   hideBranding: boolean;
+  /** QA-009 — same as HeaderProps.brandName. */
+  brandName?: string;
 }
 
 export interface HeroProps {

@@ -110,7 +110,7 @@ const STAGES = [
   },
   {
     name: "Order",
-    items: ["Checkout on Stripe, your account", "Promo codes", "Pickup or delivery"],
+    items: ["Quick checkout", "Promo codes", "Pickup or delivery"],
   },
   {
     name: "Kitchen",

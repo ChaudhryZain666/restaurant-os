@@ -376,6 +376,8 @@ export function CartPage() {
   if (lines.length === 0) {
     return (
       <div className="mx-auto max-w-xl">
+        {/* QA-013 — the page keeps its heading when there's nothing in it. */}
+        <h1 className="sr-only">Cart</h1>
         <EmptyState
           icon={<CartGlyph className="h-6 w-6" />}
           title="Your cart is empty"
@@ -393,6 +395,7 @@ export function CartPage() {
   if (restaurantMismatch) {
     return (
       <div className="mx-auto max-w-xl">
+        <h1 className="sr-only">Cart</h1>
         <EmptyState
           icon={<CartGlyph className="h-6 w-6" />}
           title="Your cart is for a different restaurant"

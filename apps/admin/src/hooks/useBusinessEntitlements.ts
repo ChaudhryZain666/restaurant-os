@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../lib/api";
+import { useCan } from "./useCan";
 
 type EntitlementValue = boolean | number | string;
 type EntitlementSource = "business" | "agency" | "lapsed" | "default";
@@ -34,9 +35,15 @@ export function useBusinessEntitlements(businessId: string | undefined | null) {
   const [entitlements, setEntitlements] = useState<Record<string, EntitlementValue> | null>(null);
   const [source, setSource] = useState<EntitlementSource>("default");
   const [loading, setLoading] = useState(true);
+  // QA-004 — the endpoint requires billing.read, which staff and kitchen roles don't hold: asking
+  // anyway only produced a 403 on every page and the same "no plan found" result as skipping it.
+  // useCan covers agency-membership and platform-owner grants as well as the base role.
+  const canRead = useCan("billing.read");
 
   useEffect(() => {
-    if (!businessId) {
+    if (!businessId || !canRead) {
+      setEntitlements(null);
+      setSource("default");
       setLoading(false);
       return;
     }
@@ -53,7 +60,7 @@ export function useBusinessEntitlements(businessId: string | undefined | null) {
         setSource("default");
       })
       .finally(() => setLoading(false));
-  }, [businessId]);
+  }, [businessId, canRead]);
 
   /** Mirrors hasFeatureEntitlement's own precedence exactly, so this can never disagree with the
    *  server: "lapsed" denies; genuinely no subscription history anywhere ("default") allows; a real

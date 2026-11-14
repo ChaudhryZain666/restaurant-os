@@ -35,12 +35,14 @@ test("owner can view the restaurant audit log, and a real status change appears 
     }
     await customerPage.goto("http://localhost:5173/r/demo-restaurant");
     const pizzaRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
-    await pizzaRow.getByRole("button", { name: "Add to order" }).click({ timeout: 15_000 });
-    // Phase 65 — demo-restaurant's real theme is Cinematic, whose item detail is a large-photograph
-    // overlay (role="dialog"), not an inline row expansion — scoped to the dialog, not `pizzaRow`.
-    const detailDialog = customerPage.getByRole("dialog");
-    await detailDialog.getByText("Small", { exact: false }).click();
-    await detailDialog.getByRole("button", { name: /Add to order — \$/ }).click();
+    // Theme-agnostic (same approach as delivery.spec.ts's addItemToCart): the seeded demo is now
+    // Classic (inline row expansion, "Add to cart" → "Confirm add to cart"), while Cinematic opens a
+    // dialog ("Add to order" → "Add to order — $X"). Either way a size is chosen and the item added.
+    await pizzaRow.getByRole("button", { name: /Add to (cart|order)/ }).click({ timeout: 15_000 });
+    const dialog = customerPage.getByRole("dialog");
+    const detailScope = (await dialog.count()) > 0 ? dialog : pizzaRow;
+    await detailScope.getByText("Small", { exact: false }).click();
+    await detailScope.getByRole("button", { name: /^Confirm add to cart$|Add to order — \$/ }).click();
     await customerPage.getByRole("link", { name: /Cart/ }).click();
     await customerPage.getByRole("button", { name: /Place order/ }).click();
     await expect(customerPage).toHaveURL(/\/orders\/[a-f0-9]+$/, { timeout: 10_000 });

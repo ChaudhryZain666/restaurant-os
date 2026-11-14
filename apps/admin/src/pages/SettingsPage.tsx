@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { BusinessHoursDay, GeocodeResult, Restaurant, RestaurantAvailability, Weekday } from "@restaurant/types";
 import { WEEKDAYS } from "@restaurant/types";
 import { Alert, Badge, Button } from "@restaurant/ui";
-import { describeAvailability } from "@restaurant/utils";
+import { ApiClientError, describeAvailability } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId } from "../context/LocationContext";
 import { AddressAutocomplete } from "../components/AddressAutocomplete";
@@ -12,6 +12,7 @@ import { PaymentAccountSettingsPanel } from "../components/PaymentAccountSetting
 import { MapPreview } from "../components/MapPreview";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { uploadRestaurantImage } from "../lib/uploads";
+import { restaurantNameError, serverNameError } from "../lib/restaurantName";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
@@ -102,6 +103,7 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
@@ -137,9 +139,16 @@ export function SettingsPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!restaurant) return;
-    setSaving(true);
     setSaved(false);
     setError(null);
+    // QA-005 — a blank name is caught on the field itself (the owner's other edits stay in the form).
+    const localNameError = restaurantNameError(restaurant.name);
+    setNameError(localNameError);
+    if (localNameError) {
+      setTab("General");
+      return;
+    }
+    setSaving(true);
     try {
       const { restaurant: updated, availability: updatedAvailability } = await apiClient.request<{
         restaurant: Restaurant;
@@ -208,6 +217,11 @@ export function SettingsPage() {
       // Kitchen/Staff pages themselves) immediately, without a full page reload.
       await refetchNavSettings();
     } catch (err) {
+      const fieldMessage = err instanceof ApiClientError ? serverNameError(err.details) : null;
+      if (fieldMessage) {
+        setNameError(fieldMessage);
+        setTab("General");
+      }
       setError((err as Error).message);
     } finally {
       setSaving(false);
@@ -290,9 +304,20 @@ export function SettingsPage() {
             Restaurant name
             <input
               value={restaurant.name}
-              onChange={(e) => setRestaurant({ ...restaurant, name: e.target.value })}
-              className={inputClass}
+              onChange={(e) => {
+                setRestaurant({ ...restaurant, name: e.target.value });
+                if (nameError) setNameError(null);
+              }}
+              aria-required="true"
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "restaurant-name-error" : undefined}
+              className={`${inputClass}${nameError ? " border-danger focus:ring-danger" : ""}`}
             />
+            {nameError && (
+              <span id="restaurant-name-error" className="text-xs text-danger">
+                {nameError}
+              </span>
+            )}
           </label>
           <label className="flex flex-col gap-1 text-sm">
             Description
@@ -684,10 +709,11 @@ export function SettingsPage() {
               />
             </label>
           </div>
-          <ComingSoon>
+          {/* D-1 / QA follow-up — this describes how the timezone already works; it was wrongly badged "Coming soon". */}
+          <p className="text-xs text-muted">
             Order times, reports, and ordering availability all use this timezone. Changing it only changes how times
             are interpreted going forward — it never rewrites anything already stored.
-          </ComingSoon>
+          </p>
         </div>
       )}
 

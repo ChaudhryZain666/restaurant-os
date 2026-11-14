@@ -222,7 +222,14 @@ export async function login(req: Request, res: Response) {
 
 export async function refresh(req: Request, res: Response) {
   const token = req.cookies?.[REFRESH_COOKIE];
-  if (!token) throw ApiError.unauthorized("Missing refresh token");
+  // QA-012 — no refresh cookie at all is a visitor who simply isn't signed in, which every app asks
+  // about on every page load: answering 401 logged a console error for every signed-out visitor.
+  // 204 says "no session" without tokens. A cookie that IS sent but is invalid, expired or revoked
+  // still gets 401 below (and reuse detection still runs), so nothing is weakened.
+  if (!token) {
+    res.status(204).end();
+    return;
+  }
 
   let payload;
   try {

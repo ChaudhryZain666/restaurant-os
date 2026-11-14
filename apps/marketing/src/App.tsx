@@ -9,7 +9,8 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 // its own chunk, fetched on first visit, so the homepage doesn't download the whole site.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
-const HomeV2Page = page(() => import("./pages/HomeV2Page"), "HomeV2Page");
+// QA-010 — the draft homepage is not even built into production bundles.
+const HomeV2Page = import.meta.env.DEV ? page(() => import("./pages/HomeV2Page"), "HomeV2Page") : NotFoundPage;
 const ProductPage = page(() => import("./pages/ProductPage"), "ProductPage");
 const SolutionsPage = page(() => import("./pages/SolutionsPage"), "SolutionsPage");
 const HowItWorksPage = page(() => import("./pages/HowItWorksPage"), "HowItWorksPage");
@@ -61,8 +62,10 @@ export function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomeV3Page />} />
-          {/* Homepage redesign under review — not linked from Nav, noindex. See HomeV2Page.tsx. */}
-          <Route path="/v2" element={<HomeV2Page />} />
+          {/* Homepage redesign under review — not linked from Nav, noindex. See HomeV2Page.tsx.
+              QA-010 — dev server only: a production build answers /v2 with the 404 page (and nginx
+              with a 404 status, infrastructure/docker/nginx/marketing.locations.template). */}
+          {import.meta.env.DEV && <Route path="/v2" element={<HomeV2Page />} />}
           {/* The review URL for what is now the homepage — keep old links working. */}
           <Route path="/v3" element={<Navigate to="/" replace />} />
           <Route path="/product" element={<ProductPage />} />

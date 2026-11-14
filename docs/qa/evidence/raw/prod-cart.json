@@ -1,0 +1,104 @@
+{
+  "desktop": {
+    "openState": [
+      "OPEN FOR ORDERS",
+      "Seasonal vegetables charred over the open flame, finished with herb oil and flaky salt.",
+      "Open 24 hours"
+    ],
+    "categories": 7,
+    "dialogPriceBefore": "ADD TO ORDER — $16.00",
+    "dialogPriceAfterMedium": "ADD TO ORDER — $16.00",
+    "cartLines": [
+      "San Pellegrino Sparkling Water",
+      "$3.00 each",
+      "Wild Mushroom & Taleggio Pizza",
+      "Medium (+$2.00)",
+      "$18.00 each",
+      "$21.00",
+      "$21.00",
+      "Place order — $21.00"
+    ],
+    "orderTypes": [
+      "pickup",
+      "delivery"
+    ],
+    "orderTypesText": "Order type Pickup Delivery",
+    "paymentText": "Payment Cash Pay in person",
+    "placeButton": "Place order — $21.00",
+    "promoSignedOut": [
+      "Promo code",
+      "Missing access token"
+    ],
+    "horizontalOverflow": null
+  },
+  "mobile": {
+    "openState": [
+      "OPEN FOR ORDERS",
+      "Seasonal vegetables charred over the open flame, finished with herb oil and flaky salt.",
+      "Open 24 hours"
+    ],
+    "categories": 7,
+    "dialogPriceBefore": "ADD TO ORDER — $16.00",
+    "dialogPriceAfterMedium": "ADD TO ORDER — $16.00",
+    "cartLines": [
+      "San Pellegrino Sparkling Water",
+      "$3.00 each",
+      "Wild Mushroom & Taleggio Pizza",
+      "Medium (+$2.00)",
+      "$18.00 each",
+      "$21.00",
+      "$21.00",
+      "Place order — $21.00"
+    ],
+    "orderTypes": [
+      "pickup",
+      "delivery"
+    ],
+    "orderTypesText": "Order type Pickup Delivery",
+    "paymentText": "Payment Cash Pay in person",
+    "placeButton": "Place order — $21.00",
+    "promoSignedOut": [
+      "Promo code",
+      "Missing access token"
+    ],
+    "horizontalOverflow": null
+  },
+  "small": {
+    "openState": [
+      "OPEN FOR ORDERS",
+      "Seasonal vegetables charred over the open flame, finished with herb oil and flaky salt.",
+      "Open 24 hours"
+    ],
+    "categories": 7,
+    "dialogPriceBefore": "ADD TO ORDER — $16.00",
+    "dialogPriceAfterMedium": "ADD TO ORDER — $16.00",
+    "cartLines": [
+      "San Pellegrino Sparkling Water",
+      "$3.00 each",
+      "Wild Mushroom & Taleggio Pizza",
+      "Medium (+$2.00)",
+      "$18.00 each",
+      "$21.00",
+      "$21.00",
+      "Place order — $21.00"
+    ],
+    "orderTypes": [
+      "pickup",
+      "delivery"
+    ],
+    "orderTypesText": "Order type Pickup Delivery",
+    "paymentText": "Payment Cash Pay in person",
+    "placeButton": "Place order — $21.00",
+    "promoSignedOut": [
+      "Promo code",
+      "Missing access token"
+    ],
+    "horizontalOverflow": null
+  },
+  "marketingVersion": {
+    "app": "marketing",
+    "commit": "4ffc99b496b6db218e3b1107856f6abee0db531c",
+    "builtAt": "2026-11-06T21:33:09Z",
+    "legalConfigured": true
+  }
+}

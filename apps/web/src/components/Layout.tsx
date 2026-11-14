@@ -1,4 +1,5 @@
-import { Outlet, useMatch } from "react-router-dom";
+import { useEffect } from "react";
+import { Outlet, useLocation, useMatch } from "react-router-dom";
 import { Alert, EmptyState } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -10,6 +11,10 @@ import { useBrandFavicon } from "../hooks/useBrandFavicon";
 import { AvailabilityBanner } from "./AvailabilityBanner";
 import { TableBanner } from "./TableBanner";
 import { HelpWidget } from "./HelpWidget";
+import { ClassicHeader } from "../theme/classic/Header";
+import { ClassicFooter } from "../theme/classic/Footer";
+import { platformBrandName } from "../lib/platformHost";
+import { pageMetaFor } from "../lib/pageTitles";
 
 function StoreOffIcon({ className }: { className?: string }) {
   return (
@@ -34,7 +39,12 @@ export function Layout() {
   const { restaurant, whiteLabelBrand, loading: restaurantLoading, error: restaurantError, resolvedVia } = useRestaurant();
   const { definition } = useActiveTheme();
   useBrandFavicon();
-  const { Header, Footer } = definition.components;
+  // QA-009 — with no restaurant on the platform's own host, the page is GarnishTable's, not a
+  // restaurant's: plain Classic chrome carrying the platform name instead of "R / Restaurant".
+  const brandName = restaurantLoading
+    ? undefined
+    : platformBrandName({ hasRestaurant: Boolean(restaurant), hostname: window.location.hostname, siteUrl: import.meta.env.VITE_SITE_URL });
+  const { Header, Footer } = brandName ? { Header: ClassicHeader, Footer: ClassicFooter } : definition.components;
   const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
 
   // Every restaurant-facing link (brand, Menu, Cart, Loyalty) is slug-aware so navigation never
@@ -63,6 +73,24 @@ export function Layout() {
   // robots signal at all (useStorefrontSeo only ever runs when a restaurant resolves), so this
   // thin, identical-looking error page was indexable by default at a unique URL per bad slug.
   useNoIndex(restaurantNotFound);
+
+  // QA-013 — a title and description for every page that doesn't set its own (menu pages do, in
+  // useStorefrontSeo). Runs after the page's own effects; null for the self-titled pages.
+  const { pathname } = useLocation();
+  const siteName = restaurant?.name ?? whiteLabelBrand?.name ?? brandName ?? null;
+  useEffect(() => {
+    const meta = restaurantLoading ? null : pageMetaFor(pathname, siteName);
+    if (!meta) return;
+    const previousTitle = document.title;
+    const tag = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const previousDescription = tag?.content;
+    document.title = meta.title;
+    if (tag) tag.content = meta.description;
+    return () => {
+      document.title = previousTitle;
+      if (tag && previousDescription !== undefined) tag.content = previousDescription;
+    };
+  }, [pathname, siteName, restaurantLoading]);
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -95,6 +123,7 @@ export function Layout() {
         cartPopping={cartPopping}
         userName={user?.name ?? null}
         onLogout={() => logout()}
+        brandName={brandName}
       />
 
       {!restaurantNotFound && <AvailabilityBanner />}
@@ -119,7 +148,11 @@ export function Layout() {
         )}
       </main>
 
-      <Footer restaurant={restaurant} hideBranding={resolvedVia === "domain" || whiteLabelBrand?.hidePlatformBranding === true} />
+      <Footer
+        restaurant={restaurant}
+        hideBranding={resolvedVia === "domain" || whiteLabelBrand?.hidePlatformBranding === true}
+        brandName={brandName}
+      />
 
       <HelpWidget />
     </div>

@@ -4,6 +4,7 @@ import { formatCurrency } from "@restaurant/utils";
 import type { MenuItem, ModifierGroup } from "@restaurant/types";
 import type { MenuSectionProps } from "../types";
 import { PlateIcon, CloseGlyphIcon } from "../icons";
+import { linePrice, selectionsToModifiers } from "../../lib/itemPrice";
 
 function RowImage({ item }: { item: MenuItem }) {
   if (item.imageUrl) {
@@ -91,7 +92,7 @@ function ModifierForm({ item, groups, currency, orderingOpen, selections, instru
           disabled={!orderingOpen}
           className="border border-foreground bg-foreground px-6 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-background transition-opacity duration-fast hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Add to order — {formatCurrency(item.price, currency)}
+          Add to order — {formatCurrency(linePrice(item.price, selectionsToModifiers(groups, selections)), currency)}
         </button>
         <button onClick={onCancelAdd} className="text-xs font-medium uppercase tracking-[0.16em] text-muted hover:text-foreground">
           Cancel

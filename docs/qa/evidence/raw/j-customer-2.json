@@ -1,0 +1,132 @@
+{
+  "steps": [
+    {
+      "id": "CUST2-01",
+      "label": "Category navigation contents and click",
+      "result": "PASS",
+      "observed": {
+        "items": 7,
+        "clicked": "DRINKS",
+        "scrolledFrom": 0,
+        "scrolledTo": 7720,
+        "hash": ""
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-01.png"
+    },
+    {
+      "id": "CUST2-02",
+      "label": "Item dialog price label follows the chosen option",
+      "result": "PASS",
+      "observed": {
+        "before": "ADD TO ORDER — $16.00",
+        "afterMedium": "ADD TO ORDER — $16.00",
+        "quantityControl": false,
+        "afterQty": "ADD TO ORDER — $16.00",
+        "optionsAria": [
+          "  - group \"Size (choose 1)\":",
+          "    - text: Size (choose 1)",
+          "    - radio \"Small\"",
+          "    - radio \"Medium +$2.00\"",
+          "    - text: Medium +$2.00",
+          "    - radio \"Large +$4.00\""
+        ]
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-02.png"
+    },
+    {
+      "id": "CUST2-03",
+      "label": "Add item and check the cart line price",
+      "result": "PASS",
+      "observed": [
+        "Wild Mushroom & Taleggio Pizza",
+        "Medium (+$2.00)",
+        "$18.00 each",
+        "$18.00",
+        "$18.00",
+        "Place order — $18.00"
+      ],
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-03.png"
+    },
+    {
+      "id": "CUST2-04",
+      "label": "Invalid promo code feedback",
+      "result": "PASS",
+      "observed": {
+        "request": "401 /restaurants/6aefc5cf1cf5d65269bdc6f9/promotions/check",
+        "alerts": [],
+        "status": [],
+        "nearPromo": "Cart\n\n1 item from Wildwood Kitchen\n\nWild Mushroom & Taleggio Pizza\n\nMedium (+$2.00)\n\n$18.00 each\n\nRemove\nSubtotal\n$18.00\nEstimated total\n$18.00\n\nTax is calculated at checkout — the final total is conf"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-04.png"
+    },
+    {
+      "id": "CUST2-05",
+      "label": "Valid seeded promo code applies a discount",
+      "result": "PASS",
+      "observed": "see owner journey for promo creation",
+      "url": "http://localhost:5173/r/demo-restaurant/cart"
+    },
+    {
+      "id": "CUST2-06",
+      "label": "Delivery: choose Delivery, enter an out-of-area address",
+      "result": "PASS",
+      "observed": {
+        "deliveryFeeRowShown": false,
+        "message": null,
+        "placeOrderEnabled": false
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-06.png"
+    },
+    {
+      "id": "CUST2-07",
+      "label": "Delivery: a nearby address shows a fee and a valid total",
+      "result": "PASS",
+      "observed": [
+        "Medium (+$2.00)",
+        "$18.00 each",
+        "Subtotal",
+        "$18.00",
+        "Estimated total",
+        "$18.00",
+        "Tax is calculated at checkout — the final total is confirmed on the next page.",
+        "Place order — $18.00"
+      ],
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-07.png"
+    },
+    {
+      "id": "CUST2-08",
+      "label": "Switch back to Pickup removes the delivery fee",
+      "result": "PASS",
+      "observed": {
+        "deliveryFeeRows": 0
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-08.png"
+    },
+    {
+      "id": "CUST2-09",
+      "label": "Remove a line from the cart",
+      "result": "PASS",
+      "observed": {
+        "linesBefore": 1,
+        "linesAfter": 0
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-customer-2\\CUST2-09.png"
+    }
+  ],
+  "consoleErrors": [
+    "http://localhost:5173/r/demo-restaurant :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "http://localhost:5173/r/demo-restaurant/cart :: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "failedRequests": [
+    "401 POST http://localhost:5173/api/v1/auth/refresh",
+    "401 POST http://localhost:5173/api/v1/restaurants/6aefc5cf1cf5d65269bdc6f9/promotions/check"
+  ]
+}

@@ -199,6 +199,85 @@ describe("checking a promo code (customer-facing, read-only)", () => {
   });
 });
 
+// QA-001 (browser audit, 2026-11-08) — a signed-out customer applying a code saw "Missing access
+// token". The check is now public; every rule still runs server-side and the order re-checks.
+describe("checking a promo code while signed out (QA-001)", () => {
+  async function createCode(body: Record<string, unknown>, restaurantId = restaurantA.id as string, token = ownerAToken) {
+    const c = code();
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurantId}/promotions`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ code: c, name: "QA-001", ...body });
+    expect(res.status).toBe(201);
+    return { code: c, id: res.body.data.promotion.id as string };
+  }
+  const check = (codeValue: string, subtotal: number, restaurantId = restaurantA.id as string) =>
+    request(app).post(`/api/v1/restaurants/${restaurantId}/promotions/check`).send({ code: codeValue, subtotal });
+
+  it("a valid code applies without an account, with the same discount a signed-in customer gets", async () => {
+    const { code: c } = await createCode({ type: "percentage", value: 10 });
+    const anon = await check(c, 40);
+    const signedIn = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/promotions/check`)
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ code: c, subtotal: 40 });
+    expect(anon.status).toBe(200);
+    expect(anon.body.data).toMatchObject({ valid: true, discount: 4 });
+    expect(signedIn.body.data).toEqual(anon.body.data);
+    // Only the code's public terms come back — no usage counts, limits, ids or owner data.
+    expect(Object.keys(anon.body.data.promotion).sort()).toEqual(["code", "name", "type", "value"]);
+  });
+
+  it("refuses unknown, expired, inactive, exhausted and below-minimum codes with a customer-friendly reason", async () => {
+    const expired = await createCode({ type: "fixed", value: 2, startDate: new Date(Date.now() - 2 * 86_400_000).toISOString(), endDate: new Date(Date.now() - 86_400_000).toISOString() });
+    const inactive = await createCode({ type: "fixed", value: 2 });
+    await Promotion.findByIdAndUpdate(inactive.id, { isActive: false });
+    const exhausted = await createCode({ type: "fixed", value: 2, usageLimit: 1 });
+    await Promotion.findByIdAndUpdate(exhausted.id, { usageCount: 1 });
+    const minimum = await createCode({ type: "fixed", value: 2, minOrderAmount: 100 });
+
+    const cases: Array<[string, RegExp]> = [
+      ["NO-SUCH-CODE", /invalid promo code/i],
+      [expired.code, /expired/i],
+      [inactive.code, /no longer active/i],
+      [exhausted.code, /usage limit/i],
+      [minimum.code, /minimum order/i],
+    ];
+    for (const [c, reason] of cases) {
+      const res = await check(c, 20);
+      expect({ c, status: res.status, valid: res.body.data.valid }).toEqual({ c, status: 200, valid: false });
+      expect(res.body.data.reason).toMatch(reason);
+      expect(JSON.stringify(res.body)).not.toMatch(/token|unauthori[sz]ed/i);
+    }
+  });
+
+  it("a code from another restaurant never applies (cross-restaurant attempt)", async () => {
+    const ownerB = await createTestUser("restaurant_owner", restaurantB._id);
+    const { code: bCode } = await createCode({ type: "percentage", value: 50 }, restaurantB.id as string, tokenFor(ownerB));
+    expect((await check(bCode, 50, restaurantB.id as string)).body.data.valid).toBe(true);
+    const res = await check(bCode, 50, restaurantA.id as string);
+    expect(res.body.data).toMatchObject({ valid: false });
+  });
+
+  it("a malformed or unknown restaurant id is a plain refusal, not an error", async () => {
+    for (const id of ["not-an-id", "6aaaaaaaaaaaaaaaaaaaaaaa"]) {
+      const res = await check("ANY", 10, id);
+      expect(res.status).toBe(200);
+      expect(res.body.data.valid).toBe(false);
+    }
+  });
+
+  it("managing promotions still requires the owner's permission", async () => {
+    expect((await request(app).get(`/api/v1/restaurants/${restaurantA.id}/promotions`)).status).toBe(401);
+    const create = await request(app)
+      .post(`/api/v1/restaurants/${restaurantA.id}/promotions`)
+      .send({ code: code(), name: "x", type: "fixed", value: 1 });
+    expect(create.status).toBe(401);
+    const asCustomer = await request(app).get(`/api/v1/restaurants/${restaurantA.id}/promotions`).set("Authorization", `Bearer ${customerToken}`);
+    expect(asCustomer.status).toBe(403);
+  });
+});
+
 describe("promo codes at checkout — server-side pricing, never trusting the client", () => {
   it("applies a valid promo code's discount to the order total and increments usageCount", async () => {
     const c = code();

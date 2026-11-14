@@ -214,7 +214,7 @@ export function PlanMenu() {
         </Reveal>
 
         <p className="mt-8 text-center text-sm text-[#6b5d48]">
-          Card payments run on your own Stripe account, so Stripe's standard processing fee applies.{" "}
+          Customers pay you directly. Online card payments through your own Stripe account are coming soon — Stripe's standard processing fee will apply.{" "}
           <Link to="/pricing" className="underline underline-offset-4 hover:text-[#2b2116]">
             Full pricing details
           </Link>
