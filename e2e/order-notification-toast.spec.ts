@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { registerFreshCustomer } from "./helpers/freshCustomer";
 
 /**
  * Regression coverage for a Phase 11 audit finding: no notification system existed anywhere, so a
@@ -25,18 +26,8 @@ test.describe("admin — new order toast notification", () => {
       // restaurant, not the literal word "Dashboard"; the subtitle line stays static.
       await expect(ownerPage.getByText("Here's what's happening with your restaurant today.")).toBeVisible({ timeout: 10_000 });
 
-      await customerPage.goto("http://localhost:5173/login");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      const loginRes = customerPage.waitForResponse((r) => r.url().includes("/api/v1/auth/login"));
-      await customerPage.getByRole("button", { name: "Log in" }).click();
-      if ((await loginRes).status() !== 200) {
-        await customerPage.goto("http://localhost:5173/register");
-        await customerPage.getByLabel("Name").fill("E2E Toast Customer");
-        await customerPage.getByLabel("Email").fill("customer1@test.local");
-        await customerPage.getByLabel("Password").fill("Customer123!");
-        await customerPage.getByRole("button", { name: "Create account" }).click();
-      }
+      // A customer of its own (helpers/freshCustomer.ts) — no shared account, no cancelled sign-up.
+      await registerFreshCustomer(customerPage, "E2E Toast Customer");
       await expect(customerPage).toHaveURL(/\/r\/demo-restaurant$/, { timeout: 10_000 });
 
       await customerPage.goto("http://localhost:5173/");

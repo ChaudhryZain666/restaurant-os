@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
-import { createApiClient } from "./apiClient.js";
+import { createApiClient, REFRESH_LOCK_NAME } from "./apiClient.js";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -49,5 +49,57 @@ describe("session refresh", () => {
     client.setOnSessionExpired(expired);
     await expect(client.request("/orders")).rejects.toMatchObject({ status: 401 });
     expect(expired).toHaveBeenCalledTimes(1);
+  });
+});
+
+// NEW-1 — a refresh survives the page being left, and tabs never refresh at the same time.
+describe("session refresh resilience (NEW-1)", () => {
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  afterEach(() => {
+    if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
+  });
+
+  it("sends the refresh with keepalive so the rotated cookie is stored even if the page unloads", async () => {
+    const fetchMock = mockFetch(json(200, { success: true, data: { accessToken: "t" } }));
+    await createApiClient({ basePath: "/api/v1" }).tryRefresh();
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.keepalive).toBe(true);
+    expect(init.credentials).toBe("include");
+  });
+
+  it("runs every refresh inside the shared cross-tab lock, one at a time", async () => {
+    const order: string[] = [];
+    let held = false;
+    const queue: Array<() => void> = [];
+    const locks = {
+      request: async (name: string, fn: () => Promise<unknown>) => {
+        expect(name).toBe(REFRESH_LOCK_NAME);
+        if (held) await new Promise<void>((resolve) => queue.push(resolve));
+        held = true;
+        try {
+          return await fn();
+        } finally {
+          held = false;
+          queue.shift()?.();
+        }
+      },
+    };
+    Object.defineProperty(globalThis, "navigator", { value: { locks }, configurable: true });
+    const fn = jest.fn<typeof fetch>().mockImplementation(async () => {
+      order.push("start");
+      await new Promise((r) => setTimeout(r, 20));
+      order.push("end");
+      return json(200, { success: true, data: { accessToken: "t" } });
+    });
+    globalThis.fetch = fn as unknown as typeof fetch;
+    // Two "tabs" = two independent clients sharing the browser's lock.
+    await Promise.all([createApiClient({ basePath: "/a" }).tryRefresh(), createApiClient({ basePath: "/a" }).tryRefresh()]);
+    expect(order).toEqual(["start", "end", "start", "end"]);
+  });
+
+  it("still refreshes where the Web Locks API is unavailable", async () => {
+    Object.defineProperty(globalThis, "navigator", { value: {}, configurable: true });
+    mockFetch(json(200, { success: true, data: { accessToken: "t" } }));
+    await expect(createApiClient({ basePath: "/a" }).tryRefresh()).resolves.toBe(true);
   });
 });

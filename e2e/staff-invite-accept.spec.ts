@@ -49,7 +49,8 @@ test.describe.serial("staff invite -> accept -> role-scoped access (Phase 17)", 
       await ownerPage.getByRole("button", { name: "Add staff member" }).click();
       await ownerPage.getByLabel("Name").fill("Kitchen Tester");
       await ownerPage.getByLabel("Email").fill(staffEmail);
-      await ownerPage.getByLabel("Role").selectOption({ label: "Kitchen staff" });
+      // exact: each staff row's own dropdown is now labelled "Role for <name>" (NEW-3).
+      await ownerPage.getByLabel("Role", { exact: true }).selectOption({ label: "Kitchen staff" });
       await ownerPage.getByRole("button", { name: "Send invite", exact: true }).click();
       await expect(ownerPage.getByText(`Invitation sent to ${staffEmail}`)).toBeVisible({ timeout: 10_000 });
 

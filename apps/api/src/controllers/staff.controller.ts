@@ -12,6 +12,7 @@ import { staffInviteEmail } from "../email/templates.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { INVITE_TTL_MS, ROLE_LABELS, createStaffInvite } from "../services/staffInvite.service.js";
 import { resolveEmailBrandForBusiness } from "../services/emailBranding.service.js";
+import { recordAuditEvent } from "../services/audit.service.js";
 
 export async function listStaff(req: Request, res: Response) {
   const { restaurantId } = req.params;
@@ -68,13 +69,28 @@ export async function updateStaff(req: Request, res: Response) {
 
   // Scoped to STAFF_ROLES so this can never be pointed at the owner account, a platform_admin,
   // or a customer by hand-editing the :id — only real staff rows in this tenant are reachable.
-  const staff = await User.findOneAndUpdate(
+  // NEW-3 — read the previous state in the same atomic update (new: false), so the audit entry
+  // records exactly the role this request replaced. Two identical submissions: the second sees the
+  // role already changed and records nothing.
+  const before = await User.findOneAndUpdate(
     { _id: id, restaurantId, role: { $in: STAFF_ROLES } },
     { $set: updates },
-    { new: true, runValidators: true }
+    { new: false, runValidators: true }
   );
-  if (!staff) throw ApiError.notFound("Staff member not found");
-  sendSuccess(res, { staff: staff.toJSON() });
+  if (!before) throw ApiError.notFound("Staff member not found");
+  if (updates.role && updates.role !== before.role) {
+    await recordAuditEvent({
+      restaurantId,
+      actorUserId: req.user!.id,
+      actorRole: req.user!.role,
+      action: "staff.role_changed",
+      targetType: "user",
+      targetId: before._id,
+      metadata: { previousRole: before.role, newRole: updates.role },
+    });
+  }
+  const staff = await User.findById(before._id);
+  sendSuccess(res, { staff: staff!.toJSON() });
 }
 
 /**

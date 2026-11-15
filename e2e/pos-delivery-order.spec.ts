@@ -74,6 +74,9 @@ test.describe.serial("POS delivery order flow (Phase 47)", () => {
     await page.getByLabel("Longitude").fill("-89.6501");
     await page.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByText("Location set — 39.7817, -89.6501")).toBeVisible({ timeout: 10_000 });
+    // "Location set" shows as soon as coordinates are typed; wait for the save itself before the next
+    // edit — the save response replaces the form, which undid the POS checkbox (15 Nov full-suite run).
+    await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10_000 });
 
     // --- Enable POS through the real Settings UI. Phase 47 documented a "checkbox checks but
     // doesn't persist" bug here and bypassed it via Mongo; Phase 54's investigation found the real

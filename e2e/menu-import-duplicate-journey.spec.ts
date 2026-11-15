@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import mongoose from "mongoose";
+import { PDFDocument } from "pdf-lib";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -28,7 +29,12 @@ test.describe.serial("menu import — duplicate detection journey", () => {
     const slug = `e2e-dup-import-${stamp}`;
     const restaurantName = `E2E Dup Import ${stamp}`;
     const ownerEmail = `e2e-dup-import-owner-${stamp}@test.local`;
-    const pdfFile = { name: "menu.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 duplicate-detection fixture", "utf-8") };
+    // A real (one-page) PDF: since upload validation landed on main (08831ce), a text buffer that only
+    // starts with "%PDF-" is rejected as "couldn't be opened as a PDF". Same fixture approach as
+    // menu-import-pdf-journey.spec.ts; the same bytes are still uploaded twice.
+    const pdf = await PDFDocument.create();
+    pdf.addPage([612, 792]).drawText("E2E duplicate-detection menu", { x: 72, y: 720, size: 24 });
+    const pdfFile = { name: "menu.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) };
 
     await page.goto("http://localhost:5174/login");
     await page.locator('input[type="email"]').fill("platform-admin@restaurant.local");

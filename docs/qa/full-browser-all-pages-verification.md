@@ -1,6 +1,12 @@
 # GarnishTable — Every Route, Verified After the Fixes
 
-Branch `fix/full-browser-qa-findings`, local stack. Run on the isolated `restaurant_platform_e2e` database with mock providers. Companion to [`full-browser-qa-fixes.md`](full-browser-qa-fixes.md).
+**Latest run: 15 Nov 2026**, branch `fix/final-release-readiness`, on a freshly seeded `restaurant_platform_e2e` database with mock providers. Route IDs R-001…R-109 are the same register as the first verification. The previous run (on `5ab9ea4`) is kept in `evidence/fixes/routes-all-results.json`. Companions: [`final-release-readiness.md`](final-release-readiness.md), [`full-browser-qa-fixes.md`](full-browser-qa-fixes.md).
+
+Changes since the previous run that these checks cover:
+- `/customers` now refuses kitchen staff.
+- `/staff` asks before changing a role; the test cancels, so no data changes.
+- Session refresh changes (NEW-1).
+- Marketing case-insensitive routes.
 
 ## How each route was tested
 
@@ -31,20 +37,15 @@ Each route was opened by URL, in its own page, as the role it is meant for. Auto
 
 Signed-in sessions lost during the run: 0.
 
-**Re-run after correcting the test, not the product (2):** `/customers` (first run FAIL), `/mock-checkout/:token` (first run FAIL). The reason is in each route's notes.
-
 ## Limits — read before relying on "PASS"
 
-- **One functional test per route.** Every route had a functional test run, and all passed. Depth varies: some exercise a whole flow (promo applied and removed, item added with an option, settings tabs, a search, an invalid-token submit); for simple content pages it is a navigation or content check.
+- **One functional test per route.** Every route had a functional test run. Depth varies: some cover a whole flow (promo applied and removed, item added with an option, all settings tabs, a search, an invalid-token submit, the staff role-change confirmation); for simple content pages it is a navigation or content check.
 - **Not every control was clicked.**
-  - The sweep clicked **135** controls across the routes, and **0** on **46** routes. Those pages either had no safe control in the page body, or the first click navigated away, which ends the sweep.
-  - Controls that change saved data were deliberately not clicked by the sweep: delete, pay, send, save, publish, role dropdowns, toggles. Where they matter they are covered by the functional tests, the fix checks (60/60) and the e2e specs.
-- **Forms.** **12** routes had a form the empty-submit step could exercise. 11 were blocked with a message. On `/support` (storefront), an empty help search simply shows all articles, which is reasonable but marked REVIEW.
-- **Environment.**
-  - Mock billing, payment and geocoding providers; nothing real was charged, sent or connected.
-  - The local Redis is too old for the job queue, so menu-import jobs stay queued.
-  - Docker could not run, so marketing's server-side 404 status (QA-011) wasn't exercised.
-- **Discarded run.** An earlier full run was discarded because the sweep changed staff roles through instant-save dropdowns (NEW-3). The database was reset to a fresh seed and every route was re-run.
+  - The sweep clicked **136** controls in total, and **0** on **46** routes. Those pages either had no safe control in the page body, or the first click navigated away, which ends the sweep.
+  - Controls that change saved data were deliberately not clicked: delete, pay, send, save, publish, role dropdowns, toggles. They are covered by the functional tests, the 14-fix checks (60/60) and the Playwright suite (145/145), all run on isolated test data and accounts.
+- **Forms.** **12** routes had a form the empty-submit step could exercise. Marked REVIEW (no visible validation): `/support` (storefront). An empty help search simply lists all articles.
+- **Access.** 65 routes were checked as signed out, and 48 with a wrong role.
+- **Environment.** Mock billing, payment and geocoding providers; nothing real was charged, sent or connected. Redis 8.10 locally, so background jobs run. Marketing's 404 status is verified separately on real nginx (see the release-readiness document).
 
 ## Marketing (16)
 
@@ -334,7 +335,7 @@ Signed-in sessions lost during the run: 0.
 | Access | signed-out: —; wrong role: — |
 | Console / network | PASS |
 | Evidence | `marketing-_-anon.png` (+ `-390.png`) |
-| Defect | QA-011 — 404 status needs nginx (not run locally) |
+| Defect | QA-011 fixed — 404 status verified on real nginx 1.27.4 |
 
 ## Storefront (26)
 
@@ -400,7 +401,7 @@ Signed-in sessions lost during the run: 0.
 | Direct load | PASS |
 | Rendering | PASS — h1 "This is Wildwood Kitchen, running on our platform." |
 | Functional test | PASS: 52 controls; one clicked |
-| Controls tested | PASS — 1 safe controls: button:Order online |
+| Controls tested | PASS — 2 safe controls: button:Order online, button:Explore the menu |
 | Form (empty submit) | N/A — no form |
 | Refresh | PASS |
 | Back/Forward | PASS |
@@ -452,7 +453,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/r/demo-restaurant/t/fd71e5d71e5a81064a64b1b65bae6fd8` · signed out |
+| URL / role | `/r/demo-restaurant/t/e36a535f56038d931c5cc0153e979910` · signed out |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Wildwood Kitchen" |
 | Functional test | PASS: table banner shown |
@@ -470,8 +471,8 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/t/fd71e5d71e5a81064a64b1b65bae6fd8` · signed out |
-| Direct load | PASS (landed on `/r/demo-restaurant/t/fd71e5d71e5a81064a64b1b65bae6fd8`) |
+| URL / role | `/t/e36a535f56038d931c5cc0153e979910` · signed out |
+| Direct load | PASS (landed on `/r/demo-restaurant/t/e36a535f56038d931c5cc0153e979910`) |
 | Rendering | PASS — h1 "Wildwood Kitchen" |
 | Functional test | PASS: → /r/demo-restaurant/t/… |
 | Controls tested | PASS — 8 safe controls: button:RESERVE THE MENU, button:WOOD-FIRED PIZZA, button:SMASH BURGERS, button:SALADS, button:DESSERTS, button:FROM THE GRILL, button:DRINKS, button:VIEW THE MENU |
@@ -560,7 +561,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/orders/6aeff13726baf4f1c95b9543` · customer (Jordan) |
+| URL / role | `/orders/6af90fd8995159e2499617cd` · customer (Jordan) |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Order ORD-1004" |
 | Functional test | PASS: ORD-1004 |
@@ -578,7 +579,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/orders/6aeff13726baf4f1c95b9543/receipt` · customer (Jordan) |
+| URL / role | `/orders/6af90fd8995159e2499617cd/receipt` · customer (Jordan) |
 | Direct load | PASS |
 | Rendering | PASS — h1 "(no h1)" |
 | Functional test | PASS: receipt rendered |
@@ -668,7 +669,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/support/tickets/6aeff13926baf4f1c95b957b` · customer (Jordan) |
+| URL / role | `/support/tickets/6af90fd9995159e249961805` · customer (Jordan) |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Payment shows as unpaid after pickup" |
 | Functional test | PASS: Payment shows as unpaid after pickup |
@@ -870,7 +871,7 @@ Signed-in sessions lost during the run: 0.
 |---|---|
 | URL / role | `/agency` · agency owner (created) |
 | Direct load | PASS |
-| Rendering | PASS — h1 "QA Routes Agency 1794109900019" |
+| Rendering | PASS — h1 "QA Routes Agency 1794707611098" |
 | Functional test | PASS: agency overview |
 | Controls tested | PASS — 1 safe controls: a:Manage billing |
 | Form (empty submit) | N/A — no form |
@@ -940,9 +941,9 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/agency/businesses/6aeff1e95910fd2efd7450af` · agency owner (created) |
+| URL / role | `/agency/businesses/6af910bb92a065a69cb7cf79` · agency owner (created) |
 | Direct load | PASS |
-| Rendering | PASS — h1 "QA Routes Client 1794109900019" |
+| Rendering | PASS — h1 "QA Routes Client 1794707611098" |
 | Functional test | PASS: client detail |
 | Controls tested | PASS — 1 safe controls: button:Manage this business |
 | Form (empty submit) | N/A — no form |
@@ -962,7 +963,7 @@ Signed-in sessions lost during the run: 0.
 | Direct load | PASS |
 | Rendering | PASS — h1 "Locations" |
 | Functional test | PASS: location listed |
-| Controls tested | PASS — 1 safe controls: a:QA Routes Location 1794109900019 |
+| Controls tested | PASS — 1 safe controls: a:QA Routes Location 1794707611098 |
 | Form (empty submit) | N/A — no form |
 | Refresh | PASS |
 | Back/Forward | PASS |
@@ -976,11 +977,11 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/agency/locations/6aeff1e95910fd2efd7450b1` · agency owner (created) |
+| URL / role | `/agency/locations/6af910bb92a065a69cb7cf7b` · agency owner (created) |
 | Direct load | PASS |
-| Rendering | PASS — h1 "QA Routes Location 1794109900019" |
+| Rendering | PASS — h1 "QA Routes Location 1794707611098" |
 | Functional test | PASS: location detail |
-| Controls tested | PASS — 1 safe controls: a:QA ROUTES CLIENT 1794109900019 |
+| Controls tested | PASS — 1 safe controls: a:QA ROUTES CLIENT 1794707611098 |
 | Form (empty submit) | N/A — no form |
 | Refresh | PASS |
 | Back/Forward | PASS |
@@ -1060,7 +1061,7 @@ Signed-in sessions lost during the run: 0.
 | Access | signed-out: PASS; wrong role: PASS — staff → /orders |
 | Console / network | PASS |
 | Evidence | `admin-_audit_log-owner.png` (+ `-390.png`) |
-| Defect | — |
+| Defect | NEW-3 — staff.role_changed entries listed |
 
 ### R-057 · `/billing` — **PASS**
 
@@ -1129,11 +1130,11 @@ Signed-in sessions lost during the run: 0.
 | Refresh | PASS |
 | Back/Forward | PASS |
 | 390px | PASS |
-| Access | signed-out: PASS; wrong role: PASS — admin → /platform |
+| Access | signed-out: PASS; wrong role: PASS — kitchen → /kitchen |
 | Console / network | PASS |
 | Evidence | `admin-_customers-owner.png` (+ `-390.png`) |
-| Defect | QA-003 fixed; D-3 (kitchen access by design) |
-| Notes | re-run (first run FAIL); kitchen/staff may open Customers by design (restaurant.orders.read) — see D-3 |
+| Defect | QA-003 fixed; kitchen restricted (restaurant.customers.read) |
+| Notes | kitchen refused by the server and the app; owners, managers, front-of-house staff (POS picker) and agency roles allowed |
 
 ### R-061 · `/delivery` — **PASS**
 
@@ -1356,7 +1357,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/menu/import/job/6aeff1cf5910fd2efd744fc6` · owner |
+| URL / role | `/menu/import/job/6af9109f92a065a69cb7ce87` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "We couldn't read this page" |
 | Functional test | PASS: We couldn't read this page |
@@ -1369,13 +1370,13 @@ Signed-in sessions lost during the run: 0.
 | Console / network | PASS |
 | Evidence | `admin-_menu_import_job_jobId-owner.png` (+ `-390.png`) |
 | Defect | — |
-| Notes | local Redis 3.0 is too old for the job queue, so the job stays queued here; the page itself renders and refreshes |
+| Notes | job processed by the queue (Redis 8.10 locally) |
 
 ### R-074 · `/mock-checkout/:token` — **PASS**
 
 | | |
 |---|---|
-| URL / role | `/mock-checkout/bca4230af4fda4cb4b64cefd87c459b8?ownerType=business` · owner |
+| URL / role | `/mock-checkout/f58085930e6d03e147dc073c76db7317?ownerType=business` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Mock checkout" |
 | Functional test | PASS: Mock checkout |
@@ -1388,7 +1389,7 @@ Signed-in sessions lost during the run: 0.
 | Console / network | PASS |
 | Evidence | `admin-_mock_checkout_token-owner.png` (+ `-390.png`) |
 | Defect | — |
-| Notes | re-run (first run FAIL); public by design: the token is the credential; exists only with mock billing |
+| Notes | public by design: the token is the credential; exists only with mock billing |
 
 ### R-075 · `/orders` — **PASS**
 
@@ -1488,7 +1489,7 @@ Signed-in sessions lost during the run: 0.
 | Direct load | PASS |
 | Rendering | PASS — h1 "Restaurants" |
 | Functional test | PASS: search → Wildwood |
-| Controls tested | PASS — 1 safe controls: a:QA Routes Location 1794109900019 |
+| Controls tested | PASS — 1 safe controls: a:QA Routes Location 1794707611098 |
 | Form (empty submit) | N/A — no form |
 | Refresh | PASS |
 | Back/Forward | PASS |
@@ -1502,7 +1503,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/platform/restaurants/6aeff11e26baf4f1c95b9439` · platform admin |
+| URL / role | `/platform/restaurants/6af90fc1995159e2499616c0` · platform admin |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Wildwood Kitchen active" |
 | Functional test | PASS: detail |
@@ -1611,7 +1612,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/platform/support/tickets/6aeff13926baf4f1c95b957b` · platform admin |
+| URL / role | `/platform/support/tickets/6af90fd9995159e249961805` · platform admin |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Payment shows as unpaid after pickup" |
 | Functional test | PASS: Payment shows as unpaid after pickup |
@@ -1737,7 +1738,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/print/receipt/6aeff13726baf4f1c95b9543` · owner |
+| URL / role | `/print/receipt/6af90fd8995159e2499617cd` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "(no h1)" |
 | Functional test | PASS: receipt + logo |
@@ -1755,7 +1756,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/print/preview/6aeff1cf5910fd2efd744fbe` · owner |
+| URL / role | `/print/preview/6af9109f92a065a69cb7ce7f` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "(no h1)" |
 | Functional test | PASS: preview rendered |
@@ -1765,7 +1766,7 @@ Signed-in sessions lost during the run: 0.
 | Back/Forward | PASS |
 | 390px | PASS |
 | Access | signed-out: PASS; wrong role: — |
-| Console / network | REVIEW (1 API 4xx, 1 console errors). API: 403 GET /api/v1/restaurants/null/print-jobs/6aeff1cf5910fd2efd744fbe |
+| Console / network | REVIEW (1 API 4xx, 1 console errors). API: 403 GET /api/v1/restaurants/null/print-jobs/6af9109f92a065a69cb7ce7f |
 | Evidence | `admin-_print_preview_jobId-owner.png` (+ `-390.png`) |
 | Defect | — |
 
@@ -1902,7 +1903,7 @@ Signed-in sessions lost during the run: 0.
 | URL / role | `/staff` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Staff" |
-| Functional test | PASS: team listed |
+| Functional test | PASS: team listed; role-change confirmation shown and cancelled |
 | Controls tested | PASS — 0 safe controls |
 | Form (empty submit) | N/A — no form |
 | Refresh | PASS |
@@ -1911,7 +1912,7 @@ Signed-in sessions lost during the run: 0.
 | Access | signed-out: PASS; wrong role: PASS — kitchen → /kitchen |
 | Console / network | PASS |
 | Evidence | `admin-_staff-owner.png` (+ `-390.png`) |
-| Defect | NEW-3 (role change unaudited) — open |
+| Defect | NEW-3 fixed (confirmation + audit entry) |
 
 ### R-104 · `/start` — **PASS**
 
@@ -1953,7 +1954,7 @@ Signed-in sessions lost during the run: 0.
 
 | | |
 |---|---|
-| URL / role | `/support/6aeff13926baf4f1c95b957b` · owner |
+| URL / role | `/support/6af90fd9995159e249961805` · owner |
 | Direct load | PASS |
 | Rendering | PASS — h1 "Payment shows as unpaid after pickup" |
 | Functional test | PASS: Payment shows as unpaid after pickup |
@@ -1999,7 +2000,7 @@ Signed-in sessions lost during the run: 0.
 | Back/Forward | PASS |
 | 390px | PASS |
 | Access | signed-out: PASS; wrong role: PASS — kitchen → /kitchen |
-| Console / network | PASS |
+| Console / network | REVIEW (1 API 4xx, 1 console errors). API: 401 POST /api/v1/auth/refresh |
 | Evidence | `admin-_theme_studio-owner.png` (+ `-390.png`) |
 | Defect | — |
 

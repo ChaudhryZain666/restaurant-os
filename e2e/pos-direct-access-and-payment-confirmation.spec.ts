@@ -104,7 +104,8 @@ test.describe.serial("POS direct access, lock/switch, and payment confirmation (
     await page.getByRole("button", { name: "Add staff member" }).click();
     await page.getByLabel("Name").fill("Direct Access Kitchen");
     await page.getByLabel("Email").fill(kitchenEmail);
-    await page.getByLabel("Role").selectOption({ label: "Kitchen staff" });
+    // exact: each staff row's own dropdown is now labelled "Role for <name>" (NEW-3).
+    await page.getByLabel("Role", { exact: true }).selectOption({ label: "Kitchen staff" });
     await page.getByRole("button", { name: "Send invite", exact: true }).click();
     await expect(page.getByText(`Invitation sent to ${kitchenEmail}`)).toBeVisible({ timeout: 10_000 });
 

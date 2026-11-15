@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { registerFreshCustomer } from "./helpers/freshCustomer";
 
 /**
  * Proves the Phase 6 real-time wiring actually works end to end through the real UI: a customer
@@ -27,18 +28,8 @@ test.describe("kitchen display — real-time order flow", () => {
       await ownerPage.getByRole("link", { name: "Kitchen" }).click();
       await expect(ownerPage.getByRole("heading", { name: "Kitchen" })).toBeVisible();
 
-      await customerPage.goto("http://localhost:5173/login");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      const loginRes = customerPage.waitForResponse((r) => r.url().includes("/api/v1/auth/login"));
-      await customerPage.getByRole("button", { name: "Log in" }).click();
-      if ((await loginRes).status() !== 200) {
-        await customerPage.goto("http://localhost:5173/register");
-        await customerPage.getByLabel("Name").fill("E2E Kitchen Customer");
-        await customerPage.getByLabel("Email").fill("customer1@test.local");
-        await customerPage.getByLabel("Password").fill("Customer123!");
-        await customerPage.getByRole("button", { name: "Create account" }).click();
-      }
+      // A customer of its own (helpers/freshCustomer.ts) — no shared account, no cancelled sign-up.
+      await registerFreshCustomer(customerPage, "E2E Kitchen Customer");
       // "/" legacy-redirects to the default restaurant's canonical /r/:slug URL (Phase 8).
       await expect(customerPage).toHaveURL(/\/r\/demo-restaurant$/, { timeout: 10_000 });
 

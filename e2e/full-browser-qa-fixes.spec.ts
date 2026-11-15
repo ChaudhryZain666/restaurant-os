@@ -90,3 +90,105 @@ test.describe("QA-014: phone width", () => {
     await expect(page).toHaveURL(/\/forgot-password$/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Final release readiness (docs/qa/final-release-readiness.md)
+// ---------------------------------------------------------------------------------------------
+
+async function apiToken(request: import("@playwright/test").APIRequestContext, email: string, password: string) {
+  const res = await request.post("http://localhost:4000/api/v1/auth/login", { data: { email, password } });
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()).data as { accessToken: string; user: { restaurantId: string } };
+}
+
+test("NEW-3: a staff role change is confirmed first, can be cancelled, and is recorded in the audit log", async ({ page, request }) => {
+  const owner = await apiToken(request, "owner@demo-restaurant.local", seedPassword("Owner"));
+  // A staff member of this test's own (an invited, not yet accepted account) — seeded staff stay untouched.
+  const name = `E2E Role Change ${Date.now()}`;
+  const invited = await request.post(`http://localhost:4000/api/v1/restaurants/${owner.user.restaurantId}/staff`, {
+    headers: { Authorization: `Bearer ${owner.accessToken}` },
+    data: { name, email: `e2e-role-${Date.now()}@test.local`, role: "kitchen_staff" },
+  });
+  expect(invited.status()).toBe(201);
+
+  await adminSignIn(page, "owner@demo-restaurant.local", seedPassword("Owner"));
+  await page.goto("http://localhost:5174/staff");
+  const role = page.getByLabel(`Role for ${name}`);
+  await expect(role).toHaveValue("kitchen_staff", { timeout: 15_000 });
+
+  // Cancel: nothing changes.
+  const patches: string[] = [];
+  page.on("request", (r) => r.method() === "PATCH" && r.url().includes("/staff/") && patches.push(r.url()));
+  await role.selectOption("restaurant_staff");
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByText(`Change ${name}'s role to Staff?`)).toBeVisible();
+  await expect(dialog.getByText("Kitchen staff", { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/permissions change as soon as you confirm/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(role).toHaveValue("kitchen_staff");
+  expect(patches).toHaveLength(0);
+
+  // Confirm (clicked twice quickly): exactly one save.
+  await role.selectOption("restaurant_staff");
+  const confirm = page.getByRole("alertdialog").getByRole("button", { name: "Change role" });
+  await confirm.click();
+  await confirm.click({ timeout: 1_000 }).catch(() => {});
+  await expect(page.getByRole("alertdialog")).toHaveCount(0, { timeout: 10_000 });
+  await expect(role).toHaveValue("restaurant_staff");
+  expect(patches).toHaveLength(1);
+
+  await page.goto("http://localhost:5174/audit-log");
+  await expect(page.getByRole("cell", { name: "Staff role changed" }).first()).toBeVisible({ timeout: 15_000 });
+});
+
+test("kitchen staff can't open the customer directory (page, nav or API) but keep the kitchen board", async ({ page, request }) => {
+  const kitchen = await apiToken(request, "kitchen@demo-restaurant.local", seedPassword("Staff"));
+  const api = await request.get(`http://localhost:4000/api/v1/restaurants/${kitchen.user.restaurantId}/customers`, {
+    headers: { Authorization: `Bearer ${kitchen.accessToken}` },
+  });
+  expect(api.status()).toBe(403);
+
+  await adminSignIn(page, "kitchen@demo-restaurant.local", seedPassword("Staff"));
+  await expect(page.locator("aside nav").getByRole("link", { name: "Customers" })).toHaveCount(0);
+  await page.goto("http://localhost:5174/customers");
+  await expect(page).not.toHaveURL(/\/customers$/, { timeout: 10_000 });
+  await page.goto("http://localhost:5174/kitchen");
+  await expect(page).toHaveURL(/\/kitchen$/);
+  await expect(page.getByRole("heading", { name: "Kitchen" })).toBeVisible({ timeout: 10_000 });
+});
+
+test("QA-004: staff and kitchen pages never request plan entitlements", async ({ browser }) => {
+  for (const [email, path] of [
+    ["kitchen@demo-restaurant.local", "/kitchen"],
+    ["staff@demo-restaurant.local", "/orders"],
+  ] as const) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const entitlementCalls: string[] = [];
+    page.on("request", (r) => r.url().includes("/subscription/entitlements") && entitlementCalls.push(r.url()));
+    await adminSignIn(page, email, seedPassword("Staff"));
+    await page.goto(`http://localhost:5174${path}`);
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+    expect(entitlementCalls).toEqual([]);
+    await context.close();
+  }
+});
+
+test("NEW-1: two tabs restoring the session at the same moment both stay signed in", async ({ browser }) => {
+  const context = await browser.newContext();
+  const first = await context.newPage();
+  await adminSignIn(first, "owner@demo-restaurant.local", seedPassword("Owner"));
+  const second = await context.newPage();
+  for (let round = 0; round < 3; round++) {
+    // Both tabs reload together, so both restore the session (one refresh token) at once.
+    await Promise.all([first.goto("http://localhost:5174/orders"), second.goto("http://localhost:5174/menu")]);
+    await expect(first).toHaveURL(/\/orders$/, { timeout: 15_000 });
+    await expect(second).toHaveURL(/\/menu$/, { timeout: 15_000 });
+    await expect(first.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(second.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 15_000 });
+  }
+  await context.close();
+});

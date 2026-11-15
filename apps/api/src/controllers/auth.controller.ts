@@ -26,9 +26,10 @@ import type { AgencyMembershipRole } from "@restaurant/types";
 import { generateSecureToken, hashToken } from "../services/secureToken.service.js";
 import {
   issueRefreshToken,
-  isRefreshTokenActive,
+  consumeRefreshToken,
   revokeAllRefreshTokens,
   revokeRefreshToken,
+  revokeRefreshFamily,
   signAccessToken,
   verifyRefreshToken,
 } from "../services/token.service.js";
@@ -95,7 +96,9 @@ export function toPublicUser(user: HydratedDocument<UserDoc>, agencyMemberships:
 export async function issueSession(
   res: Response,
   user: HydratedDocument<UserDoc>,
-  agencyMemberships: Array<{ agencyId: string; role: AgencyMembershipRole }>
+  agencyMemberships: Array<{ agencyId: string; role: AgencyMembershipRole }>,
+  /** NEW-1 — set only when rotating a refresh token, so the new token stays in the same family. */
+  family?: string
 ) {
   const accessToken = signAccessToken({
     sub: user.id as string,
@@ -113,7 +116,7 @@ export async function issueSession(
     mustChangePassword: user.mustChangePassword ?? false,
     isDemoAccount: user.isDemoAccount ?? false,
   });
-  const refreshToken = await issueRefreshToken(user.id);
+  const refreshToken = await issueRefreshToken(user.id, family);
   setRefreshCookie(res, refreshToken);
   return accessToken;
 }
@@ -238,8 +241,10 @@ export async function refresh(req: Request, res: Response) {
     throw ApiError.unauthorized("Invalid or expired refresh token");
   }
 
-  const active = await isRefreshTokenActive(payload.sub, payload.jti);
-  if (!active) {
+  // NEW-1 — consumed atomically, before anything else: a concurrent second presentation of the
+  // same token lands in the reuse branch below instead of also rotating.
+  const consumed = await consumeRefreshToken(payload.sub, payload.jti);
+  if (!consumed) {
     // Phase 35 audit fix (M1) — a refresh token that verifies cryptographically (real, not
     // expired) but is no longer present in Redis was already consumed by a prior refresh, an
     // explicit logout, or a password change — reaching this branch again means the SAME token is
@@ -249,7 +254,14 @@ export async function refresh(req: Request, res: Response) {
     // active session for this user closes the window an attacker's own rotated session would
     // otherwise keep alive after stealing a token — the legitimate user simply has to log back in
     // everywhere, the same cost password-reset/change already impose today.
-    await revokeAllRefreshTokens(payload.sub);
+    //
+    // NEW-1 — narrowed to the token's own session family. Revoking every session meant a browser
+    // that lost a rotation response (a page load interrupted mid-refresh) signed the user out on
+    // every device. The replayed token is still refused, and its whole chain — including any
+    // successor an attacker obtained — is revoked; only sign-ins that never shared this token
+    // survive. Tokens from before families existed keep the old revoke-everything behaviour.
+    if (payload.fam) await revokeRefreshFamily(payload.sub, payload.fam);
+    else await revokeAllRefreshTokens(payload.sub);
     throw ApiError.unauthorized("Refresh token has been revoked");
   }
 
@@ -257,9 +269,8 @@ export async function refresh(req: Request, res: Response) {
   if (!user) throw ApiError.unauthorized("User no longer exists");
   if (user.isActive === false) throw ApiError.forbidden("This account has been deactivated");
 
-  await revokeRefreshToken(payload.sub, payload.jti);
   const agencyMemberships = await getActiveAgencyMemberships(user.id as string);
-  const accessToken = await issueSession(res, user, agencyMemberships);
+  const accessToken = await issueSession(res, user, agencyMemberships, payload.fam);
   sendSuccess(res, { accessToken });
 }
 
@@ -540,6 +551,8 @@ export async function logout(req: Request, res: Response) {
     try {
       const payload = verifyRefreshToken(token);
       await revokeRefreshToken(payload.sub, payload.jti);
+      // NEW-1 — end the whole session (its family), not just the token presented.
+      if (payload.fam) await revokeRefreshFamily(payload.sub, payload.fam);
     } catch {
       // token already invalid/expired — nothing to revoke
     }

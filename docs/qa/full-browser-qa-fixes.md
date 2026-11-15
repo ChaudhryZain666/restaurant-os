@@ -21,14 +21,14 @@ Branch `fix/full-browser-qa-findings`, from `main` `12d7238`. Nothing here is me
 | QA-008 | P3 | Printed receipt logo broken | **FIXED** |
 | QA-009 | P3 | `order.garnishtable.com/` unbranded "R / Restaurant" page | **FIXED** |
 | QA-010 | P3 | Draft homepage public at `/v2` | **FIXED** |
-| QA-011 | P3 | Marketing unknown page returns HTTP 200 | **PARTIALLY FIXED** — nginx config changed and unit-tested, not run against a live nginx |
+| QA-011 | P3 | Marketing unknown page returns HTTP 200 | **FIXED** — verified on a real nginx 1.27.4 with the production templates on 15 Nov ([final-release-readiness.md](final-release-readiness.md)) |
 | QA-012 | P3 | 401 console error on every signed-out page load | **FIXED** |
 | QA-013 | P3 | Generic storefront titles, no description, cart lacks h1 | **FIXED** |
 | QA-014 | P3 | Mobile: cramped support table; awkward reset-password message | **FIXED** |
 | D-1 | — | Marketing promises Stripe card checkout that isn't live | **FIXED** (wording); launching Stripe is separate work — see below |
-| NEW-1 | P2 | A cancelled page load can sign the user out everywhere | **NOT FIXED** — pre-existing; security decision |
+| NEW-1 | P2 | A cancelled page load can sign the user out everywhere | **FIXED 15 Nov** — session families + atomic refresh; see [final-release-readiness.md](final-release-readiness.md) |
 | NEW-2 | P3 | Owners could open the platform support queue page (no data exposed) | **FIXED** |
-| NEW-3 | P3 | Staff role changes save instantly and aren't audited | **NOT FIXED** — pre-existing; needs approval |
+| NEW-3 | P3 | Staff role changes save instantly and aren't audited | **FIXED 15 Nov** — confirmation + `staff.role_changed` audit entry |
 
 ## Findings
 
@@ -202,7 +202,9 @@ None of this was done. No account was connected, no keys were created, and no pr
 
 ## New issues found during verification
 
-### NEW-1 (P2, pre-existing, not fixed) — a cancelled page load can sign the user out everywhere
+### NEW-1 (P2, pre-existing) — a cancelled page load can sign the user out everywhere
+> **Update, 15 Nov:** fixed on `fix/final-release-readiness`. See [final-release-readiness.md](final-release-readiness.md). The analysis below is kept as found.
+
 - **Seen:** while re-testing every page, signed-in roles (customer, agency) were repeatedly bounced to `/login` after quick Back/Forward and reload sequences.
 - **Reproduced on its own:** customer signed in, then repeatedly start a storefront page load and leave it as soon as its `/auth/refresh` request is sent.
   - On the 6th attempt the next refresh returned **401** and the customer was signed out.
@@ -225,7 +227,9 @@ None of this was done. No account was connected, no keys were created, and no pr
 - **Tests:** Playwright "NEW-2" in `e2e/full-browser-qa-fixes.spec.ts`.
 - **Browser:** the owner is redirected away from both URLs, and the platform admin still has both.
 
-### NEW-3 (P3, pre-existing, not fixed) — staff role changes are instant and unaudited
+### NEW-3 (P3, pre-existing) — staff role changes are instant and unaudited
+> **Update, 15 Nov:** fixed. There's a confirmation, and a `staff.role_changed` audit entry is visible to owners and managers only.
+
 - **What happens:** on Staff, changing a member's role saves the moment the dropdown changes. There's no confirmation, and no audit-log entry, because `staff.controller.ts` `updateStaff` records nothing.
 - **Found by accident:** my own page-sweep script changed the dropdowns, and the seeded kitchen and staff accounts became managers in the local test database. I then reset the database and reran everything.
 - **Suggested fix** (needs your approval):
@@ -234,7 +238,7 @@ None of this was done. No account was connected, no keys were created, and no pr
 - Authorisation itself is correct: only owners and managers of the same restaurant can change roles, and location ids are checked against the business.
 
 ### Other observations (not defects)
-- **Kitchen staff can open Customers.** The customer list (names, contact details, spend) is gated on `restaurant.orders.read`, so kitchen staff can see it. This is deliberate and documented in `customer.routes.ts`, but you may want it limited to managers. Decision D-3.
+- **Kitchen staff can open Customers.** _(Update, 15 Nov: restricted. Kitchen no longer has the directory; see final-release-readiness.md.)_ The customer list (names, contact details, spend) is gated on `restaurant.orders.read`, so kitchen staff can see it. This is deliberate and documented in `customer.routes.ts`, but you may want it limited to managers. Decision D-3.
 - **`GET /restaurants/by-domain/localhost` 404:** the local storefront without `VITE_SITE_URL` logs this once per load. Production sets `VITE_SITE_URL`, which skips the lookup (Phase 88). Environment only.
 - **The demo playground signs the visitor in:** opening the storefront demo (`/r/:slug/experience`) and choosing "Order online" signs the visitor in as a temporary "Demo Guest" customer for the whole storefront. That is by design (Phase 32), but a visitor may not expect it.
 

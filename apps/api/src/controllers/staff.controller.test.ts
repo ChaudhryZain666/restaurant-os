@@ -6,6 +6,7 @@ import { connectDB } from "../config/db.js";
 import { Business } from "../models/Business.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { User } from "../models/User.js";
+import { AuditLog } from "../models/AuditLog.js";
 import { generateSecureToken } from "../services/secureToken.service.js";
 import { closeTestConnections, createTestBusiness, createTestRestaurant, createTestUser, tokenFor } from "../test-utils/fixtures.js";
 
@@ -366,5 +367,92 @@ describe("staff location assignment (Phase 18)", () => {
       await Restaurant.deleteMany({ businessId: { $in: [businessOne._id, businessTwo._id] } });
       await Business.deleteMany({ _id: { $in: [businessOne._id, businessTwo._id] } });
     }
+  });
+});
+
+// NEW-3 — a role change is recorded in the restaurant's audit log, once, visible only to people
+// who can read that restaurant's audit log.
+describe("staff role changes are audited (NEW-3)", () => {
+  const auditFor = (memberId: string) => AuditLog.find({ restaurantId: restaurantA._id, action: "staff.role_changed", targetId: memberId }).lean();
+
+  it("records restaurant, staff member, the admin who changed it, previous and new role, and time", async () => {
+    const member = await createTestUser("kitchen_staff", restaurantA._id);
+    const res = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ role: "restaurant_staff" });
+    expect(res.status).toBe(200);
+    expect(res.body.data.staff.role).toBe("restaurant_staff");
+
+    const entries = await auditFor(member.id);
+    expect(entries).toHaveLength(1);
+    const [e] = entries;
+    expect(String(e.restaurantId)).toBe(restaurantA.id);
+    expect(String(e.targetId)).toBe(member.id);
+    expect(e.targetType).toBe("user");
+    expect(e.actorRole).toBe("restaurant_owner");
+    expect(e.actorUserId).toBeTruthy();
+    expect(e.metadata).toEqual({ previousRole: "kitchen_staff", newRole: "restaurant_staff" });
+    expect(e.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("re-sending the same role (a repeated or double submission) changes nothing and records nothing more", async () => {
+    const member = await createTestUser("kitchen_staff", restaurantA._id);
+    const send = () =>
+      request(app)
+        .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+        .set("Authorization", `Bearer ${ownerAToken}`)
+        .send({ role: "restaurant_manager" });
+    const [a, b] = await Promise.all([send(), send()]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect((await send()).status).toBe(200);
+    expect(await auditFor(member.id)).toHaveLength(1);
+  });
+
+  it("a location-only update records no role change", async () => {
+    const member = await createTestUser("restaurant_staff", restaurantA._id);
+    await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ isActive: true });
+    expect(await auditFor(member.id)).toHaveLength(0);
+  });
+
+  it("staff can't change roles, and another restaurant's owner can't either — nothing is recorded", async () => {
+    const member = await createTestUser("kitchen_staff", restaurantA._id);
+    const byStaff = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${staffAToken}`)
+      .send({ role: "restaurant_manager" });
+    expect(byStaff.status).toBe(403);
+    const byOtherTenant = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${ownerBToken}`)
+      .send({ role: "restaurant_manager" });
+    expect(byOtherTenant.status).toBe(403);
+    const viaOwnTenant = await request(app)
+      .patch(`/api/v1/restaurants/${restaurantB.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${ownerBToken}`)
+      .send({ role: "restaurant_manager" });
+    expect(viaOwnTenant.status).toBe(404);
+    expect((await User.findById(member.id))!.role).toBe("kitchen_staff");
+    expect(await auditFor(member.id)).toHaveLength(0);
+  });
+
+  it("the entry is readable by the restaurant's owner and manager only — not staff, not another restaurant", async () => {
+    const member = await createTestUser("kitchen_staff", restaurantA._id);
+    await request(app)
+      .patch(`/api/v1/restaurants/${restaurantA.id}/staff/${member.id}`)
+      .set("Authorization", `Bearer ${ownerAToken}`)
+      .send({ role: "restaurant_staff" });
+    const read = (token: string) =>
+      request(app).get(`/api/v1/restaurants/${restaurantA.id}/audit-log?action=staff.role_changed`).set("Authorization", `Bearer ${token}`);
+    for (const token of [ownerAToken, managerAToken]) {
+      const res = await read(token);
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body.data)).toContain(member.id);
+    }
+    expect((await read(staffAToken)).status).toBe(403);
+    expect((await read(ownerBToken)).status).toBe(403);
   });
 });

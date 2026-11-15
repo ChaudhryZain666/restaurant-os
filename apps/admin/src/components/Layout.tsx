@@ -95,7 +95,7 @@ const RESTAURANT_GROUPS: NavGroup[] = [
     items: [
       { to: "/menu", label: "Menu", icon: IconMenuBook, permission: "restaurant.menu.read" },
       { to: "/orders", label: "Orders", icon: IconClipboard, permission: "restaurant.orders.read" },
-      { to: "/customers", label: "Customers", icon: IconUsers, permission: "restaurant.orders.read" },
+      { to: "/customers", label: "Customers", icon: IconUsers, permission: "restaurant.customers.read" },
     ],
   },
   {

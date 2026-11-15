@@ -36,6 +36,9 @@ export interface AccessTokenPayload {
 export interface RefreshTokenPayload {
   sub: string;
   jti: string;
+  /** NEW-1 — the session family: one per sign-in, carried through every rotation. Absent on tokens
+   *  issued before families existed. */
+  fam?: string;
 }
 
 function refreshKey(userId: string, jti: string) {
@@ -46,11 +49,14 @@ export function signAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: parseTtlSeconds(env.ACCESS_TOKEN_TTL) });
 }
 
-export async function issueRefreshToken(userId: string): Promise<string> {
+/** Issues a refresh token. `family` is omitted at sign-in (a new session family starts) and passed
+ *  on rotation, so every token descended from one sign-in shares it. The Redis value records the
+ *  family (it used to be "1"), which lets reuse detection revoke exactly that session's chain. */
+export async function issueRefreshToken(userId: string, family: string = randomUUID()): Promise<string> {
   const jti = randomUUID();
   const ttlSeconds = parseTtlSeconds(env.REFRESH_TOKEN_TTL);
-  const token = jwt.sign({ sub: userId, jti }, env.JWT_REFRESH_SECRET, { expiresIn: ttlSeconds });
-  await redis.set(refreshKey(userId, jti), "1", "EX", ttlSeconds);
+  const token = jwt.sign({ sub: userId, jti, fam: family }, env.JWT_REFRESH_SECRET, { expiresIn: ttlSeconds });
+  await redis.set(refreshKey(userId, jti), family, "EX", ttlSeconds);
   return token;
 }
 
@@ -67,8 +73,27 @@ export async function isRefreshTokenActive(userId: string, jti: string): Promise
   return exists !== null;
 }
 
+/** NEW-1 — atomically uses up a refresh token: true for exactly one caller. Checking "is it
+ *  active?" and deleting it later let two simultaneous refreshes both pass and both rotate, forking
+ *  one token into two live sessions that reuse detection never saw. DEL reports how many keys it
+ *  removed, so only the first caller gets 1. */
+export async function consumeRefreshToken(userId: string, jti: string): Promise<boolean> {
+  return (await redis.del(refreshKey(userId, jti))) === 1;
+}
+
 export async function revokeRefreshToken(userId: string, jti: string): Promise<void> {
   await redis.del(refreshKey(userId, jti));
+}
+
+/** NEW-1 — revokes every still-active token of one session family (one sign-in on one browser).
+ *  Used by reuse detection and logout: a replayed token compromises that session's chain, not the
+ *  user's unrelated sign-ins on other devices, which never shared it. */
+export async function revokeRefreshFamily(userId: string, family: string): Promise<void> {
+  const keys = await redis.keys(refreshKey(userId, "*"));
+  if (keys.length === 0) return;
+  const values = await redis.mget(...keys);
+  const inFamily = keys.filter((_, i) => values[i] === family);
+  if (inFamily.length > 0) await redis.del(...inFamily);
 }
 
 export async function revokeAllRefreshTokens(userId: string): Promise<void> {

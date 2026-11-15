@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { registerFreshCustomer } from "./helpers/freshCustomer";
 
 /**
  * End-to-end proof of the online-payment domain added in Phase 5: customer selects "Pay online"
@@ -50,18 +51,8 @@ test.describe("online payment", () => {
       await ownerPage.locator("aside nav").getByRole("link", { name: "Orders" }).click();
       await expect(ownerPage.getByRole("heading", { name: "Orders" })).toBeVisible();
 
-      await customerPage.goto("http://localhost:5173/login");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      const loginRes = customerPage.waitForResponse((r) => r.url().includes("/api/v1/auth/login"));
-      await customerPage.getByRole("button", { name: "Log in" }).click();
-      if ((await loginRes).status() !== 200) {
-        await customerPage.goto("http://localhost:5173/register");
-        await customerPage.getByLabel("Name").fill("E2E Payment Customer");
-        await customerPage.getByLabel("Email").fill("customer1@test.local");
-        await customerPage.getByLabel("Password").fill("Customer123!");
-        await customerPage.getByRole("button", { name: "Create account" }).click();
-      }
+      // A customer of its own (helpers/freshCustomer.ts) — no shared account, no cancelled sign-up.
+      await registerFreshCustomer(customerPage, "E2E Payment Customer");
       // "/" legacy-redirects to the default restaurant's canonical /r/:slug URL (Phase 8).
       await expect(customerPage).toHaveURL(/\/r\/demo-restaurant$/);
 
@@ -137,10 +128,8 @@ test.describe("online payment", () => {
     const customerPage = await customerContext.newPage();
 
     try {
-      await customerPage.goto("http://localhost:5173/login");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      await customerPage.getByRole("button", { name: "Log in" }).click();
+      // Its own customer too — this test used to depend on the first one having created the account.
+      await registerFreshCustomer(customerPage, "E2E Payment Customer Two");
       await expect(customerPage).toHaveURL(/\/r\/demo-restaurant$/, { timeout: 10_000 });
 
       await customerPage.goto("http://localhost:5173/");

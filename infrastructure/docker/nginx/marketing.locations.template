@@ -7,21 +7,22 @@
 # (frontend.prod.Dockerfile), it sends "X-Robots-Tag: noindex, nofollow" while the legal values are
 # not configured and nothing once they are. Server-side, so crawlers that don't run JavaScript see it
 # too. try_files with a file (not a URI) serves it here, keeping this location's headers.
-location ~ ^/(terms|privacy|refund-policy)/?$ {
+location ~* ^/(terms|privacy|refund-policy)/?$ {
     try_files /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
     include /etc/nginx/conf.d/legal-robots.inc;
 }
 
-# QA-011 — the site's pages (apps/marketing/src/App.tsx's routes; marketing/routes.test.mjs keeps
+# Case-insensitive (~*) like the app's router: /Pricing renders the pricing page, so it must not
+# answer 404 (Windows nginx test run, 15 Nov). QA-011 — the site's pages (apps/marketing/src/App.tsx's routes; marketing/routes.test.mjs keeps
 # the two lists in step). Served as the SPA shell with 200.
 location = / {
     try_files /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
 }
-location ~ ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|v3)/?$ {
+location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|v3)/?$ {
     try_files /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;

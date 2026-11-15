@@ -53,4 +53,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "marketplace_integration.connected": "Marketplace integration connected",
   "marketplace_integration.disconnected": "Marketplace integration disconnected",
   "marketplace_integration.menu_sync_triggered": "Marketplace menu sync triggered",
+  "staff.role_changed": "Staff role changed",
 };

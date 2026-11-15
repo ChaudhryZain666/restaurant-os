@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { registerFreshCustomer } from "./helpers/freshCustomer";
 
 /**
  * Phase 12: the audit-log backend (GET /restaurants/:id/audit-log) already existed and was
@@ -21,18 +22,8 @@ test("owner can view the restaurant audit log, and a real status change appears 
     await ownerPage.getByRole("button", { name: "Sign in" }).click();
     await ownerPage.getByRole("link", { name: "Kitchen" }).click();
 
-    await customerPage.goto("http://localhost:5173/login");
-    await customerPage.getByLabel("Email").fill("customer1@test.local");
-    await customerPage.getByLabel("Password").fill("Customer123!");
-    const loginRes = customerPage.waitForResponse((r) => r.url().includes("/api/v1/auth/login"));
-    await customerPage.getByRole("button", { name: "Log in" }).click();
-    if ((await loginRes).status() !== 200) {
-      await customerPage.goto("http://localhost:5173/register");
-      await customerPage.getByLabel("Name").fill("E2E Audit Log Customer");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      await customerPage.getByRole("button", { name: "Create account" }).click();
-    }
+    // A customer of its own (helpers/freshCustomer.ts) — no shared account, no cancelled sign-up.
+    await registerFreshCustomer(customerPage, "E2E Audit Log Customer");
     await customerPage.goto("http://localhost:5173/r/demo-restaurant");
     const pizzaRow = customerPage.locator("li", { hasText: "Margherita Pizza" });
     // Theme-agnostic (same approach as delivery.spec.ts's addItemToCart): the seeded demo is now
@@ -50,7 +41,11 @@ test("owner can view the restaurant audit log, and a real status change appears 
 
     const kdsCard = ownerPage.getByRole("group", { name: `Order ${orderNumber}` });
     await expect(kdsCard).toBeVisible({ timeout: 15_000 });
+    // Wait for the status change itself before opening the audit log: navigating straight away let
+    // the audit list load before the change was recorded (15 Nov full-suite run, from its trace).
+    const accepted = ownerPage.waitForResponse((r) => r.request().method() === "PATCH" && /\/orders\/[a-f0-9]+\/status$/.test(r.url()));
     await kdsCard.getByRole("button", { name: "Accept" }).click();
+    expect((await accepted).ok()).toBeTruthy();
 
     await ownerPage.getByRole("link", { name: "Audit log" }).click();
     await expect(ownerPage.getByRole("heading", { name: "Audit log" })).toBeVisible();

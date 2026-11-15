@@ -264,7 +264,7 @@ export function App() {
           <Route
             path="/customers"
             element={
-              <RequireAuth permission="restaurant.orders.read">
+              <RequireAuth permission="restaurant.customers.read">
                 <CustomersPage />
               </RequireAuth>
             }

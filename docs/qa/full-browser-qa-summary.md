@@ -6,6 +6,8 @@ Full report: [`full-browser-qa-audit.md`](full-browser-qa-audit.md). Evidence: [
 > - [`full-browser-qa-fixes.md`](full-browser-qa-fixes.md): 13 of 14 findings fixed and verified in the browser. QA-011's nginx change is unit-tested but wasn't run against a live nginx. The D-1 wording is corrected. Three new pre-existing issues were found; NEW-2 is fixed.
 > - [`full-browser-all-pages-verification.md`](full-browser-all-pages-verification.md): all 109 routes re-tested route by route.
 >
+> - **Update, 15 Nov (later):** [`final-release-readiness.md`](final-release-readiness.md), branch `fix/final-release-readiness`. NEW-1 and NEW-3 are fixed, the kitchen's access to the customer directory is restricted, QA-011 is verified on a real nginx, and the browser regression is investigated.
+>
 > The findings below are the original 8 Nov audit results, kept as recorded.
 
 **Tested**

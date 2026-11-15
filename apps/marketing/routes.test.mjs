@@ -18,7 +18,7 @@ const appRoutes = [...app.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]);
 const devOnlyRoutes = [...app.matchAll(/import\.meta\.env\.DEV && <Route path="([^"]+)"/g)].map((m) => m[1]);
 const publicRoutes = appRoutes.filter((p) => p !== "*" && !devOnlyRoutes.includes(p));
 
-const regexBodies = [...nginx.matchAll(/location ~ \^\/\(([^)]+)\)\/\?\$/g)].map((m) => m[1].split("|"));
+const regexBodies = [...nginx.matchAll(/location ~\*? \^\/\(([^)]+)\)\/\?\$/g)].map((m) => m[1].split("|"));
 const servedWith200 = new Set(["/", ...regexBodies.flat().map((s) => `/${s}`)]);
 
 test("every public page of the app is served with 200", () => {
@@ -36,6 +36,11 @@ test("the /v2 draft homepage is dev-only and not served with 200", () => {
   assert.deepEqual(devOnlyRoutes, ["/v2"]);
   assert.ok(!servedWith200.has("/v2"));
   assert.ok(!sitemap.includes("/v2<"));
+});
+
+test("page routes match case-insensitively, like the app's router", () => {
+  assert.match(nginx, /location ~\* \^\/\(product\|/);
+  assert.match(nginx, /location ~\* \^\/\(terms\|/);
 });
 
 test("everything else gets the app shell with a 404 status", () => {

@@ -3,7 +3,7 @@
   "marketing|/pricing": "D-1 wording fixed (pricing note)",
   "marketing|/faq": "D-1 wording fixed (payments answer)",
   "marketing|/v2": "QA-010 fixed (production build: 404 page)",
-  "marketing|*": "QA-011 — 404 status needs nginx (not run locally)",
+  "marketing|*": "QA-011 fixed — 404 status verified on real nginx 1.27.4",
   "storefront|/": "QA-009 fixed (platform host); QA-012 fixed",
   "storefront|/r/:restaurantSlug": "QA-002 fixed; QA-012 fixed",
   "storefront|/r/:restaurantSlug/cart": "QA-001, QA-002, QA-013 fixed",
@@ -16,7 +16,7 @@
   "admin|/menu": "QA-003 fixed",
   "admin|/settings": "QA-003, QA-005 fixed",
   "admin|/orders": "QA-003 fixed",
-  "admin|/customers": "QA-003 fixed; D-3 (kitchen access by design)",
+  "admin|/customers": "QA-003 fixed; kitchen restricted (restaurant.customers.read)",
   "admin|/kitchen": "QA-003, QA-004 fixed",
   "admin|/support": "QA-006 fixed",
   "admin|/support/:id": "QA-006 fixed",
@@ -24,10 +24,11 @@
   "admin|/platform/support/tickets/:id": "NEW-2 fixed",
   "admin|/print/:mode/:id": "QA-008 fixed",
   "admin|/reset-password": "QA-014 fixed",
-  "admin|/staff": "NEW-3 (role change unaudited) — open",
+  "admin|/staff": "NEW-3 fixed (confirmation + audit entry)",
   "note|admin|/mock-checkout/:token": "public by design: the token is the credential; exists only with mock billing",
-  "note|admin|/customers": "kitchen/staff may open Customers by design (restaurant.orders.read) — see D-3",
-  "note|admin|/menu/import/job/:jobId": "local Redis 3.0 is too old for the job queue, so the job stays queued here; the page itself renders and refreshes",
+  "note|admin|/customers": "kitchen refused by the server and the app; owners, managers, front-of-house staff (POS picker) and agency roles allowed",
+  "note|admin|/menu/import/job/:jobId": "job processed by the queue (Redis 8.10 locally)",
   "note|storefront|/r/:restaurantSlug/preview": "a customer is refused the owner-only preview (403) — the expected outcome; the 401→refresh→403 sequence is the client restoring the session first",
-  "note|storefront|/r/:restaurantSlug/experience": "choosing \"Order online\" in the playground signs the browser in as a temporary Demo Guest (by design)"
+  "note|storefront|/r/:restaurantSlug/experience": "choosing \"Order online\" in the playground signs the browser in as a temporary Demo Guest (by design)",
+  "admin|/audit-log": "NEW-3 — staff.role_changed entries listed"
 }

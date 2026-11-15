@@ -1,0 +1,635 @@
+{
+  "summary": {
+    "pass": 60,
+    "fail": 0
+  },
+  "steps": [
+    {
+      "id": "fix-01",
+      "label": "[desktop] QA-012 signed-out menu load has no console errors and refresh answers 204",
+      "result": "PASS",
+      "observed": {
+        "refresh": 204,
+        "title": "Wildwood Kitchen — Order Online"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-01.png"
+    },
+    {
+      "id": "fix-02",
+      "label": "[desktop] QA-002 dialog button shows the option-inclusive price",
+      "result": "PASS",
+      "observed": {
+        "buttonBefore": "ADD TO ORDER — $12.50",
+        "buttonAfter": "ADD TO ORDER — $14.50"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-02.png"
+    },
+    {
+      "id": "fix-03",
+      "label": "[desktop] QA-002 cart subtotal equals the dialog price",
+      "result": "PASS",
+      "observed": {
+        "price": "$14.50"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-03.png"
+    },
+    {
+      "id": "fix-04",
+      "label": "[desktop] QA-013 cart title, description and h1",
+      "result": "PASS",
+      "observed": {
+        "title": "Cart · Wildwood Kitchen",
+        "desc": "Review your order and check out.",
+        "h1": "Cart"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-04.png"
+    },
+    {
+      "id": "fix-05",
+      "label": "[desktop] QA-001 signed-out promo code applies (and a bad code gets a friendly reason)",
+      "result": "PASS",
+      "observed": {
+        "promoLine": "Promo QAFIX10\n-$1.45",
+        "badCodeMessage": "Invalid promo code"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-05.png"
+    },
+    {
+      "id": "fix-06",
+      "label": "[desktop] QA-001 refresh keeps the cart; page still has no console errors",
+      "result": "PASS",
+      "observed": "ok",
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-06.png"
+    },
+    {
+      "id": "fix-07",
+      "label": "[desktop] QA-001 placing the order still requires an account",
+      "result": "PASS",
+      "observed": "Place order → /login",
+      "url": "http://localhost:5173/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-07.png"
+    },
+    {
+      "id": "fix-08",
+      "label": "[mobile] QA-012 signed-out menu load has no console errors and refresh answers 204",
+      "result": "PASS",
+      "observed": {
+        "refresh": 204,
+        "title": "Wildwood Kitchen — Order Online"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-08.png"
+    },
+    {
+      "id": "fix-09",
+      "label": "[mobile] QA-002 dialog button shows the option-inclusive price",
+      "result": "PASS",
+      "observed": {
+        "buttonBefore": "ADD TO ORDER — $12.50",
+        "buttonAfter": "ADD TO ORDER — $14.50"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-09.png"
+    },
+    {
+      "id": "fix-10",
+      "label": "[mobile] QA-002 cart subtotal equals the dialog price",
+      "result": "PASS",
+      "observed": {
+        "price": "$14.50"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-10.png"
+    },
+    {
+      "id": "fix-11",
+      "label": "[mobile] QA-013 cart title, description and h1",
+      "result": "PASS",
+      "observed": {
+        "title": "Cart · Wildwood Kitchen",
+        "desc": "Review your order and check out.",
+        "h1": "Cart"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-11.png"
+    },
+    {
+      "id": "fix-12",
+      "label": "[mobile] QA-001 signed-out promo code applies (and a bad code gets a friendly reason)",
+      "result": "PASS",
+      "observed": {
+        "promoLine": "Promo QAFIX10\n-$1.45",
+        "badCodeMessage": "Notes (optional)"
+      },
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-12.png"
+    },
+    {
+      "id": "fix-13",
+      "label": "[mobile] QA-001 refresh keeps the cart; page still has no console errors",
+      "result": "PASS",
+      "observed": "ok",
+      "url": "http://localhost:5173/r/demo-restaurant/cart",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-13.png"
+    },
+    {
+      "id": "fix-14",
+      "label": "[mobile] QA-001 placing the order still requires an account",
+      "result": "PASS",
+      "observed": "Place order → /login",
+      "url": "http://localhost:5173/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-14.png"
+    },
+    {
+      "id": "fix-15",
+      "label": "QA-012 admin login page (signed out): no console errors",
+      "result": "PASS",
+      "observed": [],
+      "url": "http://localhost:5174/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-15.png"
+    },
+    {
+      "id": "fix-16",
+      "label": "QA-012 marketing home (signed out): no console errors",
+      "result": "PASS",
+      "observed": [],
+      "url": "http://localhost:5175/",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-16.png"
+    },
+    {
+      "id": "fix-17",
+      "label": "D-1 marketing no longer claims Stripe checkout is live",
+      "result": "PASS",
+      "observed": {
+        "pricingNote": ""
+      },
+      "url": "http://localhost:5175/faq",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-17.png"
+    },
+    {
+      "id": "fix-18",
+      "label": "QA-003/004 [owner] direct load + refresh /menu: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Menu",
+        "finalPath": "/menu",
+        "errors": []
+      },
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-18.png"
+    },
+    {
+      "id": "fix-19",
+      "label": "QA-003/004 [owner] direct load + refresh /settings: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Settings",
+        "finalPath": "/settings",
+        "errors": []
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-19.png"
+    },
+    {
+      "id": "fix-20",
+      "label": "QA-003/004 [owner] direct load + refresh /orders: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Orders",
+        "finalPath": "/orders",
+        "errors": []
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-20.png"
+    },
+    {
+      "id": "fix-21",
+      "label": "QA-003/004 [owner] direct load + refresh /customers: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Customers",
+        "finalPath": "/customers",
+        "errors": []
+      },
+      "url": "http://localhost:5174/customers",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-21.png"
+    },
+    {
+      "id": "fix-22",
+      "label": "QA-003/004 [manager] direct load + refresh /menu: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Menu",
+        "finalPath": "/menu",
+        "errors": []
+      },
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-22.png"
+    },
+    {
+      "id": "fix-23",
+      "label": "QA-003/004 [manager] direct load + refresh /settings: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Good morning, Wildwood Kitchen.",
+        "finalPath": "/",
+        "errors": []
+      },
+      "url": "http://localhost:5174/",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-23.png"
+    },
+    {
+      "id": "fix-24",
+      "label": "QA-003/004 [manager] direct load + refresh /orders: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Orders",
+        "finalPath": "/orders",
+        "errors": []
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-24.png"
+    },
+    {
+      "id": "fix-25",
+      "label": "QA-003/004 [manager] direct load + refresh /customers: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Customers",
+        "finalPath": "/customers",
+        "errors": []
+      },
+      "url": "http://localhost:5174/customers",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-25.png"
+    },
+    {
+      "id": "fix-26",
+      "label": "QA-003/004 [staff] direct load + refresh /orders: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Orders",
+        "finalPath": "/orders",
+        "errors": []
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-26.png"
+    },
+    {
+      "id": "fix-27",
+      "label": "QA-003/004 [staff] direct load + refresh /: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Orders",
+        "finalPath": "/orders",
+        "errors": []
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-27.png"
+    },
+    {
+      "id": "fix-28",
+      "label": "QA-004 [staff] never asks for plan entitlements",
+      "result": "PASS",
+      "observed": "0 entitlement requests",
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-28.png"
+    },
+    {
+      "id": "fix-29",
+      "label": "QA-003/004 [kitchen] direct load + refresh /kitchen: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Kitchen",
+        "finalPath": "/kitchen",
+        "errors": []
+      },
+      "url": "http://localhost:5174/kitchen",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-29.png"
+    },
+    {
+      "id": "fix-30",
+      "label": "QA-003/004 [kitchen] direct load + refresh /: no /restaurants/null, no entitlement 403",
+      "result": "PASS",
+      "observed": {
+        "h1": "Kitchen",
+        "finalPath": "/kitchen",
+        "errors": []
+      },
+      "url": "http://localhost:5174/kitchen",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-30.png"
+    },
+    {
+      "id": "fix-31",
+      "label": "QA-004 [kitchen] never asks for plan entitlements",
+      "result": "PASS",
+      "observed": "0 entitlement requests",
+      "url": "http://localhost:5174/kitchen",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-31.png"
+    },
+    {
+      "id": "fix-32",
+      "label": "QA-005 blank name: field message, highlighted, no request, other input preserved",
+      "result": "PASS",
+      "observed": {
+        "message": "Enter a restaurant name."
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-32.png"
+    },
+    {
+      "id": "fix-33",
+      "label": "QA-005 whitespace-only name: field message, highlighted, no request, other input preserved",
+      "result": "PASS",
+      "observed": {
+        "message": "Enter a restaurant name."
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-33.png"
+    },
+    {
+      "id": "fix-34",
+      "label": "QA-005 typing clears the error; the server still refuses a whitespace name with a clear message",
+      "result": "PASS",
+      "observed": {
+        "server": 400,
+        "details": {
+          "name": [
+            "Restaurant name must be at least 2 characters"
+          ]
+        },
+        "nameUnchanged": "Wildwood Kitchen"
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-34.png"
+    },
+    {
+      "id": "fix-35",
+      "label": "QA-005 a server-side refusal reaches the field (bypassing the client check)",
+      "result": "PASS",
+      "observed": {
+        "field": "Restaurant name must be at least 2 characters",
+        "alert": "Restaurant name must be at least 2 characters"
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-35.png"
+    },
+    {
+      "id": "fix-36",
+      "label": "QA-005 a valid save still works (original name restored)",
+      "result": "PASS",
+      "observed": "Saved.",
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-36.png"
+    },
+    {
+      "id": "fix-37",
+      "label": "QA-006 platform admin /support → /platform/support, no null requests",
+      "result": "PASS",
+      "observed": {
+        "url": "http://localhost:5174/platform/support",
+        "h1": "Support"
+      },
+      "url": "http://localhost:5174/platform/support",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-37.png"
+    },
+    {
+      "id": "fix-38",
+      "label": "QA-006 platform admin /support/:id → /platform/support/tickets/:id (and Back works)",
+      "result": "PASS",
+      "observed": {
+        "back": "http://localhost:5174/platform/support"
+      },
+      "url": "http://localhost:5174/platform/support",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-38.png"
+    },
+    {
+      "id": "fix-39",
+      "label": "QA-006 owner keeps the restaurant Support page",
+      "result": "PASS",
+      "observed": {
+        "h1": "Support"
+      },
+      "url": "http://localhost:5174/support",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-39.png"
+    },
+    {
+      "id": "fix-40",
+      "label": "QA-007 another customer's order: friendly message, no \"Forbidden\", link to My orders",
+      "result": "PASS",
+      "observed": {
+        "message": "Order unavailable / We couldn't find that order on your account. Check the link, or open it from My orders. / Go to My orders"
+      },
+      "url": "http://localhost:5173/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-40.png"
+    },
+    {
+      "id": "fix-41",
+      "label": "QA-007 a non-existent order: friendly message, no \"Forbidden\", link to My orders",
+      "result": "PASS",
+      "observed": {
+        "message": "Order unavailable / We couldn't find that order on your account. Check the link, or open it from My orders. / Go to My orders"
+      },
+      "url": "http://localhost:5173/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-41.png"
+    },
+    {
+      "id": "fix-42",
+      "label": "QA-007 a malformed id: friendly message, no \"Forbidden\", link to My orders",
+      "result": "PASS",
+      "observed": {
+        "message": "Order unavailable / We couldn't find that order on your account. Check the link, or open it from My orders. / Go to My orders"
+      },
+      "url": "http://localhost:5173/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-42.png"
+    },
+    {
+      "id": "fix-43",
+      "label": "QA-008 printed receipt logo loads",
+      "result": "PASS",
+      "observed": {
+        "src": "/restaurant-images/wildwood-kitchen-logo.svg"
+      },
+      "url": "http://localhost:5174/print/receipt/6af90fd8995159e2499617cd",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-43.png"
+    },
+    {
+      "id": "fix-44",
+      "label": "[desktop] QA-009 platform host root is branded and explains what to do",
+      "result": "PASS",
+      "observed": {
+        "title": "GarnishTable online ordering",
+        "header": [
+          "G",
+          "GarnishTable",
+          "Menu"
+        ]
+      },
+      "url": "http://localhost:5176/",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-44.png"
+    },
+    {
+      "id": "fix-45",
+      "label": "[desktop] QA-009 unknown slug on platform host: branded not-found",
+      "result": "PASS",
+      "observed": "ok",
+      "url": "http://localhost:5176/r/no-such-restaurant-qa",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-45.png"
+    },
+    {
+      "id": "fix-46",
+      "label": "[desktop] QA-009 a real restaurant on the platform host shows only its own brand",
+      "result": "PASS",
+      "observed": {
+        "header": [
+          "WILDWOOD KITCHEN",
+          "MENU"
+        ]
+      },
+      "url": "http://localhost:5176/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-46.png"
+    },
+    {
+      "id": "fix-47",
+      "label": "[desktop] QA-009 \"Sign in\" button works from the platform root",
+      "result": "PASS",
+      "observed": "http://localhost:5176/login",
+      "url": "http://localhost:5176/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-47.png"
+    },
+    {
+      "id": "fix-48",
+      "label": "[mobile] QA-009 platform host root is branded and explains what to do",
+      "result": "PASS",
+      "observed": {
+        "title": "GarnishTable online ordering",
+        "header": [
+          "G",
+          "GarnishTable",
+          "0"
+        ]
+      },
+      "url": "http://localhost:5176/",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-48.png"
+    },
+    {
+      "id": "fix-49",
+      "label": "[mobile] QA-009 unknown slug on platform host: branded not-found",
+      "result": "PASS",
+      "observed": "ok",
+      "url": "http://localhost:5176/r/no-such-restaurant-qa",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-49.png"
+    },
+    {
+      "id": "fix-50",
+      "label": "[mobile] QA-009 a real restaurant on the platform host shows only its own brand",
+      "result": "PASS",
+      "observed": {
+        "header": [
+          "WILDWOOD KITCHEN",
+          "0"
+        ]
+      },
+      "url": "http://localhost:5176/r/demo-restaurant",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-50.png"
+    },
+    {
+      "id": "fix-51",
+      "label": "[mobile] QA-009 \"Sign in\" button works from the platform root",
+      "result": "PASS",
+      "observed": "http://localhost:5176/login",
+      "url": "http://localhost:5176/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-51.png"
+    },
+    {
+      "id": "fix-52",
+      "label": "QA-009 non-platform host with no slug keeps neutral chrome (white-label safety)",
+      "result": "PASS",
+      "observed": {
+        "header": [
+          "R",
+          "Restaurant"
+        ]
+      },
+      "url": "http://localhost:5173/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-52.png"
+    },
+    {
+      "id": "fix-53",
+      "label": "QA-013 title for /login",
+      "result": "PASS",
+      "observed": "Sign in",
+      "url": "http://localhost:5173/login"
+    },
+    {
+      "id": "fix-54",
+      "label": "QA-013 title for /register",
+      "result": "PASS",
+      "observed": "Create an account",
+      "url": "http://localhost:5173/register"
+    },
+    {
+      "id": "fix-55",
+      "label": "QA-013 title for /support",
+      "result": "PASS",
+      "observed": "Help center",
+      "url": "http://localhost:5173/support"
+    },
+    {
+      "id": "fix-56",
+      "label": "QA-013 title for /forgot-password",
+      "result": "PASS",
+      "observed": "Reset your password",
+      "url": "http://localhost:5173/forgot-password"
+    },
+    {
+      "id": "fix-57",
+      "label": "QA-013 title for /orders (signed in)",
+      "result": "PASS",
+      "observed": "My orders",
+      "url": "http://localhost:5173/orders"
+    },
+    {
+      "id": "fix-58",
+      "label": "QA-014 [390px] platform support table readable, page itself does not scroll sideways",
+      "result": "PASS",
+      "observed": {
+        "tableWidth": 760,
+        "wrapperScrolls": "auto",
+        "firstCellHeight": 68.5,
+        "pageOverflow": 0
+      },
+      "url": "http://localhost:5174/platform/support",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-58.png"
+    },
+    {
+      "id": "fix-59",
+      "label": "QA-014 [390px] admin reset-password without token: one readable sentence",
+      "result": "PASS",
+      "observed": "link works",
+      "url": "http://localhost:5174/forgot-password",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-59.png"
+    },
+    {
+      "id": "fix-60",
+      "label": "QA-014 [390px] storefront reset-password without token: one readable sentence",
+      "result": "PASS",
+      "observed": "link works",
+      "url": "http://localhost:5173/forgot-password",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\verify-fixes\\fix-60.png"
+    }
+  ],
+  "consoleErrors": [
+    "http://localhost:5173/login :: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http://localhost:5173/login :: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "failedRequests": [
+    "404 GET http://localhost:5173/api/v1/restaurants/by-domain/localhost",
+    "404 GET http://localhost:5173/api/v1/restaurants/by-domain/localhost"
+  ]
+}

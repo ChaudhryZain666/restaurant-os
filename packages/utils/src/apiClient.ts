@@ -10,6 +10,24 @@ export interface RequestOptions {
   body?: unknown;
   /** Skip the automatic 401 -> refresh -> retry cycle (used by the refresh call itself). */
   skipRefresh?: boolean;
+  /** NEW-1 — let the request finish even if the page unloads (fetch keepalive). */
+  keepalive?: boolean;
+}
+
+/** NEW-1 — one name for every tab of this app, so the browser runs their session refreshes one at
+ *  a time (Web Locks API). Two tabs refreshing at once would present the same single-use token,
+ *  and the second would look like a replay. Where Web Locks is unavailable the refresh simply runs. */
+export const REFRESH_LOCK_NAME = "garnishtable-session-refresh";
+
+/** The one Web Locks call used here — typed locally because this package is also compiled by the
+ *  API, which has no DOM types (LockManager). */
+interface RefreshLocks {
+  request<T>(name: string, callback: () => Promise<T>): Promise<T>;
+}
+
+function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: RefreshLocks } }).navigator?.locks;
+  return locks ? locks.request(REFRESH_LOCK_NAME, fn) : fn();
 }
 
 export class ApiClientError extends Error {
@@ -71,6 +89,7 @@ export function createApiClient({ basePath }: ApiClientOptions) {
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: isFormData ? (options.body as FormData) : options.body ? JSON.stringify(options.body) : undefined,
+      keepalive: options.keepalive,
     });
   }
 
@@ -78,7 +97,10 @@ export function createApiClient({ basePath }: ApiClientOptions) {
     if (refreshPromise) return refreshPromise;
     refreshPromise = (async () => {
       try {
-        const res = await rawRequest("/auth/refresh", { method: "POST", skipRefresh: true });
+        // NEW-1 — keepalive: if the page is left mid-refresh, the browser still completes the
+        // request and stores the rotated cookie, instead of keeping the now-used token. Serialised
+        // across tabs by withRefreshLock.
+        const res = await withRefreshLock(() => rawRequest("/auth/refresh", { method: "POST", skipRefresh: true, keepalive: true }));
         // QA-012 — 204: no session to refresh (signed out), as distinct from a rejected token.
         if (!res.ok || res.status === 204) return false;
         const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
