@@ -4,6 +4,27 @@ How GarnishTable moves subscription billing from the mock provider to Paddle **L
 it, and how to back out. Every step marked **[approval]** needs the founder's explicit go-ahead.
 Nothing in this file is a secret; secret *values* never go in the repository, chat or logs.
 
+## 0. Verified state on 2026-11-21 (supersedes the 2026-10-24 table below)
+
+Read-only checks with the authorized Paddle Live integration and the public production API:
+
+| Item | State | Needed for launch |
+| --- | --- | --- |
+| Production | `4ffc99b` (`/health`, built 2026-11-06). `BILLING_PROVIDER` is not `paddle` or `lemonsqueezy` (webhook probes). Mongo and Redis up. | Deploy the launch branch (§6.0) |
+| Seller onboarding | **Completed** (account setup and automated review). | Done |
+| Checkout domain `garnishtable.com` | **Approved** (Apple Pay verified). | Done |
+| Checkout domain `app.garnishtable.com` | **`action_required`** since 2026-11-14. Paddle's reviewer saw an empty page behind a login wall, and `robots.txt` blocked crawlers. Fixed on the launch branch (public description, policy links, `robots.txt` allows `/` and `/login`). | Not needed for **new** customers: pay-now runs on `garnishtable.com/checkout`. Still needed for in-app upgrades from a trial (`app.garnishtable.com/billing`). After the deploy, reply to Paddle's email. |
+| Live catalog | 3 products and 6 prices, made in the dashboard on 2026-11-14. USD, `saas`, monthly and yearly, no Paddle trial, amounts match the plans. They have **no `custom_data`**. | Load them with `docs/paddle-live-prices.json` (§6 step 2) |
+| Webhook destinations | **None.** | **Founder:** create one (§4) |
+| Client-side tokens | **None.** | **Founder:** create one (§3) |
+| Default payment link | **Not set.** | **Founder:** set it to `https://garnishtable.com/checkout` once the launch branch is deployed (§5.1) |
+| Statement descriptor | Not "GARNISHTABLE". | **Founder:** change it |
+| Display name and website | Not set. | **Founder:** set them to GarnishTable and `https://garnishtable.com` |
+| API keys | One active key, created 2026-10-23: the key that was shared in chat. | **Founder:** create a new key, put it in `api.env`, then revoke the old one |
+| Customers, transactions, subscriptions | 0, 0, 0. | — |
+
+**Do not run `createPaddleCatalog` against Live.** It matches products by `custom_data.internalPlanCode`, which the dashboard products don't carry, so it would plan a second catalog. Since 2026-11-21 it refuses to do that. Use the committed mapping file instead. `setPaddlePriceIds` checks every id directly against Paddle (status, product, amount, currency, cycle, no trial), and webhooks find plans by price id and by the checkout's own `custom_data`, so product `custom_data` isn't needed.
+
 Status as of **2026-10-24** (read-only checks via the authorized Paddle Live integration and the
 public production API):
 
@@ -21,6 +42,23 @@ public production API):
 | Live account display name / website | Not set. |
 | Live tax mode | `location`; balance currency USD. |
 | Sandbox catalog | Complete and correct (below); used by all sandbox tests T1–T10. |
+
+## 0.1 Pay-now checkout (added 2026-11-21)
+
+New customers can pay without a trial and without an account first, on **`https://garnishtable.com/checkout`**. The pricing page links to it with "Pay now — no trial".
+
+1. The buyer picks Owner Starter or Growth, monthly or annual. `POST /api/v1/public/checkout` records a checkout intent and returns the Paddle price, client token and a one-time set-up token.
+2. Paddle's overlay takes the email and card. Its custom data carries only the intent id.
+3. The signed `subscription.created` webhook marks the intent **paid**. The plan is taken from the subscription's price, never from the browser. The customer is emailed a set-up link (`app.garnishtable.com/claim#token=…`). The browser's "completed" event never grants anything.
+4. On `/claim` the buyer sets a password and names the restaurant. That creates the owner, the business and restaurant, and an **active** Paddle subscription with no trial. If the email already has an account, they sign in and the plan is added to it.
+5. Paddle events that arrive before set-up are acknowledged; set-up reads the subscription's current state from Paddle. A purchase cancelled before set-up can't be claimed.
+
+**Monitoring:**
+- Alert key `billing_guest_purchase_unlinked`: a paid purchase with an unknown intent or price.
+- Alert key `billing_duplicate_purchase`: a second payment on one intent.
+- Paid but unclaimed purchases are `CheckoutIntent` documents with `status: "paid"`.
+
+Agency plans are not sold on this page yet.
 
 ## 1. External blockers (Paddle account owner)
 
@@ -120,7 +158,7 @@ or a `test_` client token whenever `BILLING_PROVIDER=paddle`.
 
 1. Paddle onboarding **approved**, `garnishtable.com` approved, display name GarnishTable, statement
    descriptor GARNISHTABLE, default payment link (Checkout → Checkout settings) set to
-   `https://app.garnishtable.com/billing` — without one, Paddle's overlay fails with
+   `https://garnishtable.com/checkout`. Paddle accepts only an approved domain, and the page must load Paddle.js: the checkout page does, and opens any Paddle payment link (`?_ptxn=`) by itself. Without a default payment link, Paddle's overlay fails with
    `transaction_default_checkout_url_not_set` (seen in sandbox, Phase 40.1). It must be on an approved
    domain in Live.
 2. Production runs current `main` (the running `b6b0f3e` lacks the simulated-webhook guard, the
@@ -132,10 +170,12 @@ or a `test_` client token whenever `BILLING_PROVIDER=paddle`.
 
 ## 6. Activation — **[approval]** for each step
 
+0. Deploy the launch branch (it adds the platform-admin plans, Lemon Squeezy code (left inactive), the release-readiness fixes, the placeholder-price guard and `BILLING_CHECKOUT_ENABLED`) with `BILLING_PROVIDER` unchanged. Then check `/health` shows the new commit and run the smoke test.
+
 1. Put the live values in `api.env` (§3) with `BILLING_CHECKOUT_ENABLED=false` first.
-2. `docker compose -p garnishtable exec api node dist/scripts/createPaddleCatalog.js --plans owner_starter,owner_growth,agency_growth_v2 --out /tmp/paddle-prices.json` — dry run; expect 3 products + 6 prices "create".
-3. Same with `--apply`; expect the ids printed and the mapping written. (Re-running reuses them.)
-4. `docker compose -p garnishtable exec api node dist/scripts/setPaddlePriceIds.js --file /tmp/paddle-prices.json`, then with `--apply`.
+2. Copy the committed mapping into the container: `docker compose -p garnishtable cp docs/paddle-live-prices.json api:/tmp/paddle-prices.json` (from the server's repo checkout of the deployed commit). Skip `createPaddleCatalog`: the Live catalog already exists (§0).
+3. (no step)
+4. `docker compose -p garnishtable exec api node dist/scripts/setPaddlePriceIds.js --file /tmp/paddle-prices.json`: dry run, expect 3 product and 6 price changes from `mock_price_*` and no problems. Then run it again with `--apply`.
 5. Recreate the api container (`docker compose -p garnishtable up -d api`); expect boot to pass the
    Paddle production checks; `curl -X POST …/webhooks/billing/paddle -d '{}'` → "Invalid webhook
    signature" (proves Paddle is selected and signatures are enforced).

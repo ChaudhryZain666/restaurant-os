@@ -39,7 +39,7 @@ import { parseTtlSeconds } from "../utils/ttl.js";
 // Phase 77 — bump this when the Terms of Service / Privacy Policy content materially changes, so
 // legalVersion on existing User documents can be compared against it later if a re-acceptance
 // requirement is ever built. Not read anywhere yet other than being stamped at registration time.
-const CURRENT_LEGAL_VERSION = "2026-09-14";
+export const CURRENT_LEGAL_VERSION = "2026-09-14";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_CHANGE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -50,7 +50,7 @@ const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** Only ever trusts an Origin that's actually one of our own two frontends, so an email link can
  *  never be pointed at an attacker-controlled host via a spoofed request header. */
-function resolveAppOrigin(req: Request): string {
+export function resolveAppOrigin(req: Request): string {
   const origin = req.headers.origin;
   if (origin === env.ADMIN_ORIGIN) return env.ADMIN_ORIGIN;
   return env.CLIENT_ORIGIN;
@@ -125,7 +125,7 @@ export async function issueSession(
  *  one, same "resend invalidates the old link" behavior as staff.controller.ts's resendStaffInvite)
  *  and emails it. Never throws on send failure — the account still exists and can retry via resend,
  *  matching every other best-effort email send in this file (requestPasswordReset, etc.). */
-async function sendVerificationEmail(req: Request, user: HydratedDocument<UserDoc>): Promise<void> {
+export async function sendVerificationEmail(req: Request, user: HydratedDocument<UserDoc>): Promise<void> {
   const { raw, hash } = generateSecureToken();
   user.emailVerificationTokenHash = hash;
   user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);

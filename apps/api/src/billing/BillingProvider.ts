@@ -146,6 +146,15 @@ export interface ProviderBillingWebhookEvent {
     billingInterval: "monthly" | "yearly";
     providerCustomerId: string;
   };
+  /**
+   * Launch, 2026-11-21 — a subscription created by the PUBLIC pay-now checkout (no account yet): the
+   * checkout intent it was opened for and the customer the provider created. Only on the creation
+   * event; the plan is resolved from providerPriceId, never from custom data.
+   */
+  guestCheckout?: {
+    intentId: string;
+    providerCustomerId: string;
+  };
 }
 
 /**
@@ -183,4 +192,8 @@ export interface BillingProvider {
   getPaymentMethodUpdateUrl(providerSubscriptionId: string): Promise<string | null>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderBillingWebhookEvent | null;
+  /** Launch, 2026-11-21 — optional: records which owner a customer the provider created at a public
+   *  pay-now checkout now belongs to, so a later in-app checkout reuses that customer (see
+   *  PaddleBillingProvider.createCustomer's same-owner check). */
+  setCustomerOwner?(providerCustomerId: string, ownerType: "business" | "agency", ownerId: string): Promise<void>;
 }

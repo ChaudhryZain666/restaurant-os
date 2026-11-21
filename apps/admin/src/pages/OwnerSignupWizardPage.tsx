@@ -8,7 +8,7 @@ import { LegalConsentCheckbox } from "../components/LegalConsentCheckbox";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
-function slugify(value: string): string {
+export function slugify(value: string): string {
   return value
     .toLowerCase()
     .trim()
@@ -70,7 +70,7 @@ function formatPrice(pricing: Plan["pricing"], interval: "monthly" | "yearly"): 
 
 
 /** The owner's IANA timezone from the browser (undefined when the browser can't tell). */
-function browserTimezone(): string | undefined {
+export function browserTimezone(): string | undefined {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
   } catch {

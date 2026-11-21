@@ -23,6 +23,7 @@ const StartTrialPage = page(() => import("./pages/StartTrialPage"), "StartTrialP
 const TermsPage = page(() => import("./pages/TermsPage"), "TermsPage");
 const PrivacyPage = page(() => import("./pages/PrivacyPage"), "PrivacyPage");
 const RefundPolicyPage = page(() => import("./pages/RefundPolicyPage"), "RefundPolicyPage");
+const CheckoutPage = page(() => import("./pages/CheckoutPage"), "CheckoutPage");
 
 /** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown and footer
  *  links). Lazy pages render their anchors only once their chunk arrives, so a missing target is
@@ -77,6 +78,7 @@ export function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/start-trial" element={<StartTrialPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refund-policy" element={<RefundPolicyPage />} />
