@@ -3,6 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Logo } from "@restaurant/ui";
 import { useAuth } from "../context/AuthContext";
 import { roleHomePath } from "../lib/roleHome";
+import {
+  MARKETING_CONTACT_URL,
+  MARKETING_HOME_URL,
+  MARKETING_PRICING_URL,
+  MARKETING_PRIVACY_URL,
+  MARKETING_REFUND_URL,
+  MARKETING_TERMS_URL,
+} from "../lib/links";
 
 const inputClass = "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
@@ -39,7 +47,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background px-4">
+    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background px-4 py-8">
       <Card className="w-full max-w-sm animate-scale-in">
         <div className="mb-5">
           <Logo />
@@ -87,6 +95,25 @@ export function LoginPage() {
           </p>
         </form>
       </Card>
+      {/* Launch, 2026-11-21 — Paddle's domain review scans this host and refused it as "restricted by
+          a login wall". The portal stays behind sign-in; this says what the product is and links to
+          the public pricing, policies and contact on the marketing site. */}
+      <footer className="w-full max-w-sm text-center text-xs text-muted">
+        <p>
+          The GarnishTable owner portal, where restaurants manage their online ordering storefront, menu,
+          orders, staff and subscription.{" "}
+          <a href={MARKETING_HOME_URL} className="font-medium text-primary hover:underline">
+            Learn more about GarnishTable
+          </a>
+        </p>
+        <nav aria-label="GarnishTable" className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
+          <a href={MARKETING_PRICING_URL} className="hover:underline">Pricing</a>
+          <a href={MARKETING_TERMS_URL} className="hover:underline">Terms</a>
+          <a href={MARKETING_PRIVACY_URL} className="hover:underline">Privacy</a>
+          <a href={MARKETING_REFUND_URL} className="hover:underline">Refund policy</a>
+          <a href={MARKETING_CONTACT_URL} className="hover:underline">Contact</a>
+        </nav>
+      </footer>
     </div>
   );
 }

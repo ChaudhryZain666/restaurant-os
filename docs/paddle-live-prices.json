@@ -1,0 +1,17 @@
+{
+  "owner_starter": {
+    "productId": "pro_01m7dy63zn30cc6tzq1x4htaej",
+    "monthly": "pri_01m7dyr56dg8wbxefavr0pbjx9",
+    "yearly": "pri_01m7dys80e2gvjdwmtn0kb62pf"
+  },
+  "owner_growth": {
+    "productId": "pro_01m7dyaarnn1331wp52r3sk1ek",
+    "monthly": "pri_01m7dytkrbschm8r4zxw19xgkd",
+    "yearly": "pri_01m7dyvbb0mjr7yw4jsvr427zm"
+  },
+  "agency_growth_v2": {
+    "productId": "pro_01m7dydqyqxkx50tcwsncrp285",
+    "monthly": "pri_01m7dywv1y53k1qw2c3eyg9wqk",
+    "yearly": "pri_01m7dyxhvph5vyvjtcrqct939y"
+  }
+}

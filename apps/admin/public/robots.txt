@@ -1,2 +1,6 @@
+# The portal itself is private and never indexed; only the entry and sign-in pages may be fetched,
+# so automated reviews (Paddle's checkout-domain review) can see what this host is.
 User-agent: *
+Allow: /$
+Allow: /login
 Disallow: /

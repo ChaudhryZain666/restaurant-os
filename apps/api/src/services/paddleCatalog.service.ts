@@ -140,6 +140,16 @@ export async function buildPaddleCatalog(options: {
     result.plans.push(planResult);
   }
 
+  // Launch, 2026-11-21 — Live already had a catalog made by hand in the dashboard (no custom_data), so
+  // matching by internalPlanCode found nothing and --apply would have created a SECOND catalog beside
+  // it. Any untagged active product means "map the existing ids with setPaddlePriceIds instead".
+  const untagged = products.filter((p) => !dataOf(p).internalPlanCode);
+  if (untagged.length && result.plans.some((p) => p.product.action === "create")) {
+    result.problems.push(
+      `Paddle already has ${untagged.length} active product(s) without custom_data.internalPlanCode (${untagged.map((p) => `${p.id} "${p.name ?? ""}"`).join(", ")}) — probably made in the dashboard. Creating products now would duplicate the catalog: write their ids into a mapping file and load it with setPaddlePriceIds instead.`
+    );
+  }
+
   const nothingToCreate = result.plans.every((p) => p.product.action === "reuse" && p.prices.every((pr) => pr.action === "reuse"));
   if (result.problems.length) return result;
   if (!options.apply && !nothingToCreate) return result;

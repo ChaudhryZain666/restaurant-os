@@ -21,7 +21,17 @@
     <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Shown until the app starts (and to scanners that don't run JavaScript, such as Paddle's
+         domain review): what this host is, with the public pricing, policies and contact. React
+         replaces it on mount. -->
+    <div id="root">
+      <main style="max-width:36rem;margin:4rem auto;padding:0 1rem;font-family:system-ui,sans-serif;line-height:1.5">
+        <h1>GarnishTable owner portal</h1>
+        <p>GarnishTable is online ordering software for restaurants: a branded ordering storefront, menu management, order tracking and staff tools, sold as a monthly or annual subscription. Restaurant owners sign in here to manage their restaurant and their GarnishTable subscription.</p>
+        <p><a href="/login">Sign in</a> &middot; <a href="https://garnishtable.com">garnishtable.com</a></p>
+        <p><a href="https://garnishtable.com/pricing">Pricing</a> &middot; <a href="https://garnishtable.com/terms">Terms</a> &middot; <a href="https://garnishtable.com/privacy">Privacy</a> &middot; <a href="https://garnishtable.com/refund-policy">Refund policy</a> &middot; <a href="https://garnishtable.com/contact">Contact</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

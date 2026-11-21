@@ -137,6 +137,16 @@ describe("buildPaddleCatalog", () => {
     expect(result.applied).toBe(false);
   });
 
+  it("refuses (creates nothing) when Live already has untagged products made in the dashboard", async () => {
+    const handMade: PaddleCatalogProduct = { id: "pro_01handmade", name: "Owner Starter", status: "active", tax_category: "saas", custom_data: null, prices: [] };
+    const { api, created } = fakeApi([handMade]);
+    const result = await buildPaddleCatalog({ plans: PLANS, planCodes: CODES, api, apply: true });
+    expect(result.applied).toBe(false);
+    expect(created.products).toHaveLength(0);
+    expect(created.prices).toHaveLength(0);
+    expect(result.problems.join(" ")).toMatch(/pro_01handmade.*setPaddlePriceIds/);
+  });
+
   it("requires plans to be named", async () => {
     const result = await buildPaddleCatalog({ plans: PLANS, planCodes: [], api: fakeApi().api, apply: true });
     expect(result.problems[0]).toMatch(/No plans named/);
