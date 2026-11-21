@@ -151,6 +151,9 @@ export interface ProviderBillingWebhookEvent {
    * checkout intent it was opened for and the customer the provider created. Only on the creation
    * event; the plan is resolved from providerPriceId, never from custom data.
    */
+  /** Launch, 2026-11-21 — units on the subscription's item. Paddle's checkout lets the buyer change
+   *  it unless the price caps it at 1; every plan here is one account, so >1 is flagged. */
+  quantity?: number;
   guestCheckout?: {
     intentId: string;
     providerCustomerId: string;

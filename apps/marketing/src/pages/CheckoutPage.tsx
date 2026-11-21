@@ -60,7 +60,12 @@ export function CheckoutPage() {
   });
   const [params] = useSearchParams();
   const { plans, error: plansError, retry } = usePublicPlans();
-  const ownerPlans = useMemo(() => (plans ?? []).filter((p) => p.type === "OWNER" && formatPlanPrice(p.pricing, "monthly")), [plans]);
+  const monthlyCents = (p: PublicPlan) => p.pricing.find((x) => x.interval === "monthly")?.amountCents ?? Number.MAX_SAFE_INTEGER;
+  // Cheapest first, like the pricing page.
+  const ownerPlans = useMemo(
+    () => (plans ?? []).filter((p) => p.type === "OWNER" && formatPlanPrice(p.pricing, "monthly")).sort((a, b) => monthlyCents(a) - monthlyCents(b)),
+    [plans]
+  );
 
   const [interval, setInterval] = useState<Interval>(params.get("interval") === "yearly" ? "yearly" : "monthly");
   const [selected, setSelected] = useState<string | null>(params.get("plan"));
@@ -76,6 +81,11 @@ export function CheckoutPage() {
   useEffect(() => {
     if (!selected && ownerPlans.length) setSelected(ownerPlans[0].code);
   }, [ownerPlans, selected]);
+
+  // The confirmation replaces the plan list; start it at the top (the page was scrolled to the plans).
+  useEffect(() => {
+    if (phase === "confirming" || phase === "paid" || phase === "slow") window.scrollTo({ top: 0 });
+  }, [phase]);
 
   const stopPolling = () => {
     if (pollRef.current) window.clearTimeout(pollRef.current);

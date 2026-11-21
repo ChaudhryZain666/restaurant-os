@@ -809,6 +809,16 @@ export async function linkProviderSubscription(link: ProviderSubscriptionLink): 
  */
 async function handleCheckoutCompletionEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
   const meta = event.checkoutMetadata!;
+  if (event.quantity && event.quantity > 1) {
+    // Launch, 2026-11-21 — same check as the pay-now checkout (guestCheckout.service.ts).
+    logger.error("checkout with quantity above 1 — the customer was charged for extra units; refund the difference", {
+      alert: "billing_quantity_above_one",
+      ownerType: meta.ownerType,
+      ownerId: meta.ownerId,
+      providerSubscriptionId: event.providerSubscriptionId,
+      quantity: event.quantity,
+    });
+  }
   const plan = await Plan.findOne({ code: meta.planCode, isActive: true });
   if (!plan) {
     logger.warn("checkout-completion webhook for unknown plan code", { provider: providerName, planCode: meta.planCode });

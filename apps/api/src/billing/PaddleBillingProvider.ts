@@ -432,6 +432,7 @@ export class PaddleBillingProvider implements BillingProvider {
             ? new Date(scheduledChange.effective_at)
             : null,
       providerPriceId: data?.items?.[0]?.price?.id,
+      quantity: typeof data?.items?.[0]?.quantity === "number" ? data.items[0].quantity : undefined,
       checkoutMetadata: isCheckoutCreation
         ? {
             ownerType: customData!.ownerType as "business" | "agency",
@@ -493,7 +494,7 @@ interface PaddleWebhookData {
   custom_data?: Record<string, unknown>;
   current_billing_period?: { starts_at?: string; ends_at?: string } | null;
   scheduled_change?: { action?: string; effective_at?: string } | null;
-  items?: Array<{ price?: { id?: string } }>;
+  items?: Array<{ price?: { id?: string }; quantity?: number }>;
   // transaction.* only
   origin?: string;
   currency_code?: string;

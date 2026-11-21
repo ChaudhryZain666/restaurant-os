@@ -175,6 +175,18 @@ describe("public pay-now checkout (Launch, 2026-11-21)", () => {
     expect(intent.providerSubscriptionId).toBe(e.subscriptionId);
   });
 
+  it("a purchase of more than one unit is still recorded as paid, and raised for a refund of the extra", async () => {
+    const started = await start();
+    const e = ids();
+    const payload = created(started.checkout.customData.checkoutIntentId, e);
+    (payload.data.items[0] as { quantity?: number }).quantity = 2;
+    const errors = jest.spyOn(console, "error");
+    expect((await webhook(payload)).status).toBe(200);
+    expect((await status(started.token)).body.data.status).toBe("paid");
+    expect(errors.mock.calls.some(([line]) => String(line).includes("billing_quantity_above_one"))).toBe(true);
+    errors.mockRestore();
+  });
+
   it("a payment for an unknown intent is recorded and not applied (no retry loop)", async () => {
     const e = ids();
     const res = await webhook(created(new mongoose.Types.ObjectId().toString(), e));

@@ -36,6 +36,7 @@ const CLAIM_LOCK_MS = 2 * 60 * 1000;
 const PADDLE_PRICE_ID = /^pri_[a-z0-9]+$/;
 
 export const BILLING_ALERT_GUEST_PURCHASE_UNLINKED = "billing_guest_purchase_unlinked";
+export const BILLING_ALERT_QUANTITY_ABOVE_ONE = "billing_quantity_above_one";
 
 function isOwnerSellable(plan: { isActive?: boolean | null; isPubliclyListed?: boolean | null; type?: string | null }): boolean {
   return Boolean(plan.isActive) && plan.isPubliclyListed !== false && plan.type === "OWNER";
@@ -193,6 +194,16 @@ export async function recordGuestCheckoutPaid(providerName: string, event: Provi
     // A concurrent delivery of the same event won the update; it sends the email.
     await finishWebhookEvent(providerName, event.eventId, "Duplicate: checkout intent already paid");
     return;
+  }
+  if (event.quantity && event.quantity > 1) {
+    // Paid for more than one unit of a one-account plan (Paddle's checkout allows changing the
+    // quantity unless the price caps it). Access is granted as usual; the extra needs a refund.
+    logger.error("pay-now purchase with quantity above 1 — the customer was charged for extra units; refund the difference", {
+      alert: BILLING_ALERT_QUANTITY_ABOVE_ONE,
+      intentId,
+      providerSubscriptionId: event.providerSubscriptionId,
+      quantity: event.quantity,
+    });
   }
   logger.info("pay-now checkout paid — waiting for the buyer to set up their account", {
     intentId,
