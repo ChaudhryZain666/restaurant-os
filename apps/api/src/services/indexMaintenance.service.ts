@@ -13,6 +13,7 @@ import "../models/Payment.js";
 import "../models/Refund.js";
 import "../models/PaymentWebhookEvent.js";
 import "../models/BillingWebhookEvent.js";
+import "../models/CheckoutIntent.js";
 import "../models/BillingHistoryEvent.js";
 import "../models/Subscription.js";
 import "../models/Plan.js";
