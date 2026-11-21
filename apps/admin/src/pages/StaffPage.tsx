@@ -1,27 +1,19 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { StaffMember, UserRole } from "@restaurant/types";
-import { Alert, Badge, Button, Card, EmptyState } from "@restaurant/ui";
+import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState } from "@restaurant/ui";
 import { apiClient } from "../lib/api";
 import { useActiveLocationId, useLocation as useActiveLocation } from "../context/LocationContext";
 import { useRestaurantSettings } from "../context/RestaurantSettingsContext";
 import { IconIdBadge } from "../components/icons";
 import { ScopeBadge } from "../components/ScopeBadge";
+import { STAFF_ROLE_DESCRIPTIONS, STAFF_ROLE_LABELS, roleChangeConfirmation } from "../lib/staffRoleChange";
 
 const inputClass = "rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground";
 
 const STAFF_ROLES: UserRole[] = ["restaurant_manager", "restaurant_staff", "kitchen_staff"];
 
-const ROLE_LABELS: Record<string, string> = {
-  restaurant_manager: "Manager",
-  restaurant_staff: "Staff",
-  kitchen_staff: "Kitchen staff",
-};
-
-const ROLE_DESCRIPTIONS: Record<string, string> = {
-  restaurant_manager: "Full operational access — menu, orders, analytics, tickets.",
-  restaurant_staff: "Can view the menu and manage orders.",
-  kitchen_staff: "Can view and update order status only.",
-};
+const ROLE_LABELS = STAFF_ROLE_LABELS;
+const ROLE_DESCRIPTIONS = STAFF_ROLE_DESCRIPTIONS;
 
 interface InviteDraft {
   name: string;
@@ -44,6 +36,9 @@ export function StaffPage() {
   const [inviting, setInviting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // NEW-3 — a role change waits here for confirmation; the dropdown keeps showing the saved role.
+  const [pendingRole, setPendingRole] = useState<{ member: StaffMember; role: UserRole } | null>(null);
+  const savingRole = useRef(false);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
   const { restaurant: restaurantSettings, loading: settingsLoading } = useRestaurantSettings();
 
@@ -98,16 +93,27 @@ export function StaffPage() {
     }
   }
 
-  async function changeRole(member: StaffMember, role: UserRole) {
+  function requestRoleChange(member: StaffMember, role: UserRole) {
+    if (roleChangeConfirmation(member.name, member.role, role)) setPendingRole({ member, role });
+  }
+
+  async function confirmRoleChange() {
+    // A second click while the first save is in flight does nothing.
+    if (!pendingRole || savingRole.current) return;
+    savingRole.current = true;
+    const { member, role } = pendingRole;
     setError(null);
     setBusyId(member.id);
     try {
       await apiClient.request(`/restaurants/${restaurantId}/staff/${member.id}`, { method: "PATCH", body: { role } });
       await reload();
+      setPendingRole(null);
     } catch (err) {
       setError((err as Error).message);
+      setPendingRole(null);
     } finally {
       setBusyId(null);
+      savingRole.current = false;
     }
   }
 
@@ -163,6 +169,8 @@ export function StaffPage() {
       </div>
     );
   }
+
+  const confirmation = pendingRole ? roleChangeConfirmation(pendingRole.member.name, pendingRole.member.role, pendingRole.role) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -235,6 +243,9 @@ export function StaffPage() {
               <select
                 value={draft.role}
                 onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
+                // Its own accessible name — otherwise the wrapping label's name also includes every
+                // option's text ("RoleManagerStaff…").
+                aria-label="Role"
                 className={inputClass}
               >
                 {STAFF_ROLES.map((r) => (
@@ -284,7 +295,8 @@ export function StaffPage() {
                 <select
                   value={member.role}
                   disabled={busyId === member.id}
-                  onChange={(e) => changeRole(member, e.target.value as UserRole)}
+                  onChange={(e) => requestRoleChange(member, e.target.value as UserRole)}
+                  aria-label={`Role for ${member.name}`}
                   className={inputClass}
                 >
                   {STAFF_ROLES.map((r) => (
@@ -335,6 +347,21 @@ export function StaffPage() {
           </ul>
         </Card>
       )}
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={confirmation?.title ?? ""}
+        description={confirmation?.effect}
+        confirmLabel="Change role"
+        busy={Boolean(pendingRole && busyId === pendingRole.member.id)}
+        onConfirm={confirmRoleChange}
+        onCancel={() => setPendingRole(null)}
+      >
+        {confirmation && (
+          <p className="text-sm text-foreground">
+            Current role: <strong>{confirmation.from}</strong> → New role: <strong>{confirmation.to}</strong>
+          </p>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

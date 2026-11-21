@@ -5,6 +5,10 @@ import { connectDB } from "../config/db.js";
 import { User } from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { generateSecureToken } from "../services/secureToken.service.js";
+import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
+import { env } from "../config/env.js";
+import { redis } from "../config/redis.js";
 import { issueRefreshToken, isRefreshTokenActive, verifyRefreshToken } from "../services/token.service.js";
 import { closeTestConnections, createTestUser, tokenFor } from "../test-utils/fixtures.js";
 
@@ -25,6 +29,129 @@ function track(id: string) {
   userIds.push(id);
   return id;
 }
+
+/** The refresh token a response set, from its Set-Cookie header. */
+function cookieToken(res: request.Response): string {
+  const header = ([] as string[]).concat(res.headers["set-cookie"] ?? []).find((c) => c.startsWith("refreshToken="));
+  if (!header) throw new Error("no refresh cookie set");
+  return header.split(";")[0].slice("refreshToken=".length);
+}
+const refreshWith = (token: string) => request(app).post("/api/v1/auth/refresh").set("Cookie", `refreshToken=${token}`);
+
+describe("session families — NEW-1 (an interrupted refresh must not sign the user out everywhere)", () => {
+  async function signedInUser() {
+    const user = await createTestUser("customer");
+    track(user.id);
+    // Two independent sign-ins: "this browser" and "another device".
+    const thisBrowser = await issueRefreshToken(user.id);
+    const otherDevice = await issueRefreshToken(user.id);
+    return { user, thisBrowser, otherDevice };
+  }
+
+  it("an interrupted refresh (rotated token presented again) is refused, revokes only its own session, and leaves other devices signed in", async () => {
+    const { user, thisBrowser, otherDevice } = await signedInUser();
+    const rotated = await refreshWith(thisBrowser); // the response the interrupted page never stored
+    expect(rotated.status).toBe(200);
+    const successor = cookieToken(rotated);
+
+    const replay = await refreshWith(thisBrowser);
+    expect(replay.status).toBe(401);
+    // The replayed token's whole chain is revoked, including the successor an attacker could hold…
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(successor).jti)).toBe(false);
+    expect((await refreshWith(successor)).status).toBe(401);
+    // …but the other device's sign-in was never part of that chain.
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(true);
+    expect((await refreshWith(otherDevice)).status).toBe(200);
+  });
+
+  it("rotation keeps the session family; a fresh sign-in starts a new one", async () => {
+    const { thisBrowser, otherDevice } = await signedInUser();
+    const fam = verifyRefreshToken(thisBrowser).fam;
+    expect(fam).toBeTruthy();
+    expect(verifyRefreshToken(otherDevice).fam).not.toBe(fam);
+    const next = cookieToken(await refreshWith(thisBrowser));
+    expect(verifyRefreshToken(next).fam).toBe(fam);
+  });
+
+  it("concurrent refreshes with the same token: exactly one succeeds, and other devices are unaffected", async () => {
+    const { user, thisBrowser, otherDevice } = await signedInUser();
+    // Five at once: the token is consumed atomically, so it can never fork into several sessions.
+    const results = await Promise.all(Array.from({ length: 5 }, () => refreshWith(thisBrowser)));
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 401, 401, 401, 401]);
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(true);
+  });
+
+  it("a genuinely reused token is still refused every time", async () => {
+    const { thisBrowser } = await signedInUser();
+    expect((await refreshWith(thisBrowser)).status).toBe(200);
+    expect((await refreshWith(thisBrowser)).status).toBe(401);
+    expect((await refreshWith(thisBrowser)).status).toBe(401);
+  });
+
+  it("an expired refresh token is refused without revoking anything else", async () => {
+    const { user, otherDevice } = await signedInUser();
+    const expired = jwt.sign({ sub: user.id, jti: randomUUID(), fam: randomUUID(), exp: Math.floor(Date.now() / 1000) - 10 }, env.JWT_REFRESH_SECRET);
+    expect((await refreshWith(expired)).status).toBe(401);
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(true);
+  });
+
+  it("logout ends this session (its whole family) and only this session", async () => {
+    const { user, thisBrowser, otherDevice } = await signedInUser();
+    const next = cookieToken(await refreshWith(thisBrowser));
+    const out = await request(app).post("/api/v1/auth/logout").set("Cookie", `refreshToken=${next}`);
+    expect(out.status).toBe(204);
+    expect((await refreshWith(next)).status).toBe(401);
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(true);
+  });
+
+  it("a token from before session families keeps the old guarantee: reuse revokes every session", async () => {
+    const { user, otherDevice } = await signedInUser();
+    const jti = randomUUID();
+    const legacy = jwt.sign({ sub: user.id, jti }, env.JWT_REFRESH_SECRET, { expiresIn: 3600 });
+    await redis.set(`refresh:${user.id}:${jti}`, "1", "EX", 3600);
+    expect((await refreshWith(legacy)).status).toBe(200);
+    expect((await refreshWith(legacy)).status).toBe(401);
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(false);
+  });
+
+  it("a password change still revokes every session", async () => {
+    const { user, otherDevice } = await signedInUser();
+    const res = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${tokenFor(user)}`)
+      .send({ currentPassword: "Password123!", newPassword: "NewPassword456!" });
+    expect(res.status).toBe(200);
+    expect(await isRefreshTokenActive(user.id, verifyRefreshToken(otherDevice).jti)).toBe(false);
+  });
+});
+
+describe("POST /auth/refresh — signed-out visitors (QA-012)", () => {
+  it("no refresh cookie: 204, no tokens, no cookie set", async () => {
+    const res = await request(app).post("/api/v1/auth/refresh");
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("a malformed refresh cookie is still refused with 401", async () => {
+    const res = await request(app).post("/api/v1/auth/refresh").set("Cookie", "refreshToken=not-a-token");
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+  });
+
+  it("a valid refresh cookie still rotates and returns an access token", async () => {
+    const user = await createTestUser("customer");
+    track(user.id);
+    const refreshToken = await issueRefreshToken(user.id);
+    const res = await request(app).post("/api/v1/auth/refresh").set("Cookie", `refreshToken=${refreshToken}`);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.data.accessToken).toBe("string");
+    // Reused (already rotated) token: refused, reuse detection unchanged.
+    const reused = await request(app).post("/api/v1/auth/refresh").set("Cookie", `refreshToken=${refreshToken}`);
+    expect(reused.status).toBe(401);
+  });
+});
 
 describe("POST /auth/register — concurrent-duplicate-email race (Phase 49)", () => {
   it("returns a clean 409, not an unhandled 500, when User.create() loses a race to an already-committed duplicate email", async () => {

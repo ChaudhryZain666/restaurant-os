@@ -1,0 +1,167 @@
+{
+  "orderIsolation": {
+    "orderFound": true,
+    "ownCustomer": 200,
+    "otherCustomer": 403,
+    "anonymous": 401
+  },
+  "orderIsolationUi": "Forbidden",
+  "integrations": [
+    {
+      "id": "INTEG-01",
+      "label": "Marketplace integrations (Uber Eats, DoorDash, foodpanda)",
+      "result": "PASS",
+      "observed": {
+        "text": [
+          "Receive orders directly from third-party marketplaces into this same order system — the same kitchen, the same POS, the same reporting as every other order.",
+          "Uber Eats",
+          "Not connected",
+          "Connect Uber Eats",
+          "DoorDash",
+          "Not connected",
+          "Connect",
+          "foodpanda",
+          "Not connected",
+          "Connect"
+        ],
+        "buttons": [
+          "Connect Uber Eats",
+          "Connect"
+        ]
+      },
+      "url": "http://localhost:5174/marketplace",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-01.png"
+    },
+    {
+      "id": "INTEG-02",
+      "label": "Delivery & courier providers (Uber Direct)",
+      "result": "PASS",
+      "observed": {
+        "text": [
+          "Courier / dispatch",
+          "Who actually picks up and delivers a placed order — separate from whether delivery is offered at all and what it costs the customer (both set above). \"Your own delivery\" needs no setup: your staff dispatch and track every delivery by hand from the order's detail view. Connecting Uber Direct hands dispatch to a real courier automatically instead.",
+          "Uber Direct",
+          "Requires your own Uber Direct merchant account (connect below).",
+          "Connect Uber Direct",
+          "Optional: charge a different fee depending on how far the delivery is, instead of one flat rate for the whole radius. The tightest-fitting bracket applies — e.g. a 3km order matches the first tier that covers it. Leave empty to keep the flat fee above for every distance.",
+          "Coming soon"
+        ],
+        "buttons": [
+          "Save delivery settings",
+          "+",
+          "−",
+          "Connect Uber Direct",
+          "Add tier"
+        ]
+      },
+      "url": "http://localhost:5174/delivery",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-02.png"
+    },
+    {
+      "id": "INTEG-03",
+      "label": "Settings — Payment tab (Stripe)",
+      "result": "PASS",
+      "observed": {
+        "text": [
+          "Payment",
+          "Domain",
+          "Payment methods",
+          "Online payment",
+          "Turning on online payment requires a connected payment account — see Online Payments below. Card/wallet details never touch this platform's servers either way.",
+          "Online Payments",
+          "Accept online payments from your customers. Payments go directly to your connected account — we don't take a commission on your direct restaurant orders.",
+          "Connect payment account",
+          "The fastest, most secure option. You'll be taken to Stripe to set up your account — we never see or store your credentials.",
+          "Connect payment account",
+          "Coming soon"
+        ],
+        "buttons": [
+          "General",
+          "Location",
+          "Ordering",
+          "Payment",
+          "Business Hours",
+          "Storefront",
+          "Domain",
+          "Connect payment account",
+          "Use a Safepay account instead",
+          "Save settings"
+        ]
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-03.png"
+    },
+    {
+      "id": "INTEG-04",
+      "label": "Settings — Domain tab",
+      "result": "PASS",
+      "observed": {
+        "text": [
+          "Payment",
+          "Domain",
+          "Custom domains don't serve customers yet. You can add and verify your domain now — once custom-domain hosting is switched on, this page will show the DNS record that sends customers to your storefront. Until then, customers order through your GarnishTable storefront link.",
+          "Add a custom domain",
+          "Domain",
+          "Add domain"
+        ],
+        "buttons": [
+          "General",
+          "Location",
+          "Ordering",
+          "Payment",
+          "Business Hours",
+          "Storefront",
+          "Domain",
+          "Add domain",
+          "Save settings"
+        ]
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-04.png"
+    },
+    {
+      "id": "INTEG-05",
+      "label": "Settings — Ordering tab",
+      "result": "PASS",
+      "observed": {
+        "text": [
+          "Payment",
+          "Domain",
+          "Enable card-terminal payments for this location"
+        ],
+        "buttons": [
+          "General",
+          "Location",
+          "Ordering",
+          "Payment",
+          "Business Hours",
+          "Storefront",
+          "Domain",
+          "Save settings"
+        ]
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-05.png"
+    },
+    {
+      "id": "INTEG-06",
+      "label": "Billing (subscription checkout)",
+      "result": "PASS",
+      "observed": {
+        "text": [],
+        "buttons": [
+          "Start subscription",
+          "Subscribe now"
+        ]
+      },
+      "url": "http://localhost:5174/billing",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-integrations\\INTEG-06.png"
+    }
+  ],
+  "consoleErrors": [
+    "http://localhost:5174/login :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "http://localhost:5174/marketplace :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/delivery :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/settings :: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+  ]
+}

@@ -47,6 +47,7 @@ import { billingWebhookRouter } from "./billingWebhook.routes.js";
 import { billingMockCheckoutRouter } from "./billingMockCheckout.routes.js";
 import { planRouter } from "./plan.routes.js";
 import { publicPlanRouter } from "./publicPlan.routes.js";
+import { guestCheckoutRouter } from "./guestCheckout.routes.js";
 import { contactRouter } from "./contact.routes.js";
 import { agencyRouter } from "./agency.routes.js";
 import { agencyMembershipRouter, agencyAcceptInviteRouter } from "./agencyMembership.routes.js";
@@ -77,6 +78,7 @@ if (env.BILLING_PROVIDER === "mock" && mockDriversAllowed(env.NODE_ENV)) {
 }
 apiRouter.use("/plans", planRouter);
 apiRouter.use("/public/plans", publicPlanRouter);
+apiRouter.use("/public/checkout", guestCheckoutRouter);
 apiRouter.use("/public/contact", contactRouter);
 // Phase 25 — agencies/accept-invite mounted BEFORE /agencies itself so the literal "accept-invite"
 // segment can never be swallowed by /agencies/:agencyId's param matching.

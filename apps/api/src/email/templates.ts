@@ -380,3 +380,19 @@ export function contactFormNotificationEmail(to: string, fields: ContactFormInpu
     text: `${textRows}${fields.message ? `\n\nMessage:\n${fields.message}` : ""}`,
   };
 }
+
+/** Launch, 2026-11-21 — sent once the provider's verified webhook confirms a pay-now purchase made
+ *  on the public checkout page, so the buyer can set up their account from any device. */
+export function purchaseSetupEmail(to: string, setupUrl: string, planName: string): EmailMessage {
+  return {
+    to,
+    subject: "Your GarnishTable payment is confirmed — set up your account",
+    html: layout(
+      "Thanks for subscribing to GarnishTable",
+      `<p>Your payment for <strong>${escapeHtml(planName)}</strong> is confirmed. Set up your account to start building your restaurant's online ordering.</p>
+       <p><a href="${escapeHtml(setupUrl)}" style="color:#4e1d25;">Set up my account</a></p>
+       <p style="color:#78716c; font-size: 13px;">This link can be used once. Your receipt comes separately from Paddle, our payment provider. If you didn't make this purchase, reply to this email.</p>`
+    ),
+    text: `Your payment for ${planName} is confirmed. Set up your GarnishTable account: ${setupUrl}\n\nThis link can be used once. Your receipt comes separately from Paddle, our payment provider.`,
+  };
+}

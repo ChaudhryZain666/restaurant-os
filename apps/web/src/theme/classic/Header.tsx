@@ -13,7 +13,8 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
   ].join(" ");
 }
 
-export function ClassicHeader({ restaurant, restaurantLoading, menuHref, cartHref, links, itemCount, cartPopping, userName, onLogout }: HeaderProps) {
+export function ClassicHeader({ restaurant, restaurantLoading, menuHref, cartHref, links, itemCount, cartPopping, userName, onLogout, brandName }: HeaderProps) {
+  const name = restaurant?.name ?? brandName ?? "Restaurant";
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -24,13 +25,13 @@ export function ClassicHeader({ restaurant, restaurantLoading, menuHref, cartHre
             <img src={restaurant.logo} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" loading="lazy" />
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary font-heading text-sm font-bold text-primary-foreground">
-              {restaurant?.name?.[0]?.toUpperCase() ?? "R"}
+              {name[0]?.toUpperCase()}
             </span>
           )}
           {restaurantLoading ? (
             <Skeleton className="h-5 w-28" />
           ) : (
-            <span className="truncate font-heading text-lg font-semibold text-foreground">{restaurant?.name ?? "Restaurant"}</span>
+            <span className="truncate font-heading text-lg font-semibold text-foreground">{name}</span>
           )}
         </Link>
 

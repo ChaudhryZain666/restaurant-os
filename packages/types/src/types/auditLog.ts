@@ -88,6 +88,9 @@ export const AUDIT_ACTIONS = [
   "marketplace_integration.connected",
   "marketplace_integration.disconnected",
   "marketplace_integration.menu_sync_triggered",
+  // NEW-3 — a staff member's role changed. Metadata: {previousRole, newRole}; targetType "user".
+  // Recorded only when the role actually changes (a repeated submission records nothing).
+  "staff.role_changed",
 ] as const;
 
 export const AUDIT_TARGET_TYPES = [

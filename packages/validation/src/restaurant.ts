@@ -133,7 +133,13 @@ export type RestaurantSettingsInput = z.infer<typeof restaurantSettingsSchema>;
 // stripped by zod, so it can never reach the update document (see menu.ts's updateMenuItemSchema
 // for the same pattern, applied there against the Phase 0 audit's tenant-reassignment finding).
 export const updateRestaurantSchema = z.object({
-  name: z.string().min(2).max(120).optional(),
+  // QA-005 — trimmed so a whitespace-only name is refused, with a message an owner can act on.
+  name: z
+    .string()
+    .trim()
+    .min(2, "Restaurant name must be at least 2 characters")
+    .max(120, "Restaurant name must be 120 characters or fewer")
+    .optional(),
   description: z.string().max(2000).optional(),
   // Same fix as menu.ts's imageUrl (Phase 54 — reliability audit): accepts an absolute URL OR a
   // same-origin relative path (e.g. "/restaurant-images/demo-restaurant-logo.svg", the convention

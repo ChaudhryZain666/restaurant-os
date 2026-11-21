@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { test, expect } from "@playwright/test";
+import { registerFreshCustomer } from "./helpers/freshCustomer";
 
 /**
  * End-to-end proof of the full ordering loop through Phase 3:
@@ -55,6 +56,9 @@ test.afterAll(async () => {
 test("category -> menu item -> customer order -> restaurant status lifecycle -> tracking -> reorder", async ({
   browser,
 }) => {
+  // Two browsers through a whole order lifecycle (~25 s): its own limit, like the other multi-actor
+  // journeys, instead of the 30 s global default it sat right at the edge of.
+  test.setTimeout(60_000);
   const itemName = `E2E Burger ${Date.now()}`;
   const categoryName = `E2E Category ${Date.now()}`;
 
@@ -114,20 +118,8 @@ test("category -> menu item -> customer order -> restaurant status lifecycle -> 
     await ownerPage.getByRole("button", { name: "Back to menu" }).click();
 
     // --- Customer places an order for that item via the real storefront UI ---
-    await customerPage.goto("http://localhost:5173/login");
-    await customerPage.getByLabel("Email").fill("customer1@test.local");
-    await customerPage.getByLabel("Password").fill("Customer123!");
-    const loginRes = customerPage.waitForResponse((r) => r.url().includes("/api/v1/auth/login"));
-    await customerPage.getByRole("button", { name: "Log in" }).click();
-    const loginStatus = (await loginRes).status();
-    if (loginStatus !== 200) {
-      // First run on a fresh DB — this account doesn't exist yet, register it instead.
-      await customerPage.goto("http://localhost:5173/register");
-      await customerPage.getByLabel("Name").fill("E2E Full Flow Customer");
-      await customerPage.getByLabel("Email").fill("customer1@test.local");
-      await customerPage.getByLabel("Password").fill("Customer123!");
-      await customerPage.getByRole("button", { name: "Create account" }).click();
-    }
+    // A customer of its own (helpers/freshCustomer.ts) — no shared account, no cancelled sign-up.
+    await registerFreshCustomer(customerPage, "E2E Full Flow Customer");
     // "/" legacy-redirects to the default restaurant's canonical /r/:slug URL (Phase 8).
     await expect(customerPage).toHaveURL(/\/r\/demo-restaurant$/);
 

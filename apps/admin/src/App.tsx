@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect, type ReactElement } from "react";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { LoginPage } from "./pages/LoginPage";
@@ -57,6 +57,7 @@ import { SystemConfigPage } from "./pages/SystemConfigPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { AgencySignupWizardPage } from "./pages/AgencySignupWizardPage";
 import { OwnerSignupWizardPage } from "./pages/OwnerSignupWizardPage";
+import { ClaimPurchasePage } from "./pages/ClaimPurchasePage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { AcceptAgencyInvitePage } from "./pages/AcceptAgencyInvitePage";
 import { AgencyDashboardPage } from "./pages/AgencyDashboardPage";
@@ -72,6 +73,9 @@ import { MockCheckoutPage } from "./pages/MockCheckoutPage";
 import { ForcePasswordChangePage } from "./pages/ForcePasswordChangePage";
 import { portalHomeForOrigin, type PortalOrigins } from "./lib/portalHosts";
 import { useCan } from "./hooks/useCan";
+import { useAuth } from "./context/AuthContext";
+import { useLocation as useActiveLocation } from "./context/LocationContext";
+import { restaurantSupportRedirect } from "./lib/roleHome";
 
 const AGENCY_ROLES = ["agency_member", "customer"] as const;
 
@@ -112,6 +116,16 @@ const PORTAL_ORIGINS: PortalOrigins = {
  *  users already land on /agency and /platform by role (roleHomePath via RequireAuth), so their
  *  hostnames need nothing extra. Keyed on the real permission, so a user the POS would turn away
  *  (e.g. kitchen staff) is never bounced between "/" and "/pos". */
+/** QA-006 — sends a platform admin with no location open from the restaurant Support pages to the
+ *  platform support queue (lib/roleHome.ts restaurantSupportRedirect). */
+function RestaurantSupportRoute({ children }: { children: ReactElement }) {
+  const { user } = useAuth();
+  const { activeLocationId } = useActiveLocation();
+  const { id } = useParams();
+  const redirect = restaurantSupportRedirect(user?.role, activeLocationId, id);
+  return redirect ? <Navigate to={redirect} replace /> : children;
+}
+
 function IndexRoute() {
   const canOperatePos = useCan("restaurant.pos.operate");
   if (canOperatePos && portalHomeForOrigin(window.location.origin, PORTAL_ORIGINS) === "/pos") {
@@ -141,6 +155,8 @@ export function App() {
           lands here (see apps/marketing's StartTrialPage + lib/links.ts ADMIN_SIGNUP_URL). */}
         <Route path="/signup" element={<OwnerSignupWizardPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        {/* Launch, 2026-11-21 — account set-up after paying on the public pay-now checkout. */}
+        <Route path="/claim" element={<ClaimPurchasePage />} />
         <Route path="/accept-agency-invite" element={<AcceptAgencyInvitePage />} />
         {/* Phase 27 — public, keyed by the opaque checkout token alone; only ever reachable when
           BILLING_PROVIDER=mock (the API returns this path only from the mock provider). */}
@@ -251,7 +267,7 @@ export function App() {
           <Route
             path="/customers"
             element={
-              <RequireAuth permission="restaurant.orders.read">
+              <RequireAuth permission="restaurant.customers.read">
                 <CustomersPage />
               </RequireAuth>
             }
@@ -340,7 +356,9 @@ export function App() {
             path="/support"
             element={
               <RequireAuth permission="support.tickets.read">
-                <RestaurantSupportPage />
+                <RestaurantSupportRoute>
+                  <RestaurantSupportPage />
+                </RestaurantSupportRoute>
               </RequireAuth>
             }
           />
@@ -348,7 +366,9 @@ export function App() {
             path="/support/:id"
             element={
               <RequireAuth permission="support.tickets.read">
-                <RestaurantTicketDetailPage />
+                <RestaurantSupportRoute>
+                  <RestaurantTicketDetailPage />
+                </RestaurantSupportRoute>
               </RequireAuth>
             }
           />
@@ -553,10 +573,13 @@ export function App() {
               </RequireAuth>
             }
           />
+          {/* NEW-2 — role-gated like the API (supportAdmin.routes.ts: requireRole("platform_admin")).
+              Gating on support.tickets.read let restaurant owners/managers open the platform queue,
+              which then failed with 403s; their own tickets live at /support. */}
           <Route
             path="/platform/support"
             element={
-              <RequireAuth permission="support.tickets.read">
+              <RequireAuth roles={["platform_admin"]}>
                 <SupportDashboardPage />
               </RequireAuth>
             }
@@ -564,7 +587,7 @@ export function App() {
           <Route
             path="/platform/support/tickets/:id"
             element={
-              <RequireAuth permission="support.tickets.read">
+              <RequireAuth roles={["platform_admin"]}>
                 <SupportTicketDetailPage />
               </RequireAuth>
             }

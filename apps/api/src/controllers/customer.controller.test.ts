@@ -139,3 +139,45 @@ describe("GET /restaurants/:id/customers/:customerId/orders", () => {
     expect(res.body.data.hasNextPage).toBe(true);
   });
 });
+
+// Kitchen review — the customer directory needs restaurant.customers.read; kitchen staff keep
+// what they need to prepare orders (the orders themselves, with their customer details).
+describe("customer directory access by role", () => {
+  async function tokenAs(role: "restaurant_manager" | "restaurant_staff" | "kitchen_staff") {
+    const u = await createTestUser(role, restaurantA._id);
+    return tokenFor(u);
+  }
+  const list = (token: string) => request(app).get(`/api/v1/restaurants/${restaurantA.id}/customers`).set("Authorization", `Bearer ${token}`);
+  const history = (token: string) =>
+    request(app).get(`/api/v1/restaurants/${restaurantA.id}/customers/${alice.id}/orders`).set("Authorization", `Bearer ${token}`);
+
+  it("owners, managers and front-of-house staff (POS customer picker) can use the directory", async () => {
+    for (const token of [ownerAToken, await tokenAs("restaurant_manager"), await tokenAs("restaurant_staff")]) {
+      expect((await list(token)).status).toBe(200);
+      expect((await history(token)).status).toBe(200);
+    }
+  });
+
+  it("kitchen staff can't list customers or open a customer's order history", async () => {
+    const kitchen = await tokenAs("kitchen_staff");
+    expect((await list(kitchen)).status).toBe(403);
+    expect((await history(kitchen)).status).toBe(403);
+  });
+
+  it("kitchen staff still see the orders they prepare, including the customer on each order", async () => {
+    const kitchen = await tokenAs("kitchen_staff");
+    const res = await request(app).get(`/api/v1/restaurants/${restaurantA.id}/orders?page=1&limit=50`).set("Authorization", `Bearer ${kitchen}`);
+    expect(res.status).toBe(200);
+    const items = res.body.data.items ?? res.body.data.orders;
+    expect(items.length).toBeGreaterThan(0);
+    const one = await request(app).get(`/api/v1/orders/${items[0].id}`).set("Authorization", `Bearer ${kitchen}`);
+    expect(one.status).toBe(200);
+    expect(one.body.data.order.id).toBe(items[0].id);
+  });
+
+  it("another restaurant's kitchen and owner stay locked out", async () => {
+    const otherKitchen = tokenFor(await createTestUser("kitchen_staff", restaurantB._id));
+    expect((await list(otherKitchen)).status).toBe(403);
+    expect((await list(ownerBToken)).status).toBe(403);
+  });
+});

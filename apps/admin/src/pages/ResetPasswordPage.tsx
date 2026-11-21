@@ -33,11 +33,14 @@ export function ResetPasswordPage() {
       <div className="w-full max-w-sm">
         {!token ? (
           <Alert tone="danger" role="alert">
-            This reset link is missing its token. Request a new one from the{" "}
-            <Link to="/forgot-password" className="font-medium underline">
-              forgot password
-            </Link>{" "}
-            page.
+            <p>
+              {/* QA-014 — one paragraph: Alert is a flex row, which split the sentence around the link. */}
+              This reset link is missing its token. Request a new one from the{" "}
+              <Link to="/forgot-password" className="font-medium underline">
+                forgot password page
+              </Link>
+              .
+            </p>
           </Alert>
         ) : (
           <Card className="animate-scale-in flex flex-col gap-4">

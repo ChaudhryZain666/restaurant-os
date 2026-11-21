@@ -1,0 +1,285 @@
+{
+  "steps": [
+    {
+      "id": "OWNER-01",
+      "label": "Wrong password is refused with a clear message",
+      "result": "PASS",
+      "observed": {
+        "message": "Invalid email or password"
+      },
+      "url": "http://localhost:5174/login",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-01.png"
+    },
+    {
+      "id": "OWNER-02",
+      "label": "Owner signs in and lands on the dashboard",
+      "result": "PASS",
+      "observed": {
+        "landing": "/",
+        "heading": "Good morning, Wildwood Kitchen."
+      },
+      "url": "http://localhost:5174/",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-02.png"
+    },
+    {
+      "id": "OWNER-03",
+      "label": "Menu: an empty category name can't be added",
+      "result": "PASS",
+      "observed": "click with empty name created nothing",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-03.png"
+    },
+    {
+      "id": "OWNER-04",
+      "label": "Menu: add a category",
+      "result": "PASS",
+      "observed": "created",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-04.png"
+    },
+    {
+      "id": "OWNER-05",
+      "label": "Menu: new item rejects an empty name and a negative price",
+      "result": "FAIL",
+      "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('button', { name: 'Create item & continue' })\u001b[22m | \u001b[2m    - locator resolved to <button disabled class=\"inline-flex items-center justify-center gap-2 rounded-pill text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-fast ease-premium active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100 bg-primary text-primary-foreground shadow-sm hover",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - searchbox \"Search menu items\"\n  - paragraph: Filters\n  - group \"Filter by availability\":\n    - button \"All\" [pressed]\n    - button \"Available\"\n    - button \"Unavailable\"\n  - checkbox \"Has add-ons\"\n  - text: Has add-ons\n  - checkbox \"No photo\"\n  - text: No photo\n  - paragraph: Categories\n  - button \"All items 28\"\n  - button \"Wood-Fired Pizza 5\"\n  - button \"Smash Burgers 4\"\n  - button \"Salads 3\"\n  - button \"Starters 4\"\n  - button \"Desserts 3\"\n  - button \"From the Grill 4\"\n  - button \"Drinks 5\"\n  - button \"QA Category 1794099430070 0\"\n  - heading \"Menu\" [level=1]\n  - paragraph: Build your menu, organize your dishes, and control what customers see.\n  - paragraph: 28 items · 8 categories · applies to every location\n  - paragraph: 3 items don't have photos yet.\n  - button \"Live preview\"\n  - link \"View live storefront ↗\":\n    -",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-05.png"
+    },
+    {
+      "id": "OWNER-06",
+      "label": "Menu: create a valid item",
+      "result": "FAIL",
+      "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('button', { name: 'Create item & continue' })\u001b[22m | \u001b[2m    - locator resolved to <button disabled class=\"inline-flex items-center justify-center gap-2 rounded-pill text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-fast ease-premium active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100 bg-primary text-primary-foreground shadow-sm hover",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - searchbox \"Search menu items\"\n  - paragraph: Filters\n  - group \"Filter by availability\":\n    - button \"All\" [pressed]\n    - button \"Available\"\n    - button \"Unavailable\"\n  - checkbox \"Has add-ons\"\n  - text: Has add-ons\n  - checkbox \"No photo\"\n  - text: No photo\n  - paragraph: Categories\n  - button \"All items 28\"\n  - button \"Wood-Fired Pizza 5\"\n  - button \"Smash Burgers 4\"\n  - button \"Salads 3\"\n  - button \"Starters 4\"\n  - button \"Desserts 3\"\n  - button \"From the Grill 4\"\n  - button \"Drinks 5\"\n  - button \"QA Category 1794099430070 0\"\n  - heading \"Menu\" [level=1]\n  - paragraph: Build your menu, organize your dishes, and control what customers see.\n  - paragraph: 28 items · 8 categories · applies to every location\n  - paragraph: 3 items don't have photos yet.\n  - button \"Live preview\"\n  - link \"View live storefront ↗\":\n    -",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-06.png"
+    },
+    {
+      "id": "OWNER-07",
+      "label": "Menu: mark the item unavailable and the storefront reflects it",
+      "result": "FAIL",
+      "error": "locator.ariaSnapshot: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for locator('li, tr, article').filter({ hasText: 'QA Item 1794099430070' }).first()\u001b[22m | ",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - searchbox \"Search menu items\"\n  - paragraph: Filters\n  - group \"Filter by availability\":\n    - button \"All\" [pressed]\n    - button \"Available\"\n    - button \"Unavailable\"\n  - checkbox \"Has add-ons\"\n  - text: Has add-ons\n  - checkbox \"No photo\"\n  - text: No photo\n  - paragraph: Categories\n  - button \"All items 28\"\n  - button \"Wood-Fired Pizza 5\"\n  - button \"Smash Burgers 4\"\n  - button \"Salads 3\"\n  - button \"Starters 4\"\n  - button \"Desserts 3\"\n  - button \"From the Grill 4\"\n  - button \"Drinks 5\"\n  - button \"QA Category 1794099430070 0\"\n  - heading \"Menu\" [level=1]\n  - paragraph: Build your menu, organize your dishes, and control what customers see.\n  - paragraph: 28 items · 8 categories · applies to every location\n  - paragraph: 3 items don't have photos yet.\n  - button \"Live preview\"\n  - link \"View live storefront ↗\":\n    -",
+      "url": "http://localhost:5174/menu",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-07.png"
+    },
+    {
+      "id": "OWNER-08",
+      "label": "Settings: blank restaurant name can't be saved",
+      "result": "PASS",
+      "observed": {
+        "message": "Validation failed"
+      },
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-08.png"
+    },
+    {
+      "id": "OWNER-09",
+      "label": "Settings: business hours save and persist after reload",
+      "result": "PASS",
+      "observed": "saved; page reloads cleanly",
+      "url": "http://localhost:5174/settings",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-09.png"
+    },
+    {
+      "id": "OWNER-10",
+      "label": "Orders: list shows the customer's order and its detail opens",
+      "result": "FAIL",
+      "error": "no orders listed",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - heading \"Orders\" [level=1]\n  - 'textbox \"Search order #, customer, or table\"'\n  - combobox:\n    - option \"All types\" [selected]\n    - option \"Pickup\"\n    - option \"Delivery\"\n    - option \"Dine-in\"\n  - combobox:\n    - option \"All payments\" [selected]\n    - option \"Paid\"\n    - option \"Unpaid\"\n  - heading \"New (6)\" [level=2]\n  - group \"Order ORD-1012\":\n    - button \"ORD-1012\"\n    - paragraph: E2E Geocoding Customer · Delivery · 1.77km · 6:56 PM\n    - text: unpaid\n    - paragraph: 1 item · $13.17\n    - button \"Accept\"\n    - button \"Cancel\"\n  - group \"Order ORD-1011\":\n    - button \"ORD-1011\"\n    - paragraph: E2E Geocoding Customer · Delivery · 1.77km · 6:55 PM\n    - text: unpaid\n    - paragraph: 1 item · $11.01\n    - button \"Accept\"\n    - button \"Cancel\"\n  - group \"Order ORD-1010\":\n    - button \"ORD-1010\"\n    - paragraph: E2E",
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-10.png"
+    },
+    {
+      "id": "OWNER-11",
+      "label": "Orders: move ORD-1007 through preparing -> ready -> completed",
+      "result": "PASS",
+      "observed": {
+        "clicked": [
+          "Mark ready",
+          "Complete"
+        ]
+      },
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-11.png"
+    },
+    {
+      "id": "OWNER-12",
+      "label": "Orders: cancel ORD-1008 with a reason",
+      "result": "FAIL",
+      "error": "locator.click: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByRole('button', { name: 'Cancel order' }).first()\u001b[22m | ",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - heading \"Orders\" [level=1]\n  - 'textbox \"Search order #, customer, or table\"'\n  - combobox:\n    - option \"All types\" [selected]\n    - option \"Pickup\"\n    - option \"Delivery\"\n    - option \"Dine-in\"\n  - combobox:\n    - option \"All payments\" [selected]\n    - option \"Paid\"\n    - option \"Unpaid\"\n  - heading \"New (6)\" [level=2]\n  - group \"Order ORD-1012\":\n    - button \"ORD-1012\"\n    - paragraph: E2E Geocoding Customer · Delivery · 1.77km · 6:56 PM\n    - text: unpaid\n    - paragraph: 1 item · $13.17\n    - button \"Accept\"\n    - button \"Cancel\"\n  - group \"Order ORD-1011\":\n    - button \"ORD-1011\"\n    - paragraph: E2E Geocoding Customer · Delivery · 1.77km · 6:55 PM\n    - text: unpaid\n    - paragraph: 1 item · $11.01\n    - button \"Accept\"\n    - button \"Cancel\"\n  - group \"Order ORD-1010\":\n    - button \"ORD-1010\"\n    - paragraph: E2E",
+      "url": "http://localhost:5174/orders",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-12.png"
+    },
+    {
+      "id": "OWNER-13",
+      "label": "Staff: invalid email is refused; a valid invite is sent",
+      "result": "FAIL",
+      "error": "locator.fill: Timeout 30000ms exceeded. | Call log: | \u001b[2m  - waiting for getByLabel(/Email/).first()\u001b[22m | ",
+      "aria": "- complementary:\n  - paragraph: GarnishTable\n  - paragraph: Restaurant admin\n  - button \"Collapse sidebar\"\n  - paragraph: Wildwood Kitchen\n  - paragraph: Open\n  - navigation:\n    - paragraph: Home\n    - link \"Dashboard\":\n      - /url: /\n    - paragraph: Get ready\n    - paragraph: Set up your restaurant to start taking orders\n    - link \"Setup\":\n      - /url: /setup\n    - paragraph: Sell\n    - paragraph: What customers see and order\n    - link \"Menu\":\n      - /url: /menu\n    - link \"Orders\":\n      - /url: /orders\n    - link \"Customers\":\n      - /url: /customers\n    - paragraph: Run\n    - paragraph: Day-to-day service\n    - link \"Kitchen\":\n      - /url: /kitchen\n    - link \"Tables\":\n      - /url: /tables\n    - link \"Delivery\":\n      - /url: /delivery\n    - link \"Marketplace\":\n      - /url: /marketplace\n    - link \"Staff\":\n      - /url: /staff\n    - paragraph: Grow\n    - paragraph: Bring customers back and track results\n    - link \"Promotions\":\n      - /url: /promotions\n    - link \"Loyalty\":\n      - /url: /loyalty\n    - link \"Analytics\":\n      - /url: /analytics\n    - paragraph: Business\n    - paragraph: Locations, billing and account-wide settings\n    - link \"Locations\":\n      - /url: /locations\n    - link \"Billing\":\n      - /url: /billing\n    - link \"Settings\":\n      - /url: /settings\n    - link \"Printers\":\n      - /url: /printers\n    - link \"Theme Studio\":\n      - /url: /theme-studio\n    - link \"Audit log\":\n      - /url: /audit-log\n    - paragraph: Help\n    - link \"Support\":\n      - /url: /support\n  - text: D\n  - paragraph: Demo Restaurant Owner\n  - paragraph: Owner\n  - button \"Log out\"\n- banner:\n  - paragraph: Wildwood Kitchen\n- main:\n  - heading \"Staff\" [level=1]\n  - text: This location only\n  - paragraph: Give your team their own logins with the right level of access — no more sharing one owner account.\n  - button \"Add staff member\"\n  - list:\n    - listitem:\n      - text: S\n      - paragraph: Sam Rivera\n      - paragraph: manager@demo-restaurant.local\n      - combobox:\n        - option \"Manager\" [selected]\n        - option \"Staff\"\n        - option \"Kitchen staff\"\n      - button \"Deactivate\"\n    - listitem:\n      - text: A\n      - paragraph: Alex Chen\n      - paragraph: staff@demo-restaurant.local\n      - combobox:\n        - option \"Manager\"\n        - option \"Staff\" [selected]\n        - option \"Kitchen staff\"\n      - button \"Deactivate\"\n    - listitem:\n      - text: J\n      - paragraph: Jamie Park\n      - paragraph: kitchen@demo-restaurant.local\n      - ",
+      "url": "http://localhost:5174/staff",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-13.png"
+    },
+    {
+      "id": "OWNER-14",
+      "label": "Promotions: create a promo code",
+      "result": "PASS",
+      "observed": "Promotions This location only Create discount codes customers can apply at checkout. Every code is validated and priced server-side — nothing here can be tricked into applying a discount your rules d",
+      "url": "http://localhost:5174/promotions",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-14.png"
+    },
+    {
+      "id": "OWNER-15",
+      "label": "Analytics page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Analytics This location only How this location is doing. Revenue reflects orders staff have marked as paid — this platform doesn't process payments directly, so",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/analytics",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-15.png"
+    },
+    {
+      "id": "OWNER-16",
+      "label": "Customers page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Customers Everyone who has ordered from you, with lifetime order stats. CUSTOMER ORDERS TOTAL SPENT AVG ORDER LAST ORDER Jordan Lee jordan.lee@example.com 4 $61",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/customers",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-16.png"
+    },
+    {
+      "id": "OWNER-17",
+      "label": "Billing page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Billing Your subscription status. No subscription yet. Choose a plan You won't be charged until your trial ends, and you can cancel anytime before then. Plan Ow",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/billing",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-17.png"
+    },
+    {
+      "id": "OWNER-18",
+      "label": "Audit log page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Audit log This location only A record of status changes, cancellations, refunds, and staff/restaurant changes. Target All activity Orders Payments Restaurant Us",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/audit-log",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-18.png"
+    },
+    {
+      "id": "OWNER-19",
+      "label": "Loyalty page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Loyalty This location only Customers earn 1 point per currency unit spent and can redeem points for a discount at checkout. Tiers: Bronze from the start, Silver",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/loyalty",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-19.png"
+    },
+    {
+      "id": "OWNER-20",
+      "label": "Delivery settings page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Delivery This location only Control how customers can receive their order. Pickup Customers can collect their order in person. Delivery Customers can have their",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/delivery",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-20.png"
+    },
+    {
+      "id": "OWNER-21",
+      "label": "Marketplace integrations page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Marketplace integrations Receive orders directly from third-party marketplaces into this same order system — the same kitchen, the same POS, the same reporting ",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/marketplace",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-21.png"
+    },
+    {
+      "id": "OWNER-22",
+      "label": "Tables page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Tables Manage your dine-in tables and their QR codes. Each table gets a unique code that opens your menu with that table pre-selected — no app, no login require",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/tables",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-22.png"
+    },
+    {
+      "id": "OWNER-23",
+      "label": "Theme studio page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Theme Studio This location only Choose how your storefront looks. Changes only go live when you publish. Preview Theme Cinematic Selected IMMERSIVE · DRAMATIC ·",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/theme-studio",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-23.png"
+    },
+    {
+      "id": "OWNER-24",
+      "label": "Printers page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Printers Which printer handles receipts, which handles kitchen tickets — your restaurant can use whatever printer hardware it already has. Add a printer No prin",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/printers",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-24.png"
+    },
+    {
+      "id": "OWNER-25",
+      "label": "Locations page shows real content",
+      "result": "PASS",
+      "observed": {
+        "start": "Locations Every restaurant on this platform starts as a single location — add more here if you operate more than one. Wildwood Kitchen Active 1200 S 6th St, Spr",
+        "alerts": []
+      },
+      "url": "http://localhost:5174/locations",
+      "shot": "C:\\Users\\chaud\\AppData\\Local\\Temp\\claude\\d--Restaurant-online-ordering\\d81e7596-acda-4a4d-939a-55f36f94a7c6\\scratchpad\\qa\\out\\j-owner\\OWNER-25.png"
+    }
+  ],
+  "consoleErrors": [
+    "http://localhost:5174/login :: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "http://localhost:5174/settings :: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "http://localhost:5174/settings :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/promotions :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/analytics :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/customers :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/audit-log :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/loyalty :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/delivery :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/marketplace :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/tables :: Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "http://localhost:5174/printers :: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+  ],
+  "failedRequests": [
+    "401 POST http://localhost:5174/api/v1/auth/refresh",
+    "401 POST http://localhost:5174/api/v1/auth/login",
+    "400 PATCH http://localhost:5174/api/v1/restaurants/6aefc5cf1cf5d65269bdc6f9",
+    "403 GET http://localhost:5174/api/v1/restaurants/null",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/promotions",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/analytics",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/analytics/timeseries?days=30",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/customers?page=1&limit=20",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/audit-log?page=1&limit=30",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/loyalty/rewards/admin",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/loyalty/summary",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/marketplace-integrations",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/tables",
+    "403 GET http://localhost:5174/api/v1/restaurants/null/printers"
+  ]
+}

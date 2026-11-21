@@ -12,6 +12,7 @@ import { OrderPaymentPanel } from "../components/OrderPaymentPanel";
 import { useOrderEvents } from "../hooks/useOrderEvents";
 import { useSocketStatus } from "../hooks/useSocketStatus";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { orderLoadErrorMessage } from "../lib/orderLoadError";
 
 const ORDER_TYPE_LABELS: Record<Order["orderType"], string> = {
   pickup: "Pickup",
@@ -42,7 +43,7 @@ export function OrderDetailPage() {
   useEffect(() => {
     setLoading(true);
     reload()
-      .catch((err) => setError((err as Error).message))
+      .catch((err) => setError(orderLoadErrorMessage(err)))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -120,9 +121,15 @@ export function OrderDetailPage() {
 
   if (error && !order) {
     return (
-      <Alert tone="danger" role="alert" className="mx-auto max-w-2xl">
-        {error}
-      </Alert>
+      <div className="mx-auto flex max-w-2xl flex-col items-start gap-3">
+        <h1 className="font-heading text-2xl font-semibold text-foreground">Order unavailable</h1>
+        <Alert tone="danger" role="alert" className="w-full">
+          {error}
+        </Alert>
+        <Link to="/orders" className="text-sm font-medium text-primary underline">
+          Go to My orders
+        </Link>
+      </div>
     );
   }
 

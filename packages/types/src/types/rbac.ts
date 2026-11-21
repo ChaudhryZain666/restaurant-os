@@ -33,6 +33,10 @@ export type Permission =
   | "restaurant.loyalty.manage"
   | "restaurant.orders.read"
   | "restaurant.orders.manage"
+  // Kitchen review — the restaurant's customer directory (names, contact details, spend). Split
+  // from restaurant.orders.read so kitchen staff, who only prepare orders, don't get the directory;
+  // the customer details on an order itself still come with restaurant.orders.read.
+  | "restaurant.customers.read"
   | "restaurant.payments.manage"
   | "restaurant.audit.read"
   | "restaurant.analytics.read"
@@ -82,6 +86,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.loyalty.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
+    "restaurant.customers.read",
     "restaurant.payments.manage",
     "restaurant.audit.read",
     "restaurant.analytics.read",
@@ -103,6 +108,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "restaurant.loyalty.manage",
     "restaurant.orders.read",
     "restaurant.orders.manage",
+    "restaurant.customers.read",
     "restaurant.payments.manage",
     "restaurant.audit.read",
     "restaurant.analytics.read",
@@ -115,7 +121,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     "support.tickets.read",
   ],
   // Front-of-house staff — the role that actually runs a register, unlike kitchen_staff below.
-  restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage", "restaurant.pos.operate"],
+  // customers.read: the POS customer picker attaches a customer to a sale.
+  restaurant_staff: ["restaurant.menu.read", "restaurant.orders.read", "restaurant.orders.manage", "restaurant.customers.read", "restaurant.pos.operate"],
   kitchen_staff: ["restaurant.orders.read", "restaurant.orders.manage"],
   customer: [],
   // Phase 25 — a coarse top-level identity only (person whose primary identity is agency

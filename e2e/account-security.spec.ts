@@ -25,7 +25,8 @@ test.describe("account self-service", () => {
     await page.locator('input[type="password"]').nth(0).fill("OriginalPass1!");
     await page.locator('input[type="password"]').nth(1).fill("BrandNewPass1!");
     await page.getByRole("button", { name: "Update password" }).click();
-    await expect(page.getByText("Password updated. Your other sessions have been signed out.")).toBeVisible();
+    // Password hashing (bcrypt, cost 12) is slow by design and took 9 s once under full-suite load.
+    await expect(page.getByText("Password updated. Your other sessions have been signed out.")).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);
@@ -44,10 +45,13 @@ test.describe("account self-service", () => {
     await registerFreshCustomer(page, "emailchange");
 
     await page.goto("/account");
+    // Wait for the signed-in page before typing (as the password test above does): input typed while
+    // the session was still being restored was lost under full-suite load (15 Nov 2026 run).
+    await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
     await page.locator('input[type="email"]').fill(`e2e-newaddr-${Date.now()}@test.local`);
     await page.locator('input[type="password"]').nth(2).fill("OriginalPass1!");
     await page.getByRole("button", { name: "Send confirmation link" }).click();
-    await expect(page.getByText(/A confirmation link has been sent to/)).toBeVisible();
+    await expect(page.getByText(/A confirmation link has been sent to/)).toBeVisible({ timeout: 15_000 });
 
     // A bogus token must be rejected, not silently accepted — proves confirmation is real.
     await page.goto("/confirm-email-change?token=not-a-real-token");

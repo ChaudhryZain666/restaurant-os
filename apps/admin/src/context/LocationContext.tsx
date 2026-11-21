@@ -61,15 +61,24 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [locations, setLocations] = useState<Restaurant[]>([]);
   const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // QA-003 — which user/business the current activeLocationId was resolved for. On a direct page
+  // load the effect below first resolves for "no user yet" (loading false, no location); when the
+  // signed-in user arrives there is one render before the effect re-runs, in which pages saw
+  // loading=false with a null location and requested /restaurants/null/…. Until the resolution
+  // matches the current user/business, the location still counts as loading.
+  const resolutionKey = user ? `${user.id}:${user.mustChangePassword ? 1 : 0}:${activeBusinessId ?? ""}` : "signed-out";
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const key = resolutionKey;
 
     async function resolve() {
       if (!user) {
         setLocations([]);
         setActiveLocationId(null);
         setLoading(false);
+        setResolvedKey(key);
         socket.disconnect();
         return;
       }
@@ -84,6 +93,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setLocations([]);
         setActiveLocationId(user.restaurantId ?? null);
         setLoading(false);
+        setResolvedKey(key);
         setActiveLocationIdForSocket(user.restaurantId ?? null);
         socket.connect();
         return;
@@ -106,7 +116,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setActiveLocationIdForSocket(resolved);
         socket.connect();
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setResolvedKey(key);
+        }
       }
     }
 
@@ -150,9 +163,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     setLocations(fetched);
   }, [activeBusinessId]);
 
+  const effectiveLoading = loading || resolvedKey !== resolutionKey;
   const value = useMemo(
-    () => ({ activeLocationId, locations, loading, switchLocation, refetchLocations }),
-    [activeLocationId, locations, loading, switchLocation, refetchLocations]
+    () => ({ activeLocationId, locations, loading: effectiveLoading, switchLocation, refetchLocations }),
+    [activeLocationId, locations, effectiveLoading, switchLocation, refetchLocations]
   );
 
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;

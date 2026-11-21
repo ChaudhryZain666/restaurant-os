@@ -1,0 +1,443 @@
+[
+  {
+    "label": "marketing page /",
+    "url": ":8081/",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /about",
+    "url": ":8081/about",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /contact",
+    "url": ":8081/contact",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /demo",
+    "url": ":8081/demo",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /faq",
+    "url": ":8081/faq",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /how-it-works",
+    "url": ":8081/how-it-works",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /pricing",
+    "url": ":8081/pricing",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /product",
+    "url": ":8081/product",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /solutions",
+    "url": ":8081/solutions",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /start-trial",
+    "url": ":8081/start-trial",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /v3",
+    "url": ":8081/v3",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /pricing/",
+    "url": ":8081/pricing/",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing page /Pricing",
+    "url": ":8081/Pricing",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing legal /terms",
+    "url": ":8081/terms",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing legal /privacy",
+    "url": ":8081/privacy",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing legal /refund-policy",
+    "url": ":8081/refund-policy",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing unknown /no-such-page",
+    "url": ":8081/no-such-page",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing unknown /v2",
+    "url": ":8081/v2",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing unknown /pricing/extra",
+    "url": ":8081/pricing/extra",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing unknown /deep/unknown/path",
+    "url": ":8081/deep/unknown/path",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing unknown /index",
+    "url": ":8081/index",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing robots.txt",
+    "url": ":8081/robots.txt",
+    "status": 200,
+    "type": "text/plain",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing sitemap.xml",
+    "url": ":8081/sitemap.xml",
+    "status": 200,
+    "type": "text/xml",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing og-image.png",
+    "url": ":8081/og-image.png",
+    "status": 200,
+    "type": "image/png",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing favicon.svg",
+    "url": ":8081/favicon.svg",
+    "status": 200,
+    "type": "image/svg+xml",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing /v3 image",
+    "url": ":8081/v3/logo-mark.png",
+    "status": 200,
+    "type": "image/png",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing hashed asset",
+    "url": ":8081/assets/index-g1adv3l5.js",
+    "status": 200,
+    "type": "application/javascript",
+    "cache": "public, max-age=31536000, immutable",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing missing asset",
+    "url": ":8081/assets/missing-file.js",
+    "status": 404,
+    "type": "text/html",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing index.html",
+    "url": ":8081/index.html",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "marketing API proxy",
+    "url": ":8081/api/v1/public/plans",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /",
+    "url": ":8082/",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /r/demo-restaurant",
+    "url": ":8082/r/demo-restaurant",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /r/demo-restaurant/cart",
+    "url": ":8082/r/demo-restaurant/cart",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /orders",
+    "url": ":8082/orders",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /support",
+    "url": ":8082/support",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /login",
+    "url": ":8082/login",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /r/no-such-restaurant",
+    "url": ":8082/r/no-such-restaurant",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront /no-such-page",
+    "url": ":8082/no-such-page",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront menu image dir as route",
+    "url": ":8082/menu-images",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront hashed asset",
+    "url": ":8082/assets/index-CaBLuLOr.js",
+    "status": 200,
+    "type": "application/javascript",
+    "cache": "public, max-age=31536000, immutable",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "storefront API proxy",
+    "url": ":8082/api/v1/restaurants/by-slug/demo-restaurant",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /login",
+    "url": ":8083/login",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /platform",
+    "url": ":8083/platform",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /agency",
+    "url": ":8083/agency",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /settings",
+    "url": ":8083/settings",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /print/receipt/abc",
+    "url": ":8083/print/receipt/abc",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin /no-such-page",
+    "url": ":8083/no-such-page",
+    "status": 200,
+    "type": "text/html",
+    "cache": "no-cache",
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin restaurant image",
+    "url": ":8083/restaurant-images/wildwood-kitchen-logo.svg",
+    "status": 200,
+    "type": "image/svg+xml",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  },
+  {
+    "label": "admin API proxy",
+    "url": ":8083/api/v1/public/plans",
+    "status": 200,
+    "type": "application/json; charset=utf-8",
+    "cache": null,
+    "ok": true,
+    "problems": []
+  }
+]

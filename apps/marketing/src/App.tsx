@@ -9,7 +9,8 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 // its own chunk, fetched on first visit, so the homepage doesn't download the whole site.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
-const HomeV2Page = page(() => import("./pages/HomeV2Page"), "HomeV2Page");
+// QA-010 — the draft homepage is not even built into production bundles.
+const HomeV2Page = import.meta.env.DEV ? page(() => import("./pages/HomeV2Page"), "HomeV2Page") : NotFoundPage;
 const ProductPage = page(() => import("./pages/ProductPage"), "ProductPage");
 const SolutionsPage = page(() => import("./pages/SolutionsPage"), "SolutionsPage");
 const HowItWorksPage = page(() => import("./pages/HowItWorksPage"), "HowItWorksPage");
@@ -22,6 +23,7 @@ const StartTrialPage = page(() => import("./pages/StartTrialPage"), "StartTrialP
 const TermsPage = page(() => import("./pages/TermsPage"), "TermsPage");
 const PrivacyPage = page(() => import("./pages/PrivacyPage"), "PrivacyPage");
 const RefundPolicyPage = page(() => import("./pages/RefundPolicyPage"), "RefundPolicyPage");
+const CheckoutPage = page(() => import("./pages/CheckoutPage"), "CheckoutPage");
 
 /** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown and footer
  *  links). Lazy pages render their anchors only once their chunk arrives, so a missing target is
@@ -61,8 +63,10 @@ export function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomeV3Page />} />
-          {/* Homepage redesign under review — not linked from Nav, noindex. See HomeV2Page.tsx. */}
-          <Route path="/v2" element={<HomeV2Page />} />
+          {/* Homepage redesign under review — not linked from Nav, noindex. See HomeV2Page.tsx.
+              QA-010 — dev server only: a production build answers /v2 with the 404 page (and nginx
+              with a 404 status, infrastructure/docker/nginx/marketing.locations.template). */}
+          {import.meta.env.DEV && <Route path="/v2" element={<HomeV2Page />} />}
           {/* The review URL for what is now the homepage — keep old links working. */}
           <Route path="/v3" element={<Navigate to="/" replace />} />
           <Route path="/product" element={<ProductPage />} />
@@ -74,6 +78,7 @@ export function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/start-trial" element={<StartTrialPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refund-policy" element={<RefundPolicyPage />} />

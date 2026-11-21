@@ -12,3 +12,12 @@ export function roleHomePath(role: UserRole): string {
   if (role === "agency_member" || role === "customer") return "/agency";
   return "/";
 }
+
+/** QA-006 — the restaurant Support pages (/support, /support/:id) are scoped to a location. A
+ *  platform admin with no location open has nothing to show there (the page used to request
+ *  /restaurants/null/support/tickets), so they go to the platform-wide support queue instead. A
+ *  platform admin running a restaurant of its own (a location is open) keeps the restaurant page. */
+export function restaurantSupportRedirect(role: UserRole | undefined, activeLocationId: string | null, ticketId?: string): string | null {
+  if (role !== "platform_admin" || activeLocationId) return null;
+  return ticketId ? `/platform/support/tickets/${encodeURIComponent(ticketId)}` : "/platform/support";
+}

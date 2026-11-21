@@ -4,6 +4,7 @@ import type { Order } from "@restaurant/types";
 import { formatCurrency } from "@restaurant/utils";
 import { apiClient } from "../lib/api";
 import { useNoIndex } from "../hooks/useNoIndex";
+import { orderLoadErrorMessage } from "../lib/orderLoadError";
 
 /**
  * Phase 14 — customer-facing printable receipt. Mirrors apps/admin's PrintOrderPage (same data
@@ -24,7 +25,7 @@ export function PrintReceiptPage() {
     apiClient
       .request<{ order: Order }>(`/orders/${id}`)
       .then((data) => setOrder(data.order))
-      .catch((err) => setError((err as Error).message));
+      .catch((err) => setError(orderLoadErrorMessage(err)));
   }, [id]);
 
   useEffect(() => {

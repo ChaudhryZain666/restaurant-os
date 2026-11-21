@@ -476,3 +476,28 @@ describe("POST /businesses/:businessId/subscription/payment-method-update (Phase
     expect((await call(biz.id, token)).status).toBe(403);
   });
 });
+
+// QA-004 — the server keeps plan entitlements to billing.read roles; the admin app simply stopped
+// asking for them on staff and kitchen pages (useBusinessEntitlements).
+describe("plan entitlement access by role (QA-004)", () => {
+  const entitlements = (token: string) =>
+    request(app).get(`/api/v1/businesses/${business.id}/subscription/entitlements`).set("Authorization", `Bearer ${token}`);
+
+  it("owners and managers can read their own business's entitlements", async () => {
+    expect((await entitlements(ownerToken)).status).toBe(200);
+    expect((await entitlements(managerToken)).status).toBe(200);
+  });
+
+  it("front-of-house and kitchen staff cannot", async () => {
+    const kitchen = tokenFor(await createTestUser("kitchen_staff", location._id, { businessId: business._id, locationIds: [location._id] }));
+    expect((await entitlements(staffToken)).status).toBe(403);
+    expect((await entitlements(kitchen)).status).toBe(403);
+  });
+
+  it("platform admins keep their subscription-management view; owners can't use it", async () => {
+    const asAdmin = await request(app).get("/api/v1/platform/subscriptions").set("Authorization", `Bearer ${platformAdminToken}`);
+    expect(asAdmin.status).toBe(200);
+    const asOwner = await request(app).get("/api/v1/platform/subscriptions").set("Authorization", `Bearer ${ownerToken}`);
+    expect(asOwner.status).toBe(403);
+  });
+});

@@ -109,41 +109,45 @@ export function SupportDashboardPage() {
       ) : tickets.length === 0 ? (
         <Card className="text-center text-muted">No tickets match these filters.</Card>
       ) : (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-border text-muted">
-              <th className="py-2 font-medium">Ticket</th>
-              <th className="font-medium">From</th>
-              <th className="font-medium">Restaurant</th>
-              <th className="font-medium">Category</th>
-              <th className="font-medium">Priority</th>
-              <th className="font-medium">Status</th>
-              <th className="font-medium">Updated</th>
-            </tr>
-          </thead>
-          <tbody className="text-foreground/80">
-            {tickets.map((t) => (
-              <tr key={t.id} className="border-b border-border transition-colors duration-fast hover:bg-black/[0.02]">
-                <td className="py-2">
-                  <Link to={`/platform/support/tickets/${t.id}`} className="text-foreground underline decoration-dotted">
-                    {t.subject}
-                  </Link>
-                  <div className="text-xs text-muted">{t.ticketNumber}</div>
-                </td>
-                <td>{t.createdByName ?? "—"}</td>
-                <td>{t.restaurantName ?? "—"}</td>
-                <td className="capitalize">{t.category.replace(/_/g, " ")}</td>
-                <td>
-                  <Badge tone={TICKET_PRIORITY_TONE[t.priority]}>{TICKET_PRIORITY_LABELS[t.priority]}</Badge>
-                </td>
-                <td>
-                  <Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS_LABELS[t.status]}</Badge>
-                </td>
-                <td>{new Date(t.updatedAt).toLocaleDateString()}</td>
+        // QA-014 — at phone width seven columns squeezed every cell to one word per line; the
+        // table now keeps a readable width and scrolls inside its own box, like the other lists.
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm [&_td]:pr-3 [&_th]:pr-3">
+            <thead>
+              <tr className="border-b border-border text-muted">
+                <th className="py-2 font-medium">Ticket</th>
+                <th className="font-medium">From</th>
+                <th className="font-medium">Restaurant</th>
+                <th className="font-medium">Category</th>
+                <th className="font-medium">Priority</th>
+                <th className="font-medium">Status</th>
+                <th className="font-medium">Updated</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="text-foreground/80">
+              {tickets.map((t) => (
+                <tr key={t.id} className="border-b border-border transition-colors duration-fast hover:bg-black/[0.02]">
+                  <td className="py-2">
+                    <Link to={`/platform/support/tickets/${t.id}`} className="text-foreground underline decoration-dotted">
+                      {t.subject}
+                    </Link>
+                    <div className="text-xs text-muted">{t.ticketNumber}</div>
+                  </td>
+                  <td>{t.createdByName ?? "—"}</td>
+                  <td>{t.restaurantName ?? "—"}</td>
+                  <td className="capitalize">{t.category.replace(/_/g, " ")}</td>
+                  <td>
+                    <Badge tone={TICKET_PRIORITY_TONE[t.priority]}>{TICKET_PRIORITY_LABELS[t.priority]}</Badge>
+                  </td>
+                  <td>
+                    <Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS_LABELS[t.status]}</Badge>
+                  </td>
+                  <td>{new Date(t.updatedAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

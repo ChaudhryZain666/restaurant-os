@@ -17,6 +17,9 @@ export const MARKETING_CONTACT_URL = `${MARKETING_ORIGIN}/contact`;
  *  half-filled form to read a policy. */
 export const MARKETING_TERMS_URL = `${MARKETING_ORIGIN}/terms`;
 export const MARKETING_PRIVACY_URL = `${MARKETING_ORIGIN}/privacy`;
+export const MARKETING_REFUND_URL = `${MARKETING_ORIGIN}/refund-policy`;
+export const MARKETING_PRICING_URL = `${MARKETING_ORIGIN}/pricing`;
+export const MARKETING_HOME_URL = MARKETING_ORIGIN;
 
 /** The customer storefront's real, public URL for this restaurant — only valid once published. */
 export function storefrontUrl(slug: string): string {

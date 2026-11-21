@@ -15,6 +15,7 @@ import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
 import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 import { resolveOwnerIdentity } from "./ownerIdentity.service.js";
 import { LIVE_STATUSES } from "./subscriptionResolution.service.js";
+import { acknowledgeUnclaimedPurchaseEvent, recordGuestCheckoutPaid } from "./guestCheckout.service.js";
 
 const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
 
@@ -203,6 +204,10 @@ async function createCheckoutSessionCore(
   if (getBillingProvider().name === "mock" && !mockDriversAllowed(env.NODE_ENV)) {
     throw ApiError.serviceUnavailable("Paid plan checkout isn't open yet, so nothing can be charged. Your storefront and online ordering keep working either way.");
   }
+  // Pre-launch — the rollback switch (see env.ts BILLING_CHECKOUT_ENABLED): no new paid checkouts.
+  if (!env.BILLING_CHECKOUT_ENABLED) {
+    throw ApiError.serviceUnavailable("Paid plan checkout is paused right now. Your current plan and trial are unaffected.");
+  }
   const identity = await resolveOwnerIdentity(ownerType, ownerId);
   if (!identity) throw ApiError.notFound(`${ownerType === "business" ? "Business" : "Agency"} not found`);
 
@@ -240,6 +245,17 @@ async function createCheckoutSessionCore(
   }
 
   const provider = getBillingProvider();
+  // Pre-launch — the seed fills every plan with mock_price_* placeholders until
+  // scripts/setPaddlePriceIds.ts loads the real ids. Under Paddle, anything but a real Paddle price
+  // id means the catalog isn't configured: refuse before creating a Paddle customer or opening a
+  // checkout Paddle would reject.
+  if (provider.name === "paddle" && !/^pri_[a-z0-9]+$/.test(pricing.providerPriceId)) {
+    logger.error("paddle checkout refused — the plan's price id is not a Paddle price id (run setPaddlePriceIds)", {
+      planCode: plan.code,
+      billingInterval,
+    });
+    throw ApiError.serviceUnavailable("Paid plan checkout isn't available yet. Your free trial stays active in the meantime.");
+  }
   const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
 
   return provider.createCheckoutSession({
@@ -668,6 +684,119 @@ const HISTORY_TYPE_BY_TARGET_STATUS: Partial<Record<SubscriptionStatus, BillingH
   expired: "expired",
 };
 
+/** Launch, 2026-11-21 — thrown by linkProviderSubscription when the owner already has a live
+ *  subscription (the one-live-subscription index rejected the new one). */
+export class DuplicateLiveSubscriptionError extends Error {
+  constructor() {
+    super("This account already has an active plan");
+    this.name = "DuplicateLiveSubscriptionError";
+  }
+}
+
+export interface ProviderSubscriptionLink {
+  providerName: string;
+  ownerType: SubscriptionOwnerType;
+  ownerId: string;
+  plan: HydratedDocument<PlanDoc>;
+  billingInterval: "monthly" | "yearly";
+  providerCustomerId: string;
+  providerSubscriptionId: string;
+  /** Event ordering mark for the new Subscription (the newest provider event already reflected). */
+  occurredAt?: Date;
+  /** Billing-history provider reference (the webhook event id). */
+  reference: string;
+  historyMetadata: Record<string, unknown>;
+}
+
+/**
+ * Links a paid provider subscription to an owner: converts the owner's local-only trial in place,
+ * or creates the Subscription, then records the history rows. Its state comes from the provider
+ * (retrieveSubscription), never from the caller. Used by the in-app checkout's webhook and by the
+ * public pay-now checkout's account set-up (guestCheckout.service.ts).
+ */
+export async function linkProviderSubscription(link: ProviderSubscriptionLink): Promise<HydratedDocument<SubscriptionDoc>> {
+  const plan = link.plan;
+  const provider = getBillingProvider();
+  const snapshot = await provider.retrieveSubscription(link.providerSubscriptionId);
+  const status: SubscriptionStatus = snapshot.status === "trialing" ? "trialing" : "active";
+
+  await expireLapsedManualSubscriptions({ ownerType: link.ownerType, ownerId: link.ownerId });
+  // A live manual (platform-admin) subscription is never converted: the create below then hits the
+  // one-live-subscription index and is reported as a duplicate purchase for a human to resolve.
+  const existingLocalTrial = await Subscription.findOne({
+    ownerType: link.ownerType,
+    ownerId: link.ownerId,
+    status: { $in: LIVE_STATUSES },
+    providerSubscriptionId: { $exists: false },
+    provider: { $ne: "manual" },
+  });
+
+  let subscription: HydratedDocument<SubscriptionDoc>;
+  if (existingLocalTrial) {
+    existingLocalTrial.planId = plan._id;
+    existingLocalTrial.status = status;
+    existingLocalTrial.billingInterval = link.billingInterval;
+    existingLocalTrial.currentPeriodStart = snapshot.currentPeriodStart;
+    existingLocalTrial.currentPeriodEnd = snapshot.currentPeriodEnd;
+    // Phase 89 — a subscription the provider reports as active is no longer in a trial: clear the
+    // local trial's end date instead of carrying it over (it read as a live trial in admin views).
+    existingLocalTrial.trialEnd = status === "trialing" ? (snapshot.trialEnd ?? existingLocalTrial.trialEnd) : undefined;
+    existingLocalTrial.provider = link.providerName as SubscriptionDoc["provider"];
+    existingLocalTrial.providerCustomerId = link.providerCustomerId;
+    existingLocalTrial.providerSubscriptionId = link.providerSubscriptionId;
+    if (link.occurredAt) existingLocalTrial.lastProviderEventAt = link.occurredAt; // Phase 89 — event ordering
+    subscription = await existingLocalTrial.save();
+  } else {
+    try {
+      subscription = await Subscription.create({
+        ownerType: link.ownerType,
+        ownerId: link.ownerId,
+        planId: plan._id,
+        status,
+        billingInterval: link.billingInterval,
+        currentPeriodStart: snapshot.currentPeriodStart,
+        currentPeriodEnd: snapshot.currentPeriodEnd,
+        trialStart: status === "trialing" ? new Date() : undefined,
+        trialEnd: snapshot.trialEnd,
+        provider: link.providerName,
+        providerCustomerId: link.providerCustomerId,
+        providerSubscriptionId: link.providerSubscriptionId,
+        lastProviderEventAt: link.occurredAt, // Phase 89 — event ordering
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) throw new DuplicateLiveSubscriptionError();
+      throw err;
+    }
+  }
+
+  const pricing = resolvePricing(plan, link.billingInterval);
+  await recordBillingHistoryEvent({
+    ownerType: link.ownerType,
+    ownerId: link.ownerId,
+    subscriptionId: subscription._id,
+    type: "subscription_created",
+    provider: link.providerName as SubscriptionDoc["provider"],
+    amountCents: pricing?.amountCents,
+    currency: pricing?.currency,
+    providerReference: link.reference,
+    metadata: { planCode: plan.code, ...link.historyMetadata },
+  });
+  if (status === "active") {
+    await recordBillingHistoryEvent({
+      ownerType: link.ownerType,
+      ownerId: link.ownerId,
+      subscriptionId: subscription._id,
+      type: "payment_succeeded",
+      provider: link.providerName as SubscriptionDoc["provider"],
+      amountCents: pricing?.amountCents,
+      currency: pricing?.currency,
+      providerReference: link.reference,
+    });
+  }
+
+  return subscription;
+}
+
 /**
  * Phase 27 — a checkout completing reports a subscription that may be BRAND-NEW (no prior
  * Subscription document at all — a no-trial plan going straight to checkout) or the conversion of
@@ -680,6 +809,16 @@ const HISTORY_TYPE_BY_TARGET_STATUS: Partial<Record<SubscriptionStatus, BillingH
  */
 async function handleCheckoutCompletionEvent(providerName: string, event: ProviderBillingWebhookEvent): Promise<void> {
   const meta = event.checkoutMetadata!;
+  if (event.quantity && event.quantity > 1) {
+    // Launch, 2026-11-21 — same check as the pay-now checkout (guestCheckout.service.ts).
+    logger.error("checkout with quantity above 1 — the customer was charged for extra units; refund the difference", {
+      alert: "billing_quantity_above_one",
+      ownerType: meta.ownerType,
+      ownerId: meta.ownerId,
+      providerSubscriptionId: event.providerSubscriptionId,
+      quantity: event.quantity,
+    });
+  }
   const plan = await Plan.findOne({ code: meta.planCode, isActive: true });
   if (!plan) {
     logger.warn("checkout-completion webhook for unknown plan code", { provider: providerName, planCode: meta.planCode });
@@ -693,85 +832,25 @@ async function handleCheckoutCompletionEvent(providerName: string, event: Provid
     return;
   }
 
-  const provider = getBillingProvider();
-  const snapshot = await provider.retrieveSubscription(event.providerSubscriptionId);
-  const status: SubscriptionStatus = snapshot.status === "trialing" ? "trialing" : "active";
-
-  await expireLapsedManualSubscriptions({ ownerType: meta.ownerType, ownerId: meta.ownerId });
-  // A live manual (platform-admin) subscription is never converted: the create below then hits the
-  // one-live-subscription index and is reported as a duplicate purchase for a human to resolve.
-  const existingLocalTrial = await Subscription.findOne({
-    ownerType: meta.ownerType,
-    ownerId: meta.ownerId,
-    status: { $in: LIVE_STATUSES },
-    providerSubscriptionId: { $exists: false },
-    provider: { $ne: "manual" },
-  });
-
-  let subscription: HydratedDocument<SubscriptionDoc>;
-  if (existingLocalTrial) {
-    existingLocalTrial.planId = plan._id;
-    existingLocalTrial.status = status;
-    existingLocalTrial.billingInterval = meta.billingInterval;
-    existingLocalTrial.currentPeriodStart = snapshot.currentPeriodStart;
-    existingLocalTrial.currentPeriodEnd = snapshot.currentPeriodEnd;
-    // Phase 89 — a subscription the provider reports as active is no longer in a trial: clear the
-    // local trial's end date instead of carrying it over (it read as a live trial in admin views).
-    existingLocalTrial.trialEnd = status === "trialing" ? (snapshot.trialEnd ?? existingLocalTrial.trialEnd) : undefined;
-    existingLocalTrial.provider = providerName as SubscriptionDoc["provider"];
-    existingLocalTrial.providerCustomerId = meta.providerCustomerId;
-    existingLocalTrial.providerSubscriptionId = event.providerSubscriptionId;
-    if (event.occurredAt) existingLocalTrial.lastProviderEventAt = event.occurredAt; // Phase 89 — event ordering
-    subscription = await existingLocalTrial.save();
-  } else {
-    try {
-      subscription = await Subscription.create({
-        ownerType: meta.ownerType,
-        ownerId: meta.ownerId,
-        planId: plan._id,
-        status,
-        billingInterval: meta.billingInterval,
-        currentPeriodStart: snapshot.currentPeriodStart,
-        currentPeriodEnd: snapshot.currentPeriodEnd,
-        trialStart: status === "trialing" ? new Date() : undefined,
-        trialEnd: snapshot.trialEnd,
-        provider: providerName,
-        providerCustomerId: meta.providerCustomerId,
-        providerSubscriptionId: event.providerSubscriptionId,
-        lastProviderEventAt: event.occurredAt, // Phase 89 — event ordering
-      });
-    } catch (err) {
-      if ((err as { code?: number }).code === 11000) {
-        await recordDuplicateCheckoutCompletion(providerName, event);
-        return;
-      }
-      throw err;
-    }
-  }
-
-  const pricing = resolvePricing(plan, meta.billingInterval);
-  await recordBillingHistoryEvent({
-    ownerType: meta.ownerType,
-    ownerId: meta.ownerId,
-    subscriptionId: subscription._id,
-    type: "subscription_created",
-    provider: providerName as SubscriptionDoc["provider"],
-    amountCents: pricing?.amountCents,
-    currency: pricing?.currency,
-    providerReference: event.eventId,
-    metadata: { planCode: plan.code, viaCheckout: true },
-  });
-  if (status === "active") {
-    await recordBillingHistoryEvent({
+  try {
+    await linkProviderSubscription({
+      providerName,
       ownerType: meta.ownerType,
       ownerId: meta.ownerId,
-      subscriptionId: subscription._id,
-      type: "payment_succeeded",
-      provider: providerName as SubscriptionDoc["provider"],
-      amountCents: pricing?.amountCents,
-      currency: pricing?.currency,
-      providerReference: event.eventId,
+      plan,
+      billingInterval: meta.billingInterval,
+      providerCustomerId: meta.providerCustomerId,
+      providerSubscriptionId: event.providerSubscriptionId,
+      occurredAt: event.occurredAt,
+      reference: event.eventId,
+      historyMetadata: { viaCheckout: true },
     });
+  } catch (err) {
+    if (err instanceof DuplicateLiveSubscriptionError) {
+      await recordDuplicateCheckoutCompletion(providerName, event);
+      return;
+    }
+    throw err;
   }
 
   await BillingWebhookEvent.updateOne(
@@ -967,6 +1046,12 @@ export async function processBillingProviderEvent(providerName: string, event: P
       return;
     }
 
+    // Launch, 2026-11-21 — a purchase on the public pay-now checkout (no account yet).
+    if (event.guestCheckout) {
+      await recordGuestCheckoutPaid(providerName, event);
+      return;
+    }
+
     const markProcessed = () =>
       BillingWebhookEvent.updateOne(
         { provider: providerName, eventId: event.eventId },
@@ -977,6 +1062,11 @@ export async function processBillingProviderEvent(providerName: string, event: P
       ? await Subscription.findOne({ provider: providerName, providerSubscriptionId: event.providerSubscriptionId })
       : null;
     if (!subscription) {
+      // Launch, 2026-11-21 — a paid pay-now purchase whose buyer hasn't set up their account yet.
+      if (await acknowledgeUnclaimedPurchaseEvent(providerName, event)) {
+        await markProcessed();
+        return;
+      }
       // Phase 89 — Paddle does not guarantee delivery order: subscription.activated can arrive
       // while subscription.created (which links the reference) is still being processed. A recent
       // event that would change something is therefore answered with a retryable error (the catch

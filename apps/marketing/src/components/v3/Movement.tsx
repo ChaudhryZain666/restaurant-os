@@ -18,7 +18,7 @@ const STATIONS: Station[] = [
   {
     id: "order",
     name: "Order",
-    caption: "Checked out on your own Stripe account, with a promo code applied.",
+    caption: "Checked out in a few taps, with a promo code applied.",
   },
   {
     id: "core",

@@ -22,6 +22,7 @@ import { CreateTicketPage } from "./pages/CreateTicketPage";
 import { TicketDetailPage } from "./pages/TicketDetailPage";
 import { PrintReceiptPage } from "./pages/PrintReceiptPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { NoRestaurantPage } from "./pages/NoRestaurantPage";
 
 // Phase 32 — lazy-loaded so the qrcode dependency and the playground UI never ship in the bundle
 // real restaurants' normal /r/:slug traffic downloads; only a visitor who actually opens the
@@ -78,13 +79,7 @@ function LegacyRedirect({ suffix }: { suffix: string }) {
     // this hostname either — silently redirecting into a guessed restaurant slug that likely
     // doesn't exist would be worse than this honest message (Phase 13 audit finding: this used to
     // fall back to "demo-restaurant" unconditionally).
-    return (
-      <div className="flex min-h-svh items-center justify-center px-4 text-center text-muted">
-        <p>
-          This link doesn't specify a restaurant. Please use the restaurant's own storefront link.
-        </p>
-      </div>
-    );
+    return <NoRestaurantPage />;
   }
   const target = `/r/${defaultSlug}${suffix}${tableToken ? `/${tableToken}` : ""}`;
   return <Navigate to={target} replace />;

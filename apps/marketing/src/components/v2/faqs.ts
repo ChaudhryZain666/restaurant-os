@@ -11,7 +11,7 @@ export const BUYER_FAQS = [
   },
   {
     q: "Does GarnishTable charge a commission on direct orders?",
-    a: "No. It's a flat subscription — 0% platform commission on every direct order. Card payments run through your own Stripe account, so Stripe's standard processing fees apply.",
+    a: "No. It's a flat subscription — 0% platform commission on every direct order. Online card payments through your own Stripe account are coming soon, at Stripe's standard processing fees.",
   },
   {
     q: "How much does GarnishTable cost?",

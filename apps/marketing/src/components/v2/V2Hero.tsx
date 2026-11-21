@@ -9,7 +9,7 @@ const WHAT_IT_RUNS = [
   { href: "#sell", label: "Sell", copy: "Storefront, menu, QR ordering, promotions" },
   { href: "#run", label: "Run", copy: "Orders, kitchen, POS, delivery" },
   { href: "#grow", label: "Grow", copy: "Loyalty, analytics, customers, locations" },
-  { href: "#system", label: "Connect", copy: "Stripe payments, delivery, your own domain" },
+  { href: "#system", label: "Connect", copy: "Delivery, your own domain, Stripe payments soon" },
 ];
 
 /**

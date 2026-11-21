@@ -109,11 +109,19 @@ export function PricingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link to="/start-trial">
-                    {/* Phase 80 CTA-consistency pass: was "Start free trial" — every other primary
-                        CTA on the site says "Start Free Trial." */}
-                    <Button className="w-full">Start Free Trial</Button>
-                  </Link>
+                  <div className="flex flex-col gap-2">
+                    <Link to="/start-trial">
+                      {/* Phase 80 CTA-consistency pass: was "Start free trial" — every other primary
+                          CTA on the site says "Start Free Trial." */}
+                      <Button className="w-full">Start Free Trial</Button>
+                    </Link>
+                    {/* Launch, 2026-11-21 — skip the trial and pay now (public checkout, no account first). */}
+                    {plan.type === "OWNER" && formatPlanPrice(plan.pricing, "monthly") && (
+                      <Link to={`/checkout?plan=${encodeURIComponent(plan.code)}`}>
+                        <Button variant="outline" className="w-full">Pay now — no trial</Button>
+                      </Link>
+                    )}
+                  </div>
                 </Card>
               </Reveal>
             ))}

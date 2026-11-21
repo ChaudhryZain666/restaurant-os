@@ -77,6 +77,7 @@ export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permissio
     "restaurant.menu.write",
     "restaurant.modifiers.write",
     "restaurant.orders.read",
+    "restaurant.customers.read",
     "restaurant.orders.manage",
     "restaurant.tables.manage",
     "restaurant.pos.operate",
@@ -97,6 +98,7 @@ export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permissio
     "restaurant.menu.write",
     "restaurant.modifiers.write",
     "restaurant.orders.read",
+    "restaurant.customers.read",
     "restaurant.orders.manage",
     "restaurant.tables.manage",
     "restaurant.pos.operate",
@@ -110,6 +112,7 @@ export const AGENCY_ROLE_GRANTS: Record<AgencyMembershipRole, readonly Permissio
     "restaurant.analytics.read",
     "restaurant.menu.read",
     "restaurant.orders.read",
+    "restaurant.customers.read",
     "restaurant.marketplace.read",
   ],
 };

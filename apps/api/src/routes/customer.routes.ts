@@ -8,15 +8,16 @@ import { validateQuery } from "../middleware/validate.js";
 import { listCustomerOrders, listRestaurantCustomers } from "../controllers/customer.controller.js";
 
 /** Mounted at /restaurants/:restaurantId/customers — mergeParams for :restaurantId. Gated on
- *  restaurant.orders.read (not a new permission): this view is derived entirely from order data,
- *  visible to exactly the same roles who could already see the underlying orders. */
+ *  restaurant.customers.read: the directory (contact details, spend, history) is for owners,
+ *  managers and front-of-house staff (the POS customer picker). Kitchen staff, who only prepare
+ *  orders, can't list it; the customer details on each order still come with the order. */
 export const customerRouter = Router({ mergeParams: true });
 
 customerRouter.get(
   "/",
   requireAuth,
   requireTenantMatch(),
-  requirePermission("restaurant.orders.read"),
+  requirePermission("restaurant.customers.read"),
   validateQuery(listRestaurantCustomersQuerySchema),
   asyncHandler(listRestaurantCustomers)
 );
@@ -25,7 +26,7 @@ customerRouter.get(
   "/:customerId/orders",
   requireAuth,
   requireTenantMatch(),
-  requirePermission("restaurant.orders.read"),
+  requirePermission("restaurant.customers.read"),
   validateQuery(listCustomerOrdersQuerySchema),
   asyncHandler(listCustomerOrders)
 );

@@ -114,7 +114,9 @@ test.describe.serial("Agency Portal 2.0 — search/filter, location drill-down, 
     await page.getByRole("button", { name: "Save profile" }).click();
     await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10_000 });
 
-    await expect(page.getByText(/does not do yet/i)).toBeVisible();
+    // The domain panel states plainly what verification does NOT do (copy reworded since this spec
+    // was written: "What it doesn't do: route customers by itself …").
+    await expect(page.getByText(/What it doesn't do:/i)).toBeVisible();
     await page.getByLabel("Domain").fill(`whitelabel-${stamp}.example.test`);
     await page.getByRole("button", { name: "Add domain" }).click();
     await expect(page.getByText("Pending verification")).toBeVisible({ timeout: 10_000 });

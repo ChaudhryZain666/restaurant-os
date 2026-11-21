@@ -1,0 +1,987 @@
+{
+  "/": {
+    "prices": [
+      "$8,420",
+      "$12.50",
+      "$21.00",
+      "$16.00",
+      "2 items · $25.00",
+      "$25.00",
+      "$0",
+      "$0.00",
+      "$19.50",
+      "$24.00",
+      "$31.20",
+      "$18.50"
+    ],
+    "trial": [
+      "Start Free Trial",
+      "TABLE D'HÔTE · SERVED WITH A 14-DAY TRIAL",
+      "Is there a trial?",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "0% platform commission",
+      "Checked out on your own Stripe account, with a promo code applied.",
+      "Your own delivery zones and fees, right alongside pickup.",
+      ": Checked out on your own Stripe account, with a promo code applied.",
+      ": Your own delivery zones and fees, right alongside pickup.",
+      "Card",
+      "One subscription. 0% platform commission on direct orders — whichever plan, however many orders.",
+      "Card payments run on your own Stripe account, so Stripe's standard processing fee applies. Full pricing details",
+      "Does GarnishTable charge a commission on direct orders?",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "#demo"
+      },
+      {
+        "text": "Start an agency account →",
+        "href": "https://app.garnishtable.com/start"
+      },
+      {
+        "text": "OPEN THE FULL DEMO →",
+        "href": "/demo"
+      },
+      {
+        "text": "Start an agency",
+        "href": "https://app.garnishtable.com/start"
+      },
+      {
+        "text": "Full pricing details",
+        "href": "/pricing"
+      },
+      {
+        "text": "Can customers order directly from my restaurant?",
+        "href": "(button)"
+      },
+      {
+        "text": "Is there a trial?",
+        "href": "(button)"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      }
+    ]
+  },
+  "/product": {
+    "prices": [
+      "Medium (+$2.00)",
+      "$14.50",
+      "$3.00",
+      "WELCOME10 applied — -$1.75",
+      "$17.19",
+      "$8,420",
+      "$27.00"
+    ],
+    "trial": [
+      "Start Free Trial",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "Customers order straight from your restaurant's ordering page — no third-party app, no per-order commission cut.",
+      "Turn delivery on or off, set a delivery fee and minimum order amount, and manage it alongside pickup.",
+      "Per-restaurant delivery fee and minimum order",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [],
+    "placeholders": [
+      "Photo support with polished placeholders"
+    ],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "1 WHAT CUSTOMERS SEE The ordering page they land o",
+        "href": "#layer-customer"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/how-it-works": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/solutions": {
+    "prices": [
+      "Medium (+$2.00)",
+      "$14.50",
+      "$3.00",
+      "WELCOME10 applied — -$1.75",
+      "$17.19",
+      "Tomato, mozzarella, basil — from $12.50",
+      "+$0.00",
+      "+$2.00",
+      "+$4.00",
+      "+$1.50",
+      "+$1.00",
+      "$3.50"
+    ],
+    "trial": [
+      "Start Free Trial",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "No per-order commission on direct sales",
+      "Delivery fee",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/pricing": {
+    "prices": [
+      "$59",
+      "or $590/year",
+      "$99",
+      "or $990/year",
+      "$179",
+      "or $1,790/year"
+    ],
+    "trial": [
+      "Start Free Trial",
+      "No credit card required for your 14-day trial — nothing is charged unless you choose a paid plan.",
+      "14-day free trial",
+      "Is there a free trial?",
+      "Yes — a 14-day trial, no credit card required. Create your account on the Start Free Trial page and your restaurant is ready to set up immediately.",
+      "Start your 14-day trial today",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "No credit card required for your 14-day trial — nothing is charged unless you choose a paid plan.",
+      "Yes, both can be enabled independently, with their own settings like delivery fee and minimum order amount.",
+      "Do you take a commission on my orders?",
+      "No. It's a flat monthly subscription — 0% commission on every direct order, however many you take.",
+      "Payments run through your own Stripe account, connected via a guided, Stripe-hosted setup — no API keys to manage. Stripe's own processing fees apply, same as they would anywhere else.",
+      "Yes — a 14-day trial, no credit card required. Create your account on the Start Free Trial page and your restaurant is ready to set up immediately.",
+      "No credit card required — see your own restaurant's numbers before you decide.",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [
+      "Can I cancel anytime?",
+      "Yes — cancel anytime from your billing settings. Your subscription stays active through the end of your current billing period, and you can undo a scheduled cancellation anytime before it takes effect."
+    ],
+    "placeholders": [
+      "Yes, every menu item supports a photo. Items without one get a polished placeholder instead of a blank box."
+    ],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "(button)"
+      },
+      {
+        "text": "contact us",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/demo": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "payments": [
+      "0% PLATFORM COMMISSION ON DIRECT ORDERS · 14-DAY TRIAL, NO CARD REQUIRED"
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Open the demo",
+        "href": "https://order.garnishtable.com/r/demo-restaurant/experience"
+      },
+      {
+        "text": "Request a guided demo",
+        "href": "(button)"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/about": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial"
+    ],
+    "payments": [
+      "Every commission on a direct sale is money a restaurant already earned, paid again just to reach its own customer. We think that trade stopped making sense once a restaurant has its own brand worth protecting — so we built the alternative instead of another listing."
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact us",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/contact": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial"
+    ],
+    "payments": [],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "live demo",
+        "href": "/demo"
+      },
+      {
+        "text": "View pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Start free",
+        "href": "/start-trial"
+      },
+      {
+        "text": "I'm interested in starting",
+        "href": "(button)"
+      },
+      {
+        "text": "I want a product demo",
+        "href": "(button)"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/faq": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "Is there a free trial?"
+    ],
+    "payments": [
+      "Do you take a commission on my orders?"
+    ],
+    "claims": [
+      "Can I cancel anytime?"
+    ],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Can customers order directly from my restaurant?",
+        "href": "(button)"
+      },
+      {
+        "text": "Can I manage my orders?",
+        "href": "(button)"
+      },
+      {
+        "text": "Do you take a commission on my orders?",
+        "href": "(button)"
+      },
+      {
+        "text": "Can I use my own domain for ordering?",
+        "href": "(button)"
+      },
+      {
+        "text": "Is there a free trial?",
+        "href": "(button)"
+      },
+      {
+        "text": "Contact us",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      }
+    ]
+  },
+  "/start-trial": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "About pricing & trial length",
+      "No credit card required to start a trial. See Pricing for current plan details, or the FAQ for more.",
+      "Create your account, name your restaurant, and start your 14-day trial — no waiting on our team, no card required.",
+      "Start my restaurant's trial",
+      "Start your agency's trial directly — choose a plan, create your account, and you're in.",
+      "Start agency trial"
+    ],
+    "payments": [
+      "Create your account and your restaurant goes live in minutes — no sales call, no credit card.",
+      "No credit card required to start a trial. See Pricing for current plan details, or the FAQ for more.",
+      "Create your account, name your restaurant, and start your 14-day trial — no waiting on our team, no card required."
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Try the live demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Start my restaurant's trial",
+        "href": "https://app.garnishtable.com/signup"
+      },
+      {
+        "text": "Start agency trial",
+        "href": "https://app.garnishtable.com/start"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/terms": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "These Terms of Service (\"Terms\") govern access to and use of GarnishTable (the \"Service\"), operated by GarnishTable (\"GarnishTable,\" \"we,\" \"us,\" or \"our\"). By creating an account, starting a trial, or otherwise using the Service, you agree to these Terms. If you do not agree, do not use the Service.",
+      "6. Subscriptions, trials, and billing",
+      "Certain features of the Service are offered under paid subscription plans, billed to restaurant owners and agencies (not to their customers). Current plan names, prices, and included features are shown at signup and in your account's billing settings, and are the version of the terms that applies to your subscription unless we notify you of a change in advance. Where a free trial is offered, its length and any card requirement will be shown to you before you start it. Subscriptions renew automatically for successive billing periods at the then-current price unless cancelled before the renewal date, consistent with the cancellation behavior described in our Refund & Cancellation Policy. Subscription payments are processed by a third-party payment provider (see Section 10); we do not store your full payment card details."
+    ],
+    "payments": [
+      "Certain features of the Service are offered under paid subscription plans, billed to restaurant owners and agencies (not to their customers). Current plan names, prices, and included features are shown at signup and in your account's billing settings, and are the version of the terms that applies to your subscription unless we notify you of a change in advance. Where a free trial is offered, its length and any card requirement will be shown to you before you start it. Subscriptions renew automatically for successive billing periods at the then-current price unless cancelled before the renewal date, consistent with the cancellation behavior described in our Refund & Cancellation Policy. Subscription payments are processed by a third-party payment provider (see Section 10); we do not store your full payment card details.",
+      "When a customer places an order through a restaurant's storefront on the Service, that order is a transaction between the customer and the restaurant (or, where applicable, the restaurant's delivery partner) — GarnishTable provides the ordering platform but is not itself the seller of the food or beverages ordered. Payment for customer orders is handled by the payment provider connected to that specific restaurant. Order accuracy, fulfillment, and any refund of an order are the responsibility of the restaurant fulfilling it, separate from the SaaS subscription billing described in Section 6.",
+      "8. Payment-provider relationship",
+      "GarnishTable relies on third-party providers to process both restaurant subscription billing and customer order payments. Your use of payment features is also subject to the applicable payment provider's own terms. We are not responsible for the acts, omissions, or availability of any third-party payment provider.",
+      "The Service may integrate with or rely on third-party services (for example, payment processors, delivery providers, email delivery, or mapping/geocoding services). We are not responsible for the availability, accuracy, or conduct of third-party services, which are governed by their own terms."
+    ],
+    "claims": [
+      "We aim to keep the Service available and reliable, but we do not guarantee uninterrupted or error-free operation. The Service may be temporarily unavailable for maintenance, updates, or reasons outside our control. We are not liable for losses arising from Service unavailability, except where applicable law prevents us from limiting that liability."
+    ],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "contact page",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/privacy": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial"
+    ],
+    "payments": [
+      "Payment information — we do not store full payment card numbers. Card details are entered directly with our payment processors (see Section 4), who return a payment status and, where applicable, a token we use to reference the transaction.",
+      "Process subscription billing for restaurant owners and agencies, and order payments for customers, through our payment processors.",
+      "Payment processors, to process subscription billing and customer order payments."
+    ],
+    "claims": [
+      "A restaurant owner or agency using the Service acts as the operator of their own storefront and is responsible for how they collect and use their customers' information within the Service (for example, what they tell a customer about a loyalty program). GarnishTable processes that data on their behalf to operate the platform, and restricts a restaurant's or agency's access to only the data associated with their own account — a restaurant never has access to another restaurant's customer data.",
+      "We apply reasonable technical and organizational measures to protect information on the Service — including password hashing, access controls scoped to each restaurant/agency's own data, and encrypted connections between your browser and our servers. No method of transmission or storage is completely secure, and we cannot guarantee absolute security."
+    ],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "contact page",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/refund-policy": {
+    "prices": [],
+    "trial": [
+      "Start Free Trial",
+      "1. Free trials",
+      "Where a plan includes a free trial, no payment method is required to start it, and no charge occurs during the trial. You may cancel at any time during the trial with immediate effect and no charge. If a trial is not cancelled before it ends, your subscription proceeds as described in Section 2 (if you've chosen a plan) or simply expires with no charge (if no payment has been set up).",
+      "You can cancel a paid subscription at any time from your account's billing settings. Cancelling an active, currently-paid subscription schedules the cancellation to take effect at the end of your current billing period — you keep full access through the period you've already paid for, and are not charged again after it ends. Cancelling a subscription that has not yet completed a paid period (for example, one still in trial, or in a failed-payment state) takes effect immediately.",
+      "Once a subscription ends (by cancellation taking effect, or a trial expiring with no plan selected), the account moves to a restricted state: existing data — your menu, order history, and settings — is preserved and not deleted, but paid features are no longer accessible until the subscription is reactivated. A new subscription can be started at any time."
+    ],
+    "payments": [
+      "Where a plan includes a free trial, no payment method is required to start it, and no charge occurs during the trial. You may cancel at any time during the trial with immediate effect and no charge. If a trial is not cancelled before it ends, your subscription proceeds as described in Section 2 (if you've chosen a plan) or simply expires with no charge (if no payment has been set up).",
+      "You can cancel a paid subscription at any time from your account's billing settings. Cancelling an active, currently-paid subscription schedules the cancellation to take effect at the end of your current billing period — you keep full access through the period you've already paid for, and are not charged again after it ends. Cancelling a subscription that has not yet completed a paid period (for example, one still in trial, or in a failed-payment state) takes effect immediately.",
+      "Failed payments. A failed subscription payment does not immediately cancel your subscription. Access continues while the payment is retried; if it cannot be recovered, the subscription is cancelled and you are not charged further.",
+      "A refund for a customer's food or beverage order — for an incorrect, incomplete, or unfulfilled order — is between the customer and the restaurant that took the order, not a GarnishTable subscription matter. The restaurant that received the order is responsible for handling that request, typically through its own connected payment processor's refund mechanism. If you placed a customer order and need a refund, contact the restaurant directly.",
+      "7. Payment-provider handling",
+      "Both subscription billing and customer order payments are processed through third-party payment providers. Where a refund is approved, it is issued back through the original payment method via that provider, and may take several business days to appear depending on your bank or card issuer."
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "contact page",
+        "href": "/contact"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      },
+      {
+        "text": "Order Management",
+        "href": "/product#order-management"
+      },
+      {
+        "text": "Demo",
+        "href": "/demo"
+      },
+      {
+        "text": "Contact",
+        "href": "/contact"
+      },
+      {
+        "text": "View live demo restaurant",
+        "href": "https://order.garnishtable.com/r/demo-restaurant"
+      }
+    ]
+  },
+  "/v2": {
+    "prices": [
+      "Paid · $25.00",
+      "$12.50",
+      "$14.00",
+      "$8.50",
+      "$6.00",
+      "Medium (+$2.00)",
+      "$14.50",
+      "$3.00",
+      "WELCOME10 applied — -$1.75",
+      "$17.19",
+      "$3.50",
+      "$15.00"
+    ],
+    "trial": [
+      "Start Free Trial",
+      "14-day trial, no card required",
+      "14-day free trial",
+      "14-DAY TRIAL",
+      "Is there a trial?"
+    ],
+    "payments": [
+      "Your own ordering storefront, the kitchen and counter behind it, and the customers who come back — run from one system, with no commission taken from a single direct order.",
+      "0% platform commission on direct orders",
+      "14-day trial, no card required",
+      "Stripe payments, delivery, your own domain",
+      "0% platform commission, one subscription",
+      "Checkout on Stripe, your account",
+      "Your delivery areas and fees",
+      "Delivery areas, fees and minimums alongside pickup",
+      "Delivery fee",
+      "The same system, growing with the business — no per-order commission at any tier.",
+      "A flat monthly or yearly subscription, and no GarnishTable commission on direct orders. Card processing is Stripe's standard fee, paid to Stripe.",
+      "Does GarnishTable charge a commission on direct orders?"
+    ],
+    "claims": [],
+    "placeholders": [],
+    "ctas": [
+      {
+        "text": "Pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Log in",
+        "href": "https://app.garnishtable.com/login"
+      },
+      {
+        "text": "Start Free Trial",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Start your restaurant",
+        "href": "/start-trial"
+      },
+      {
+        "text": "Explore the demo",
+        "href": "#demo"
+      },
+      {
+        "text": "Sell → Storefront, menu, QR ordering, promotions",
+        "href": "#sell"
+      },
+      {
+        "text": "Run → Orders, kitchen, POS, delivery",
+        "href": "#run"
+      },
+      {
+        "text": "OPEN THE FULL DEMO →",
+        "href": "/demo"
+      },
+      {
+        "text": "01 — START Owner — Starter One restaurant, one foc",
+        "href": "(button)"
+      },
+      {
+        "text": "02 — PROVE Owner — Growth Orders are flowing, cust",
+        "href": "(button)"
+      },
+      {
+        "text": "See full pricing",
+        "href": "/pricing"
+      },
+      {
+        "text": "Start an agency account →",
+        "href": "https://app.garnishtable.com/start"
+      },
+      {
+        "text": "Can customers order directly from my restaurant?",
+        "href": "(button)"
+      },
+      {
+        "text": "Is there a trial?",
+        "href": "(button)"
+      },
+      {
+        "text": "Online Ordering",
+        "href": "/product#online-ordering"
+      }
+    ]
+  },
+  "contactForm": {
+    "fields": [
+      "input[text]  required=true",
+      "input[email]  required=true",
+      "input[text]  required=false",
+      "input[tel]  required=false",
+      "select[select-one]  required=false",
+      "input[number]  required=false",
+      "textarea[textarea]  required=true"
+    ],
+    "afterEmptySubmit": [],
+    "invalidFields": 3
+  }
+}
