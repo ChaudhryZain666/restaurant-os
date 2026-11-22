@@ -26,6 +26,13 @@ export interface CreateProviderSubscriptionInput {
  *  provider itself needs to track — see subscriptionStateMachine.ts. */
 export type ProviderSubscriptionStatus = "trialing" | "active" | "past_due" | "cancelled";
 
+/** A completed charge as the provider recorded it (amount in the currency's lowest unit). */
+export interface ProviderPayment {
+  amountCents: number;
+  currency: string;
+  reference: string;
+}
+
 export interface ProviderSubscriptionSnapshot {
   providerSubscriptionId: string;
   status: ProviderSubscriptionStatus;
@@ -193,6 +200,10 @@ export interface BillingProvider {
    *  (e.g. after a failed renewal). Short-lived, so it's fetched on demand and never stored. Null
    *  when the provider has no such page for this subscription. */
   getPaymentMethodUpdateUrl(providerSubscriptionId: string): Promise<string | null>;
+  /** Optional: what the customer actually paid for a subscription's first charge (after discounts
+   *  and tax), so billing history doesn't assume the plan's list price. Null when the provider has
+   *  no paid charge for it yet. Providers without it fall back to the plan's price. */
+  retrieveFirstPayment?(providerSubscriptionId: string): Promise<ProviderPayment | null>;
   /** Returns the parsed, verified event, or null if the signature doesn't check out. */
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): ProviderBillingWebhookEvent | null;
   /** Launch, 2026-11-21 — optional: records which owner a customer the provider created at a public

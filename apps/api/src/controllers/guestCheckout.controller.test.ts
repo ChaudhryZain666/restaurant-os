@@ -45,6 +45,7 @@ let monthlyPriceId: string;
 let seq = 0;
 const sent: Array<{ to: string; subject: string; text?: string }> = [];
 const subscriptionStatus: Record<string, "active" | "cancelled"> = {};
+const firstPayment: Record<string, { amountCents: number; currency: string; reference: string } | Error> = {};
 
 beforeAll(async () => {
   await connectDB();
@@ -69,6 +70,11 @@ beforeAll(async () => {
     currentPeriodEnd: new Date("2026-12-21T00:00:00Z"),
   }));
   jest.spyOn(paddle, "setCustomerOwner").mockResolvedValue(undefined);
+  jest.spyOn(paddle, "retrieveFirstPayment").mockImplementation(async (id) => {
+    const p = firstPayment[id];
+    if (p instanceof Error) throw p;
+    return p ?? null;
+  });
 });
 
 beforeEach(() => {
@@ -237,6 +243,29 @@ describe("public pay-now checkout (Launch, 2026-11-21)", () => {
     };
     expect((await webhook(cancel)).status).toBe(200);
     expect((await Subscription.findOne({ _id: sub._id }).lean())!.status).toBe("cancelled");
+  });
+
+  it("billing history records what the buyer was charged: $0 with a 100%-off code, the plan price only as a fallback", async () => {
+    const setUp = async (paid: Awaited<ReturnType<typeof startAndPay>>) => {
+      const res = await request(app)
+        .post("/api/v1/public/checkout/claim")
+        .send({ token: paid.token, name: "Discount Owner", password: "PayNowPass1!", termsAccepted: true, restaurant: restaurant() });
+      expect(res.status).toBe(201);
+      const user = (await User.findOne({ email: paid.email }).lean())!;
+      return BillingHistoryEvent.find({ ownerId: user.businessId }).lean();
+    };
+
+    const discounted = await startAndPay();
+    firstPayment[discounted.subscriptionId] = { amountCents: 0, currency: "USD", reference: "txn_discounted" };
+    const history = await setUp(discounted);
+    expect(history.find((h) => h.type === "subscription_created")).toMatchObject({ amountCents: 5900 }); // the plan's price
+    expect(history.find((h) => h.type === "payment_succeeded")).toMatchObject({ amountCents: 0, currency: "USD" });
+
+    // The provider can't be asked: the account is still set up, and the plan price is recorded.
+    const unreadable = await startAndPay();
+    firstPayment[unreadable.subscriptionId] = new Error("Paddle unavailable — simulated");
+    const fallback = await setUp(unreadable);
+    expect(fallback.find((h) => h.type === "payment_succeeded")).toMatchObject({ amountCents: 5900, currency: "USD" });
   });
 
   it("the emailed link verifies the address", async () => {

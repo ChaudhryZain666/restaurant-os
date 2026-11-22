@@ -421,6 +421,18 @@ describe("PaddleBillingProvider Phase 89", () => {
     expect(provider().verifyWebhookSignature(forged.rawBody, forged.signatureHeader)).toBeNull();
   });
 
+  it("retrieveFirstPayment reads the subscription's oldest paid transaction total, and null when there is none", async () => {
+    const fetchSpy = mockFetchOnce(200, { data: [{ id: "txn_1", currency_code: "USD", details: { totals: { total: "0" } } }] });
+    expect(await provider().retrieveFirstPayment("sub_1")).toEqual({ amountCents: 0, currency: "USD", reference: "txn_1" });
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain("/transactions?");
+    expect(url).toContain("subscription_id=sub_1");
+    expect(decodeURIComponent(url)).toContain("status=paid,completed");
+    expect(decodeURIComponent(url)).toContain("order_by=created_at[ASC]");
+    mockFetchOnce(200, { data: [] });
+    expect(await provider().retrieveFirstPayment("sub_2")).toBeNull();
+  });
+
   it("retrievePrice returns the price, and null for an id this environment doesn't have", async () => {
     mockFetchOnce(200, { data: { id: "pri_1", status: "active" } });
     expect(await provider().retrievePrice("pri_1")).toEqual({ id: "pri_1", status: "active" });

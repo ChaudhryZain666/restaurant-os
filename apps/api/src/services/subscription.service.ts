@@ -10,7 +10,7 @@ import { trialExtensionActive } from "./trialExtension.service.js";
 import { env } from "../config/env.js";
 import { mockDriversAllowed } from "../config/mockDrivers.js";
 import { getBillingProvider } from "../billing/index.js";
-import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
+import type { ProviderBillingWebhookEvent, ProviderCheckoutSession, ProviderPayment, ProviderSubscriptionStatus } from "../billing/BillingProvider.js";
 import { isValidSubscriptionTransition } from "./subscriptionStateMachine.js";
 import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 import { resolveOwnerIdentity } from "./ownerIdentity.service.js";
@@ -782,15 +782,29 @@ export async function linkProviderSubscription(link: ProviderSubscriptionLink): 
     metadata: { planCode: plan.code, ...link.historyMetadata },
   });
   if (status === "active") {
+    // What the buyer was actually charged (a discount code can make it $0); the plan's list price
+    // only when the provider can't say. A lookup failure must not undo the link above.
+    let firstPayment: ProviderPayment | null = null;
+    if (provider.retrieveFirstPayment) {
+      try {
+        firstPayment = await provider.retrieveFirstPayment(link.providerSubscriptionId);
+      } catch (err) {
+        logger.warn("could not read the first payment from the billing provider — recording the plan price", {
+          providerSubscriptionId: link.providerSubscriptionId,
+          error: (err as Error).message,
+        });
+      }
+    }
     await recordBillingHistoryEvent({
       ownerType: link.ownerType,
       ownerId: link.ownerId,
       subscriptionId: subscription._id,
       type: "payment_succeeded",
       provider: link.providerName as SubscriptionDoc["provider"],
-      amountCents: pricing?.amountCents,
-      currency: pricing?.currency,
+      amountCents: firstPayment ? firstPayment.amountCents : pricing?.amountCents,
+      currency: firstPayment ? firstPayment.currency : pricing?.currency,
       providerReference: link.reference,
+      ...(firstPayment ? { metadata: { providerTransaction: firstPayment.reference } } : {}),
     });
   }
 
