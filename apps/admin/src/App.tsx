@@ -72,6 +72,8 @@ import { AgencyAuditLogPage } from "./pages/AgencyAuditLogPage";
 import { MockCheckoutPage } from "./pages/MockCheckoutPage";
 import { ForcePasswordChangePage } from "./pages/ForcePasswordChangePage";
 import { portalHomeForOrigin, type PortalOrigins } from "./lib/portalHosts";
+import { showsPublicHome } from "./lib/publicHome";
+import { OwnerPortalHomePage } from "./pages/OwnerPortalHomePage";
 import { useCan } from "./hooks/useCan";
 import { useAuth } from "./context/AuthContext";
 import { useLocation as useActiveLocation } from "./context/LocationContext";
@@ -124,6 +126,19 @@ function RestaurantSupportRoute({ children }: { children: ReactElement }) {
   const { id } = useParams();
   const redirect = restaurantSupportRedirect(user?.role, activeLocationId, id);
   return redirect ? <Navigate to={redirect} replace /> : children;
+}
+
+/** Launch, 2026-11-22 — the app's main layout, except that a SIGNED-OUT visitor to "/" on the Owner
+ *  Portal host gets the public OwnerPortalHomePage instead of being sent to sign-in (Paddle's
+ *  domain review refused app.garnishtable.com as a login wall). lib/publicHome.ts decides; for
+ *  everyone else this is exactly <Layout />, so signed-in pages and RequireAuth are unchanged. */
+function LayoutOrPublicHome() {
+  const { user, loading } = useAuth();
+  const { pathname } = useLocation();
+  if (showsPublicHome({ pathname, authLoading: loading, signedIn: Boolean(user), origin: window.location.origin, portals: PORTAL_ORIGINS })) {
+    return <OwnerPortalHomePage />;
+  }
+  return <Layout />;
 }
 
 function IndexRoute() {
@@ -211,7 +226,7 @@ export function App() {
           <Route path="/pos/orders" element={<PosOrdersPage />} />
           <Route path="/pos/pending" element={<PendingSalesPage />} />
         </Route>
-        <Route element={<Layout />}>
+        <Route element={<LayoutOrPublicHome />}>
           <Route
             path="/"
             element={<IndexRoute />}
