@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-test("admin dashboard redirects unauthenticated visitors to login", async ({ page }) => {
-  await page.goto("http://localhost:5174/");
+// Launch, 2026-11-22 — "/" now shows the public owner portal home to signed-out visitors (see
+// owner-portal-public-home.spec.ts); the dashboard's own guarded pages still redirect to sign-in.
+test("admin dashboard pages redirect unauthenticated visitors to login", async ({ page }) => {
+  await page.goto("http://localhost:5174/orders");
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });

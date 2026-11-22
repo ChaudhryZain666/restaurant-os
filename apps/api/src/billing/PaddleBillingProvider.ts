@@ -9,6 +9,7 @@ import type {
   ProviderBillingWebhookEvent,
   ProviderCheckoutSession,
   ProviderInvoice,
+  ProviderPayment,
   ProviderSubscriptionSnapshot,
   ProviderSubscriptionStatus,
 } from "./BillingProvider.js";
@@ -242,6 +243,25 @@ export class PaddleBillingProvider implements BillingProvider {
   async retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscriptionSnapshot> {
     const response = await this.request<PaddleSubscriptionResponse>("GET", `/subscriptions/${providerSubscriptionId}`);
     return this.toSnapshot(response);
+  }
+
+  /**
+   * The subscription's first paid transaction, oldest first (GET /transactions filtered by
+   * subscription_id and status). Its `details.totals.total` is what the buyer was charged after
+   * discounts, including tax: $0 when a 100%-off code was used, not the price's list amount.
+   */
+  async retrieveFirstPayment(providerSubscriptionId: string): Promise<ProviderPayment | null> {
+    const query = new URLSearchParams({
+      subscription_id: providerSubscriptionId,
+      status: "paid,completed",
+      order_by: "created_at[ASC]",
+      per_page: "1",
+    });
+    const response = await this.request<{ data?: Array<PaddleWebhookData & { id?: string }> }>("GET", `/transactions?${query.toString()}`);
+    const txn = response.data?.[0];
+    const amountCents = toCents(txn?.details?.totals?.total);
+    if (!txn?.id || amountCents === undefined || !txn.currency_code) return null;
+    return { amountCents, currency: txn.currency_code, reference: txn.id };
   }
 
   /**

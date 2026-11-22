@@ -187,7 +187,9 @@ jobs:
             e2e/kitchen-realtime.spec.ts \
             e2e/admin-tenant-isolation.spec.ts \
             e2e/multi-tenant.spec.ts \
-            e2e/menu-rbac.spec.ts
+            e2e/menu-rbac.spec.ts \
+            e2e/admin.spec.ts \
+            e2e/owner-portal-public-home.spec.ts
       - name: Upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
