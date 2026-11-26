@@ -63,10 +63,7 @@ Ordered by impact:
 
 Start with 100 restaurants in **one city you can visit**; pick the city before starting.
 
-**Offer.**
-- **Launch partner:** first 3 months on Owner — Growth, complimentary. Set it up yourself from the platform admin, with no checkout and no card (Platform → Restaurants → the restaurant → Set up a plan → Complimentary, end date in 3 months). It converts to $99/month or $990/year after that.
-- **In return:** a short testimonial, permission to show their storefront as a live example, and a 15-minute feedback call at week 4.
-- **Cap:** 10 launch partners. Scarcity is honest here, because you can only onboard that many by hand.
+**Offer.** The standard 14-day free trial (no card) at the existing prices, with you doing the setup. Any extra launch incentive (a longer free period, a founding-customer price) is **your decision and not part of this plan yet**; `first-five-campaign.md` §3 lists the options and how each would be set up. Ask happy trial restaurants for a short testimonial and permission to show their storefront as an example.
 
 **How you onboard them.** You create the restaurant and invite the owner from the platform admin, import their menu (PDF, photos or URL import), and publish with them on a 30-minute call. This exact path is covered end to end by `e2e/platform-admin-onboarding-subscription.spec.ts`.
 
@@ -79,7 +76,7 @@ Start with 100 restaurants in **one city you can visit**; pick the city before s
 | 10 | Last touch: one concrete number, e.g. "at 40 orders a week, a 25% commission on a $20 ticket is $800/month" (use their real numbers if they shared them). |
 
 **Opening message (adapt it):**
-> Hi [name], I built a commission-free ordering page for [restaurant] using your current menu: [link to the draft storefront]. Customers order directly from you, and you keep the whole order, with no per-order fee. I'm taking on 10 launch partners in [city] who get it free for 3 months while I help set everything up. Would you like me to publish it for you this week?
+> Hi [name], I built a commission-free ordering page for [restaurant] using your current menu: [link to the draft storefront]. Customers order directly from you, and you keep the whole order, with no per-order fee. I'll set it up with you, and you can try it free for 14 days with no card. Would you like me to publish it for you this week?
 
 **Measure, weekly, in a simple sheet:**
 - contacted;
@@ -89,7 +86,7 @@ Start with 100 restaurants in **one city you can visit**; pick the city before s
 - first real order;
 - converted to paid.
 
-Expected funnel: 100 contacted → about 25 conversations → about 10 launch partners → **3–5 paying** by week 8.
+Expected funnel: 100 contacted → about 25 conversations → about 10 trials → **3–5 paying** by week 8. Week-by-week execution: `first-five-campaign.md`.
 
 **Weekly rhythm:**
 - 20 new restaurants contacted;
