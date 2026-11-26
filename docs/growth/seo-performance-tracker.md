@@ -1,6 +1,6 @@
 # SEO performance tracker
 
-A weekly 20-minute review, kept in a spreadsheet with the tabs below. Fill it from **Google Search Console** and **Bing Webmaster Tools** once they're set up (`search-engine-setup.md`). Until then, only the **Authority** and **Content** tabs have data. As of 27 Nov 2026.
+A weekly 20-minute review, kept in a spreadsheet with the tabs below. **Google Search Console has been verified and the sitemap submitted since 27 Nov 2026; Bing is still to do.** Fill it from **Google Search Console** and **Bing Webmaster Tools** once they're set up (`search-engine-setup.md`). Until then, only the **Authority** and **Content** tabs have data. As of 27 Nov 2026.
 
 ## Tab 1: Weekly summary (one row per week)
 | Week ending | Google impressions | Google clicks | Avg position | Bing impressions | Bing clicks | Indexed pages (Google) | Trials started | Pay-now purchases | Trials from organic* | Notes |

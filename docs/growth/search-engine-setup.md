@@ -1,6 +1,10 @@
 # Search engine setup for garnishtable.com
 
-Checked against production on 27 Nov 2026. **Domain verification and sitemap submission have not been done yet.** They need your Google and Microsoft accounts.
+Checked against production on 27 Nov 2026.
+
+**Status (27 Nov 2026):**
+- **Google: done.** Domain property `garnishtable.com` shows "Ownership verified" (TXT record added in Hostinger; it must stay in place). `https://garnishtable.com/sitemap.xml` shows "Sitemap submitted successfully". Indexing was requested for `/`, `/pricing`, `/product` and `/faq`. At that time `/` and `/faq` were already indexed (from older crawls), `/pricing` was unknown to Google, and `/product` had been discovered through the sitemap but not yet crawled.
+- **Bing: not done yet** (§2).
 
 ## Current state (verified)
 - **Canonical domain:** `https://garnishtable.com`. `www.garnishtable.com` redirects to it with a 301.
@@ -18,7 +22,7 @@ Checked against production on 27 Nov 2026. **Domain verification and sitemap sub
 ## 1. Google Search Console (about 15 minutes)
 **Verify the domain**
 1. Open https://search.google.com/search-console and sign in with the Google account that should own the site's data.
-2. **Add property** → the left box, **Domain** → enter `garnishtable.com` → **Continue**.
+2. **Add a website** (or **Add property**) → the left box, **Domain** → enter `garnishtable.com` → **Continue**.
 3. Google shows a TXT record that starts `google-site-verification=…`. Click **Copy**, and leave this page open.
 4. In a new tab, open Hostinger → **Domains** → `garnishtable.com` → **DNS / Nameservers** → **DNS records**.
 5. **Add record:** Type **TXT**, Name `@`, TXT value: paste the copied text, TTL: leave the default → **Add record**. Don't edit or delete the existing A, CNAME or MX records.
