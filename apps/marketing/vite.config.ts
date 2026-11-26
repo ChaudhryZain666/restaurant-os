@@ -1,8 +1,35 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { checkLegalConfig, LEGAL_NOT_CONFIGURED_WARNING, sitemapWithoutLegalPages } from "./legalConfig.mjs";
+import { SEO_PAGES } from "./src/seo/pages.js";
+import { renderPage } from "./src/seo/prerender.js";
+
+/**
+ * SEO prerendering: after the build, writes dist/_pages/<page>.html for every page in
+ * src/seo/pages.ts — the built index.html with that page's own title, description, canonical URL,
+ * structured data and readable content. nginx (marketing.locations.template) serves it for the
+ * page's URL and falls back to index.html. index.html itself stays the plain app shell, so 404s and
+ * unknown paths never carry a real page's content. Runs after siteOrigin, so index.html already
+ * holds the Open Graph defaults this rewrites.
+ */
+function prerenderPages(siteUrl: string | undefined): Plugin {
+  const origin = siteUrl?.replace(/\/+$/, "") ?? "";
+  return {
+    name: "garnishtable-prerender-pages",
+    apply: "build",
+    closeBundle() {
+      const dist = resolve(import.meta.dirname, "dist");
+      const template = readFileSync(resolve(dist, "index.html"), "utf8");
+      mkdirSync(resolve(dist, "_pages"), { recursive: true });
+      for (const page of SEO_PAGES) {
+        writeFileSync(resolve(dist, "_pages", `${page.file}.html`), renderPage(template, page, origin));
+      }
+      console.log(`[prerender] ${SEO_PAGES.length} pages written to dist/_pages/`);
+    },
+  };
+}
 
 /** The placeholder origin public/sitemap.xml is authored with (no production domain yet). */
 const SITEMAP_PLACEHOLDER = "https://www.garnishtable.app";
@@ -98,7 +125,7 @@ export default defineConfig(({ command, mode }) => {
   // Only a production build is judged; dev and other modes keep the full draft pages (and sitemap).
   const legalConfigured = command === "build" && mode === "production" ? assertLegalConfig(env) : true;
   return {
-    plugins: [react(), siteOrigin(env.VITE_SITE_URL, legalConfigured)],
+    plugins: [react(), siteOrigin(env.VITE_SITE_URL, legalConfigured), prerenderPages(env.VITE_SITE_URL)],
     server: {
       port: 5175,
       // Phase 28 — mirrors apps/web/vite.config.ts's exact proxy: makes the new public/* API calls

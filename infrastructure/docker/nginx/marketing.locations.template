@@ -17,15 +17,24 @@ location ~* ^/(terms|privacy|refund-policy)/?$ {
 # Case-insensitive (~*) like the app's router: /Pricing renders the pricing page, so it must not
 # answer 404 (Windows nginx test run, 15 Nov). QA-011 — the site's pages (apps/marketing/src/App.tsx's routes; marketing/routes.test.mjs keeps
 # the two lists in step). Served as the SPA shell with 200.
+# SEO prerendering (apps/marketing/src/seo): each page has its own static HTML in /_pages/ with its
+# own title, description, canonical URL, structured data and readable content, for crawlers and
+# answer engines that don't run JavaScript. A page without one (checkout, v3, a /Pricing spelling)
+# gets the plain shell as before; the app renders the same page either way.
 location = / {
-    try_files /index.html =404;
+    try_files /_pages/home.html /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
 }
 location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|checkout|v3)/?$ {
-    try_files /index.html =404;
+    try_files /_pages/$1.html /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
+}
+# The prerendered files are only ever served under their page's own URL, never at /_pages/ (that
+# would be a second, duplicate URL for every page).
+location ^~ /_pages/ {
+    return 404;
 }
 
 # QA-011 — anything else that isn't a real file (a typo, a dead link, the dev-only /v2 draft) used
