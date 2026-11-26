@@ -28,7 +28,7 @@ function useSiteStructuredData() {
           url: base,
         },
       ],
-    });
+    }, "site");
   }, []);
 }
 

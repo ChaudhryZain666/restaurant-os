@@ -1,0 +1,22 @@
+# GarnishTable
+
+> GarnishTable is online ordering software for independent restaurants. Each restaurant gets its own branded ordering page, a menu builder, a live order queue for staff, pickup and delivery, customer history, loyalty and promotions — for a flat monthly subscription with 0% commission on direct orders.
+
+Key facts:
+
+- Pricing (USD): Owner — Starter $59/month or $590/year (one location). Owner — Growth $99/month or $990/year (up to 2 locations, your own ordering domain, business-wide analytics and promotions). Agency — Growth $179/month or $1,790/year (up to 5 client restaurant businesses).
+- 14-day free trial, no credit card required. Customers can also pay at checkout and skip the trial.
+- 0% commission on direct orders.
+- Customers currently pay the restaurant directly (at pickup, on delivery or at the table). Online card payments through the restaurant's own Stripe account are planned, not yet available.
+- Marketplace connections (Uber Eats, DoorDash, foodpanda) are not available at launch.
+- Subscriptions are sold and billed by Paddle, the merchant of record.
+
+## Pages
+
+- [Product](https://garnishtable.com/product): every feature, from digital menu to analytics
+- [Pricing](https://garnishtable.com/pricing): plans and what each includes
+- [How it works](https://garnishtable.com/how-it-works): from signup to the first order in six steps
+- [FAQ](https://garnishtable.com/faq): common questions, answered
+- [Live demo](https://garnishtable.com/demo): the real product running a sample restaurant
+- [Start a free trial](https://garnishtable.com/start-trial)
+- [Contact](https://garnishtable.com/contact)

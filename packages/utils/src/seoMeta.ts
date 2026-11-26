@@ -112,8 +112,14 @@ export function applySeoMeta(input: SeoMetaInput): () => void {
  * Malformed input can't break page rendering: JSON.stringify on a plain data object never throws
  * for the object shapes this package's callers build (no circular refs, no BigInt/function fields).
  */
-export function applyJsonLd(data: object): () => void {
+export function applyJsonLd(data: object, key?: string): () => void {
+  // A page the build prerendered already carries this block in its static HTML (apps/marketing
+  // vite.config.ts prerenderPages, tagged data-jsonld=<key>): adding it again would duplicate it.
+  if (key && document.head.querySelector(`script[type="application/ld+json"][data-jsonld="${key}"]`)) {
+    return () => {};
+  }
   const script = document.createElement("script");
+  if (key) script.dataset.jsonld = key;
   script.type = "application/ld+json";
   script.textContent = JSON.stringify(data);
   document.head.appendChild(script);

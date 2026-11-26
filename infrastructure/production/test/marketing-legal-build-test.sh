@@ -33,6 +33,18 @@ if build "$LOG"; then
   if grep -qE "$TOKENS" "${CHUNKS[@]}"; then fail "unconfigured: placeholder tokens in the legal chunks"; else pass "unconfigured: no placeholder tokens"; fi
   if grep -qE "/(terms|privacy|refund-policy)</loc>" "$DIST/sitemap.xml"; then fail "unconfigured: legal pages still in sitemap.xml"; else pass "unconfigured: legal pages left out of sitemap.xml"; fi
   grep -q "/pricing</loc>" "$DIST/sitemap.xml" && pass "unconfigured: the rest of the sitemap is intact" || fail "unconfigured: other sitemap entries missing"
+  # SEO prerendering (apps/marketing/src/seo): each page's own static HTML; the plain shell untouched.
+  P="$DIST/_pages/pricing.html"
+  if [ -f "$P" ] && [ -f "$DIST/_pages/home.html" ] && [ -f "$DIST/_pages/faq.html" ]; then
+    grep -q "<title>Pricing — GarnishTable</title>" "$P" && pass "prerender: pricing has its own title" || fail "prerender: pricing title wrong"
+    grep -q '<link rel="canonical" href="https://garnishtable.com/pricing"' "$P" && pass "prerender: pricing canonical URL" || fail "prerender: pricing canonical missing"
+    grep -q '<h1>Restaurant online ordering pricing</h1>' "$P" && grep -q '\$59/month' "$P" && pass "prerender: pricing content is in the HTML" || fail "prerender: pricing content missing"
+    grep -q '"@type":"SoftwareApplication"' "$P" && grep -q '"price":"59.00"' "$P" && pass "prerender: pricing structured data" || fail "prerender: pricing structured data missing"
+    grep -q '"@type":"FAQPage"' "$DIST/_pages/faq.html" && pass "prerender: FAQPage structured data" || fail "prerender: FAQPage structured data missing"
+    grep -q 'data-prerendered' "$DIST/index.html" && fail "prerender: index.html (the 404/fallback shell) carries page content" || pass "prerender: index.html stays the plain shell"
+  else
+    fail "prerender: dist/_pages/ files missing"
+  fi
 else
   fail "unconfigured: the build failed ($(tail -5 "$LOG"))"
 fi
