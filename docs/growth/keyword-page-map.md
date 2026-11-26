@@ -27,7 +27,7 @@ Status key: **Live** = on garnishtable.com now. **Planned** = should be built. *
 | # | URL | Primary keyword | Why it's worth it | Hold conditions |
 |---|---|---|---|---|
 | 1 | `/compare/chownow` | ChowNow alternative / ChowNow pricing comparison | High-intent buyers are already comparing; GarnishTable's price gap is large ($59 vs ChowNow's stated $249+/month monthly billing, plus their setup fee) | **Built in PR #29**, from ChowNow's own pricing page (27 Nov). Recheck before publishing. |
-| 2 | `/compare/restolabs` | Restolabs alternative | Same audience: independents, 0% commission | **Built in PR #29.** Restolabs' plan prices weren't readable, so the page says so; confirm and add them if you can. |
+| 2 | `/compare/restolabs` | Restolabs alternative | Same audience: independents, 0% commission | **Built in PR #29**, with prices re-checked in a browser on 27 Nov ($69/$99/$199 monthly billing). |
 | 3 | `/compare/toast` | Toast online ordering alternative | Toast is the best-known brand; searchers include restaurants that don't want POS hardware or a 12–36 month contract | **Built in PR #29**, from Toast's own pricing page, read in a browser on 27 Nov. |
 | 4 | `/guides/direct-online-ordering` (pillar) | how to get more direct online orders for a restaurant | The core problem GarnishTable solves; links to `/pricing`, `/product` and the compare pages | — |
 | 5 | `/guides/restaurant-ordering-software` (pillar) | how to choose online ordering software for a restaurant | Buyer's-guide intent; a natural home for an honest checklist | — |
