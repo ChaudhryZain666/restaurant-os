@@ -26,9 +26,9 @@ Status key: **Live** = on garnishtable.com now. **Planned** = should be built. *
 
 | # | URL | Primary keyword | Why it's worth it | Hold conditions |
 |---|---|---|---|---|
-| 1 | `/compare/chownow` | ChowNow alternative / ChowNow pricing comparison | High-intent buyers are already comparing; GarnishTable's price gap is large ($59 vs ChowNow's stated $249+/month monthly billing, plus their setup fee) | Facts collected 27 Nov from ChowNow's own pricing page. Recheck before publishing. |
-| 2 | `/compare/restolabs` | Restolabs alternative | Same audience: independents, 0% commission | Restolabs' plan prices weren't readable on its pricing page. Publish without a price row, or confirm prices first. |
-| 3 | `/compare/toast` | Toast online ordering alternative | Toast is the best-known brand; searchers include restaurants that don't want POS hardware | **Hold:** Toast's pages blocked automated reading; no verified facts yet. Collect them by hand. |
+| 1 | `/compare/chownow` | ChowNow alternative / ChowNow pricing comparison | High-intent buyers are already comparing; GarnishTable's price gap is large ($59 vs ChowNow's stated $249+/month monthly billing, plus their setup fee) | **Built in PR #29**, from ChowNow's own pricing page (27 Nov). Recheck before publishing. |
+| 2 | `/compare/restolabs` | Restolabs alternative | Same audience: independents, 0% commission | **Built in PR #29.** Restolabs' plan prices weren't readable, so the page says so; confirm and add them if you can. |
+| 3 | `/compare/toast` | Toast online ordering alternative | Toast is the best-known brand; searchers include restaurants that don't want POS hardware or a 12–36 month contract | **Built in PR #29**, from Toast's own pricing page, read in a browser on 27 Nov. |
 | 4 | `/guides/direct-online-ordering` (pillar) | how to get more direct online orders for a restaurant | The core problem GarnishTable solves; links to `/pricing`, `/product` and the compare pages | — |
 | 5 | `/guides/restaurant-ordering-software` (pillar) | how to choose online ordering software for a restaurant | Buyer's-guide intent; a natural home for an honest checklist | — |
 | 6 | `/agencies` | white-label restaurant ordering software / restaurant software for agencies | The Agency — Growth plan exists today ($179/month, up to 5 businesses). This page sells it. | Don't promise full white-label yet (roadmap §17); describe what exists now. |

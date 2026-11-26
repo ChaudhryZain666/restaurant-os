@@ -39,14 +39,13 @@ Each of those pages links to `/pricing` and the trial. Authority then comes from
 |---|---|---|---|
 | 1 | Google Search Console and Bing verification, sitemap submission | You, 15 minutes | Nothing gets measured or indexed fast without it |
 | 2 | Set the legal values (terms, privacy, refund) | You, 15 minutes | Removes `noindex`; trust signals; Paddle review |
-| 3 | `/compare/chownow` and `/compare/restolabs` with sourced, dated facts | 1 PR | Highest buying intent we can rank for early |
+| 3 | `/compare/chownow`, `/compare/restolabs` and `/compare/toast` with sourced, dated facts | **Built: PR #29**, awaiting your fact check and approval | Highest buying intent we can rank for early |
 | 4 | Commission-cost calculator on `/pricing` | 1 PR | Converts comparison and pricing traffic; linkable |
 | 5 | Pillar guide: "How to get more direct online orders" | 1 article, about 1,500 words | The core problem; links to everything |
 | 6 | `/agencies` page for the existing Agency — Growth plan | 1 PR | A second customer type, already sellable |
 | 7 | Free listings and the first real backlinks (`organic-authority-plan.md`) | Ongoing, 2 hours a week | Authority compounds |
 | 8 | Second pillar: "How to choose restaurant ordering software" plus supporting articles | 1 a fortnight | Topic authority |
-| 9 | `/compare/toast` | After facts are collected by hand | Toast blocked automated reading |
-| 10 | City pages | Only with a real customer in the city | Avoids thin pages |
+| 9 | City pages | Only with a real customer in the city | Avoids thin pages |
 
 ## 4. Content clusters
 
