@@ -50,7 +50,7 @@ export const COMPARISONS: Comparison[] = [
       "An honest comparison of GarnishTable and ChowNow for independent restaurants: monthly price, setup fees, card processing, trial and features, with sources.",
     h1: "GarnishTable vs ChowNow",
     answer:
-      "Both GarnishTable and ChowNow give independent restaurants commission-free direct online ordering. GarnishTable costs $59 or $99 a month with no setup fee and a 14-day free trial, but doesn't take online card payments yet. ChowNow starts at $249 a month (monthly billing) plus setup and card-processing fees, and includes branded apps and POS integrations.",
+      "Both GarnishTable and ChowNow give independent restaurants commission-free direct online ordering. GarnishTable costs $59 or $99 a month with no setup fee and a 14-day free trial, but doesn't take online card payments yet. ChowNow starts at $249 a month (monthly billing) plus setup and card-processing fees, and offers branded apps and 30+ POS integrations.",
     checkedOn: "27 November 2026",
     sources: [
       { label: "ChowNow pricing", url: "https://get.chownow.com/pricing/" },
@@ -88,15 +88,15 @@ export const COMPARISONS: Comparison[] = [
       "An honest comparison of GarnishTable and Restolabs for independent restaurants: pricing, trial, payments, apps and integrations, with sources.",
     h1: "GarnishTable vs Restolabs",
     answer:
-      "GarnishTable and Restolabs both offer commission-free online ordering for restaurants with no hardware to buy. GarnishTable lists its prices publicly ($59 or $99 a month) with a 14-day free trial, but doesn't take online card payments yet. Restolabs offers a 30-day free trial, online payments through many gateways, POS and delivery integrations, and branded apps as an option.",
+      "GarnishTable and Restolabs both offer commission-free online ordering for restaurants with no hardware to buy. GarnishTable costs $59 or $99 a month with a 14-day free trial, but doesn't take online card payments yet. Restolabs costs $69 to $199 a month (less when billed annually), with a 30-day free trial, online payments through many gateways, POS and delivery integrations, and branded apps as an option.",
     checkedOn: "27 November 2026",
     sources: [
       { label: "Restolabs pricing", url: "https://www.restolabs.com/pricing" },
       { label: "Restolabs home page", url: "https://www.restolabs.com/" },
     ],
     rows: [
-      { label: "Monthly price", garnishtable: GT.price, competitor: "Basic, Growth and Pro plans; prices weren't shown in readable form on the pricing page. See restolabs.com/pricing." },
-      { label: "Annual billing", garnishtable: GT.annual, competitor: "Annual billing \"save 20%\"" },
+      { label: "Monthly price (monthly billing)", garnishtable: GT.price, competitor: "Basic $69, Growth $99, Pro $199 per month" },
+      { label: "Annual billing", garnishtable: GT.annual, competitor: "Basic $55, Growth $79, Pro $159 per month, billed annually (\"save 20%\")" },
       { label: "Setup fee", garnishtable: GT.setup, competitor: "Not stated" },
       { label: "Commission on direct orders", garnishtable: GT.commission, competitor: "0% commission" },
       { label: "Online card payments", garnishtable: GT.payments, competitor: "Yes: \"Online Payments (50+ Gateways)\"; rates not stated" },
@@ -104,11 +104,11 @@ export const COMPARISONS: Comparison[] = [
       { label: "Free trial", garnishtable: GT.trial, competitor: "30 days; \"No credit card required to start\"" },
       { label: "Contract terms", garnishtable: GT.contract, competitor: "Month-to-month or annual; no long-term contract" },
       { label: "Branded mobile app", garnishtable: GT.app, competitor: "Included on Pro, or a $49/month add-on" },
-      { label: "Marketplace / third-party delivery", garnishtable: GT.marketplaces, competitor: "Third-party delivery integrations listed (e.g. DoorDash, Uber Direct)" },
+      { label: "Marketplace / third-party delivery", garnishtable: GT.marketplaces, competitor: "Third-party delivery integrations (DoorDash, Uber Direct and more): on Growth, or an add-on on Basic" },
       { label: "POS integrations", garnishtable: GT.pos, competitor: "On the Growth plan (Toast, Clover, Genius and more listed)" },
     ],
     chooseGarnishTable: [
-      "You want simple, published prices and to start the same day on your own.",
+      "You want direct ordering at a lower monthly price ($59 vs $69 with monthly billing) and to set it up yourself the same day.",
       "Your customers already pay at pickup, on delivery or at the table.",
       "You run one or two locations, or you're an agency managing several restaurants on one plan.",
     ],
