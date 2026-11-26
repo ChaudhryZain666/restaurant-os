@@ -80,6 +80,34 @@ Leave the one-pager. Follow up the same day by WhatsApp or email with the draft 
 
 Ask for annual (= 10 months' price) only when they're clearly happy.
 
+## 4.5 Week 1, day by day (about 3 hours a day, no spend)
+
+| Day | Do | Output by end of day |
+|---|---|---|
+| **Mon** | Pick the launch city (your decision). Set up the tracking sheet (§6). In the platform admin, create the reusable **preview restaurant** under an email alias you control and give it a complimentary Owner — Growth plan (§4.1). | City chosen; sheet ready; preview restaurant live |
+| **Tue** | **Build the prospect list.** Search Google Maps for "restaurant", "pizza", "burgers", "takeaway", "café" in 3–4 neighbourhoods. For each independent with 1–2 locations, check its website, Google profile and Instagram for an ordering link. Add the ones with **no direct ordering link**, or only a marketplace link. | 50 prospects with name, address, contact, "ordering today" |
+| **Wed** | **Prepare 10 previews.** For the 10 best prospects, import their public menu into the preview restaurant (menu import: website URL, PDF or photos), check prices, apply their colour, and screenshot it on a phone. You re-import for each prospect, so keep each screenshot. | 10 phone screenshots of "their" menu |
+| **Thu** | **Visit 5 restaurants at 2–4 pm** (the quiet hours). Show their menu on the preview, use the opening line (§4.2), and leave the one-pager. Say up front what it doesn't do yet: online card payments, marketplace sync. | 5 conversations logged |
+| **Fri** | **Visit 5 more.** Send same-day follow-ups to everyone met (WhatsApp or email, with the demo link `garnishtable.com/demo`). For anyone who said yes: book a 30-minute onboarding call (§4.3) for next week. | 10 contacted; follow-ups sent; any onboarding calls booked |
+| **Sat** | Finish the list to 100 (another 50 from new neighbourhoods). Ask 2–3 friendly owners you met who else they know. | 100 prospects |
+| **Sun** | **Review:** contacted, conversations, yeses, objections heard (write the exact words; they become FAQ entries). Prepare the next 10 previews. | Week-1 numbers in the sheet |
+
+**Onboarding a "yes"** (§4.3, about 30 minutes, booked within 3 days):
+- create their real restaurant with their email, which sends the invite;
+- assign Starter or Growth as a **14-day trial**;
+- import the menu;
+- set hours, pickup and delivery;
+- publish;
+- put the link on their Google profile and Instagram;
+- place one test order together.
+
+**Converting at the end of the trial** (§4.4):
+- the product emails them 3 days before the trial ends; call them that day;
+- they subscribe from **Billing** once Paddle approves `app.garnishtable.com`;
+- until then, they pay at `garnishtable.com/checkout` with the **same email**, then choose "Add plan to my account".
+
+**The one number to watch each week:** trials that took a **real customer order** in their first 7 days. Those are the ones that convert.
+
 ## 5. Week by week
 
 | Week | Activity | Target by end of week |
