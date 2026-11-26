@@ -7,6 +7,7 @@ import { COMPARISONS, type Comparison } from "../lib/comparisons";
 const bySlug = (slug: string) => COMPARISONS.find((c) => c.slug === slug)!;
 export const CompareChowNowPage = () => <ComparisonPage comparison={bySlug("chownow")} />;
 export const CompareRestolabsPage = () => <ComparisonPage comparison={bySlug("restolabs")} />;
+export const CompareToastPage = () => <ComparisonPage comparison={bySlug("toast")} />;
 
 /** /compare/<slug> — an honest, sourced comparison (data and rules: lib/comparisons.ts). */
 export function ComparisonPage({ comparison: c }: { comparison: Comparison }) {

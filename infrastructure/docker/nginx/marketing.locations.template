@@ -26,7 +26,7 @@ location = / {
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
 }
-location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|checkout|v3|compare/chownow|compare/restolabs)/?$ {
+location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|checkout|v3|compare/chownow|compare/restolabs|compare/toast)/?$ {
     try_files /_pages/$1.html /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;

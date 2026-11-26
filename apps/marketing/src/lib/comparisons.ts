@@ -3,9 +3,6 @@
  * public page, read on `checkedOn`; each source URL is shown on the page. "Not stated" means the page
  * didn't say, never a guess. Re-check before each change and at least quarterly. GarnishTable's own
  * column must state what isn't available yet, as plainly as what is.
- *
- * Toast is deliberately absent: its pages couldn't be read on 27 Nov 2026, so there are no verified
- * facts to compare (docs/growth/keyword-page-map.md).
  */
 
 export interface ComparisonRow {
@@ -119,6 +116,39 @@ export const COMPARISONS: Comparison[] = [
       "You need online card payments or a branded mobile app now.",
       "You need POS or third-party delivery integrations.",
       "You'd like a longer, 30-day trial.",
+    ],
+  },
+  {
+    slug: "toast",
+    competitor: "Toast",
+    title: "GarnishTable vs Toast — Online Ordering Without POS Hardware",
+    description:
+      "An honest comparison of GarnishTable and Toast for independent restaurants that want online ordering: pricing, hardware, contracts and features, with sources.",
+    h1: "GarnishTable vs Toast",
+    answer:
+      "Toast is a full restaurant point-of-sale platform with its own hardware, payments, payroll and online ordering, usually on a 12–36 month contract. GarnishTable is online ordering software only: $59 or $99 a month, no hardware, no long contract and a 14-day free trial, but no card payments, payroll or POS hardware.",
+    checkedOn: "27 November 2026",
+    sources: [{ label: "Toast POS pricing", url: "https://pos.toasttab.com/pricing" }],
+    rows: [
+      { label: "What it is", garnishtable: "Online ordering software: ordering page, menu, order queue, customers, loyalty", competitor: "A restaurant point-of-sale platform with add-ons, including online ordering" },
+      { label: "Price", garnishtable: GT.price, competitor: "Starter Kit from $0/month (pay-as-you-go, \"through a higher card processing rate\"); Point of Sale from $69/month; Build Your Own: custom pricing" },
+      { label: "Online ordering", garnishtable: "Included in every plan", competitor: "Listed in the Build Your Own plan (\"Online ordering and delivery\") and as an add-on; \"Fees may apply\"" },
+      { label: "Setup / onboarding", garnishtable: `${GT.setup}; set it up yourself the same day`, competitor: "One-time onboarding and implementation fees, depending on your package" },
+      { label: "Hardware", garnishtable: GT.hardware, competitor: "Services \"may only be used on approved Toast hardware\"" },
+      { label: "Card payments", garnishtable: GT.payments, competitor: "Yes: Toast is a payment facilitator; a custom (or flat) processing rate" },
+      { label: "Contract", garnishtable: GT.contract, competitor: "\"Typically between 12- 36 months\", renewing yearly; early termination fee typically applies" },
+      { label: "Free trial", garnishtable: GT.trial, competitor: "Not stated (\"Get a Free Demo\")" },
+      { label: "Payroll, scheduling, inventory", garnishtable: "No", competitor: "Available as products or add-ons" },
+    ],
+    chooseGarnishTable: [
+      "You only need online ordering, not a new point-of-sale system.",
+      "You don't want to buy approved hardware or sign a multi-year contract.",
+      "You want a flat $59 or $99 a month and to start today with a free trial.",
+    ],
+    chooseCompetitor: [
+      "You need a full point-of-sale system with terminals, card payments and payroll in one platform.",
+      "You want online ordering tied directly into your in-store POS.",
+      "You run a high-volume restaurant that needs Toast's wider operations suite.",
     ],
   },
 ];
