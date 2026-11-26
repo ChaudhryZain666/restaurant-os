@@ -21,7 +21,7 @@ Nothing here can guarantee rankings or mentions by AI tools. What we control: cr
 | Domain | `https://garnishtable.com` is canonical; www redirects with a 301 | Production check |
 | Sitemap and robots | Correct, on the canonical domain | Production check |
 | Search Console and Bing | **Not set up yet** | Needs you: `search-engine-setup.md` |
-| Legal pages | `noindex` until the legal values are set | Weakens trust signals |
+| Legal pages | Configured and indexable; in the sitemap | Production check, 27 Nov |
 | Backlinks | Essentially none (new domain) | The biggest long-term gap |
 | Content depth | 10 product pages, no guides or comparison pages | The next build work |
 
@@ -38,14 +38,13 @@ Each of those pages links to `/pricing` and the trial. Authority then comes from
 | Order | Work | Effort | Why now |
 |---|---|---|---|
 | 1 | Google Search Console and Bing verification, sitemap submission | You, 15 minutes | Nothing gets measured or indexed fast without it |
-| 2 | Set the legal values (terms, privacy, refund) | You, 15 minutes | Removes `noindex`; trust signals; Paddle review |
-| 3 | `/compare/chownow`, `/compare/restolabs` and `/compare/toast` with sourced, dated facts | **Built: PR #29**, awaiting your fact check and approval | Highest buying intent we can rank for early |
-| 4 | Commission-cost calculator on `/pricing` | 1 PR | Converts comparison and pricing traffic; linkable |
-| 5 | Pillar guide: "How to get more direct online orders" | 1 article, about 1,500 words | The core problem; links to everything |
-| 6 | `/agencies` page for the existing Agency — Growth plan | 1 PR | A second customer type, already sellable |
-| 7 | Free listings and the first real backlinks (`organic-authority-plan.md`) | Ongoing, 2 hours a week | Authority compounds |
-| 8 | Second pillar: "How to choose restaurant ordering software" plus supporting articles | 1 a fortnight | Topic authority |
-| 9 | City pages | Only with a real customer in the city | Avoids thin pages |
+| 2 | `/compare/chownow`, `/compare/restolabs` and `/compare/toast` with sourced, dated facts | **Built: PR #29**, awaiting your fact check and approval | Highest buying intent we can rank for early |
+| 3 | Commission-cost calculator on `/pricing` | 1 PR | Converts comparison and pricing traffic; linkable |
+| 4 | Pillar guide: "How to get more direct online orders" | 1 article, about 1,500 words | The core problem; links to everything |
+| 5 | `/agencies` page for the existing Agency — Growth plan | 1 PR | A second customer type, already sellable |
+| 6 | Free listings and the first real backlinks (`organic-authority-plan.md`) | Ongoing, 2 hours a week | Authority compounds |
+| 7 | Second pillar: "How to choose restaurant ordering software" plus supporting articles | 1 a fortnight | Topic authority |
+| 8 | City pages | Only with a real customer in the city | Avoids thin pages |
 
 ## 4. Content clusters
 

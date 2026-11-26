@@ -21,7 +21,7 @@ No paid links, sponsored placements, link schemes, fake reviews or mass outreach
 **Use the same description everywhere** (from `organic-search-master-plan.md` §5), with the same logo and the link `https://garnishtable.com`.
 
 ## 2. Links that come from real customers (the strongest source)
-- **"Online ordering by GarnishTable" link:** check whether each restaurant's storefront footer already links to `garnishtable.com`; if not, it's a small product change worth making. Each launch restaurant adds one relevant link.
+- **"Online ordering by GarnishTable" link:** checked 27 Nov 2026: storefront footers say "Powered by a platform built for real restaurants" but don't name GarnishTable or link to `garnishtable.com`. A small product change would let every storefront earn one relevant link: name it and link it in the footer, except where white-label branding is hidden (the themes already have a `hideBranding` switch). **Not built yet; needs your go-ahead.**
 - **The restaurant's own website and Google Business Profile:** when they add their ordering link, it points to their storefront, which links back.
 - **Case studies:** once a launch restaurant has real results, write them up on garnishtable.com (with their written permission). The restaurant often shares or links it.
 

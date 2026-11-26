@@ -22,8 +22,8 @@ One deliberate difference: the prerendered `<h1>` is keyword-led ("Online orderi
 1. **Your actions, one-time, about 30 minutes:**
    - Verify `garnishtable.com` in Google Search Console and Bing Webmaster Tools. Use the DNS TXT method; there's nothing to deploy.
    - Submit `https://garnishtable.com/sitemap.xml` to both.
-   - In Bing, turn on IndexNow. Bing's index feeds Copilot and is one of the sources ChatGPT search uses.
-2. **Configure the legal pages.** Set the five `GT_LEGAL_*` values so `/terms`, `/privacy` and `/refund-policy` stop sending `noindex`. Their absence also weakens trust signals for Paddle reviewers and for search.
+   - Exact steps: `search-engine-setup.md`. Bing's index also feeds Copilot and is one of the sources ChatGPT search uses.
+2. **Legal pages: done.** `/terms`, `/privacy` and `/refund-policy` are configured in production (checked 27 Nov 2026): no `noindex`, and listed in the sitemap. Keep them accurate as the business changes.
 3. **Keywords. Aim at a few pages written for buying intent, not traffic volume:**
    - "commission-free online ordering for restaurants" → the home page and `/pricing`. This is the core position.
    - "online ordering system for small restaurants" / "restaurant ordering website" → `/product`.
@@ -98,5 +98,4 @@ Expected funnel: 100 contacted → about 25 conversations → about 10 trials �
 
 1. Pick the launch city.
 2. Verify the domain in Google Search Console and Bing, and submit the sitemap (§2.1).
-3. Set the legal values (§2.2).
-4. Approve deploying this change.
+3. Check the comparison pages' sources and approve PR #29.

@@ -19,7 +19,7 @@ Status key: **Live** = on garnishtable.com now. **Planned** = should be built. *
 | `/faq` | (answer-engine hub, no single keyword) | "is there a commission", "how do customers pay", "can I use my own domain" | The real objections | Trial | **Live, with FAQPage data.** Add questions in prospects' exact words as they're asked. |
 | `/start-trial` | restaurant online ordering free trial (transactional) | — | — | Signup | **Live.** It's a conversion page; it doesn't need to rank. |
 | `/about`, `/contact` | brand: "GarnishTable" (navigational) | — | Who is behind it? | Trust | **Live.** About should state who runs the company and where; answer engines use this for brand entity facts. |
-| `/terms`, `/privacy`, `/refund-policy` | — | — | — | Trust | **Hold:** `noindex` until the legal values are set. |
+| `/terms`, `/privacy`, `/refund-policy` | — | — | — | Trust | **Live and indexable** (configured in production; in the sitemap). |
 | `/checkout` | — | — | — | Payment | Not in the sitemap, on purpose. |
 
 ## Planned pages, in priority order
