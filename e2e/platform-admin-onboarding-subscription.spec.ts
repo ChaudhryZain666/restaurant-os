@@ -114,6 +114,29 @@ test.describe.serial("platform admin onboarding with a complimentary subscriptio
       await expect(ownerPage.getByRole("button", { name: /Subscribe|Update payment method/ })).toHaveCount(0);
       await expect(ownerPage.getByText("Launch partner")).toHaveCount(0); // admin note stays admin-side
 
+      // The complimentary plan grants Owner Growth's entitlements: the Growth-only analytics page
+      // opens, and the API reports the Growth feature set from the business's own subscription.
+      const entitlementsRes = ownerPage.waitForResponse((r) => /\/subscription\/entitlements$/.test(new URL(r.url()).pathname));
+      await ownerPage.goto("http://localhost:5174/business-analytics");
+      const entitlements = (await (await entitlementsRes).json()).data;
+      expect(entitlements.source).toBe("business");
+      expect(entitlements.entitlements).toMatchObject({ business_analytics: true, business_promotions: true, custom_domains: true, max_locations: 2 });
+      await expect(ownerPage.getByText(/requires an active plan/)).toHaveCount(0);
+
+      // Tenant isolation: the owner's own session is refused on another restaurant's data (the demo tenant).
+      const ownerAuth = (await entitlementsRes).request().headers()["authorization"];
+      expect(ownerAuth).toMatch(/^Bearer /);
+      const otherBusiness = await db.collection("businesses").findOne({ slug: { $ne: slug } });
+      const otherRestaurant = await db.collection("restaurants").findOne({ businessId: otherBusiness!._id });
+      for (const path of [
+        `/api/v1/restaurants/${otherRestaurant!._id}`,
+        `/api/v1/businesses/${otherBusiness!._id}/subscription/entitlements`,
+        `/api/v1/businesses/${otherBusiness!._id}/subscription`,
+      ]) {
+        const res = await ownerPage.request.get(`http://localhost:4000${path}`, { headers: { authorization: ownerAuth } });
+        expect([403, 404], `${path} must be refused, got ${res.status()}`).toContain(res.status());
+      }
+
       // --- Owner builds a menu and publishes. ---
       await ownerPage.getByRole("link", { name: "Menu", exact: true }).click();
       await ownerPage.getByPlaceholder("New category name").fill(categoryName);
@@ -167,9 +190,15 @@ test.describe.serial("platform admin onboarding with a complimentary subscriptio
 
       await ownerPage.goto("http://localhost:5174/billing");
       await expect(ownerPage.getByText(/paused by GarnishTable: Agreement under review/)).toBeVisible({ timeout: 10_000 });
+      // A suspension removes the plan's features at once; unsuspending restores them.
+      const ownerBusinessId = (await db.collection("businesses").findOne({ slug }))!._id;
+      const entitlementsNow = async () =>
+        (await (await ownerPage.request.get(`http://localhost:4000/api/v1/businesses/${ownerBusinessId}/subscription/entitlements`, { headers: { authorization: ownerAuth } })).json()).data;
+      expect((await entitlementsNow()).entitlements?.business_analytics ?? false).toBe(false);
 
       await planCard.getByRole("button", { name: "Unsuspend" }).click();
       await expect(planCard.getByText("Subscription unsuspended.")).toBeVisible({ timeout: 10_000 });
+      expect((await entitlementsNow()).entitlements).toMatchObject({ business_analytics: true });
 
       // Every admin action is on the restaurant's audit trail.
       const actions = (await db.collection("auditlogs").find({ targetId: sub!._id }).toArray()).map((a) => a.action).sort();
