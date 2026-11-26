@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { checkLegalConfig, LEGAL_NOT_CONFIGURED_WARNING, sitemapWithoutLegalPages } from "./legalConfig.mjs";
@@ -22,9 +22,10 @@ function prerenderPages(siteUrl: string | undefined): Plugin {
     closeBundle() {
       const dist = resolve(import.meta.dirname, "dist");
       const template = readFileSync(resolve(dist, "index.html"), "utf8");
-      mkdirSync(resolve(dist, "_pages"), { recursive: true });
       for (const page of SEO_PAGES) {
-        writeFileSync(resolve(dist, "_pages", `${page.file}.html`), renderPage(template, page, origin));
+        const out = resolve(dist, "_pages", `${page.file}.html`);
+        mkdirSync(dirname(out), { recursive: true }); // compare/<slug>.html lives in a subfolder
+        writeFileSync(out, renderPage(template, page, origin));
       }
       console.log(`[prerender] ${SEO_PAGES.length} pages written to dist/_pages/`);
     },

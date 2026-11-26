@@ -55,3 +55,30 @@ test("nginx serves each page's prerendered file under its own URL, falling back 
 test("the prerendered body states only shipped facts (no online-payment or marketplace promises)", () => {
   assert.doesNotMatch(pagesSrc, /accept card payments online|pay online by card|Uber Eats integration|DoorDash integration/i);
 });
+
+// Comparison pages (src/lib/comparisons.ts): every one is routed, served by nginx, in the sitemap,
+// and carries its sources and check date; Toast stays out until its facts are verified.
+const comparisonsSrc = readFileSync(join(here, "src/lib/comparisons.ts"), "utf8");
+const appSrc = readFileSync(join(here, "src/App.tsx"), "utf8");
+const sitemapSrc = readFileSync(join(here, "public/sitemap.xml"), "utf8");
+const slugs = [...comparisonsSrc.matchAll(/^\s{4}slug: "([^"]+)"/gm)].map((m) => m[1]);
+
+test("each comparison page is routed, served by nginx and listed in the sitemap", () => {
+  assert.deepEqual(slugs.sort(), ["chownow", "restolabs"]);
+  for (const s of slugs) {
+    assert.ok(appSrc.includes(`<Route path="/compare/${s}"`), `/compare/${s} is not routed`);
+    assert.match(nginx, new RegExp(`\|compare/${s}[|)]`), `/compare/${s} is not served by nginx`);
+    assert.ok(sitemapSrc.includes(`/compare/${s}</loc>`), `/compare/${s} is not in the sitemap`);
+  }
+});
+
+test("every comparison cites its sources and the date the facts were checked", () => {
+  const blocks = comparisonsSrc.split(/\n  \{\n    slug: /).slice(1);
+  assert.equal(blocks.length, slugs.length);
+  for (const b of blocks) {
+    assert.match(b, /checkedOn: "\d{1,2} \w+ \d{4}"/);
+    assert.match(b, /sources: \[\s*\{ label: "[^"]+", url: "https:\/\//);
+    assert.match(b, /chooseCompetitor: \[/, "each comparison says when the competitor is the better fit");
+  }
+  assert.doesNotMatch(comparisonsSrc, /slug: "toast"/, "Toast stays out until its facts are verified");
+});
