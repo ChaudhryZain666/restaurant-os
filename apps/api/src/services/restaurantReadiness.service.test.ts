@@ -98,10 +98,30 @@ describe("computeReadiness — canonical (migrated) path", () => {
 });
 
 describe("computeSetupChecklist — payment account item (Phase 42)", () => {
-  it("is 'optional' with no connected account — cash-only is a fully supported permanent choice", async () => {
+  it("is omitted with no connected account, so the checklist never recommends connecting one", async () => {
     const restaurant = await createTestRestaurant();
     const items = await computeSetupChecklist(restaurant);
-    expect(items.find((i) => i.key === "payment")?.status).toBe("optional");
+    expect(items.find((i) => i.key === "payment")).toBeUndefined();
+    // Every other checklist item is unchanged, in its original order.
+    expect(items.map((i) => i.key)).toEqual(["branding", "hours", "tables", "kitchen", "staff", "loyalty", "domain"]);
+  });
+
+  it("ignores a disconnected account (still no payment item)", async () => {
+    const restaurant = await createTestRestaurant();
+    const account = await RestaurantPaymentAccount.create({
+      restaurantId: restaurant._id,
+      businessId: new mongoose.Types.ObjectId(),
+      provider: "stripe",
+      connectionMode: "platform_connect",
+      status: "disconnected",
+      connectedAccountId: "acct_readiness_test_disconnected",
+      connectedByUserId: new mongoose.Types.ObjectId(),
+    });
+
+    const items = await computeSetupChecklist(restaurant);
+    expect(items.find((i) => i.key === "payment")).toBeUndefined();
+
+    await RestaurantPaymentAccount.deleteOne({ _id: account._id });
   });
 
   it("is 'in_progress' while a Stripe Connect account is mid-onboarding", async () => {

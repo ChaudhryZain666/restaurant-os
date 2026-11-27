@@ -127,15 +127,24 @@ export async function computeSetupChecklist(restaurant: HydratedDocument<Restaur
       label: "Loyalty rewards",
       status: rewardCount > 0 ? "complete" : "optional",
     },
-    // Phase 42 — always "optional": cash-only is a fully supported, permanent choice, never
-    // blocking anything else. Reflects whether a payment account is connected, not whether online
-    // payments happen to be enabled right now (the two are the same thing going forward, since
-    // enabling online payments now requires an active account — see restaurant.controller.ts).
-    {
-      key: "payment",
-      label: "Payment account connected",
-      status: paymentAccount?.status === "active" ? "complete" : paymentAccount ? "in_progress" : "optional",
-    },
+    // Phase 42: cash-only is a fully supported, permanent choice that never blocks anything else.
+    // The item reflects whether a payment account is connected, not whether online payments happen
+    // to be enabled right now. Enabling online payments requires an active account (see
+    // restaurant.controller.ts), so the two amount to the same thing.
+    //
+    // Online card payments aren't offered to restaurants today. A restaurant with no payment
+    // account therefore gets no "payment" item, so the checklist never recommends connecting one.
+    // A restaurant that has already started or finished connecting one keeps seeing its status
+    // (in_progress/complete), so that state stays visible.
+    ...(paymentAccount
+      ? [
+          {
+            key: "payment",
+            label: "Payment account connected",
+            status: paymentAccount.status === "active" ? ("complete" as const) : ("in_progress" as const),
+          },
+        ]
+      : []),
     {
       key: "domain",
       label: "Custom domain",
