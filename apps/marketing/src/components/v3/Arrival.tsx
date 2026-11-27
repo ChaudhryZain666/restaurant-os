@@ -166,23 +166,23 @@ export function Arrival() {
                   className="max-w-[46rem]"
                   style={{ transform: `scale(${settle})`, transformOrigin: "0% 100%" }}
                 >
-                  <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[#e3aab2]">
-                    Built for independent restaurants
-                  </p>
-                  <h1 className="mt-5 font-heading font-semibold leading-[0.9] tracking-[-0.02em] text-[#f6f0e2]">
+                  <h1 className="font-mono text-[11px] font-normal uppercase tracking-[0.3em] text-[#e3aab2]">
+                    Restaurant online ordering system for independent restaurants
+                  </h1>
+                  <p className="mt-5 font-heading font-semibold leading-[0.9] tracking-[-0.02em] text-[#f6f0e2]">
                     <span className="block text-[17vw] sm:text-[min(12vw,10svh)] lg:text-[8.2vw] xl:text-[7.6rem]">
                       Your restaurant.
                     </span>
                     <span className="block pb-[0.08em] text-[11vw] italic text-[#f6f0e2]/85 sm:text-[min(8vw,6.5svh)] lg:text-[4.6vw] xl:text-[4.4rem]">
                       Running on your terms.
                     </span>
-                  </h1>
+                  </p>
                   <p
                     className="mt-5 max-w-[34rem] text-[15px] leading-relaxed text-white/70 sm:text-base"
                     style={{ opacity: desktop ? 1 : 1 - seg(p, 0.28, 0.44) }}
                   >
-                    Online ordering, kitchen, POS, loyalty and analytics in one system — so your
-                    direct orders, customers and data stay yours.
+                    Your own branded ordering page, a menu customers can order from, and one dashboard
+                    for every pickup, delivery and table order. No commission per order.
                   </p>
                   <div
                     className="mt-7 flex flex-wrap items-center gap-3"

@@ -7,8 +7,9 @@ Key facts:
 - Pricing (USD): Owner — Starter $59/month or $590/year (one location). Owner — Growth $99/month or $990/year (up to 2 locations, your own ordering domain, business-wide analytics and promotions). Agency — Growth $179/month or $1,790/year (up to 5 client restaurant businesses).
 - 14-day free trial, no credit card required. Customers can also pay at checkout and skip the trial.
 - 0% commission on direct orders.
-- Customers currently pay the restaurant directly (at pickup, on delivery or at the table). Online card payments through the restaurant's own Stripe account are planned, not yet available.
-- Marketplace connections (Uber Eats, DoorDash, foodpanda) are not available at launch.
+- Customers currently pay the restaurant directly (at pickup, on delivery or at the table). Online card payments are not available yet.
+- No POS or delivery-app integrations (Uber Eats, DoorDash, Just Eat, Deliveroo) today; GarnishTable runs alongside them.
+- Delivery uses the restaurant's own drivers (its own fee, minimum order and radius). There is no future pickup date or time picker; customers can add order notes and per-item instructions.
 - Subscriptions are sold and billed by Paddle, the merchant of record.
 
 ## Pages
@@ -17,6 +18,12 @@ Key facts:
 - [Pricing](https://garnishtable.com/pricing): plans and what each includes
 - [How it works](https://garnishtable.com/how-it-works): from signup to the first order in six steps
 - [FAQ](https://garnishtable.com/faq): common questions, answered
+- [Guides](https://garnishtable.com/guides): practical restaurant online ordering guides
+- [How to set up online ordering for your restaurant](https://garnishtable.com/guides/set-up-online-ordering-for-your-restaurant)
+- [Restaurant online ordering systems: what to look for](https://garnishtable.com/guides/restaurant-online-ordering-system-what-to-look-for)
+- [Direct online ordering vs third-party delivery apps](https://garnishtable.com/guides/direct-online-ordering-vs-third-party-delivery-apps)
+- [How to manage online orders in one dashboard](https://garnishtable.com/guides/manage-restaurant-online-orders-in-one-dashboard)
+- [GarnishTable vs Toast](https://garnishtable.com/compare/toast), [vs ChowNow](https://garnishtable.com/compare/chownow), [vs Restolabs](https://garnishtable.com/compare/restolabs): sourced comparisons
 - [Live demo](https://garnishtable.com/demo): the real product running a sample restaurant
 - [For agencies](https://garnishtable.com/agencies): Agency — Growth, up to 5 client restaurants under your own brand
 - [Start a free trial](https://garnishtable.com/start-trial)

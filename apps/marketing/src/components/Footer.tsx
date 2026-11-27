@@ -30,6 +30,7 @@ const COLUMNS = [
       { label: "How It Works", to: "/how-it-works" },
       { label: "Pricing", to: "/pricing" },
       { label: "FAQs", to: "/faq" },
+      { label: "Guides", to: "/guides" },
       { label: "Demo", to: "/demo" },
     ],
   },

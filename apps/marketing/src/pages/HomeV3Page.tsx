@@ -9,6 +9,7 @@ import { Business } from "../components/v3/Business";
 import { Network } from "../components/v3/Network";
 import { ExperienceIt } from "../components/v3/ExperienceIt";
 import { PlanMenu } from "../components/v3/PlanMenu";
+import { HowOrderingWorks } from "../components/v3/HowOrderingWorks";
 import { Decision } from "../components/v3/Decision";
 import { Departure } from "../components/v3/Departure";
 
@@ -36,6 +37,7 @@ const LATER_SCENES = [
   Network,
   ExperienceIt,
   PlanMenu,
+  HowOrderingWorks,
   Decision,
   Departure,
 ];

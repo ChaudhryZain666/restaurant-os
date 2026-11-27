@@ -6,7 +6,7 @@ const WORDS = [
   "Ordering",
   "Menu",
   "Kitchen",
-  "POS",
+  "QR tables",
   "Delivery",
   "Customers",
   "Loyalty",

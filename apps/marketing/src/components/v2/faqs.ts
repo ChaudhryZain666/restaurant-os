@@ -3,7 +3,7 @@
 export const BUYER_FAQS = [
   {
     q: "What is GarnishTable?",
-    a: "A restaurant operating platform: your own branded online ordering, menu, order management, POS, delivery, loyalty, promotions and analytics in one system, built for independent restaurants.",
+    a: "Restaurant online ordering software for independent restaurants: your own branded ordering page, menu, order management, pickup and delivery, table QR ordering, loyalty, promotions and analytics.",
   },
   {
     q: "Who is GarnishTable for?",
@@ -11,7 +11,7 @@ export const BUYER_FAQS = [
   },
   {
     q: "Does GarnishTable charge a commission on direct orders?",
-    a: "No. It's a flat subscription — 0% platform commission on every direct order. Online card payments through your own Stripe account are coming soon, at Stripe's standard processing fees.",
+    a: "No. It's a flat subscription with 0% commission on every direct order. Customers pay you directly at pickup, on delivery or at the table; online card payments aren't available yet.",
   },
   {
     q: "How much does GarnishTable cost?",
@@ -23,15 +23,15 @@ export const BUYER_FAQS = [
   },
   {
     q: "Can I manage multiple restaurant locations?",
-    a: "Yes — one dashboard for every location, each with its own menu overrides, staff, hours and orders, plus a business-wide view across all of them.",
+    a: "Yes. The Growth plan covers up to 2 locations, each with its own menu, staff, hours and orders, plus a business-wide view across both.",
   },
   {
     q: "Can customers order directly from my restaurant?",
     a: "Yes. Customers browse your menu and order from your restaurant's own ordering page — pickup or delivery — or scan a QR code at the table.",
   },
   {
-    q: "Does GarnishTable support POS and delivery workflows?",
-    a: "Yes. Staff ring up counter and table sales on the built-in POS, the kitchen works from a live order queue, and delivery runs alongside pickup with your own areas and fees. Marketplace connections switch on as each provider approves them — Uber Eats first.",
+    q: "Does GarnishTable connect to my POS or to delivery apps?",
+    a: "Not today. GarnishTable is your own direct ordering channel and runs alongside any POS or delivery app you already use. The kitchen works from a live order queue, and delivery with your own drivers runs alongside pickup, with your own fee, minimum order and radius.",
   },
   {
     q: "Can agencies manage restaurant clients?",

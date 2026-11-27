@@ -309,8 +309,8 @@ export function ProductPage() {
     <>
       <MarketingPageHero
         eyebrow="Product"
-        title="Look inside the machine"
-        description="One platform, three vantage points — what customers see, what your team runs, and what you grow with. What's live today, and what's next — no feature marked available unless it actually works."
+        title="Restaurant online ordering software, feature by feature"
+        description="What customers see, what your team runs, and what you grow with. No feature is marked available unless it works today. Customers pay you directly; online card payments and POS or delivery-app integrations aren't available yet."
       />
       <Section className="py-10 sm:py-12">
         <LayerNavigator />

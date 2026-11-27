@@ -20,6 +20,7 @@ const NAV: [string, string][] = [
   ["/how-it-works", "How it works"],
   ["/demo", "Live demo"],
   ["/faq", "FAQ"],
+  ["/guides", "Guides"],
   ["/start-trial", "Start free trial"],
   ["/contact", "Contact"],
 ];

@@ -27,6 +27,7 @@ const PAGE_COMPONENT = {
   "/about": "AboutPage",
   "/contact": "ContactPage",
   "/start-trial": "StartTrialPage",
+  "/guides": "GuidesPage",
   "/agencies": "AgenciesPage",
 };
 
@@ -72,6 +73,29 @@ test("each comparison page is routed, served by nginx and listed in the sitemap"
     assert.ok(nginx.includes(`|compare/${s}|`) || nginx.includes(`|compare/${s})`), `/compare/${s} is not served by nginx`);
     assert.ok(sitemapSrc.includes(`/compare/${s}</loc>`), `/compare/${s} is not in the sitemap`);
   }
+});
+
+// Guides (src/lib/guides.ts): routed, served by nginx, listed in the sitemap and in llms.txt.
+const guidesSrc = readFileSync(join(here, "src/lib/guides.ts"), "utf8");
+const llms = readFileSync(join(here, "public/llms.txt"), "utf8");
+const guideSlugs = [...guidesSrc.matchAll(/^\s{4}slug: "([^"]+)"/gm)].map((m) => m[1]);
+
+test("each guide is routed, served by nginx, in the sitemap and in llms.txt", () => {
+  assert.equal(guideSlugs.length, 4);
+  assert.ok(appSrc.includes('<Route path="/guides"'), "/guides is not routed");
+  assert.ok(nginx.includes("|guides|"), "/guides is not served by nginx");
+  assert.ok(sitemapSrc.includes("/guides</loc>"), "/guides is not in the sitemap");
+  for (const s of guideSlugs) {
+    assert.ok(appSrc.includes(`<Route path="/guides/${s}"`), `/guides/${s} is not routed`);
+    assert.ok(nginx.includes(`|guides/${s}|`) || nginx.includes(`|guides/${s})`), `/guides/${s} is not served by nginx`);
+    assert.ok(sitemapSrc.includes(`/guides/${s}</loc>`), `/guides/${s} is not in the sitemap`);
+    assert.ok(llms.includes(`/guides/${s})`), `/guides/${s} is not in llms.txt`);
+  }
+});
+
+test("guides state only shipped facts", () => {
+  assert.doesNotMatch(guidesSrc, /accept card payments online|pay online by card|integrates with (Uber Eats|DoorDash|Toast)/i);
+  assert.match(guidesSrc, /doesn't (process|take) online card payments today/, "guides say plainly that online card payments aren't offered");
 });
 
 test("every comparison cites its sources and the date the facts were checked", () => {

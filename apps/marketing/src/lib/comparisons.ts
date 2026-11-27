@@ -37,7 +37,7 @@ const GT = {
   trial: "14 days, no card required",
   contract: "Monthly or annual; cancel anytime from billing settings",
   app: "No branded mobile app (mobile-friendly ordering page)",
-  marketplaces: "Not at launch (Uber Eats, DoorDash, foodpanda planned)",
+  marketplaces: "No marketplace integrations today; GarnishTable runs alongside the apps",
   pos: "No third-party POS integrations",
 };
 
