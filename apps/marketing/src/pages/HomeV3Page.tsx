@@ -61,9 +61,9 @@ function useProgressiveCount(total: number): number {
 export function HomeV3Page() {
   const mounted = useProgressiveCount(LATER_SCENES.length);
   usePageMeta({
-    title: "GarnishTable — Online Ordering for Independent Restaurants",
+    title: "Restaurant Online Ordering System | GarnishTable",
     description:
-      "Direct online ordering, kitchen, POS, loyalty and analytics in one system for independent restaurants — with 0% platform commission on direct orders.",
+      "Restaurant online ordering for independent restaurants: branded menus, pickup and delivery, QR ordering, and order management with no per-order commission.",
   });
 
   // Tell the first-load loader in index.html the page is mounted (one of the three things it waits on).

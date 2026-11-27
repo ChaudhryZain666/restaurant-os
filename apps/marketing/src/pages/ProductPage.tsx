@@ -302,8 +302,8 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
 
 export function ProductPage() {
   usePageMeta({
-    title: "Product — GarnishTable",
-    description: "Everything a restaurant needs to sell direct: digital menu, ordering, delivery, loyalty, promotions and analytics in one platform.",
+    title: "Restaurant Online Ordering Software | GarnishTable",
+    description: "Restaurant online ordering software with branded digital menus, pickup and delivery, QR ordering, order management, loyalty and promotions.",
   });
   return (
     <>

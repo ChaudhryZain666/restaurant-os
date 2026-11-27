@@ -81,9 +81,9 @@ export const SEO_PAGES: SeoPage[] = [
   {
     path: "/",
     file: "home",
-    title: "GarnishTable — Online Ordering for Independent Restaurants",
+    title: "Restaurant Online Ordering System | GarnishTable",
     description:
-      "Direct online ordering, kitchen, POS, loyalty and analytics in one system for independent restaurants — with 0% platform commission on direct orders.",
+      "Restaurant online ordering for independent restaurants: branded menus, pickup and delivery, QR ordering, and order management with no per-order commission.",
     h1: "Online ordering for independent restaurants",
     intro: [
       WHAT_IT_IS,
@@ -101,9 +101,9 @@ export const SEO_PAGES: SeoPage[] = [
   {
     path: "/product",
     file: "product",
-    title: "Product — GarnishTable",
+    title: "Restaurant Online Ordering Software | GarnishTable",
     description:
-      "Everything a restaurant needs to sell direct: digital menu, ordering, delivery, loyalty, promotions and analytics in one platform.",
+      "Restaurant online ordering software with branded digital menus, pickup and delivery, QR ordering, order management, loyalty and promotions.",
     h1: "Everything a restaurant needs to sell direct",
     intro: [WHAT_IT_IS],
     sections: [{ heading: "Features", items: OFFER_FEATURES.map((f) => `${f.title}: ${f.description}`) }],
