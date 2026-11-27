@@ -36,7 +36,7 @@ if build "$LOG"; then
   # SEO prerendering (apps/marketing/src/seo): each page's own static HTML; the plain shell untouched.
   P="$DIST/_pages/pricing.html"
   if [ -f "$P" ] && [ -f "$DIST/_pages/home.html" ] && [ -f "$DIST/_pages/faq.html" ]; then
-    grep -q "<title>Pricing — GarnishTable</title>" "$P" && pass "prerender: pricing has its own title" || fail "prerender: pricing title wrong"
+    grep -q "<title>Restaurant Online Ordering Pricing — GarnishTable</title>" "$P" && pass "prerender: pricing has its own title" || fail "prerender: pricing title wrong"
     grep -q '<link rel="canonical" href="https://garnishtable.com/pricing"' "$P" && pass "prerender: pricing canonical URL" || fail "prerender: pricing canonical missing"
     grep -q '<h1>Restaurant online ordering pricing</h1>' "$P" && grep -q '\$59/month' "$P" && pass "prerender: pricing content is in the HTML" || fail "prerender: pricing content missing"
     grep -q '"@type":"SoftwareApplication"' "$P" && grep -q '"price":"59.00"' "$P" && pass "prerender: pricing structured data" || fail "prerender: pricing structured data missing"
