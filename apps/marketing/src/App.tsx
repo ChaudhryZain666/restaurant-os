@@ -23,6 +23,9 @@ const StartTrialPage = page(() => import("./pages/StartTrialPage"), "StartTrialP
 const TermsPage = page(() => import("./pages/TermsPage"), "TermsPage");
 const PrivacyPage = page(() => import("./pages/PrivacyPage"), "PrivacyPage");
 const RefundPolicyPage = page(() => import("./pages/RefundPolicyPage"), "RefundPolicyPage");
+const CompareChowNowPage = page(() => import("./pages/ComparisonPage"), "CompareChowNowPage");
+const CompareRestolabsPage = page(() => import("./pages/ComparisonPage"), "CompareRestolabsPage");
+const CompareToastPage = page(() => import("./pages/ComparisonPage"), "CompareToastPage");
 const CheckoutPage = page(() => import("./pages/CheckoutPage"), "CheckoutPage");
 
 /** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown and footer
@@ -79,6 +82,9 @@ export function App() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/start-trial" element={<StartTrialPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/compare/chownow" element={<CompareChowNowPage />} />
+          <Route path="/compare/restolabs" element={<CompareRestolabsPage />} />
+          <Route path="/compare/toast" element={<CompareToastPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refund-policy" element={<RefundPolicyPage />} />

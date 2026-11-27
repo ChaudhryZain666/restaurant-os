@@ -1,4 +1,5 @@
 import { FAQS, HOW_IT_WORKS_STEPS, OFFER_FEATURES } from "../lib/content.js";
+import { COMPARISONS } from "../lib/comparisons.js";
 
 /**
  * SEO / answer-engine content for each public marketing page, prerendered into static HTML at build
@@ -197,6 +198,24 @@ export const SEO_PAGES: SeoPage[] = [
     h1: "Start your 14-day free trial",
     intro: ["No credit card required. Create your restaurant, add your menu and publish your ordering page."],
   },
+  // Comparison pages: built from lib/comparisons.ts, the same data ComparisonPage renders, so the
+  // static HTML and the app can't disagree.
+  ...COMPARISONS.map(
+    (c): SeoPage => ({
+      path: `/compare/${c.slug}`,
+      file: `compare/${c.slug}`,
+      title: c.title,
+      description: c.description,
+      h1: c.h1,
+      intro: [c.answer, `${c.competitor} facts are from ${c.competitor}'s own public pages, checked on ${c.checkedOn}.`],
+      sections: [
+        { heading: "Side by side", items: c.rows.map((r) => `${r.label}: GarnishTable — ${r.garnishtable}. ${c.competitor} — ${r.competitor}.`) },
+        { heading: "When GarnishTable is the better fit", items: c.chooseGarnishTable },
+        { heading: `When ${c.competitor} is the better fit`, items: c.chooseCompetitor },
+        { heading: "Sources", items: c.sources.map((s) => `${s.label}: ${s.url} (checked ${c.checkedOn})`) },
+      ],
+    })
+  ),
 ];
 
 /** Every page gets the site-wide graph (the same one Layout.tsx adds at runtime). */
