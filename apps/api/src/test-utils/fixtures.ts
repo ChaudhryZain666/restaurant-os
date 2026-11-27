@@ -42,9 +42,14 @@ export async function closeTestConnections(): Promise<void> {
 }
 
 let counter = 0;
+/** Unique across Jest's parallel workers too: each worker has its own `counter`, so two workers could
+ *  produce the same `${prefix}-${Date.now()}-${counter}` in the same millisecond and hit a unique
+ *  index (seen in CI: "E11000 … slug: test-business-1795803602259-38"). The worker id and a random
+ *  suffix make that impossible in practice. */
 function unique(prefix: string) {
   counter += 1;
-  return `${prefix}-${Date.now()}-${counter}`;
+  const worker = process.env.JEST_WORKER_ID ?? "0";
+  return `${prefix}-${Date.now()}-${worker}-${counter}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 export async function createTestRestaurant(overrides: Partial<Record<string, unknown>> = {}) {
