@@ -1,5 +1,7 @@
 # First five paying restaurants: an 8-week execution plan
 
+> **Markets: United States and United Kingdom, worked remotely.** In-person visits below become one-to-one remote contact (a personalised menu preview + short video + email, contact form or Instagram DM), following each country's marketing rules. See `us-uk-market-plan.md` §5, which replaces the "visit" steps; the funnel, trial and conversion steps here are unchanged.
+
 This is the plan for the launch campaign, as of 27 Nov 2026. It turns `first-customers-plan.md` §5 into week-by-week work.
 
 **Pricing:** unchanged.
