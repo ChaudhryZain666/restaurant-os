@@ -18,5 +18,6 @@ Key facts:
 - [How it works](https://garnishtable.com/how-it-works): from signup to the first order in six steps
 - [FAQ](https://garnishtable.com/faq): common questions, answered
 - [Live demo](https://garnishtable.com/demo): the real product running a sample restaurant
+- [For agencies](https://garnishtable.com/agencies): Agency — Growth, up to 5 client restaurants under your own brand
 - [Start a free trial](https://garnishtable.com/start-trial)
 - [Contact](https://garnishtable.com/contact)
