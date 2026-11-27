@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --test legalConfig.test.mjs routes.test.mjs seoPages.test.mjs"
+    "test": "node --test legalConfig.test.mjs routes.test.mjs seoPages.test.mjs commissionMath.test.mjs"
   },
   "dependencies": {
     "@restaurant/ui": "*",
