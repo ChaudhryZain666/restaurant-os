@@ -190,6 +190,32 @@ export const SEO_PAGES: SeoPage[] = [
     intro: ["Ask about getting started, request a walkthrough for your restaurant, or get support."],
   },
   {
+    path: "/agencies",
+    file: "agencies",
+    title: "Restaurant Ordering Software for Agencies — GarnishTable",
+    description:
+      "Offer your restaurant clients commission-free online ordering under your own brand. Manage up to 5 client businesses from one login for $179/month.",
+    h1: "Online ordering for your restaurant clients, under your brand",
+    intro: [
+      "Web designers and marketing agencies use GarnishTable to give independent restaurants their own commission-free ordering page, managed from one agency login. Agency — Growth costs $179/month or $1,790/year for up to 5 client restaurant businesses.",
+    ],
+    sections: [
+      {
+        heading: "What agencies get",
+        items: [
+          "Up to 5 client businesses from one agency dashboard, each with its own locations, staff and owner.",
+          "Growth-tier features for each client: up to 2 locations, its own ordering domain, business-wide analytics and promotions.",
+          "White-label options per client: your brand name and colour on storefronts, GarnishTable branding hidden, your own support contact.",
+          "Client domains, a branded sign-in page, and customer emails from your verified sending domain.",
+        ],
+      },
+      {
+        heading: "What isn't included yet",
+        items: ["Online card payments: customers pay the restaurant directly.", "Marketplace (Uber Eats, DoorDash, Just Eat, Deliveroo) and POS integrations."],
+      },
+    ],
+  },
+  {
     path: "/start-trial",
     file: "start-trial",
     title: "Start Your Free Trial — GarnishTable",

@@ -27,6 +27,7 @@ const PAGE_COMPONENT = {
   "/about": "AboutPage",
   "/contact": "ContactPage",
   "/start-trial": "StartTrialPage",
+  "/agencies": "AgenciesPage",
 };
 
 test("every indexable marketing page is prerendered", () => {
