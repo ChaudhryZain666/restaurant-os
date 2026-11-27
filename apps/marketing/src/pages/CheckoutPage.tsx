@@ -8,6 +8,7 @@ import { apiClient } from "../lib/api";
 import { ADMIN_URL } from "../lib/links";
 import { formatPlanPrice, usePublicPlans, type PublicPlan } from "../lib/plans";
 import { initPaddle, type PaddleEventData } from "../lib/paddle";
+import { HandoffCheckout } from "./HandoffCheckout";
 
 /**
  * Launch, 2026-11-21 — pay now, no trial, no account: pick a plan, pay in Paddle's checkout, then set
@@ -53,11 +54,22 @@ function store(value: { token: string; planName: string } | null) {
   }
 }
 
+/** In-app Subscribe arrives as #handoff=<token> (HandoffCheckout.tsx); everything else is pay-now. */
+function handoffToken(): string | null {
+  const m = /(?:^#|&)handoff=([A-Za-z0-9_-]{20,200})/.exec(window.location.hash);
+  return m ? m[1] : null;
+}
+
 export function CheckoutPage() {
+  const [token] = useState(handoffToken);
   usePageMeta({
     title: "Subscribe — GarnishTable",
     description: "Subscribe to GarnishTable and pay now — no trial needed. Set up your restaurant right after payment.",
   });
+  return token ? <HandoffCheckout token={token} /> : <PayNowCheckout />;
+}
+
+function PayNowCheckout() {
   const [params] = useSearchParams();
   const { plans, error: plansError, retry } = usePublicPlans();
   const monthlyCents = (p: PublicPlan) => p.pricing.find((x) => x.interval === "monthly")?.amountCents ?? Number.MAX_SAFE_INTEGER;

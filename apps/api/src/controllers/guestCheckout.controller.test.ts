@@ -15,7 +15,7 @@ import { Plan } from "../models/Plan.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { Subscription } from "../models/Subscription.js";
 import { User } from "../models/User.js";
-import { closeTestConnections, createTestPlan } from "../test-utils/fixtures.js";
+import { closeTestConnections, createTestBusiness, createTestPlan, createTestUser, tokenFor } from "../test-utils/fixtures.js";
 
 /**
  * Launch, 2026-11-21 — the public pay-now checkout end to end over the real routes: start (no
@@ -311,5 +311,36 @@ describe("public pay-now checkout (Launch, 2026-11-21)", () => {
     const user = (await User.findOne({ email: paid.email }).lean())!;
     expect(user.role).toBe("restaurant_owner");
     expect((await Subscription.findOne({ ownerId: user.businessId }).lean())!).toMatchObject({ status: "active", providerSubscriptionId: paid.subscriptionId });
+  });
+
+  it("in-app Subscribe hands the checkout to garnishtable.com/checkout: same owner, price and custom data", async () => {
+    const owner = await createTestUser("restaurant_owner", undefined, { email: `${TAG}-handoff-owner@buyer.test` });
+    const business = await createTestBusiness({ ownerId: owner._id });
+    owner.businessId = business._id;
+    await owner.save();
+    jest.spyOn(paddle, "createCustomer").mockResolvedValue({ providerCustomerId: `ctm_${TAG}_handoff`, email: owner.email });
+
+    const res = await request(app)
+      .post(`/api/v1/businesses/${business._id}/subscription/checkout`)
+      .set("Authorization", `Bearer ${tokenFor(owner)}`)
+      .send({ planCode: plan.code, billingInterval: "monthly" });
+    expect(res.status).toBe(200);
+    const handoffUrl: string = res.body.data.checkout.handoffUrl;
+    expect(handoffUrl).toMatch(/\/checkout#handoff=[A-Za-z0-9_-]{20,}$/);
+    const token = handoffUrl.split("#handoff=")[1];
+
+    const handoff = await request(app).post("/api/v1/public/checkout/handoff").send({ token });
+    expect(handoff.status).toBe(200);
+    expect(handoff.body.data).toMatchObject({
+      providerPriceId: monthlyPriceId,
+      providerCustomerId: `ctm_${TAG}_handoff`,
+      clientToken: "test_guestclienttoken",
+      customData: { ownerType: "business", ownerId: String(business._id), planCode: plan.code, billingInterval: "monthly" },
+      billingInterval: "monthly",
+    });
+    expect(handoff.body.data.returnUrl).toMatch(/\/billing\?checkout=complete$/);
+    // Readable again within its lifetime (reload / reopen), and an unknown link is refused.
+    expect((await request(app).post("/api/v1/public/checkout/handoff").send({ token })).status).toBe(200);
+    expect((await request(app).post("/api/v1/public/checkout/handoff").send({ token: "x".repeat(32) })).status).toBe(404);
   });
 });

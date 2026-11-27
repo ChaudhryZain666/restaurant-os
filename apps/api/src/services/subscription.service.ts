@@ -16,6 +16,7 @@ import { recordBillingHistoryEvent } from "./billingHistory.service.js";
 import { resolveOwnerIdentity } from "./ownerIdentity.service.js";
 import { LIVE_STATUSES } from "./subscriptionResolution.service.js";
 import { acknowledgeUnclaimedPurchaseEvent, recordGuestCheckoutPaid } from "./guestCheckout.service.js";
+import { createCheckoutHandoff } from "./checkoutHandoff.service.js";
 
 const OWNER_LABEL: Record<SubscriptionOwnerType, string> = { business: "business", agency: "agency" };
 
@@ -258,13 +259,32 @@ async function createCheckoutSessionCore(
   }
   const customer = await provider.createCustomer({ ownerType, ownerId, email: identity.email, name: identity.name });
 
-  return provider.createCheckoutSession({
+  const metadata = { ownerType, ownerId, planCode: plan.code, billingInterval };
+  const session = await provider.createCheckoutSession({
     providerCustomerId: customer.providerCustomerId,
     providerPriceId: pricing.providerPriceId,
-    metadata: { ownerType, ownerId, planCode: plan.code, billingInterval },
+    metadata,
     successUrl: `${env.ADMIN_ORIGIN}/billing-checkout-complete`,
     cancelUrl: `${env.ADMIN_ORIGIN}/billing`,
   });
+
+  // Paddle's form only opens on a domain Paddle approved (garnishtable.com), so an overlay checkout
+  // is handed to the marketing site's checkout page instead of opening in the app
+  // (services/checkoutHandoff.service.ts). Same session, same custom data, same webhook.
+  if (session.mode === "overlay" && session.clientToken && session.providerPriceId && session.providerCustomerId && session.environment) {
+    const token = await createCheckoutHandoff({
+      clientToken: session.clientToken,
+      environment: session.environment,
+      providerPriceId: session.providerPriceId,
+      providerCustomerId: session.providerCustomerId,
+      customData: metadata,
+      planName: plan.name,
+      billingInterval,
+      returnUrl: `${env.ADMIN_ORIGIN}${ownerType === "agency" ? "/agency/billing" : "/billing"}?checkout=complete`,
+    });
+    return { ...session, handoffUrl: `${env.MARKETING_ORIGIN.replace(/\/+$/, "")}/checkout#handoff=${token}` };
+  }
+  return session;
 }
 
 export async function createCheckoutSessionForBusiness(

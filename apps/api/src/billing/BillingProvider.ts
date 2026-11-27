@@ -79,6 +79,9 @@ export interface ProviderCheckoutSession {
    *  (Paddle.Environment.set). Derived server-side from the API host actually being called — never
    *  defaulted by the frontend. */
   environment?: "sandbox" | "production";
+  /** Set by the API (not the provider): an overlay checkout to open on the marketing site's
+   *  /checkout page, the domain Paddle approved, instead of in the app (checkoutHandoff.service.ts). */
+  handoffUrl?: string;
 }
 
 export interface ProviderInvoice {

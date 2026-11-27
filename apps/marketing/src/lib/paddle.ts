@@ -15,6 +15,8 @@ interface PaddleGlobal {
   Checkout: {
     open: (options: {
       items: Array<{ priceId: string; quantity: number }>;
+      /** In-app Subscribe hand-off: the owner's existing Paddle customer. */
+      customer?: { id: string };
       customData?: Record<string, string>;
       settings?: { displayMode?: "overlay"; theme?: "light" | "dark"; allowLogout?: boolean };
     }) => void;

@@ -15,6 +15,7 @@ import {
   claimGuestCheckoutForUserHandler,
   claimGuestCheckoutHandler,
   getGuestCheckoutConfigHandler,
+  getCheckoutHandoffHandler,
   getGuestCheckoutStatusHandler,
   startGuestCheckoutHandler,
 } from "../controllers/guestCheckout.controller.js";
@@ -38,5 +39,7 @@ guestCheckoutRouter.post("/", limiter(30), validateBody(startGuestCheckoutSchema
 // Polled by the checkout page while the webhook confirms the payment (every few seconds). POST, so
 // the set-up token never appears in a URL (request logs record paths with their query).
 guestCheckoutRouter.post("/status", limiter(600), validateBody(guestCheckoutStatusQuerySchema), asyncHandler(getGuestCheckoutStatusHandler));
+// In-app Subscribe, handed to this site (services/checkoutHandoff.service.ts). Same {token} body shape.
+guestCheckoutRouter.post("/handoff", limiter(60), validateBody(guestCheckoutStatusQuerySchema), asyncHandler(getCheckoutHandoffHandler));
 guestCheckoutRouter.post("/claim", limiter(20), validateBody(claimGuestCheckoutSchema), asyncHandler(claimGuestCheckoutHandler));
 guestCheckoutRouter.post("/claim/signed-in", limiter(20), requireAuth, validateBody(claimGuestCheckoutForUserSchema), asyncHandler(claimGuestCheckoutForUserHandler));
