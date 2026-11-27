@@ -67,13 +67,14 @@ test("each comparison page is routed, served by nginx and listed in the sitemap"
   assert.deepEqual(slugs.sort(), ["chownow", "restolabs", "toast"]);
   for (const s of slugs) {
     assert.ok(appSrc.includes(`<Route path="/compare/${s}"`), `/compare/${s} is not routed`);
-    assert.match(nginx, new RegExp(`\|compare/${s}[|)]`), `/compare/${s} is not served by nginx`);
+    // Plain substring checks: "|compare/<slug>" followed by "|" or ")" in the nginx page list.
+    assert.ok(nginx.includes(`|compare/${s}|`) || nginx.includes(`|compare/${s})`), `/compare/${s} is not served by nginx`);
     assert.ok(sitemapSrc.includes(`/compare/${s}</loc>`), `/compare/${s} is not in the sitemap`);
   }
 });
 
 test("every comparison cites its sources and the date the facts were checked", () => {
-  const blocks = comparisonsSrc.split(/\n  \{\n    slug: /).slice(1);
+  const blocks = comparisonsSrc.split(/\r?\n {2}\{\r?\n {4}slug: /).slice(1); // CRLF on Windows checkouts
   assert.equal(blocks.length, slugs.length);
   for (const b of blocks) {
     assert.match(b, /checkedOn: "\d{1,2} \w+ \d{4}"/);
