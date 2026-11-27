@@ -1,3 +1,4 @@
+import { CommissionCalculator } from "../components/CommissionCalculator";
 import { Link } from "react-router-dom";
 import { Alert, Badge, Button, Card, Reveal } from "@restaurant/ui";
 import { Section, SectionHeading } from "../components/Section";
@@ -137,6 +138,10 @@ export function PricingPage() {
           </Link>{" "}
           for larger multi-location or agency needs.
         </p>
+      </Section>
+
+      <Section>
+        <CommissionCalculator />
       </Section>
 
       <Section>
