@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useCheckoutReturn } from "../hooks/useCheckoutReturn";
 import { formatHistoryAmount } from "../lib/billingHistoryDisplay";
 import type { BillingHistoryEvent, Paginated, Plan, Subscription } from "@restaurant/types";
 import { Alert, Badge, Button, Card, ConfirmDialog } from "@restaurant/ui";
@@ -175,12 +176,16 @@ export function AgencyBillingPage() {
     setError(null);
     try {
       const res = await apiClient.request<{
-        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string; environment?: string };
+        checkout: { mode: string; url?: string; clientToken?: string; providerPriceId?: string; providerCustomerId?: string; environment?: string; handoffUrl?: string };
       }>(`/agencies/${activeAgencyId}/subscription/checkout`, {
         method: "POST",
         body: { planCode: target.planCode, billingInterval: target.billingInterval },
       });
-      if (res.checkout.mode === "redirect" && res.checkout.url) {
+      // Paddle only opens its form on garnishtable.com (the domain it approved), so the API hands the
+      // checkout to that site's /checkout page; payment is still confirmed by Paddle's webhook.
+      if (res.checkout.handoffUrl) {
+        window.location.assign(res.checkout.handoffUrl);
+      } else if (res.checkout.mode === "redirect" && res.checkout.url) {
         window.location.assign(res.checkout.url);
       } else if (res.checkout.mode === "overlay" && res.checkout.clientToken && res.checkout.providerPriceId && res.checkout.providerCustomerId) {
         if (!isPaddleJsLoaded()) throw new Error("Paddle.js did not load — check your network connection and try again.");
@@ -270,6 +275,9 @@ export function AgencyBillingPage() {
     setSelectResetKey((k) => k + 1);
   }
 
+  // Back from paying on garnishtable.com/checkout: wait for Paddle's webhook to activate the plan.
+  const awaitingPayment = useCheckoutReturn(reload, subscription?.provider === "paddle" && subscription.status === "active");
+
   if (!activeAgencyId) return null;
   if (loading) return <p className="text-muted">Loading billing...</p>;
 
@@ -290,6 +298,11 @@ export function AgencyBillingPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-heading text-2xl font-semibold text-foreground">Agency billing</h1>
+        {awaitingPayment && (
+          <Alert tone="info" className="mt-3">
+            Payment received. Your plan shows as active here as soon as Paddle confirms it, usually within a minute.
+          </Alert>
+        )}
         <p className="text-sm text-muted">
           {/* Portal UX audit (Phase 53) — same fix as BillingPage.tsx: don't assume "mock billing"
               for an agency with no subscription yet, only once one genuinely reports provider
