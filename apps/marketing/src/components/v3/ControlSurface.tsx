@@ -16,8 +16,8 @@ const SATELLITES = [
   },
   {
     key: "pos",
-    label: "Counter · POS",
-    note: "Table 4 — paid at the counter",
+    label: "Tables · QR ordering",
+    note: "Table 4 — ordered from the table's QR code",
     x: 64,
     y: -34,
     z: 60,

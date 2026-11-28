@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Reveal } from "@restaurant/ui";
 import { applyJsonLd } from "@restaurant/utils/seoMeta";
 import { Section } from "../components/Section";
@@ -30,16 +31,17 @@ function useFaqStructuredData() {
 
 export function FaqPage() {
   usePageMeta({
-    title: "FAQ — GarnishTable",
-    description: "Answers to common questions about setting up and running online ordering with GarnishTable.",
+    title: "Restaurant Online Ordering FAQ — GarnishTable",
+    description:
+      "Straight answers about GarnishTable's restaurant online ordering: branded ordering page, orders and notes, pickup and delivery, pricing, free trial, payments and integrations.",
   });
   useFaqStructuredData();
   return (
     <>
       <MarketingPageHero
         eyebrow="FAQs"
-        title="Frequently asked questions"
-        description="Everything restaurant owners ask before signing up."
+        title="Restaurant online ordering: frequently asked questions"
+        description="Straight answers to what restaurant owners ask before signing up, including what GarnishTable doesn't do yet."
       />
 
       <Section tone="surface">
@@ -48,6 +50,12 @@ export function FaqPage() {
           {FAQS.map((item, i) => (
             <FaqItem key={item.q} q={item.q} a={item.a} index={i} />
           ))}
+          <p className="mt-6 text-sm text-muted">
+            More detail: <Link to="/pricing" className="underline">pricing</Link>,{" "}
+            <Link to="/how-it-works" className="underline">how setup works</Link>,{" "}
+            <Link to="/guides" className="underline">restaurant guides</Link> and the{" "}
+            <Link to="/demo" className="underline">live demo</Link>.
+          </p>
         </div>
       </Section>
 

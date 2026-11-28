@@ -30,7 +30,7 @@ const WHY = [
   },
   {
     title: "Run the operation.",
-    copy: "Storefront, kitchen, counter and delivery work from one order record — nothing re-typed, nothing reconciled.",
+    copy: "Online, table QR, kitchen and delivery orders work from one order record — nothing re-typed, nothing reconciled.",
   },
   {
     title: "Build the customer.",

@@ -28,6 +28,8 @@ const CompareRestolabsPage = page(() => import("./pages/ComparisonPage"), "Compa
 const CompareToastPage = page(() => import("./pages/ComparisonPage"), "CompareToastPage");
 const CheckoutPage = page(() => import("./pages/CheckoutPage"), "CheckoutPage");
 const AgenciesPage = page(() => import("./pages/AgenciesPage"), "AgenciesPage");
+const GuidesPage = page(() => import("./pages/GuidesPage"), "GuidesPage");
+const GuideRoute = page(() => import("./pages/GuidePage"), "GuideRoute");
 
 /** Scrolls to top on route change, but respects an in-page #anchor (nav dropdown and footer
  *  links). Lazy pages render their anchors only once their chunk arrives, so a missing target is
@@ -87,6 +89,11 @@ export function App() {
           <Route path="/compare/restolabs" element={<CompareRestolabsPage />} />
           <Route path="/compare/toast" element={<CompareToastPage />} />
           <Route path="/agencies" element={<AgenciesPage />} />
+          <Route path="/guides" element={<GuidesPage />} />
+          <Route path="/guides/set-up-online-ordering-for-your-restaurant" element={<GuideRoute />} />
+          <Route path="/guides/restaurant-online-ordering-system-what-to-look-for" element={<GuideRoute />} />
+          <Route path="/guides/direct-online-ordering-vs-third-party-delivery-apps" element={<GuideRoute />} />
+          <Route path="/guides/manage-restaurant-online-orders-in-one-dashboard" element={<GuideRoute />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refund-policy" element={<RefundPolicyPage />} />

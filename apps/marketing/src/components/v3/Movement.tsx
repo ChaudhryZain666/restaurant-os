@@ -32,8 +32,8 @@ const STATIONS: Station[] = [
   },
   {
     id: "pos",
-    name: "POS",
-    caption: "Counter and table sales settle on the same system, attributed to staff.",
+    name: "Ready",
+    caption: "Staff mark it ready, and the customer's order status updates.",
   },
   {
     id: "delivery",
@@ -92,7 +92,7 @@ const MOBILE: Layout = {
 
 /**
  * SCENE 4 — THE MOVEMENT. One real path through the operation, scrubbed by scroll: a paper ticket
- * (the same order #1047 from the opening) travels Customer → Order → GarnishTable → Kitchen → POS →
+ * (the same order #1047 from the opening) travels Customer → Order → GarnishTable → Kitchen → Ready →
  * Delivery → Loyalty → Analytics → and back to the customer. Each station lights as the ticket
  * reaches it and the caption names what actually happens there — every caption is a shipped
  * capability. SVG + HTML, so every station name is real, readable text; the full sequence is also

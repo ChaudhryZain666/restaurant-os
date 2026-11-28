@@ -1,5 +1,6 @@
 import { FAQS, HOW_IT_WORKS_STEPS, OFFER_FEATURES } from "../lib/content.js";
 import { COMPARISONS } from "../lib/comparisons.js";
+import { GUIDES } from "../lib/guides.js";
 
 /**
  * SEO / answer-engine content for each public marketing page, prerendered into static HTML at build
@@ -55,7 +56,18 @@ export const PLANS = [
 ] as const;
 
 const WHAT_IT_IS =
-  "GarnishTable is online ordering software for independent restaurants. Each restaurant gets its own branded ordering page, a menu builder, a live order queue for staff, pickup and delivery, customer history, loyalty and promotions — for a flat monthly subscription with 0% commission on direct orders.";
+  "GarnishTable is online ordering software for independent restaurants. Each restaurant gets its own branded ordering page, a menu builder, a live order queue for staff, pickup, delivery with its own drivers and table QR ordering, customer history, loyalty and promotions, for a flat monthly subscription with 0% commission on direct orders.";
+
+/** Said plainly wherever pricing or ordering is described: what GarnishTable doesn't do today. */
+const LIMITS =
+  "Customers pay the restaurant directly at pickup, on delivery or at the table; online card payments aren't available yet. GarnishTable doesn't connect to POS systems or delivery apps, and doesn't offer a future pickup date or time picker.";
+
+function breadcrumbs(origin: string, trail: [string, string][]) {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: trail.map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: origin ? `${origin}${path}` : undefined })),
+  };
+}
 
 function softwareApplication(origin: string) {
   return {
@@ -84,12 +96,22 @@ export const SEO_PAGES: SeoPage[] = [
     title: "Restaurant Online Ordering System | GarnishTable",
     description:
       "Restaurant online ordering for independent restaurants: branded menus, pickup and delivery, QR ordering, and order management with no per-order commission.",
-    h1: "Online ordering for independent restaurants",
+    h1: "Restaurant online ordering system for independent restaurants",
     intro: [
       WHAT_IT_IS,
       "Customers order straight from your restaurant instead of a marketplace, so you keep the customer relationship and every order's margin. Start with a 14-day free trial, no credit card required.",
     ],
     sections: [
+      {
+        heading: "How restaurant online ordering works with GarnishTable",
+        items: [
+          "Your own branded ordering page: your name, logo, colours and menu, shared on Google, your website, social media and table QR codes.",
+          "Customers browse and order: they pick items and options, add a note for anything special, and choose pickup, your own delivery or table service. No app to download.",
+          "Orders arrive in one dashboard: every order lands in one live list with its items, options and notes, and staff move it through accept, preparing, ready and completed.",
+          "Pickup and your own delivery: switched on separately, with your own delivery fee, minimum order and radius.",
+          LIMITS,
+        ],
+      },
       { heading: "What's included", items: OFFER_FEATURES.map((f) => `${f.title}: ${f.description}`) },
       {
         heading: "Pricing",
@@ -104,7 +126,7 @@ export const SEO_PAGES: SeoPage[] = [
     title: "Restaurant Online Ordering Software | GarnishTable",
     description:
       "Restaurant online ordering software with branded digital menus, pickup and delivery, QR ordering, order management, loyalty and promotions.",
-    h1: "Everything a restaurant needs to sell direct",
+    h1: "Restaurant online ordering software, feature by feature",
     intro: [WHAT_IT_IS],
     sections: [{ heading: "Features", items: OFFER_FEATURES.map((f) => `${f.title}: ${f.description}`) }],
   },
@@ -122,21 +144,23 @@ export const SEO_PAGES: SeoPage[] = [
   {
     path: "/how-it-works",
     file: "how-it-works",
-    title: "How It Works — GarnishTable",
-    description: "From signup to your first order in six steps — no developer required, no separate website to maintain.",
-    h1: "From signup to your first order in six steps",
-    intro: ["No developer and no separate website to maintain: you set up the restaurant yourself from the dashboard."],
+    title: "How Restaurant Online Ordering Works — GarnishTable",
+    description:
+      "How to go from signup to your first online order with GarnishTable: create your account, add your menu, brand your page, choose order types, test and share.",
+    h1: "How restaurant online ordering works, from signup to your first order",
+    intro: ["Six steps you do yourself from the dashboard. No developer needed and no separate website to maintain.", LIMITS],
     sections: [{ heading: "Steps", items: HOW_IT_WORKS_STEPS.map((s, i) => `${i + 1}. ${s.title} — ${s.description}`) }],
   },
   {
     path: "/pricing",
     file: "pricing",
-    title: "Pricing — GarnishTable",
+    title: "Restaurant Online Ordering Pricing — GarnishTable",
     description:
-      "Simple, transparent pricing for restaurant online ordering. Start free, upgrade as you grow — no per-order commission.",
+      "Restaurant online ordering pricing with no commission per order: Starter $59/month, Growth $99/month, Agency $179/month. 14-day free trial, no card needed.",
     h1: "Restaurant online ordering pricing",
     intro: [
-      "Flat monthly or annual plans with 0% commission on direct orders. Every owner plan starts with a 14-day free trial, no credit card required — or pay now at checkout and skip the trial. Annual billing costs the same as 10 months.",
+      "Flat monthly or annual plans with 0% commission on direct orders. Every plan starts with a 14-day free trial, no credit card required, or owners can pay now at checkout and skip the trial. Annual billing costs the same as 10 months. Prices are in US dollars. Cancel any time in billing settings; your plan runs to the end of the period you've paid for.",
+      LIMITS,
     ],
     sections: PLANS.map((p) => ({
       heading: `${p.name} — $${p.monthly}/month or $${p.yearly}/year`,
@@ -147,10 +171,11 @@ export const SEO_PAGES: SeoPage[] = [
   {
     path: "/faq",
     file: "faq",
-    title: "FAQ — GarnishTable",
-    description: "Answers to common questions about setting up and running online ordering with GarnishTable.",
-    h1: "Frequently asked questions",
-    intro: ["Answers to common questions about setting up and running online ordering with GarnishTable."],
+    title: "Restaurant Online Ordering FAQ — GarnishTable",
+    description:
+      "Straight answers about GarnishTable's restaurant online ordering: branded ordering page, orders and notes, pickup and delivery, pricing, free trial, payments and integrations.",
+    h1: "Restaurant online ordering: frequently asked questions",
+    intro: ["Straight answers to what restaurant owners ask before signing up, including what GarnishTable doesn't do yet."],
     sections: FAQS.map((f) => ({ heading: f.q, paragraphs: [f.a] })),
     structuredData: () => [
       {
@@ -224,6 +249,45 @@ export const SEO_PAGES: SeoPage[] = [
     h1: "Start your 14-day free trial",
     intro: ["No credit card required. Create your restaurant, add your menu and publish your ordering page."],
   },
+  {
+    path: "/guides",
+    file: "guides",
+    title: "Restaurant Online Ordering Guides — GarnishTable",
+    description:
+      "Practical guides for restaurant owners: setting up online ordering, choosing a system, direct ordering vs delivery apps, and managing orders in one dashboard.",
+    h1: "Restaurant online ordering guides",
+    intro: ["Plain-language guides for independent restaurant owners: how online ordering works, what to look for and how to run it day to day."],
+    sections: [{ heading: "All guides", items: GUIDES.map((g) => `${g.h1}: ${g.description}`) }],
+  },
+  // Guide articles: built from lib/guides.ts, the same data GuidePage renders.
+  ...GUIDES.map(
+    (g): SeoPage => ({
+      path: `/guides/${g.slug}`,
+      file: `guides/${g.slug}`,
+      title: g.title,
+      description: g.description,
+      h1: g.h1,
+      intro: [g.answer, `Updated ${g.updated}.`],
+      sections: g.sections.map((s) => ({ heading: s.heading, paragraphs: s.paragraphs, items: s.items })),
+      structuredData: (origin) => [
+        {
+          "@type": "Article",
+          headline: g.h1,
+          description: g.description,
+          dateModified: g.updatedIso,
+          datePublished: g.updatedIso,
+          author: { "@type": "Organization", name: "GarnishTable" },
+          publisher: { "@type": "Organization", name: "GarnishTable" },
+          mainEntityOfPage: origin ? `${origin}/guides/${g.slug}` : undefined,
+        },
+        breadcrumbs(origin, [
+          ["Home", "/"],
+          ["Guides", "/guides"],
+          [g.h1, `/guides/${g.slug}`],
+        ]),
+      ],
+    })
+  ),
   // Comparison pages: built from lib/comparisons.ts, the same data ComparisonPage renders, so the
   // static HTML and the app can't disagree.
   ...COMPARISONS.map(

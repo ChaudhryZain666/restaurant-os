@@ -26,7 +26,7 @@ location = / {
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;
 }
-location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|checkout|v3|agencies|compare/chownow|compare/restolabs|compare/toast)/?$ {
+location ~* ^/(product|solutions|how-it-works|pricing|faq|demo|about|contact|start-trial|checkout|v3|agencies|guides|guides/set-up-online-ordering-for-your-restaurant|guides/restaurant-online-ordering-system-what-to-look-for|guides/direct-online-ordering-vs-third-party-delivery-apps|guides/manage-restaurant-online-orders-in-one-dashboard|compare/chownow|compare/restolabs|compare/toast)/?$ {
     try_files /_pages/$1.html /index.html =404;
     add_header Cache-Control "no-cache";
     include /etc/nginx/conf.d/app-headers.inc;

@@ -187,16 +187,16 @@ export function AnalyticsPane() {
   );
 }
 
-/** The counter's side: a POS sale settling. */
+/** The table's side: an order placed from the table's QR code, paid at the table. */
 export function PosPane() {
   return (
     <div className="p-4">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] text-white/50">Table 4 · Riley</span>
+        <span className="font-mono text-[11px] text-white/50">Table 4 · QR order</span>
         <span className="font-heading text-2xl text-[#f6f0e2]">$18.50</span>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-1.5">
-        {["Card", "Cash", "Split"].map((m, i) => (
+        {["Ordered", "Preparing", "Served"].map((m, i) => (
           <span
             key={m}
             className="rounded-md py-2 text-center text-[11px]"
@@ -210,7 +210,7 @@ export function PosPane() {
         ))}
       </div>
       <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9fd9a8]">
-        ✓ Paid · recorded to the order
+        ✓ Tagged to table 4 · pay at the table
       </p>
     </div>
   );

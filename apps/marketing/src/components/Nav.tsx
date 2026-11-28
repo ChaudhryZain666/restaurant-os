@@ -51,7 +51,7 @@ const PRODUCT: NavDropdown = {
       to: "/product#order-management",
       description: "Accept, prepare, complete",
     },
-    { label: "Delivery", to: "/product#delivery", description: "Zones, fees and pickup together" },
+    { label: "Delivery", to: "/product#delivery", description: "Radius, fees and pickup together" },
     {
       label: "Customer Management",
       to: "/product#customers",

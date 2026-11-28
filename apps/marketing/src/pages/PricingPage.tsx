@@ -6,7 +6,7 @@ import { MarketingPageHero } from "../components/MarketingPageHero";
 import { MarketingClosingCta } from "../components/MarketingClosingCta";
 import { IconCheck } from "../components/icons";
 import { usePageMeta } from "../hooks/usePageMeta";
-import { FAQS } from "../lib/content";
+import { PRICING_FAQS } from "../lib/content";
 import { usePublicPlans, formatPlanPrice, type PublicPlan } from "../lib/plans";
 
 const ENTITLEMENT_LABELS: Record<string, string> = {
@@ -19,9 +19,9 @@ function planFeatures(plan: PublicPlan): string[] {
   const features: string[] = [];
   for (const e of plan.entitlements) {
     if (e.key === "max_locations" && typeof e.value === "number") {
-      features.push(`${e.value} location${e.value === 1 ? "" : "s"} included — additional locations available`);
+      features.push(e.value === 1 ? "1 location" : `Up to ${e.value} locations`);
     } else if (e.key === "max_businesses" && typeof e.value === "number") {
-      features.push(`${e.value} businesses included — additional businesses available`);
+      features.push(`Up to ${e.value} client businesses`);
     } else if (ENTITLEMENT_LABELS[e.key] && e.value === true) {
       features.push(ENTITLEMENT_LABELS[e.key]);
     }
@@ -29,6 +29,19 @@ function planFeatures(plan: PublicPlan): string[] {
   if (plan.trialDays) features.unshift(`${plan.trialDays}-day free trial`);
   return features;
 }
+
+/** Who each plan suits. Limits match the live plan catalog (GET /public/plans). */
+const PLAN_GUIDE = [
+  { plan: "Owner — Starter", who: "One restaurant location that wants its own commission-free ordering page for pickup, delivery or table orders." },
+  { plan: "Owner — Growth", who: "Up to 2 locations, or one location that wants its own ordering domain, business-wide analytics and promotions." },
+  { plan: "Agency — Growth", who: "Agencies and consultants managing up to 5 client restaurant businesses, each with up to 2 locations, from one login." },
+];
+
+const BILLING_FACTS = [
+  { title: "Monthly or annual", body: "Pay monthly, or pay annually and get 12 months for the price of 10. Prices are in US dollars." },
+  { title: "Trial and cancellation", body: "The 14-day trial needs no card, and nothing is charged during it. Cancel any time in billing settings; your plan runs to the end of the period you've paid for." },
+  { title: "After you sign up", body: "You add your menu, choose pickup, delivery or table ordering, place a test order and share your ordering link. Customers pay you directly; online card payments aren't available yet." },
+];
 
 function planMonthlyCents(plan: PublicPlan): number {
   return plan.pricing.find((p) => p.interval === "monthly")?.amountCents ?? Number.POSITIVE_INFINITY;
@@ -47,8 +60,9 @@ function planMonthlyCents(plan: PublicPlan): number {
  */
 export function PricingPage() {
   usePageMeta({
-    title: "Pricing — GarnishTable",
-    description: "Simple, transparent pricing for restaurant online ordering. Start free, upgrade as you grow — no per-order commission.",
+    title: "Restaurant Online Ordering Pricing — GarnishTable",
+    description:
+      "Restaurant online ordering pricing with no commission per order: Starter $59/month, Growth $99/month, Agency $179/month. 14-day free trial, no card needed.",
   });
 
   const { plans, error, retry } = usePublicPlans();
@@ -61,8 +75,8 @@ export function PricingPage() {
     <>
       <MarketingPageHero
         eyebrow="Pricing"
-        title="Simple pricing, built to grow with you"
-        description="No credit card required for your 14-day trial — nothing is charged unless you choose a paid plan."
+        title="Restaurant online ordering pricing"
+        description="Flat monthly or annual plans with no commission on any order. Every plan starts with a 14-day free trial, and no card is needed to start."
       />
 
       <Section tone="surface">
@@ -141,13 +155,37 @@ export function PricingPage() {
       </Section>
 
       <Section>
+        <SectionHeading eyebrow="Choosing a plan" title="Which plan fits your restaurant?" />
+        <div className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
+          {PLAN_GUIDE.map((g) => (
+            <div key={g.plan} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-6">
+              <h3 className="font-heading text-lg font-semibold text-foreground">{g.plan}</h3>
+              <p className="text-sm text-muted">{g.who}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
+          {BILLING_FACTS.map((f) => (
+            <div key={f.title} className="flex flex-col gap-2">
+              <h3 className="font-heading text-base font-semibold text-foreground">{f.title}</h3>
+              <p className="text-sm text-muted">{f.body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mx-auto mt-8 max-w-3xl text-center text-sm text-muted">
+          See <Link to="/how-it-works" className="underline">how setup works</Link>, read the{" "}
+          <Link to="/faq" className="underline">FAQ</Link> or <Link to="/demo" className="underline">try the live demo</Link> first.
+        </p>
+      </Section>
+
+      <Section>
         <CommissionCalculator />
       </Section>
 
       <Section>
         <SectionHeading eyebrow="Pricing FAQ" title="Common questions about plans" />
         <div className="mx-auto mt-10 grid max-w-3xl gap-3">
-          {FAQS.map((item, i) => (
+          {PRICING_FAQS.map((item, i) => (
             <Reveal key={item.q} index={i % 4} className="rounded-xl border border-border bg-surface p-5">
               <p className="font-medium text-foreground">{item.q}</p>
               <p className="mt-1 text-sm text-muted">{item.a}</p>
